@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.7.2 (2026-10-24)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Plain text stripped copy (Alt+Shift+C), auto-recommended alias pill generation, multi-format clipboard matrix, and 729 passing automated tests.
+> **Released: v0.7.3 (2026-10-24)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Settings Bento Grid adds Top Snippets leaderboard with one-click copy pills, smart alias recommendation, and plain text stripped copy.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.7.2)
+## This release (v0.7.3)
+
+Settings Bento Dashboard Top Snippets Leaderboard:
+
+- **Top Snippets Leaderboard in Bento Dashboard**: Automatically tallies and presents the user's top most-used snippets inside the Bento settings panel as interactive pills (`#1 Snippet Title (N calls)`). Clicking any pill immediately extracts and copies its content to clipboard.
+- **Visualized Asset Heat**: Provides immediate insight into your personal knowledge reuse distribution and time saved.
+
+## Previous release (v0.7.2)
 
 Multi-Format Clipboard Matrix & Smart Alias Recommendation:
 

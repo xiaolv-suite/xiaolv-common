@@ -141,7 +141,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     });
     activeSettingsDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.2", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.3", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -555,6 +555,46 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
             mkMetric(String(insights.activeItems7Days), "7天活跃条目"),
         );
         insightsBox.appendChild(grid);
+
+        // 高频资产 Top 榜单直达（G52）
+        if (insights.topItems && insights.topItems.length > 0) {
+            const topSec = document.createElement("div");
+            topSec.className = "xlc-insights-top";
+            topSec.style.cssText = "margin-top:10px; display:flex; flex-direction:column; gap:6px;";
+            const topHead = document.createElement("div");
+            topHead.style.cssText = "font-size:11px; font-weight:600; opacity:0.8; display:flex; align-items:center; gap:4px;";
+            topHead.textContent = "⭐ 高频资产 Top 榜（点击直接复制）：";
+            topSec.appendChild(topHead);
+
+            const pillsWrap = document.createElement("div");
+            pillsWrap.style.cssText = "display:flex; flex-wrap:wrap; gap:6px;";
+
+            for (const [idx, item] of insights.topItems.slice(0, 5).entries()) {
+                const pill = document.createElement("button");
+                pill.type = "button";
+                pill.className = "xlc-quick-pill";
+                pill.style.cssText = "padding:3px 10px; font-size:12px; display:inline-flex; align-items:center; gap:5px;";
+                pill.textContent = `#${idx + 1} ${item.title} (${item.count}次)`;
+                pill.title = `点击复制「${item.title}」正文`;
+                pill.addEventListener("click", async () => {
+                    try {
+                        const got = await ctx.library.getItem(item.id);
+                        if (got.ok) {
+                            const kd = await ctx.library.getItemKramdown(got.data);
+                            if (kd.ok && navigator.clipboard) {
+                                await navigator.clipboard.writeText(kd.data);
+                                ctx.notify("info", `已复制高频资产「${item.title}」到剪贴板`);
+                            }
+                        }
+                    } catch {
+                        // ignore
+                    }
+                });
+                pillsWrap.appendChild(pill);
+            }
+            topSec.appendChild(pillsWrap);
+            insightsBox.appendChild(topSec);
+        }
     };
 
     const paintSummary = (): void => {
