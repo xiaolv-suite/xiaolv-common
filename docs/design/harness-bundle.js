@@ -118,6 +118,32 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.7.4", iconName = "iconXlcCommon") {
+    if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
+    const header = dialogElement.querySelector(".b3-dialog__header");
+    const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
+    if (!header || !titleEl) return null;
+    const existing = header.querySelector(".lv-dialog-title-wrap");
+    if (existing) return existing;
+    const wrap = document.createElement("div");
+    wrap.className = "lv-dialog-title-wrap";
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "lv-dialog-title-icon";
+    iconSpan.innerHTML = `<svg><use xlink:href="#${iconName || "iconXlcCommon"}"></use></svg>`;
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "lv-dialog-title-text";
+    titleSpan.textContent = titleText || "";
+    wrap.append(iconSpan, titleSpan);
+    if (badgeText) {
+      const badgeSpan = document.createElement("span");
+      badgeSpan.className = "lv-dialog-title-pill";
+      badgeSpan.textContent = badgeText;
+      wrap.appendChild(badgeSpan);
+    }
+    titleEl.textContent = "";
+    titleEl.appendChild(wrap);
+    return wrap;
+  }
   var init_dialog_dom = __esm({
     "src/ui/dialog-dom.ts"() {
       "use strict";
@@ -314,23 +340,50 @@
       droppedFields
     };
   }
-  function deriveTitle(kramdown, itemType, attrs) {
+  function deriveTitle(kramdown, itemType, attrs = {}) {
     var _a;
-    const alias = cleanString(attrs[ATTR.alias], LIMITS.alias);
+    const alias = cleanString(attrs == null ? void 0 : attrs[ATTR.alias], LIMITS.alias);
     if (alias) return alias;
     const text = kramdownToPlainText(kramdown);
     const firstLine = (_a = text.split("\n").map((l) => l.trim()).find((l) => l.length > 0)) != null ? _a : "";
     if (firstLine) return firstLine.slice(0, LIMITS.title);
-    if (itemType === "url") return cleanString(attrs[ATTR.url], LIMITS.title) || "URL";
+    if (itemType === "url") return cleanString(attrs == null ? void 0 : attrs[ATTR.url], LIMITS.title) || "URL";
     if (itemType === "code") return "Code";
     return itemType;
   }
   function kramdownToPlainText(kramdown) {
+    if (!kramdown) return "";
     return kramdown.replace(/^```.*$/gm, "").replace(/\{\{.*?\}\}/g, "").replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, "$1 $2").replace(/\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, "$1 $2").replace(/^#{1,6}\s+/gm, "").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").replace(/`([^`]+)`/g, "$1").replace(/\{\:(\s[^}]*)?\}/g, "").replace(/^%%[\s\S]*?%%$/gm, "").trim();
   }
   function deriveSummary(kramdown) {
     const text = kramdownToPlainText(kramdown).replace(/\s+/g, " ").trim();
     return text.slice(0, LIMITS.summary);
+  }
+  function deriveSmartSummary(content, tokens = [], maxLen = 90) {
+    const plain = kramdownToPlainText(content).replace(/\s+/g, " ").trim();
+    if (!plain) return "";
+    if (plain.length <= maxLen || !tokens || tokens.length === 0) {
+      return plain.slice(0, maxLen) + (plain.length > maxLen ? "\u2026" : "");
+    }
+    const lower = plain.toLowerCase();
+    let firstIdx = -1;
+    for (const t of tokens) {
+      const cleanT = t.trim().toLowerCase();
+      if (!cleanT) continue;
+      const at = lower.indexOf(cleanT);
+      if (at !== -1 && (firstIdx === -1 || at < firstIdx)) {
+        firstIdx = at;
+      }
+    }
+    if (firstIdx === -1 || firstIdx <= 30) {
+      return plain.slice(0, maxLen) + (plain.length > maxLen ? "\u2026" : "");
+    }
+    const lead = 20;
+    const start = Math.max(0, firstIdx - lead);
+    const end = Math.min(plain.length, start + maxLen);
+    const prefix = start > 0 ? "\u2026" : "";
+    const suffix = end < plain.length ? "\u2026" : "";
+    return prefix + plain.slice(start, end).trim() + suffix;
   }
   function getCategoryColorVariant(category) {
     var _a;
@@ -578,9 +631,178 @@
     }
   });
 
+  // src/model/actions.ts
+  function isValidAssetPath(path) {
+    return ASSET_PATH_RE.test(path) && !path.includes("..");
+  }
+  function extractAssetPath(kramdown) {
+    const m = kramdown.match(/\]\((assets\/[^)\s]+)[^)]*\)/);
+    const path = m == null ? void 0 : m[1];
+    if (!path) return null;
+    return isValidAssetPath(path) ? path : null;
+  }
+  function extractCodeFence(kramdown) {
+    var _a, _b;
+    const m = kramdown.match(/^```([\w+#.-]*)\s*\n([\s\S]*?)\n?```\s*$/);
+    if (!m) return null;
+    return { language: (_a = m[1]) != null ? _a : "", code: (_b = m[2]) != null ? _b : "" };
+  }
+  function refAnchorText(item) {
+    const base = item.alias || item.title || "ref";
+    return base.replace(/[[\]()']/g, "").slice(0, 96) || "ref";
+  }
+  function asInlineText(text) {
+    return text.slice(0, LIMITS.contentChars);
+  }
+  function buildBlockRef(blockId, anchor) {
+    if (!BLOCK_ID_RE.test(blockId)) throw new Error("invalid block id");
+    return `((${blockId} '${anchor.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'))`;
+  }
+  function buildEmbedBlock(blockId) {
+    if (!BLOCK_ID_RE.test(blockId)) throw new Error("invalid block id");
+    return `{{select * from blocks where id='${blockId}'}}`;
+  }
+  function planAction(item, mode, ctx) {
+    const base = {
+      mode,
+      clipboardKind: "text",
+      downgraded: false,
+      pendingVerification: [],
+      warnings: []
+    };
+    if (ctx.content.sourceMissing && mode !== "insert-ref" && mode !== "insert-embed" && mode !== "copy-content") {
+      if (mode === "open") {
+        return { ...base, open: void 0, downgraded: true, downgradeReason: "source-missing", warnings: ["source-missing"] };
+      }
+    }
+    if (ctx.content.assetMissing) {
+      base.pendingVerification.push("asset-missing");
+    }
+    switch (item.itemType) {
+      case "text": {
+        const text = asInlineText(ctx.content.kramdown);
+        if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: text, clipboardKind: "text" };
+        return { ...base, markdown: text };
+      }
+      case "markdown":
+      case "structure": {
+        const md = ctx.content.kramdown.slice(0, LIMITS.contentChars);
+        if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: md, clipboardKind: "markdown" };
+        return { ...base, markdown: md };
+      }
+      case "url": {
+        const url = item.url || extractFirstUrl(ctx.content.kramdown);
+        if (!url || !isSafeHttpUrl(url)) {
+          return { ...base, downgraded: true, downgradeReason: "type-unsupported", warnings: ["url-empty"] };
+        }
+        if (mode === "open") return { ...base, open: { kind: "url", url } };
+        if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: url, clipboardKind: "url" };
+        const title = item.title && item.title !== url ? item.title : url;
+        return { ...base, markdown: `[${title.replace(/[[\]]/g, "")}](${url})` };
+      }
+      case "code": {
+        const fence = extractCodeFence(ctx.content.kramdown);
+        const code = fence ? fence.code : ctx.content.kramdown;
+        const language = fence ? fence.language : "";
+        if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: code, clipboardKind: "code" };
+        return { ...base, markdown: "```" + language + "\n" + code.slice(0, LIMITS.contentChars) + "\n```" };
+      }
+      case "image":
+      case "asset": {
+        const assetPath = extractAssetPath(ctx.content.kramdown);
+        if (!assetPath) {
+          return { ...base, downgraded: true, downgradeReason: "asset-missing", warnings: ["asset-path-unresolvable"] };
+        }
+        if (ctx.content.assetMissing) {
+          if (mode === "copy" || mode === "copy-content") {
+            return {
+              ...base,
+              clipboardText: `[${item.title}](${assetPath})`,
+              clipboardKind: "markdown-link",
+              pendingVerification: ["asset-missing"]
+            };
+          }
+          return { ...base, downgraded: true, downgradeReason: "asset-missing", warnings: ["asset-missing"] };
+        }
+        if (mode === "open") {
+          return { ...base, open: { kind: "asset", assetPath } };
+        }
+        if (mode === "copy" || mode === "copy-content") {
+          return {
+            ...base,
+            clipboardText: `[${item.title}](${assetPath})`,
+            clipboardKind: "markdown-link",
+            pendingVerification: item.itemType === "image" ? ["bitmap-clipboard-unverified"] : []
+          };
+        }
+        return {
+          ...base,
+          markdown: item.itemType === "image" ? `![](${assetPath})` : `[${item.title}](${assetPath})`,
+          pendingVerification: item.itemType === "image" ? ["bitmap-clipboard-unverified"] : []
+        };
+      }
+      case "blockref": {
+        const target = resolveBlockRefTarget(item);
+        if (!BLOCK_ID_RE.test(target)) {
+          return { ...base, downgraded: true, downgradeReason: "source-missing", warnings: ["target-block-invalid"] };
+        }
+        if (mode === "copy" || mode === "copy-content") {
+          return { ...base, clipboardText: ctx.content.kramdown, clipboardKind: "markdown", mode: "copy-content" };
+        }
+        if (mode === "insert-ref") {
+          return { ...base, markdown: buildBlockRef(target, refAnchorText(item)) };
+        }
+        if (mode === "insert-embed") {
+          return { ...base, markdown: buildEmbedBlock(target) };
+        }
+        if (mode === "insert-content") {
+          return { ...base, markdown: ctx.content.kramdown.slice(0, LIMITS.contentChars) };
+        }
+        return { ...base, markdown: buildBlockRef(target, refAnchorText(item)) };
+      }
+      default: {
+        return { ...base, downgraded: true, downgradeReason: "type-unsupported", warnings: ["unknown-type"] };
+      }
+    }
+  }
+  function extractFirstUrl(text) {
+    const m = text.match(/https?:\/\/[^\s)）\]]+/);
+    return m ? m[0].slice(0, 2048) : "";
+  }
+  function planOpenSource(item, resolved) {
+    if (item.itemType === "url") {
+      const url = item.url || extractFirstUrl(resolved.kramdown);
+      return url && isSafeHttpUrl(url) ? { target: { kind: "url", url } } : { failure: "source-missing" };
+    }
+    if (item.itemType === "image" || item.itemType === "asset") {
+      const assetPath = extractAssetPath(resolved.kramdown);
+      if (!assetPath || resolved.assetMissing) return { failure: "asset-missing" };
+      return { target: { kind: "asset", assetPath } };
+    }
+    const sourceBlockId = item.itemType === "blockref" ? resolveBlockRefTarget(item) : item.source.sourceBlockId;
+    if (sourceBlockId) {
+      if (resolved.sourceMissing) return { failure: "source-missing" };
+      return { target: { kind: "block", docId: item.source.sourceDocId, blockId: sourceBlockId } };
+    }
+    if (item.source.sourceDocId) {
+      if (resolved.sourceMissing) return { failure: "source-missing" };
+      return { target: { kind: "doc", docId: item.source.sourceDocId } };
+    }
+    return { target: { kind: "doc", docId: item.libraryDocId } };
+  }
+  var ASSET_PATH_RE;
+  var init_actions = __esm({
+    "src/model/actions.ts"() {
+      "use strict";
+      init_constants();
+      init_item();
+      ASSET_PATH_RE = /^(assets\/[^\s/][^\s]*|assets\/[^\s/])$/;
+    }
+  });
+
   // src/model/variables.ts
   function parseAskField(rawName, rawOptions) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     let name = rawName.trim().slice(0, LIMITS.tag);
     let defaultValue;
     const eqIdx = name.indexOf("=");
@@ -589,9 +811,29 @@
       name = name.slice(0, eqIdx).trim().slice(0, LIMITS.tag);
     }
     if (!name) return null;
-    const options = (rawOptions != null ? rawOptions : "").split(/[,，、]/).map((s) => s.trim().slice(0, LIMITS.tag)).filter(Boolean).slice(0, 16);
-    if (options.length === 1 && ((_a = options[0]) == null ? void 0 : _a.toLowerCase()) === "date") return { name, kind: "date", options: [], ...defaultValue ? { defaultValue } : {} };
-    if (options.length === 1 && ((_b = options[0]) == null ? void 0 : _b.toLowerCase()) === "textarea") return { name, kind: "textarea", options: [], ...defaultValue ? { defaultValue } : {} };
+    let isMulti = false;
+    let cleanRawOptions = rawOptions != null ? rawOptions : "";
+    if (cleanRawOptions.includes("|")) {
+      const parts = cleanRawOptions.split("|");
+      const suffix = (_b = (_a = parts[parts.length - 1]) == null ? void 0 : _a.trim().toLowerCase()) != null ? _b : "";
+      if (["multi", "multiple", "checkboxes", "mselect", "\u591A\u9009"].includes(suffix)) {
+        isMulti = true;
+        cleanRawOptions = parts.slice(0, parts.length - 1).join("|");
+      }
+    } else if (/^(?:multi|multiple|多选)\s*[:：]/i.test(cleanRawOptions)) {
+      isMulti = true;
+      cleanRawOptions = cleanRawOptions.replace(/^(?:multi|multiple|多选)\s*[:：]/i, "");
+    }
+    const options = cleanRawOptions.split(/[,，、]/).map((s) => s.trim().slice(0, LIMITS.tag)).filter(Boolean).slice(0, 16);
+    if (isMulti && options.length > 0) {
+      return { name, kind: "multi", options, ...defaultValue ? { defaultValue } : {} };
+    }
+    const firstOpt = (_d = (_c = options[0]) == null ? void 0 : _c.toLowerCase()) != null ? _d : "";
+    if (options.length === 1 && firstOpt === "date") return { name, kind: "date", options: [], ...defaultValue ? { defaultValue } : {} };
+    if (options.length === 1 && firstOpt === "textarea") return { name, kind: "textarea", options: [], ...defaultValue ? { defaultValue } : {} };
+    if (options.length === 1 && ["toggle", "checkbox", "switch", "bool", "\u5F00\u5173"].includes(firstOpt)) {
+      return { name, kind: "toggle", options: [], ...defaultValue ? { defaultValue } : {} };
+    }
     if (options.length >= 2) return { name, kind: "select", options, ...defaultValue ? { defaultValue } : {} };
     if (options.length === 1 && !defaultValue) {
       defaultValue = options[0];
@@ -602,6 +844,8 @@
     const nameWithDef = field.defaultValue && field.kind === "text" && field.options.length === 0 ? `${field.name}=${field.defaultValue}` : field.name;
     if (field.kind === "text") return field.defaultValue && field.options.length === 0 ? `{{xlc:ask:${nameWithDef}}}` : `{{xlc:ask:${field.name}}}`;
     if (field.kind === "select") return `{{xlc:ask:${field.name}|${field.options.join(",")}}}`;
+    if (field.kind === "multi") return `{{xlc:ask:${field.name}|${field.options.join(",")}|multi}}`;
+    if (field.kind === "toggle") return field.defaultValue ? `{{xlc:ask:${field.name}=${field.defaultValue}|toggle}}` : `{{xlc:ask:${field.name}|toggle}}`;
     return `{{xlc:ask:${field.name}|${field.kind}}}`;
   }
   function listAskFields(text) {
@@ -627,10 +871,21 @@
   function expandAsks(text, fills) {
     if (!text) return text;
     return text.replace(ASK_PATTERN, (_match, rawName, rawOptions) => {
-      var _a;
+      var _a, _b, _c;
       const field = parseAskField(rawName, rawOptions);
       if (!field) return _match;
-      const filled = Object.prototype.hasOwnProperty.call(fills, field.name) ? cleanFillValue((_a = fills[field.name]) != null ? _a : "") : "";
+      if (field.kind === "toggle") {
+        if (Object.prototype.hasOwnProperty.call(fills, field.name)) {
+          const filled2 = (_b = (_a = fills[field.name]) == null ? void 0 : _a.trim()) != null ? _b : "";
+          if (filled2 === "" || filled2 === "false" || filled2 === "0" || filled2 === "\u5426") {
+            return "";
+          }
+          return cleanFillValue(filled2 === "true" || filled2 === "\u662F" ? field.defaultValue || "\u662F" : filled2);
+        }
+        if (field.defaultValue) return cleanFillValue(field.defaultValue);
+        return "";
+      }
+      const filled = Object.prototype.hasOwnProperty.call(fills, field.name) ? cleanFillValue((_c = fills[field.name]) != null ? _c : "") : "";
       if (filled) return filled;
       if (field.defaultValue) return cleanFillValue(field.defaultValue);
       return `__${field.name}__`;
@@ -691,11 +946,24 @@
       // 按钮确认/取消已自行结算，不在此重复触发（R138 结算语义）
       destroyCallback: () => {
         var _a2;
+        if (typeof window !== "undefined" && window.visualViewport) {
+          window.visualViewport.removeEventListener("resize", handleViewport);
+          window.visualViewport.removeEventListener("scroll", handleViewport);
+        }
         if (!settled) (_a2 = options.onCancel) == null ? void 0 : _a2.call(options);
       }
     });
     const container = dialog.element.querySelector(".b3-dialog__container");
     if (container) container.classList.add("xlc-varform-host");
+    const handleViewport = () => {
+      if (!container || typeof window === "undefined" || !window.visualViewport) return;
+      const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
+      container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
+    };
+    if (typeof window !== "undefined" && window.visualViewport) {
+      window.visualViewport.addEventListener("resize", handleViewport);
+      window.visualViewport.addEventListener("scroll", handleViewport);
+    }
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -762,6 +1030,97 @@
         input.value = field.defaultValue;
       }
       wrap.appendChild(input);
+      if (field.kind === "toggle") {
+        input.style.display = "none";
+        const toggleRow = document.createElement("div");
+        toggleRow.className = "xlc-varform-toggle-row";
+        const toggleSwitch = document.createElement("input");
+        toggleSwitch.type = "checkbox";
+        toggleSwitch.className = "b3-switch xlc-varform-toggle";
+        const defaultVal = field.defaultValue || "\u662F";
+        toggleSwitch.checked = Boolean(input.value && input.value !== "\u5426" && input.value !== "false" && input.value !== "0");
+        const toggleHint = document.createElement("span");
+        toggleHint.className = "xlc-form-hint";
+        toggleHint.textContent = toggleSwitch.checked ? `\u5305\u542B\uFF1A${defaultVal}` : "\u5173\u95ED\uFF1A\u4E0D\u5305\u542B\u6B64\u5185\u5BB9";
+        toggleSwitch.addEventListener("change", () => {
+          input.value = toggleSwitch.checked ? defaultVal : "";
+          toggleHint.textContent = toggleSwitch.checked ? `\u5305\u542B\uFF1A${defaultVal}` : "\u5173\u95ED\uFF1A\u4E0D\u5305\u542B\u6B64\u5185\u5BB9";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        toggleRow.append(toggleSwitch, toggleHint);
+        wrap.appendChild(toggleRow);
+      }
+      if (field.kind === "multi") {
+        input.style.display = "none";
+        const multiWrap = document.createElement("div");
+        multiWrap.className = "xlc-varform-multi-options";
+        const currentSelected = new Set(
+          (input.value ? input.value.split(/[,，、]/) : field.defaultValue ? field.defaultValue.split(/[,，、]/) : []).map((s) => s.trim()).filter(Boolean)
+        );
+        input.value = Array.from(currentSelected).join("\u3001");
+        const updateMultiVal = () => {
+          input.value = Array.from(currentSelected).join("\u3001");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        for (const opt of field.options) {
+          const optBtn = document.createElement("button");
+          optBtn.type = "button";
+          optBtn.className = "xlc-multi-option-pill" + (currentSelected.has(opt) ? " xlc-multi-option-pill--selected" : "");
+          optBtn.textContent = opt;
+          optBtn.title = `\u70B9\u51FB\u5207\u6362\u9009\u4E2D "${opt}"`;
+          optBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (currentSelected.has(opt)) {
+              currentSelected.delete(opt);
+              optBtn.classList.remove("xlc-multi-option-pill--selected");
+            } else {
+              currentSelected.add(opt);
+              optBtn.classList.add("xlc-multi-option-pill--selected");
+            }
+            updateMultiVal();
+          });
+          multiWrap.appendChild(optBtn);
+        }
+        wrap.appendChild(multiWrap);
+      }
+      const candidateOptions = /* @__PURE__ */ new Set();
+      if (field.kind !== "multi" && field.options && Array.isArray(field.options)) {
+        for (const opt of field.options) {
+          if (opt && opt.trim()) candidateOptions.add(opt.trim());
+        }
+      }
+      if (field.defaultValue && field.defaultValue.trim()) {
+        candidateOptions.add(field.defaultValue.trim());
+      }
+      if (candidateOptions.size > 0) {
+        const pillsWrap = document.createElement("div");
+        pillsWrap.className = "xlc-varform-quick-options";
+        const syncPills = () => {
+          pillsWrap.querySelectorAll(".xlc-quick-option-pill").forEach((pill) => {
+            pill.classList.toggle("xlc-quick-option-pill--selected", pill.textContent === input.value);
+          });
+        };
+        for (const opt of Array.from(candidateOptions).slice(0, 8)) {
+          const optBtn = document.createElement("button");
+          optBtn.type = "button";
+          optBtn.className = "xlc-quick-option-pill" + (input.value === opt ? " xlc-quick-option-pill--selected" : "");
+          optBtn.textContent = opt;
+          optBtn.title = `\u70B9\u51FB\u586B\u5165 "${opt}"`;
+          optBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            input.value = opt;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            input.focus();
+          });
+          pillsWrap.appendChild(optBtn);
+        }
+        input.addEventListener("input", syncPills);
+        input.addEventListener("change", syncPills);
+        wrap.appendChild(pillsWrap);
+      }
       inputs.push(input);
       fieldsWrap.appendChild(wrap);
     }
@@ -815,6 +1174,40 @@
     cancelBtn.dataset.xlcControl = "variable.cancel";
     cancelBtn.textContent = t("cancel");
     foot.appendChild(cancelBtn);
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "b3-button xlc-btn-ghost";
+    resetBtn.dataset.xlcControl = "variable.reset-defaults";
+    resetBtn.textContent = "\u21BA " + (t("resetDefaults") || "\u6062\u590D\u9ED8\u8BA4");
+    resetBtn.title = "\u6E05\u7A7A\u5F53\u524D\u8F93\u5165\uFF0C\u6062\u590D\u6240\u6709\u5B57\u6BB5\u5230\u6A21\u677F\u521D\u59CB\u9ED8\u8BA4\u503C";
+    resetBtn.addEventListener("click", () => {
+      var _a2, _b2;
+      for (const input of inputs) {
+        const name = (_a2 = input.dataset.xlcVarField) != null ? _a2 : "";
+        const field = options.fields.find((f) => f.name === name);
+        input.value = (_b2 = field == null ? void 0 : field.defaultValue) != null ? _b2 : "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    foot.appendChild(resetBtn);
+    if (options.onCopy) {
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "b3-button xlc-btn-ghost";
+      copyBtn.dataset.xlcControl = "variable.copy";
+      copyBtn.textContent = "\u29C9 " + (t("copy") || "\u590D\u5236");
+      copyBtn.title = "\u5C06\u586B\u5165\u53D8\u91CF\u540E\u7684\u5C55\u5F00\u7ED3\u679C\u590D\u5236\u5230\u526A\u8D34\u677F\u5E76\u5173\u95ED (Alt+C)";
+      copyBtn.addEventListener("click", () => {
+        var _a2;
+        if (liveDebounceTimer) clearTimeout(liveDebounceTimer);
+        if (settled) return;
+        settled = true;
+        dialog.destroy();
+        (_a2 = options.onCopy) == null ? void 0 : _a2.call(options, collect());
+      });
+      foot.appendChild(copyBtn);
+    }
     const insertBtn = document.createElement("button");
     insertBtn.className = "b3-button xlc-btn-primary";
     insertBtn.textContent = t("insert");
@@ -841,6 +1234,22 @@
     root.addEventListener("keydown", (ev) => {
       var _a2;
       if (ev.isComposing || ev.keyCode === 229) return;
+      if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+        ev.preventDefault();
+        confirm3();
+        return;
+      }
+      if (ev.altKey && (ev.key === "c" || ev.key === "C") || ev.ctrlKey && ev.shiftKey && (ev.key === "C" || ev.key === "c")) {
+        if (options.onCopy) {
+          ev.preventDefault();
+          if (liveDebounceTimer) clearTimeout(liveDebounceTimer);
+          if (settled) return;
+          settled = true;
+          dialog.destroy();
+          options.onCopy(collect());
+          return;
+        }
+      }
       if (ev.key === "Enter" && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
         if (ev.target.tagName === "BUTTON") return;
         if (ev.target.tagName === "TEXTAREA") return;
@@ -877,10 +1286,14 @@
       { id: "ask", text: "{{xlc:ask:\u5B57\u6BB5}}" },
       { id: "ask.options", text: "{{xlc:ask:\u5B57\u6BB5|\u9009\u9879A,\u9009\u9879B}}" },
       { id: "ask.textarea", text: "{{xlc:ask:\u5B57\u6BB5|textarea}}" },
+      { id: "ask.multi", text: "{{xlc:ask:\u5B57\u6BB5|\u9009\u9879A,\u9009\u9879B,\u9009\u9879C|multi}}" },
+      { id: "ask.toggle", text: "{{xlc:ask:\u5B57\u6BB5=\u9ED8\u8BA4\u5185\u5BB9|toggle}}" },
       { id: "snippet", text: "{{xlc:snippet:\u6807\u9898}}" },
       { id: "cursor", text: "{{xlc:cursor}}" },
       { id: "date", text: "{{xlc:date}}" },
       { id: "date.offset", text: "{{xlc:date|+3d}}" },
+      { id: "week", text: "{{xlc:week}}" },
+      { id: "timestamp", text: "{{xlc:timestamp}}" },
       { id: "random", text: "{{xlc:random|\u9009\u9879A,\u9009\u9879B}}" },
       { id: "doc", text: "{{xlc:doc}}" },
       { id: "clipboard", text: "{{xlc:clipboard}}" }
@@ -1232,6 +1645,80 @@
     }
   });
 
+  // src/model/export-sanitizer.ts
+  function sanitizeTextForExport(text, options = {}) {
+    var _a;
+    if (!text || !text.trim()) {
+      return { text: text != null ? text : "", sanitizedCount: 0, detectedTypes: [] };
+    }
+    const mode = (_a = options.mode) != null ? _a : "mask";
+    const sanitizePhones = options.sanitizePhones !== false;
+    const sanitizeEmails = options.sanitizeEmails !== false;
+    const sanitizeIdCards = options.sanitizeIdCards !== false;
+    const sanitizeTokens = options.sanitizeTokens !== false;
+    let result = text;
+    let sanitizedCount = 0;
+    const detectedTypes = /* @__PURE__ */ new Set();
+    if (options.customReplacements) {
+      for (const [target, replacement] of Object.entries(options.customReplacements)) {
+        if (target && result.includes(target)) {
+          const count = result.split(target).length - 1;
+          sanitizedCount += count;
+          detectedTypes.add("custom");
+          result = result.replaceAll(target, replacement);
+        }
+      }
+    }
+    if (sanitizePhones) {
+      result = result.replace(PHONE_REGEX, (_match, p1, _p2, p3) => {
+        sanitizedCount++;
+        detectedTypes.add("phone");
+        return mode === "placeholder" ? "{{xlc:ask:\u624B\u673A\u53F7}}" : `${p1}****${p3}`;
+      });
+    }
+    if (sanitizeEmails) {
+      result = result.replace(EMAIL_REGEX, (_match, prefix, domain) => {
+        sanitizedCount++;
+        detectedTypes.add("email");
+        return mode === "placeholder" ? "{{xlc:ask:\u7535\u5B50\u90AE\u7BB1}}" : `${prefix}***${domain}`;
+      });
+    }
+    if (sanitizeIdCards) {
+      result = result.replace(ID_CARD_REGEX, (_match, prefix, suffix) => {
+        sanitizedCount++;
+        detectedTypes.add("idCard");
+        return mode === "placeholder" ? "{{xlc:ask:\u8EAB\u4EFD\u8BC1\u53F7}}" : `${prefix}********${suffix}`;
+      });
+    }
+    if (sanitizeTokens) {
+      result = result.replace(TOKEN_REGEX, (_match, tokenVal) => {
+        sanitizedCount++;
+        detectedTypes.add("token");
+        if (mode === "placeholder") {
+          return "{{xlc:ask:API\u5BC6\u94A5}}";
+        }
+        if (tokenVal.startsWith("sk-")) return "sk-********************";
+        if (tokenVal.startsWith("ghp_")) return "ghp_********************";
+        return "Bearer ********************";
+      });
+    }
+    return {
+      text: result,
+      sanitizedCount,
+      detectedTypes: Array.from(detectedTypes)
+    };
+  }
+  var PHONE_REGEX, EMAIL_REGEX, ID_CARD_REGEX, TOKEN_REGEX;
+  var init_export_sanitizer = __esm({
+    "src/model/export-sanitizer.ts"() {
+      "use strict";
+      PHONE_REGEX = /(?<!\d)(1[3-9]\d)(\d{4})(\d{4})(?!\d)/g;
+      EMAIL_REGEX = /\b([a-zA-Z0-9._%+-]{1,2})[a-zA-Z0-9._%+-]*(@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/g;
+      ID_CARD_REGEX = /(?<!\d)(\d{6})(?:\d{8})(\d{3}[\dXx])(?!\d)/g;
+      TOKEN_REGEX = /(?<![a-zA-Z0-9_-])(sk-[a-zA-Z0-9]{16,}|ghp_[a-zA-Z0-9]{16,}|Bearer\s+[a-zA-Z0-9._-]{16,})(?![a-zA-Z0-9_-])/g;
+    }
+  });
+
   // src/model/transfer.ts
   function base64ToUtf8(b64) {
     const binary = atob(b64);
@@ -1366,6 +1853,7 @@
       "use strict";
       init_constants();
       init_item();
+      init_export_sanitizer();
       COMPACT_BUNDLE_PREFIX = "xlc-bundle:";
     }
   });
@@ -1474,178 +1962,11 @@
     }
   });
 
-  // src/model/actions.ts
-  function isValidAssetPath(path) {
-    return ASSET_PATH_RE.test(path) && !path.includes("..");
-  }
-  function extractAssetPath(kramdown) {
-    const m = kramdown.match(/\]\((assets\/[^)\s]+)[^)]*\)/);
-    const path = m == null ? void 0 : m[1];
-    if (!path) return null;
-    return isValidAssetPath(path) ? path : null;
-  }
-  function extractCodeFence(kramdown) {
-    var _a, _b;
-    const m = kramdown.match(/^```([\w+#.-]*)\s*\n([\s\S]*?)\n?```\s*$/);
-    if (!m) return null;
-    return { language: (_a = m[1]) != null ? _a : "", code: (_b = m[2]) != null ? _b : "" };
-  }
-  function refAnchorText(item) {
-    const base = item.alias || item.title || "ref";
-    return base.replace(/[[\]()']/g, "").slice(0, 96) || "ref";
-  }
-  function asInlineText(text) {
-    return text.slice(0, LIMITS.contentChars);
-  }
-  function buildBlockRef(blockId, anchor) {
-    if (!BLOCK_ID_RE.test(blockId)) throw new Error("invalid block id");
-    return `((${blockId} '${anchor.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'))`;
-  }
-  function buildEmbedBlock(blockId) {
-    if (!BLOCK_ID_RE.test(blockId)) throw new Error("invalid block id");
-    return `{{select * from blocks where id='${blockId}'}}`;
-  }
-  function planAction(item, mode, ctx) {
-    const base = {
-      mode,
-      clipboardKind: "text",
-      downgraded: false,
-      pendingVerification: [],
-      warnings: []
-    };
-    if (ctx.content.sourceMissing && mode !== "insert-ref" && mode !== "insert-embed" && mode !== "copy-content") {
-      if (mode === "open") {
-        return { ...base, open: void 0, downgraded: true, downgradeReason: "source-missing", warnings: ["source-missing"] };
-      }
-    }
-    if (ctx.content.assetMissing) {
-      base.pendingVerification.push("asset-missing");
-    }
-    switch (item.itemType) {
-      case "text": {
-        const text = asInlineText(ctx.content.kramdown);
-        if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: text, clipboardKind: "text" };
-        return { ...base, markdown: text };
-      }
-      case "markdown":
-      case "structure": {
-        const md = ctx.content.kramdown.slice(0, LIMITS.contentChars);
-        if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: md, clipboardKind: "markdown" };
-        return { ...base, markdown: md };
-      }
-      case "url": {
-        const url = item.url || extractFirstUrl(ctx.content.kramdown);
-        if (!url || !isSafeHttpUrl(url)) {
-          return { ...base, downgraded: true, downgradeReason: "type-unsupported", warnings: ["url-empty"] };
-        }
-        if (mode === "open") return { ...base, open: { kind: "url", url } };
-        if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: url, clipboardKind: "url" };
-        const title = item.title && item.title !== url ? item.title : url;
-        return { ...base, markdown: `[${title.replace(/[[\]]/g, "")}](${url})` };
-      }
-      case "code": {
-        const fence = extractCodeFence(ctx.content.kramdown);
-        const code = fence ? fence.code : ctx.content.kramdown;
-        const language = fence ? fence.language : "";
-        if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: code, clipboardKind: "code" };
-        return { ...base, markdown: "```" + language + "\n" + code.slice(0, LIMITS.contentChars) + "\n```" };
-      }
-      case "image":
-      case "asset": {
-        const assetPath = extractAssetPath(ctx.content.kramdown);
-        if (!assetPath) {
-          return { ...base, downgraded: true, downgradeReason: "asset-missing", warnings: ["asset-path-unresolvable"] };
-        }
-        if (ctx.content.assetMissing) {
-          if (mode === "copy" || mode === "copy-content") {
-            return {
-              ...base,
-              clipboardText: `[${item.title}](${assetPath})`,
-              clipboardKind: "markdown-link",
-              pendingVerification: ["asset-missing"]
-            };
-          }
-          return { ...base, downgraded: true, downgradeReason: "asset-missing", warnings: ["asset-missing"] };
-        }
-        if (mode === "open") {
-          return { ...base, open: { kind: "asset", assetPath } };
-        }
-        if (mode === "copy" || mode === "copy-content") {
-          return {
-            ...base,
-            clipboardText: `[${item.title}](${assetPath})`,
-            clipboardKind: "markdown-link",
-            pendingVerification: item.itemType === "image" ? ["bitmap-clipboard-unverified"] : []
-          };
-        }
-        return {
-          ...base,
-          markdown: item.itemType === "image" ? `![](${assetPath})` : `[${item.title}](${assetPath})`,
-          pendingVerification: item.itemType === "image" ? ["bitmap-clipboard-unverified"] : []
-        };
-      }
-      case "blockref": {
-        const target = resolveBlockRefTarget(item);
-        if (!BLOCK_ID_RE.test(target)) {
-          return { ...base, downgraded: true, downgradeReason: "source-missing", warnings: ["target-block-invalid"] };
-        }
-        if (mode === "copy" || mode === "copy-content") {
-          return { ...base, clipboardText: ctx.content.kramdown, clipboardKind: "markdown", mode: "copy-content" };
-        }
-        if (mode === "insert-ref") {
-          return { ...base, markdown: buildBlockRef(target, refAnchorText(item)) };
-        }
-        if (mode === "insert-embed") {
-          return { ...base, markdown: buildEmbedBlock(target) };
-        }
-        if (mode === "insert-content") {
-          return { ...base, markdown: ctx.content.kramdown.slice(0, LIMITS.contentChars) };
-        }
-        return { ...base, markdown: buildBlockRef(target, refAnchorText(item)) };
-      }
-      default: {
-        return { ...base, downgraded: true, downgradeReason: "type-unsupported", warnings: ["unknown-type"] };
-      }
-    }
-  }
-  function extractFirstUrl(text) {
-    const m = text.match(/https?:\/\/[^\s)）\]]+/);
-    return m ? m[0].slice(0, 2048) : "";
-  }
-  function planOpenSource(item, resolved) {
-    if (item.itemType === "url") {
-      const url = item.url || extractFirstUrl(resolved.kramdown);
-      return url && isSafeHttpUrl(url) ? { target: { kind: "url", url } } : { failure: "source-missing" };
-    }
-    if (item.itemType === "image" || item.itemType === "asset") {
-      const assetPath = extractAssetPath(resolved.kramdown);
-      if (!assetPath || resolved.assetMissing) return { failure: "asset-missing" };
-      return { target: { kind: "asset", assetPath } };
-    }
-    const sourceBlockId = item.itemType === "blockref" ? resolveBlockRefTarget(item) : item.source.sourceBlockId;
-    if (sourceBlockId) {
-      if (resolved.sourceMissing) return { failure: "source-missing" };
-      return { target: { kind: "block", docId: item.source.sourceDocId, blockId: sourceBlockId } };
-    }
-    if (item.source.sourceDocId) {
-      if (resolved.sourceMissing) return { failure: "source-missing" };
-      return { target: { kind: "doc", docId: item.source.sourceDocId } };
-    }
-    return { target: { kind: "doc", docId: item.libraryDocId } };
-  }
-  var ASSET_PATH_RE;
-  var init_actions = __esm({
-    "src/model/actions.ts"() {
-      "use strict";
-      init_constants();
-      init_item();
-      ASSET_PATH_RE = /^(assets\/[^\s/][^\s]*|assets\/[^\s/])$/;
-    }
-  });
-
   // src/service/export-markdown.ts
-  async function buildMarkdownExport(items, kramdownById, fetchAssetBytes, pack) {
+  async function buildMarkdownExport(items, kramdownById, fetchAssetBytes, packOrOptions) {
     var _a, _b, _c;
+    const pack = packOrOptions && "name" in packOrOptions ? packOrOptions : packOrOptions == null ? void 0 : packOrOptions.pack;
+    const sanitizer = packOrOptions && "sanitizer" in packOrOptions ? packOrOptions.sanitizer : void 0;
     const oneLine = (value) => value.replace(/[\r\n]+/g, " ").trim();
     for (const item of items) {
       if (!kramdownById.has(item.id)) {
@@ -1660,7 +1981,11 @@
     const varNames = [];
     for (const item of items) {
       if (item.itemType === "code") continue;
-      for (const field of listAskFields((_a = kramdownById.get(item.id)) != null ? _a : "")) {
+      let text = (_a = kramdownById.get(item.id)) != null ? _a : "";
+      if (sanitizer) {
+        text = sanitizeTextForExport(text, sanitizer).text;
+      }
+      for (const field of listAskFields(text)) {
         if (!varNames.includes(field.name)) varNames.push(field.name);
         if (varNames.length >= LIMITS.maxAskFields) break;
       }
@@ -1694,7 +2019,10 @@
     }
     let totalLen = mdParts.reduce((length, part) => length + part.length, 0) + mdParts.length - 1;
     for (const item of items) {
-      const kramdown = (_c = kramdownById.get(item.id)) != null ? _c : "";
+      let kramdown = (_c = kramdownById.get(item.id)) != null ? _c : "";
+      if (sanitizer && item.itemType !== "code") {
+        kramdown = sanitizeTextForExport(kramdown, sanitizer).text;
+      }
       const meta = [
         `<!-- xlc-item`,
         `id: ${item.id}`,
@@ -1742,6 +2070,7 @@
       init_actions();
       init_constants();
       init_variables();
+      init_export_sanitizer();
       ExportIntegrityError = class extends Error {
         constructor(reason, itemLabel = "", detail = "") {
           super(`export-${reason}${itemLabel ? `: ${itemLabel}` : ""}${detail ? `: ${detail}` : ""}`);
@@ -2486,6 +2815,160 @@
     }
   });
 
+  // src/kernel/client.ts
+  function parseChildBlocks(data) {
+    if (!Array.isArray(data)) return [];
+    return data.filter((raw) => {
+      return !!raw && typeof raw.id === "string" && typeof raw.type === "string";
+    });
+  }
+  function parseKramdown(data) {
+    if (!data || typeof data.id !== "string") return null;
+    const kramdown = data.kramdown;
+    return { id: data.id, kramdown: typeof kramdown === "string" ? kramdown : "" };
+  }
+  function parseBatchKramdowns(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+    const out = {};
+    for (const [blockId, value] of Object.entries(data)) {
+      if (/^\d{14}-[0-9a-z]{7}$/.test(blockId) && typeof value === "string") out[blockId] = value;
+    }
+    return out;
+  }
+  function parseAttrs(data) {
+    if (!data || typeof data !== "object") return {};
+    const out = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (typeof v === "string") out[k] = v;
+    }
+    return out;
+  }
+  function parseBatchAttrs(data) {
+    if (!data || typeof data !== "object") return {};
+    const out = {};
+    for (const [blockId, attrs] of Object.entries(data)) {
+      out[blockId] = parseAttrs(attrs);
+    }
+    return out;
+  }
+  function parseExistingMap(data) {
+    if (!data || typeof data !== "object") return {};
+    const out = {};
+    for (const [id, v] of Object.entries(data)) {
+      out[id] = v === true;
+    }
+    return out;
+  }
+  function parseDocId(data) {
+    return typeof data === "string" && data.length > 0 ? data : null;
+  }
+  function parseNotebookId(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+    const notebook = data.notebook;
+    if (!notebook || typeof notebook !== "object" || Array.isArray(notebook)) return null;
+    const id = notebook.id;
+    return typeof id === "string" && /^\d{8,14}$/.test(id) ? id : null;
+  }
+  function parseVoid(data) {
+    return data === null;
+  }
+  function parseString(data) {
+    return typeof data === "string" ? data : "";
+  }
+  function parseDocSearch(data) {
+    var _a;
+    if (!Array.isArray(data)) return [];
+    const out = [];
+    for (const raw of data) {
+      if (!raw || typeof raw !== "object") continue;
+      const obj = raw;
+      const path = typeof obj.path === "string" ? obj.path : "";
+      const m = path.match(/(\d{14}-[0-9a-z]{7})\.sy$/);
+      if (!m) continue;
+      out.push({
+        id: (_a = m[1]) != null ? _a : "",
+        hPath: typeof obj.hPath === "string" ? obj.hPath : "",
+        box: typeof obj.box === "string" ? obj.box : "",
+        name: typeof obj.name === "string" ? obj.name : ""
+      });
+      if (out.length >= 30) break;
+    }
+    return out;
+  }
+  var init_client = __esm({
+    "src/kernel/client.ts"() {
+      "use strict";
+      init_constants();
+      init_errors();
+    }
+  });
+
+  // src/service/omni-search.ts
+  function deriveOmniItemMetadata(entry) {
+    const rawPath = (entry.category || "").replace(/^\/+/, "").replace(/\.sy$/, "");
+    const segments = rawPath.split("/").map((s) => s.trim()).filter(Boolean);
+    let category = "\u601D\u6E90\u6536\u5F55";
+    if (segments.length >= 2) {
+      category = segments[segments.length - 1] || "\u601D\u6E90\u6536\u5F55";
+    } else if (segments.length === 1) {
+      category = segments[0] || "\u601D\u6E90\u6536\u5F55";
+    }
+    const tagsSet = /* @__PURE__ */ new Set();
+    tagsSet.add("\u601D\u6E90\u6536\u5F55");
+    if (segments.length > 0) {
+      const docName = segments[segments.length - 1];
+      if (docName && docName.length <= 20 && docName !== category) {
+        tagsSet.add(docName);
+      }
+    }
+    if (entry.tags && Array.isArray(entry.tags)) {
+      for (const t of entry.tags) {
+        if (t && t !== "\u5168\u5E93\u5757" && t !== "\u5168\u5E93\u7B14\u8BB0" && t !== "\u5F53\u524D\u6587\u6863") {
+          tagsSet.add(t);
+        }
+      }
+    }
+    let recommendedAlias = (entry.alias || "").trim();
+    if (!recommendedAlias && entry.title) {
+      try {
+        const adapter = getPinyinAdapter();
+        if (typeof (adapter == null ? void 0 : adapter.annotate) === "function") {
+          const anno = adapter.annotate({ title: entry.title, alias: "" });
+          if (anno && anno.pyi) {
+            recommendedAlias = anno.pyi.toLowerCase().slice(0, 8);
+          }
+        }
+      } catch {
+        recommendedAlias = "";
+      }
+      if (!recommendedAlias) {
+        const words = entry.title.split(/[\s_-]+/).filter(Boolean);
+        if (words.length >= 2 && words.every((w) => /^[a-zA-Z]/.test(w))) {
+          recommendedAlias = words.map((w) => {
+            var _a;
+            return (_a = w[0]) == null ? void 0 : _a.toLowerCase();
+          }).join("").slice(0, 8);
+        }
+      }
+    }
+    return {
+      category,
+      tags: Array.from(tagsSet).slice(0, 8),
+      recommendedAlias
+    };
+  }
+  var init_omni_search = __esm({
+    "src/service/omni-search.ts"() {
+      "use strict";
+      init_client();
+      init_search();
+      init_item();
+      init_capture();
+      init_kramdown();
+      init_pinyin();
+    }
+  });
+
   // src/ui/capture.ts
   function isBlockRefTarget(blockId) {
     return /^\d{14}-[0-9a-z]{7}$/.test(blockId);
@@ -2516,6 +2999,7 @@
       init_variable_form();
       init_kramdown();
       init_constants();
+      init_omni_search();
       TOAST_TITLE_MAX = 48;
       shortTitle = (title) => title.length > TOAST_TITLE_MAX ? `${title.slice(0, TOAST_TITLE_MAX)}\u2026` : title;
       newWriteKey = (scope) => `xlc-${scope}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`.slice(0, 120);
@@ -2525,6 +3009,14 @@
           /** 命令面板入口没有可禁用的按钮，用操作锁防止重复读取和重复落库。 */
           this.activeCaptures = /* @__PURE__ */ new Set();
           this.formOpen = false;
+          this.currentDialog = null;
+        }
+        destroy() {
+          var _a;
+          (_a = this.currentDialog) == null ? void 0 : _a.destroy();
+          this.currentDialog = null;
+          this.formOpen = false;
+          this.activeCaptures.clear();
         }
         /** 保存前的共同前置条件：没有内容库时直接回到首次设置，避免先访问宿主再报错。 */
         ensureConfigured() {
@@ -2782,22 +3274,22 @@
         }
         /** 全域条目编辑并收录：携带条目正文、类型、来源文档与全域收录标签打开收录表单 */
         captureOmniWithForm(entry) {
-          var _a;
           if (!this.ensureConfigured()) return;
           const text = (entry.content || entry.summary || "").trim();
           const title = entry.title || this.deps.t("unknownType");
-          const isCurrentDoc = (_a = entry.tags) == null ? void 0 : _a.includes("\u5F53\u524D\u6587\u6863");
+          const meta = deriveOmniItemMetadata(entry);
           this.openForm(text, entry.itemType, null, {
             title,
-            tags: ["\u5168\u57DF\u6536\u5F55", ...isCurrentDoc ? ["\u6587\u6863\u6536\u96C6"] : ["\u7B14\u8BB0\u6536\u96C6"]],
-            category: isCurrentDoc ? "\u6587\u6863\u6536\u96C6" : "\u7B14\u8BB0\u6536\u96C6",
+            alias: meta.recommendedAlias || void 0,
+            tags: meta.tags,
+            category: meta.category,
             docId: entry.sourceDocId,
             targetBlockId: entry.targetBlockId,
             sourceType: "block"
           });
         }
         openForm(defaultText, defaultType, sourceBlockId, overrides) {
-          var _a, _b, _c, _d, _e;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
           if (this.deps.isConfigured && !this.deps.isConfigured()) {
             (_b = (_a = this.deps).onNotConfigured) == null ? void 0 : _b.call(_a);
             return;
@@ -2821,11 +3313,28 @@
             destroyCallback: () => {
               closed = true;
               this.formOpen = false;
+              this.currentDialog = null;
+              if (typeof window !== "undefined" && window.visualViewport) {
+                window.visualViewport.removeEventListener("resize", handleViewport);
+                window.visualViewport.removeEventListener("scroll", handleViewport);
+              }
               ++tidySeq;
               ++draftSeq;
             }
           });
-          (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host");
+          this.currentDialog = dialog;
+          const container = dialog.element.querySelector(".b3-dialog__container");
+          container == null ? void 0 : container.classList.add("xlc-form-host");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.7.4", "iconXlcCommon");
+          const handleViewport = () => {
+            if (!container || typeof window === "undefined" || !window.visualViewport) return;
+            const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
+            container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
+          };
+          if (typeof window !== "undefined" && window.visualViewport) {
+            window.visualViewport.addEventListener("resize", handleViewport);
+            window.visualViewport.addEventListener("scroll", handleViewport);
+          }
           const body = getDialogBody(dialog.element);
           if (!body) {
             this.formOpen = false;
@@ -2874,6 +3383,10 @@
             if (it === defaultType) opt.selected = true;
             typeSelect.appendChild(opt);
           }
+          let userExplicitlySetType = Boolean(defaultType && defaultType !== "text");
+          typeSelect.addEventListener("change", () => {
+            userExplicitlySetType = true;
+          });
           typeWrap.appendChild(typeSelect);
           metaRow.appendChild(typeWrap);
           const contentEl = field(t("contentLabel"), defaultText, true, "xlc-form-content");
@@ -2891,14 +3404,60 @@
           multiBlockHint.setAttribute("role", "note");
           multiBlockHint.textContent = t("multiBlockPendingHint");
           contentWrap.appendChild(multiBlockHint);
+          const counterEl = document.createElement("span");
+          counterEl.className = "xlc-form-counter";
+          counterEl.textContent = `${contentEl.value.length} / ${LIMITS.contentChars}`;
+          contentWrap.appendChild(counterEl);
           const varbar = buildVariableBar(t, () => contentEl);
           contentEl.parentElement.after(varbar);
-          const titleEl = field(t("title"), (_d = overrides == null ? void 0 : overrides.title) != null ? _d : "", false, "xlc-form-title");
+          const titleEl = field(t("title"), (_c = overrides == null ? void 0 : overrides.title) != null ? _c : "", false, "xlc-form-title");
           titleEl.dataset.xlcControl = "capture.title";
           form.appendChild(metaRow);
-          const aliasEl = field(t("alias"), "", false, "xlc-form-alias", metaRow);
+          const aliasEl = field(t("alias"), (_d = overrides == null ? void 0 : overrides.alias) != null ? _d : "", false, "xlc-form-alias", metaRow);
           aliasEl.dataset.xlcControl = "capture.alias";
           metaRow.insertBefore(aliasEl.parentElement, typeWrap);
+          const aliasHint = document.createElement("div");
+          aliasHint.className = "xlc-form-hint xlc-alias-hint";
+          aliasHint.style.marginTop = "3px";
+          aliasHint.style.display = "none";
+          aliasEl.parentElement.appendChild(aliasHint);
+          const syncAliasRecommendation = () => {
+            var _a2;
+            const currentTitle = titleEl.value.trim();
+            const currentAlias = aliasEl.value.trim();
+            if (!currentTitle) {
+              aliasHint.style.display = "none";
+              return;
+            }
+            const meta = deriveOmniItemMetadata({
+              title: currentTitle,
+              content: contentEl.value || ""
+            });
+            const rec = (_a2 = meta.recommendedAlias) == null ? void 0 : _a2.trim();
+            if (rec && rec !== currentAlias) {
+              aliasHint.textContent = "";
+              const tipLabel = document.createElement("span");
+              tipLabel.textContent = "\u26A1 \u63A8\u8350\u522B\u540D\uFF1A";
+              const pill = document.createElement("button");
+              pill.type = "button";
+              pill.className = "xlc-quick-pill";
+              pill.textContent = rec;
+              pill.title = `\u70B9\u51FB\u586B\u5165\u63A8\u8350\u522B\u540D\u300C${rec}\u300D`;
+              pill.addEventListener("click", () => {
+                aliasEl.value = rec;
+                aliasEl.dispatchEvent(new Event("input", { bubbles: true }));
+                aliasHint.style.display = "none";
+              });
+              aliasHint.append(tipLabel, pill);
+              aliasHint.style.display = "flex";
+              aliasHint.style.alignItems = "center";
+              aliasHint.style.gap = "4px";
+            } else {
+              aliasHint.style.display = "none";
+            }
+          };
+          titleEl.addEventListener("input", syncAliasRecommendation);
+          setTimeout(syncAliasRecommendation, 0);
           const tagRow = document.createElement("div");
           tagRow.className = "xlc-form-row";
           const initialTags = (overrides == null ? void 0 : overrides.tags) ? overrides.tags.join("; ") : "";
@@ -2908,9 +3467,44 @@
           tagsHint.className = "xlc-form-hint";
           tagsHint.textContent = t("tagsHint");
           tagsEl.parentElement.appendChild(tagsHint);
-          const categoryEl = field(t("category"), (_e = overrides == null ? void 0 : overrides.category) != null ? _e : "", false, "xlc-form-category", tagRow);
+          const existingTags = (_g = (_f = (_e = this.deps).getExistingTags) == null ? void 0 : _f.call(_e)) != null ? _g : [];
+          if (existingTags.length > 0) {
+            const tagPillsWrap = document.createElement("div");
+            tagPillsWrap.className = "xlc-capture-quick-tags";
+            for (const tag of existingTags) {
+              const pill = document.createElement("button");
+              pill.type = "button";
+              pill.className = "xlc-quick-pill";
+              pill.textContent = "+" + tag;
+              pill.title = `\u70B9\u51FB\u8FFD\u52A0\u6807\u7B7E\u300C${tag}\u300D`;
+              pill.addEventListener("click", () => {
+                const cur = tagsEl.value.trim();
+                const tagList = cur ? cur.split(/[,，;；、\s]+/).filter(Boolean) : [];
+                if (!tagList.includes(tag)) {
+                  tagList.push(tag);
+                  tagsEl.value = tagList.join("; ");
+                  tagsEl.dispatchEvent(new Event("input", { bubbles: true }));
+                }
+              });
+              tagPillsWrap.appendChild(pill);
+            }
+            tagsEl.parentElement.appendChild(tagPillsWrap);
+          }
+          const categoryEl = field(t("category"), (_h = overrides == null ? void 0 : overrides.category) != null ? _h : "", false, "xlc-form-category", tagRow);
           categoryEl.dataset.xlcControl = "capture.category";
           categoryEl.parentElement.classList.add("xlc-form-field--fixed");
+          const existingCats = (_k = (_j = (_i = this.deps).getExistingCategories) == null ? void 0 : _j.call(_i)) != null ? _k : [];
+          if (existingCats.length > 0) {
+            categoryEl.setAttribute("list", "xlc-capture-category-list");
+            const catDatalist = document.createElement("datalist");
+            catDatalist.id = "xlc-capture-category-list";
+            for (const cat of existingCats) {
+              const opt = document.createElement("option");
+              opt.value = cat;
+              catDatalist.appendChild(opt);
+            }
+            categoryEl.parentElement.appendChild(catDatalist);
+          }
           form.appendChild(tagRow);
           const hint = document.createElement("div");
           hint.className = "xlc-form-hint";
@@ -2931,11 +3525,28 @@
             contentEl.focus();
           };
           contentEl.addEventListener("input", () => {
+            var _a2;
             contentEl.classList.remove("xlc-input--error");
             contentEl.removeAttribute("aria-invalid");
             contentEl.removeAttribute("aria-describedby");
             contentError.hidden = true;
             contentError.textContent = "";
+            const curLen = contentEl.value.length;
+            counterEl.textContent = `${curLen} / ${LIMITS.contentChars}`;
+            counterEl.classList.toggle("xlc-form-counter--over", curLen > LIMITS.contentChars);
+            const val = contentEl.value.trim();
+            if (val && !userExplicitlySetType) {
+              const detected = inferTypeFromText(val);
+              if (detected !== typeSelect.value) {
+                typeSelect.value = detected;
+              }
+            }
+            if (!titleEl.value.trim() && val) {
+              const firstLine = ((_a2 = val.replace(/^#+\s*/, "").split("\n")[0]) == null ? void 0 : _a2.trim()) || "";
+              if (firstLine) {
+                titleEl.placeholder = `\u63A8\u8350\u6807\u9898: ${firstLine.slice(0, 30)}`;
+              }
+            }
           });
           const sugrow = document.createElement("div");
           sugrow.className = "xlc-sugrow";
@@ -3173,6 +3784,13 @@
             });
           };
           [titleEl, aliasEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el));
+          form.addEventListener("keydown", (ev) => {
+            if (ev.isComposing || ev.keyCode === 229) return;
+            if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+              ev.preventDefault();
+              saveBtn.click();
+            }
+          });
           saveBtn.addEventListener("click", () => {
             if (closed || saving) return;
             const contentValue = contentEl.value;
@@ -4322,7 +4940,19 @@
   }
   function pickRandomOption(rawArg) {
     var _a;
-    const options = rawArg.split(/[,，、]/).map((s) => s.trim()).filter(Boolean).slice(0, 16);
+    const trimmed = rawArg.trim();
+    const rangeMatch = trimmed.match(/^(-?\d+)\.\.(-?\d+)$/);
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1], 10);
+      const end = parseInt(rangeMatch[2], 10);
+      if (Number.isFinite(start) && Number.isFinite(end)) {
+        const min = Math.min(start, end);
+        const max = Math.max(start, end);
+        const val = Math.floor(Math.random() * (max - min + 1)) + min;
+        return String(val);
+      }
+    }
+    const options = trimmed.split(/[,，、]/).map((s) => s.trim()).filter(Boolean).slice(0, 16);
     if (options.length === 0) return null;
     return (_a = options[Math.floor(Math.random() * options.length)]) != null ? _a : null;
   }
@@ -4516,6 +5146,17 @@
     }
     return null;
   }
+  function getIsoWeekNumber(d) {
+    const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNr = (target.getUTCDay() + 6) % 7;
+    target.setUTCDate(target.getUTCDate() - dayNr + 3);
+    const firstThursday = target.getTime();
+    target.setUTCMonth(0, 1);
+    if (target.getUTCDay() !== 4) {
+      target.setUTCMonth(0, 1 + (4 - target.getUTCDay() + 7) % 7);
+    }
+    return 1 + Math.ceil((firstThursday - target.getTime()) / 6048e5);
+  }
   function renderPlaceholder(kind, now, doc) {
     var _a, _b, _c, _d;
     switch (kind) {
@@ -4546,6 +5187,10 @@
         return (_d = doc == null ? void 0 : doc.selection) != null ? _d : "";
       case "regex":
         return "";
+      case "timestamp":
+        return String(Math.floor(now.getTime() / 1e3));
+      case "week":
+        return `\u7B2C${getIsoWeekNumber(now)}\u5468`;
     }
   }
   function resolvePlaceholder(rawKind, arg, now, doc) {
@@ -4575,6 +5220,19 @@
     if (kind === "calc") return arg ? evaluateMathExpression(arg) : null;
     if (kind === "selection") return (doc == null ? void 0 : doc.selection) && doc.selection.length > 0 ? doc.selection : arg != null ? arg : "";
     if (kind === "regex") return arg ? resolveRegexArg(arg, subAction) : null;
+    if (kind === "timestamp") {
+      if ((arg == null ? void 0 : arg.trim().toLowerCase()) === "ms") {
+        return String(now.getTime());
+      }
+      return String(Math.floor(now.getTime() / 1e3));
+    }
+    if (kind === "week") {
+      const weekNum = getIsoWeekNumber(now);
+      const cleanArg = arg == null ? void 0 : arg.trim().toLowerCase();
+      if (cleanArg === "num" || cleanArg === "number") return String(weekNum);
+      if (cleanArg === "w") return `W${weekNum}`;
+      return `\u7B2C${weekNum}\u5468`;
+    }
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
   }
@@ -4599,7 +5257,7 @@
     "src/model/placeholders.ts"() {
       "use strict";
       init_calculator();
-      PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|title|path|doc|random|uuid|id|calc|selection|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+      PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|title|path|doc|random|uuid|id|calc|selection|timestamp|week|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
       WEEKDAYS_ZH = ["\u5468\u65E5", "\u5468\u4E00", "\u5468\u4E8C", "\u5468\u4E09", "\u5468\u56DB", "\u5468\u4E94", "\u5468\u516D"];
       WEEKDAYS_FULL_ZH = ["\u661F\u671F\u65E5", "\u661F\u671F\u4E00", "\u661F\u671F\u4E8C", "\u661F\u671F\u4E09", "\u661F\u671F\u56DB", "\u661F\u671F\u4E94", "\u661F\u671F\u516D"];
       WEEKDAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -4916,6 +5574,54 @@
       TYPING_CPM = 200;
       INVOKE_OVERHEAD_KEYSTROKES = 6;
       SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1e3;
+    }
+  });
+
+  // src/service/ecosystem.ts
+  function detectEcosystem(host = typeof window !== "undefined" ? window : {}) {
+    const plugins = [
+      {
+        id: "siyuan-checkin",
+        name: "\u5C0F\u9A74\u6253\u5361",
+        bridgeKey: "window.siyuanCheckin",
+        installed: Boolean(host.siyuanCheckin && typeof host.siyuanCheckin.getItems === "function"),
+        description: "\u4E60\u60EF\u6253\u5361\u3001\u65F6\u95F4\u8FFD\u8E2A\u4E0E\u8FDE\u51FB\u8BB0\u5F55",
+        capability: "\u5FEB\u901F\u63D2\u5165\u4ECA\u65E5\u6253\u5361\u72B6\u6001\u4E0E\u8FDE\u51FB\u6587\u672C"
+      },
+      {
+        id: "siyuan-contacts",
+        name: "\u5C0F\u9A74\u4EBA\u8109",
+        bridgeKey: "window.LvContacts",
+        installed: Boolean((host.LvContacts || host.siyuanContacts) && typeof (host.LvContacts || host.siyuanContacts).searchPeople === "function"),
+        description: "\u4EBA\u7269\u5173\u7CFB\u56FE\u8C31\u4E0E\u8054\u7CFB\u4EBA\u8109\u7EDC",
+        capability: "\u68C0\u7D22\u8054\u7CFB\u4EBA\u5E76\u4E00\u952E\u63D2\u5165\u7ED3\u6784\u5316\u540D\u7247\u5757"
+      },
+      {
+        id: "siyuan-glean",
+        name: "\u5C0F\u9A74\u62FE\u9057",
+        bridgeKey: "window.siyuanGlean",
+        installed: Boolean((host.siyuanGlean || host.xiaolvGlean) && typeof (host.siyuanGlean || host.xiaolvGlean).listClips === "function"),
+        description: "\u7F51\u9875\u6587\u7AE0\u526A\u85CF\u4E0E\u9AD8\u4EAE\u6458\u5F55",
+        capability: "\u5F15\u7528\u526A\u85CF\u6587\u7AE0\u7247\u6BB5\u4E0E\u91D1\u53E5\u9AD8\u4EAE"
+      },
+      {
+        id: "siyuan-speed-switch",
+        name: "\u5C0F\u9A74\u96F7\u5207",
+        bridgeKey: "window.siyuanSpeedSwitch",
+        installed: Boolean(host.siyuanSpeedSwitch || host.xiaolvSpeedSwitch),
+        description: "\u5168\u57DF\u5DE5\u4F5C\u53F0\u5FEB\u901F\u5207\u6362\u4E0E\u5927\u7EB2\u7A7F\u900F",
+        capability: "\u901A\u8FC7\u516C\u5F00\u534F\u8BAE\u5728\u96F7\u5207\u4E2D\u79D2\u7EA7\u8C03\u7528\u5E38\u7528\u8BED"
+      }
+    ];
+    return {
+      totalChecked: plugins.length,
+      installedCount: plugins.filter((p) => p.installed).length,
+      plugins
+    };
+  }
+  var init_ecosystem = __esm({
+    "src/service/ecosystem.ts"() {
+      "use strict";
     }
   });
 
@@ -7603,6 +8309,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.4", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -7680,6 +8387,7 @@ ${exception.mark.snippet}`;
     buildSearchSection(ctx, root);
     buildSavedViewsSection(ctx, root, () => dialog.destroy());
     buildHealthSection(ctx, root);
+    buildExternalIntegrationSection(ctx, root);
     buildProviderSection(ctx, root);
     buildDataSection(ctx, root);
     body.appendChild(root);
@@ -7927,6 +8635,37 @@ ${exception.mark.snippet}`;
         items = [];
       }
       const insights = calculateUsageInsights(usage, items, Date.now());
+      const bentoDeck = document.createElement("div");
+      bentoDeck.className = "xlc-bento-deck";
+      const mangoCard = document.createElement("div");
+      mangoCard.className = "xlc-bento-card xlc-bento-card--mango";
+      const mangoHead = document.createElement("div");
+      mangoHead.className = "xlc-bento-head";
+      mangoHead.textContent = "\u{1F525} \u7D2F\u8BA1\u8C03\u7528";
+      const mangoVal = document.createElement("div");
+      mangoVal.className = "xlc-bento-value";
+      const valSpan = document.createElement("span");
+      valSpan.style.cssText = "font-size:12px; font-weight:normal;";
+      valSpan.textContent = " \u6B21";
+      mangoVal.append(document.createTextNode(String(insights.totalCalls)), valSpan);
+      const mangoSub = document.createElement("div");
+      mangoSub.className = "xlc-bento-sub";
+      mangoSub.textContent = `\u8282\u7701\u7EA6 ${insights.totalSavedKeystrokes} \u5B57\u7B26`;
+      mangoCard.append(mangoHead, mangoVal, mangoSub);
+      const lilacCard = document.createElement("div");
+      lilacCard.className = "xlc-bento-card xlc-bento-card--lilac";
+      const lilacHead = document.createElement("div");
+      lilacHead.className = "xlc-bento-head";
+      lilacHead.textContent = "\u26A1 \u6548\u7387\u589E\u76CA";
+      const lilacVal = document.createElement("div");
+      lilacVal.className = "xlc-bento-value";
+      lilacVal.textContent = insights.formattedTimeSaved;
+      const lilacSub = document.createElement("div");
+      lilacSub.className = "xlc-bento-sub";
+      lilacSub.textContent = `\u8FD17\u5929\u6D3B\u8DC3 ${insights.activeItems7Days} \u9879`;
+      lilacCard.append(lilacHead, lilacVal, lilacSub);
+      bentoDeck.append(mangoCard, lilacCard);
+      insightsBox.appendChild(bentoDeck);
       const grid = document.createElement("div");
       grid.className = "xlc-insights-grid";
       const mkMetric = (numText, labelText) => {
@@ -7948,6 +8687,41 @@ ${exception.mark.snippet}`;
         mkMetric(String(insights.activeItems7Days), "7\u5929\u6D3B\u8DC3\u6761\u76EE")
       );
       insightsBox.appendChild(grid);
+      if (insights.topItems && insights.topItems.length > 0) {
+        const topSec = document.createElement("div");
+        topSec.className = "xlc-insights-top";
+        topSec.style.cssText = "margin-top:10px; display:flex; flex-direction:column; gap:6px;";
+        const topHead = document.createElement("div");
+        topHead.style.cssText = "font-size:11px; font-weight:600; opacity:0.8; display:flex; align-items:center; gap:4px;";
+        topHead.textContent = "\u2B50 \u9AD8\u9891\u8D44\u4EA7 Top \u699C\uFF08\u70B9\u51FB\u76F4\u63A5\u590D\u5236\uFF09\uFF1A";
+        topSec.appendChild(topHead);
+        const pillsWrap = document.createElement("div");
+        pillsWrap.style.cssText = "display:flex; flex-wrap:wrap; gap:6px;";
+        for (const [idx, item] of insights.topItems.slice(0, 5).entries()) {
+          const pill = document.createElement("button");
+          pill.type = "button";
+          pill.className = "xlc-quick-pill";
+          pill.style.cssText = "padding:3px 10px; font-size:12px; display:inline-flex; align-items:center; gap:5px;";
+          pill.textContent = `#${idx + 1} ${item.title} (${item.count}\u6B21)`;
+          pill.title = `\u70B9\u51FB\u590D\u5236\u300C${item.title}\u300D\u6B63\u6587`;
+          pill.addEventListener("click", async () => {
+            try {
+              const got = await ctx.library.getItem(item.id);
+              if (got.ok) {
+                const kd = await ctx.library.getItemKramdown(got.data);
+                if (kd.ok && navigator.clipboard) {
+                  await navigator.clipboard.writeText(kd.data);
+                  ctx.notify("info", `\u5DF2\u590D\u5236\u9AD8\u9891\u8D44\u4EA7\u300C${item.title}\u300D\u5230\u526A\u8D34\u677F`);
+                }
+              }
+            } catch {
+            }
+          });
+          pillsWrap.appendChild(pill);
+        }
+        topSec.appendChild(pillsWrap);
+        insightsBox.appendChild(topSec);
+      }
     };
     const paintSummary = () => {
       const current = summarizeUsage(ctx.state.usage);
@@ -9097,6 +9871,86 @@ ${exception.mark.snippet}`;
     });
     root.appendChild(sec);
   }
+  function buildExternalIntegrationSection(ctx, root) {
+    void ctx;
+    const sec = document.createElement("div");
+    sec.className = "xlc-form-field xlc-card xlc-external-integration";
+    sec.dataset.xlcControl = "settings.external-integration";
+    const label = document.createElement("span");
+    label.className = "xlc-form-label";
+    label.textContent = "\u5168\u5C40\u53EF\u7528\u4E0E\u5916\u90E8\u8C03\u7528\u8054\u52A8 (Quicker / Headless API)";
+    sec.appendChild(label);
+    const desc = document.createElement("div");
+    desc.className = "xlc-form-hint";
+    desc.style.lineHeight = "1.6";
+    desc.textContent = "\u5C0F\u9A74\u5E38\u7528\u5DF2\u5168\u9762\u5F00\u653E Headless \u7EAF\u6C42\u503C\u4E0E\u68C0\u7D22\u534F\u8BAE\u3002\u652F\u6301\u5728\u5FAE\u4FE1\u3001Word\u3001QQ\u3001\u6D4F\u89C8\u5668\u7B49\u4EFB\u610F\u5916\u90E8\u7A97\u53E3\uFF0C\u901A\u8FC7\u5168\u5C40\u70ED\u952E\u3001Quicker \u52A8\u4F5C\u6216\u672C\u5730\u811A\u672C\uFF0C\u514D\u5207\u601D\u6E90\u7A97\u53E3\u76F4\u63A5\u68C0\u7D22\u5E38\u7528\u8BED\u5E76\u79D2\u7EA7\u55B7\u5C04\u6587\u672C\u3002";
+    sec.appendChild(desc);
+    const apiCard = document.createElement("div");
+    apiCard.className = "xlc-api-code-block";
+    apiCard.innerHTML = `
+        <div class="xlc-api-title">\u5F00\u653E\u534F\u8BAE\u547D\u4EE4\uFF08\u601D\u6E90\u5185\u90E8\u547D\u4EE4 / WebSocket / \u7A97\u53E3\u6865\uFF09\uFF1A</div>
+        <div>\u2022 <strong>xiaolv.common.resolve</strong>: \u6761\u76EE\u7EAF\u6C42\u503C\uFF08\u81EA\u52A8\u5C55\u5F00\u5D4C\u5957\u7247\u6BB5\u5E76\u8BA1\u7B97\u5B8F\u53D8\u91CF\uFF0C\u652F\u6301\u586B\u53C2 fills\uFF09</div>
+        <div>\u2022 <strong>xiaolv.common.recall</strong>: \u522B\u540D\u95EA\u7535\u76F4\u8FBE\uFF08\u8F93\u5165\u522B\u540D\u6216\u62FC\u97F3\u7F29\u5199\u4E00\u6B65\u53D6\u56DE\u5C55\u5F00\u6B63\u6587\uFF09</div>
+        <div>\u2022 <strong>xiaolv.common.search</strong>: \u6309\u5173\u952E\u8BCD\u68C0\u7D22\u5E38\u7528\u6761\u76EE\u6E05\u5355\uFF08\u542B\u522B\u540D/\u6807\u7B7E/\u5206\u7C7B/\u53D8\u91CF\u6570\uFF09</div>
+        <div>\u2022 <strong>xiaolv.common.recent</strong>: \u83B7\u53D6\u6700\u8FD1\u4F7F\u7528\u8FC7\u7684\u5E38\u7528\u6761\u76EE</div>
+        <div>\u2022 <strong>xiaolv.common.get</strong>: \u83B7\u53D6\u6761\u76EE\u5B8C\u6574\u5B9A\u4E49\u4E0E\u5143\u6570\u636E</div>
+    `;
+    sec.appendChild(apiCard);
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "b3-button xlc-btn-ghost";
+    copyBtn.textContent = "\u590D\u5236 Quicker \u52A8\u4F5C\u8C03\u7528\u914D\u7F6E\u4E0E\u53C2\u6570\u793A\u4F8B";
+    copyBtn.addEventListener("click", () => {
+      const examplePayload = JSON.stringify({
+        target: "xiaolv-common",
+        protocol: "xiaolv-common/v1",
+        operations: {
+          recall: { command: "xiaolv.common.recall", params: { alias: "yq", fills: { "\u5BA2\u6237\u59D3\u540D": "\u5F20\u7ECF\u7406" } } },
+          search: { command: "xiaolv.common.search", params: { keyword: "\u9000\u6B3E", limit: 20 } },
+          resolve: { command: "xiaolv.common.resolve", params: { itemId: "\u6761\u76EEID", fills: { "\u5BA2\u6237\u59D3\u540D": "\u5F20\u7ECF\u7406" } } },
+          recent: { command: "xiaolv.common.recent", params: { limit: 15 } }
+        },
+        quickerNote: "\u5411\u601D\u6E90\u5185\u6838 POST /api/command \u53D1\u9001\u4E0A\u8FF0\u6307\u4EE4\uFF0C\u83B7\u53D6 recall/resolve \u7ED3\u679C\u4E2D\u7684 resolvedText \u5373\u53EF\u7531 Quicker \u5199\u5165\u526A\u8D34\u677F\u5E76\u6A21\u62DF Ctrl+V \u55B7\u5C04\u3002"
+      }, null, 2);
+      void navigator.clipboard.writeText(examplePayload).then(() => {
+        copyBtn.textContent = "\u2713 \u5DF2\u590D\u5236\u914D\u7F6E\u793A\u4F8B\u5230\u526A\u8D34\u677F";
+        setTimeout(() => {
+          copyBtn.textContent = "\u590D\u5236 Quicker \u52A8\u4F5C\u8C03\u7528\u914D\u7F6E\u4E0E\u53C2\u6570\u793A\u4F8B";
+        }, 3e3);
+      });
+    });
+    sec.appendChild(copyBtn);
+    const ecoTitle = document.createElement("div");
+    ecoTitle.className = "xlc-eco-matrix-title";
+    ecoTitle.textContent = "\u5C0F\u9A74\u5BB6\u65CF\u5168\u5BB6\u6876\u534F\u540C\u72B6\u6001\uFF08\u96F6\u5F3A\u4F9D\u8D56\uFF0C\u81EA\u52A8\u611F\u77E5\uFF09\uFF1A";
+    sec.appendChild(ecoTitle);
+    const ecoDesc = document.createElement("div");
+    ecoDesc.className = "xlc-form-hint";
+    ecoDesc.textContent = "\u672C\u63D2\u4EF6\u5B8C\u5168\u72EC\u7ACB\u8FD0\u884C\uFF0C\u96F6\u5916\u90E8\u4F9D\u8D56\u3002\u82E5\u68C0\u6D4B\u5230\u5BBF\u4E3B\u73AF\u5883\u4E2D\u5DF2\u5B89\u88C5\u7684\u5C0F\u9A74\u7CFB\u5217\u5144\u5F1F\u63D2\u4EF6\uFF0C\u5C06\u81EA\u52A8\u6FC0\u6D3B\u53EA\u8BFB\u6570\u636E\u8054\u52A8\uFF1B\u672A\u5B89\u88C5\u65F6\u9759\u9ED8\u8DF3\u8FC7\uFF0C\u65E0\u4EFB\u4F55\u6027\u80FD\u5F00\u9500\u3002";
+    sec.appendChild(ecoDesc);
+    const ecoStatus = detectEcosystem();
+    const ecoList = document.createElement("div");
+    ecoList.className = "xlc-eco-matrix-list";
+    for (const p of ecoStatus.plugins) {
+      const row = document.createElement("div");
+      row.className = "xlc-eco-row";
+      const left = document.createElement("div");
+      const nameStrong = document.createElement("strong");
+      nameStrong.textContent = p.name;
+      const descSpan = document.createElement("span");
+      descSpan.className = "xlc-eco-desc";
+      descSpan.textContent = `(${p.description})`;
+      left.append(nameStrong, descSpan);
+      const badge = document.createElement("span");
+      badge.className = "xlc-badge " + (p.installed ? "xlc-badge--ai" : "xlc-badge--text");
+      badge.textContent = p.installed ? `\u2713 \u5DF2\u5C31\u7EEA \xB7 ${p.capability}` : "\u672A\u5B89\u88C5 (\u53EF\u5355\u72EC\u4F7F\u7528)";
+      row.appendChild(left);
+      row.appendChild(badge);
+      ecoList.appendChild(row);
+    }
+    sec.appendChild(ecoList);
+    root.appendChild(sec);
+  }
   function buildDataSection(ctx, root) {
     const t = ctx.t;
     const dataSec = document.createElement("div");
@@ -9411,6 +10265,39 @@ ${exception.mark.snippet}`;
     });
     templateRow.appendChild(templateBtn);
     dataSec.appendChild(templateRow);
+    const avRow = document.createElement("div");
+    avRow.className = "xlc-template-import-row";
+    const avHint = document.createElement("div");
+    avHint.className = "xlc-form-hint";
+    const avStrong = document.createElement("strong");
+    avStrong.textContent = "\u601D\u6E90\u5C5E\u6027\u89C6\u56FE\uFF08AV \u6570\u636E\u5E93\u5757\uFF09\u81EA\u52A8\u5316\u8054\u52A8\uFF1A";
+    avHint.appendChild(avStrong);
+    avHint.appendChild(document.createElement("br"));
+    avHint.appendChild(document.createTextNode("\u6240\u6709\u6761\u76EE\u5747\u951A\u5B9A\u5728\u771F\u5B9E\u601D\u6E90\u5757\u5E76\u643A\u5E26 custom-xlc-* \u5C5E\u6027\u3002\u60A8\u53EF\u5728\u7B14\u8BB0\u4E2D\u8F93\u5165 /av \u63D2\u5165\u539F\u751F\u5C5E\u6027\u89C6\u56FE\uFF0C\u914D\u7F6E\u81EA\u52A8\u6536\u96C6\u89C4\u5219\u300Ccustom-xlc-id \u5B58\u5728\u300D\uFF0C\u5373\u53EF\u81EA\u52A8\u4EE5\u539F\u751F\u8868\u683C\u3001\u770B\u677F\u7B49\u5F62\u6001\u7BA1\u7406\u5168\u90E8\u5E38\u7528\u8D44\u4EA7\u3002"));
+    avRow.appendChild(avHint);
+    const avCopyBtn = document.createElement("button");
+    avCopyBtn.type = "button";
+    avCopyBtn.className = "b3-button";
+    avCopyBtn.textContent = "\u{1F4CB} \u590D\u5236 AV \u6536\u96C6\u89C4\u5219\u8BF4\u660E";
+    avCopyBtn.addEventListener("click", () => {
+      const guideText = `\u3010\u601D\u6E90\u5C5E\u6027\u89C6\u56FE (AV \u6570\u636E\u5E93) \u5E38\u7528\u8D44\u4EA7\u81EA\u52A8\u5316\u6536\u96C6\u6307\u5F15\u3011
+1. \u5728\u601D\u6E90\u7B14\u8BB0\u4EFB\u610F\u6587\u6863\u8F93\u5165 /av \u63D2\u5165\u4E00\u4E2A\u5C5E\u6027\u89C6\u56FE\uFF08\u6570\u636E\u5E93\u5757\uFF09\uFF1B
+2. \u70B9\u51FB\u53F3\u4E0A\u89D2\u89C6\u56FE\u8BBE\u7F6E -> \u81EA\u52A8\u6536\u96C6\u89C4\u5219 (Automations)\uFF1B
+3. \u6DFB\u52A0\u5757\u5C5E\u6027\u5339\u914D\u6761\u4EF6\uFF1A
+   - \u5C5E\u6027\u540D\uFF1Acustom-xlc-id
+   - \u64CD\u4F5C\u7B26\uFF1A\u5B58\u5728 (exists) \u6216 \u4E0D\u4E3A\u7A7A
+4. \uFF08\u53EF\u9009\uFF09\u6309\u5206\u7C7B\u591A\u7EF4\u805A\u5408\uFF1A
+   - \u5C5E\u6027\u540D\uFF1Acustom-xlc-category
+   - \u64CD\u4F5C\u7B26\uFF1A\u7B49\u4E8E (equals) \u60A8\u6307\u5B9A\u7684\u5206\u7C7B\u540D
+5. \u5B8C\u6210\u540E\uFF0C\u6240\u6709\u5C0F\u9A74\u5E38\u7528\u8D44\u4EA7\u5C06\u81EA\u52A8\u4EE5\u601D\u6E90\u5B98\u65B9\u539F\u751F\u8868\u683C\u3001\u770B\u677F\u6216\u5217\u8868\u5F62\u6001\u5168\u91CF\u6C47\u805A\uFF0C\u53CC\u5411\u65E0\u7F1D\u8BFB\u5199\uFF01`;
+      if (navigator.clipboard) {
+        void navigator.clipboard.writeText(guideText).then(() => {
+          ctx.notify("info", "\u5DF2\u590D\u5236\u601D\u6E90\u5C5E\u6027\u89C6\u56FE (AV \u6570\u636E\u5E93) \u6536\u96C6\u89C4\u5219\u8BF4\u660E\u5230\u526A\u8D34\u677F");
+        }).catch(() => void 0);
+      }
+    });
+    avRow.appendChild(avCopyBtn);
+    dataSec.appendChild(avRow);
     root.appendChild(dataSec);
   }
   function openEspansoImportDialog(ctx, onClose) {
@@ -9781,6 +10668,7 @@ ${exception.mark.snippet}`;
       init_csv_tsv_wizard();
       init_health_doctor();
       init_usage_insights();
+      init_ecosystem();
       activeSetupDialog = null;
       activeSettingsDialog = null;
       espansoParserPromise = null;
@@ -9794,6 +10682,7 @@ ${exception.mark.snippet}`;
   init_item();
   init_errors();
   init_search();
+  init_actions();
   init_variables();
   init_variable_form();
 
@@ -10229,6 +11118,18 @@ ${exception.mark.snippet}`;
         blocks.push({ type: "quote", rawText: content, inlines: tokenizeMarkdownInlines(content) });
         continue;
       }
+      const taskMatch = /^[-*+]\s+\[([ xX])\]\s+(.*)$/.exec(trimmed);
+      if (taskMatch) {
+        const isDone = taskMatch[1].toLowerCase() === "x";
+        const content = taskMatch[2];
+        blocks.push({
+          type: "task-item",
+          rawText: content,
+          inlines: tokenizeMarkdownInlines(content),
+          isDone
+        });
+        continue;
+      }
       if (/^[-*+]\s+/.test(trimmed)) {
         const content = trimmed.replace(/^[-*+]\s+/, "");
         blocks.push({ type: "list-bullet", rawText: content, inlines: tokenizeMarkdownInlines(content) });
@@ -10374,6 +11275,15 @@ ${exception.mark.snippet}`;
         num.className = "xlc-md-ordered-num";
         num.textContent = "\u203A";
         el.appendChild(num);
+      } else if (block.type === "task-item") {
+        el = doc.createElement("div");
+        el.className = "xlc-md-list-item xlc-md-task-item" + (block.isDone ? " xlc-md-task--done" : "");
+        const checkbox = doc.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "xlc-md-task-checkbox";
+        checkbox.disabled = true;
+        if (block.isDone) checkbox.checked = true;
+        el.appendChild(checkbox);
       } else {
         el = doc.createElement("p");
         el.className = "xlc-md-p";
@@ -10442,12 +11352,18 @@ ${exception.mark.snippet}`;
       this.quickLookReturnFocus = null;
       this.currentScope = "all";
       this.lastPreviewId = null;
+      /** 窗口固定模式（连续调用时不关闭弹窗，Alt+P 切换） */
+      this.pinWindow = false;
       /** 空状态文案（refresh 计算后交 renderList 渲染大空态；瞬态/错误仍走 status 行） */
       this.emptyMessage = "";
       /** 使用计数快照（refresh 时取自侧车；行 meta 与预览徽标展示用） */
       this.usageCounts = /* @__PURE__ */ new Map();
       /** 最近一次查询词（行标题命中高亮用；空串=不高亮） */
       this.lastQueryText = "";
+      this.multiSelectMode = false;
+      this.selectedIds = /* @__PURE__ */ new Set();
+      this.capturedOmniIds = /* @__PURE__ */ new Set();
+      this.batchBarEl = null;
       /** 动作菜单 document 监听兜底清理（destroy 时调用；防键盘关弹窗残留监听） */
       this.menuDismiss = null;
       this.inputDebounce = null;
@@ -10500,6 +11416,7 @@ ${exception.mark.snippet}`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.7.4", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
@@ -10551,6 +11468,7 @@ ${exception.mark.snippet}`;
       clearBtn.addEventListener("click", () => {
         input.value = "";
         syncQMark();
+        updateHistoryBar();
         input.focus();
         if (this.inputDebounce) {
           clearTimeout(this.inputDebounce);
@@ -10566,7 +11484,15 @@ ${exception.mark.snippet}`;
       });
       input.addEventListener("input", () => {
         syncQMark();
-        this.currentScope = "all";
+        updateHistoryBar();
+        const rawVal = input.value.trim();
+        if (rawVal.startsWith("@") || rawVal.startsWith("/") || rawVal.startsWith("sy:")) {
+          this.currentScope = "all-notes";
+        } else if (this.currentScope === "all-notes" && !rawVal) {
+          this.currentScope = "all";
+        } else if (this.currentScope !== "current-doc" && this.currentScope !== "all-notes") {
+          this.currentScope = "all";
+        }
         this.syncScopeChips();
         if (!this.navigatingHistory) {
           this.historyCursor = -1;
@@ -10591,11 +11517,72 @@ ${exception.mark.snippet}`;
       search.appendChild(qMark);
       search.appendChild(input);
       search.appendChild(clearBtn);
+      const pinBtn = document.createElement("button");
+      pinBtn.type = "button";
+      pinBtn.className = "xlc-search-pin" + (this.pinWindow ? " xlc-search-pin--active" : "");
+      pinBtn.dataset.xlcControl = "search.pin";
+      pinBtn.textContent = "\u{1F4CC}";
+      pinBtn.title = "\u56FA\u5B9A\u7A97\u53E3\uFF08\u8FDE\u7EED\u590D\u5236/\u63D2\u5165\u4E0D\u5173\u95ED\uFF0CAlt+P \u5207\u6362\uFF09";
+      pinBtn.setAttribute("aria-label", "\u56FA\u5B9A\u7A97\u53E3");
+      pinBtn.addEventListener("click", () => {
+        this.togglePinWindow();
+      });
+      search.appendChild(pinBtn);
       searchBlock.appendChild(search);
       const searchHint = document.createElement("div");
       searchHint.className = "xlc-search-hint";
       searchHint.textContent = this.deps.t("searchHint");
       searchBlock.appendChild(searchHint);
+      const historyBar = document.createElement("div");
+      historyBar.className = "xlc-search-history-bar";
+      const updateHistoryBar = () => {
+        var _a2, _b2, _c2;
+        const hasText = input.value.trim().length > 0;
+        if (hasText) {
+          historyBar.style.display = "none";
+          return;
+        }
+        const history = ((_c2 = (_b2 = (_a2 = this.deps).getRecentQueries) == null ? void 0 : _b2.call(_a2)) != null ? _c2 : []).slice(0, 5);
+        if (history.length === 0) {
+          historyBar.style.display = "none";
+          return;
+        }
+        historyBar.replaceChildren();
+        const lbl = document.createElement("span");
+        lbl.className = "xlc-history-label";
+        lbl.textContent = "\u{1F550} \u5386\u53F2:";
+        historyBar.appendChild(lbl);
+        for (const word of history) {
+          const pill = document.createElement("button");
+          pill.type = "button";
+          pill.className = "xlc-history-pill";
+          pill.textContent = word;
+          pill.title = `\u70B9\u51FB\u68C0\u7D22\u300C${word}\u300D`;
+          pill.addEventListener("click", () => {
+            input.value = word;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.focus();
+          });
+          historyBar.appendChild(pill);
+        }
+        if (this.deps.clearRecentQueries) {
+          const clearBtn2 = document.createElement("button");
+          clearBtn2.type = "button";
+          clearBtn2.className = "xlc-history-clear";
+          clearBtn2.textContent = "\u6E05\u7A7A";
+          clearBtn2.title = "\u6E05\u7A7A\u641C\u7D22\u5386\u53F2";
+          clearBtn2.addEventListener("click", (e) => {
+            var _a3, _b3;
+            e.stopPropagation();
+            (_b3 = (_a3 = this.deps).clearRecentQueries) == null ? void 0 : _b3.call(_a3);
+            updateHistoryBar();
+          });
+          historyBar.appendChild(clearBtn2);
+        }
+        historyBar.style.display = "flex";
+      };
+      updateHistoryBar();
+      searchBlock.appendChild(historyBar);
       topMain.appendChild(searchBlock);
       let kbdRow = null;
       if (!isMobile) {
@@ -10609,11 +11596,21 @@ ${exception.mark.snippet}`;
         kbdLabel.textContent = this.deps.t("shortcutLabel");
         kbdRow.appendChild(kbdLabel);
         for (const hint of [
-          { key: "\u2191 \u2193", action: this.deps.t("kbdNav") },
-          { key: "Enter", action: this.deps.t("kbdEnter") },
+          { key: "Enter", action: "\u63D2\u5165\u6587\u672C\u5FEB\u7167" },
+          { key: "Shift+Enter", action: "\u5D4C\u5165\u540C\u6B65\u5757" },
+          { key: "Alt+Enter", action: "\u63D2\u5165\u5757\u5F15\u7528" },
           { key: `${isApple ? "\u2318" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy") },
           { key: `${isApple ? "\u2325" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert") },
           { key: `${isApple ? "\u2325 + \u21E7" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy") },
+          { key: `${isApple ? "\u2325" : "Alt"} + S`, action: "\u6536\u5F55\u5168\u5E93\u5757" },
+          { key: `${isApple ? "\u2325" : "Alt"} + R`, action: "\u590D\u5236\u5757\u5F15\u7528" },
+          { key: `${isApple ? "\u2325" : "Alt"} + D`, action: "\u6253\u5F00\u6765\u6E90\u5B9A\u4F4D" },
+          { key: `${isApple ? "\u2325" : "Alt"} + M`, action: "\u590D\u5236 Markdown" },
+          { key: `${isApple ? "\u2325" : "Alt"} + H`, action: "\u5C42\u7EA7\u5927\u7EB2" },
+          { key: `${isApple ? "\u2325" : "Alt"} + P`, action: "\u56FA\u5B9A\u7A97\u53E3" },
+          { key: `${isApple ? "\u2325" : "Alt"} + C`, action: "\u590D\u5236\u5E76\u5173\u95ED" },
+          { key: `${isApple ? "\u2325" : "Alt"} + T`, action: "\u8F6E\u8F6C\u8303\u56F4" },
+          { key: "@ /", action: "\u5168\u5E93\u7A7F\u900F" },
           { key: `${isApple ? "\u2325" : "Alt"} + F`, action: this.deps.t("kbdFavorite") },
           { key: "Tab", action: this.deps.t("kbdTabActions") },
           { key: "Esc", action: this.deps.t("kbdClose") }
@@ -10698,25 +11695,32 @@ ${exception.mark.snippet}`;
         void this.refresh();
       });
       filters.appendChild(categorySelect);
-      const scopes = ["favorites", "recent", "current-doc", "all-notes"];
+      const scopes = ["all", "favorites", "recent", "current-doc", "all-notes"];
+      const track = document.createElement("div");
+      track.className = "xlc-segmented-track";
+      track.setAttribute("role", "radiogroup");
+      track.setAttribute("aria-label", "\u641C\u7D22\u4F5C\u7528\u57DF\u5207\u6362");
       for (const scope of scopes) {
         const chip = document.createElement("button");
-        chip.className = "xlc-chip xlc-scope-chip";
+        const on = this.currentScope === scope;
+        chip.className = "xlc-chip xlc-scope-chip" + (on ? " xlc-chip--on xlc-scope-chip--on" : "");
         chip.dataset.scope = scope;
         chip.dataset.xlcControl = `filter.scope.${scope}`;
         let text = "";
-        if (scope === "favorites") text = "\u2605 " + this.deps.t("filterFavorites");
+        if (scope === "all") text = this.deps.t("scopeAll") || "\u5168\u90E8";
+        else if (scope === "favorites") text = "\u2605 " + this.deps.t("filterFavorites");
         else if (scope === "recent") text = "\u{1F550} " + this.deps.t("filterRecent");
         else if (scope === "current-doc") text = "\u2635 " + this.deps.t("scopeCurrentDoc");
         else if (scope === "all-notes") text = "\u{1F50D} " + this.deps.t("scopeAllNotes");
         chip.textContent = text;
         chip.addEventListener("click", () => {
-          this.currentScope = this.currentScope === scope ? "all" : scope;
+          this.currentScope = scope === "all" ? "all" : this.currentScope === scope ? "all" : scope;
           this.syncScopeChips();
           void this.refresh();
         });
-        filters.appendChild(chip);
+        track.appendChild(chip);
       }
+      filters.appendChild(track);
       const aiBanner = document.createElement("span");
       aiBanner.className = "xlc-chip xlc-ai-banner";
       aiBanner.style.display = "none";
@@ -10754,6 +11758,10 @@ ${exception.mark.snippet}`;
         filters.insertBefore(targetBanner, filters.firstChild);
       }
       root.appendChild(filters);
+      const quickPills = document.createElement("div");
+      quickPills.className = "xlc-quick-filter-pills";
+      quickPills.style.display = "none";
+      root.appendChild(quickPills);
       const status = document.createElement("div");
       status.className = "xlc-status";
       status.setAttribute("aria-live", "polite");
@@ -10775,6 +11783,19 @@ ${exception.mark.snippet}`;
         const index = Number(row.dataset.xlcIndex);
         const entry = this.results[index];
         if (!entry) return;
+        if (this.multiSelectMode || e.shiftKey || e.ctrlKey || e.metaKey) {
+          if (!this.multiSelectMode) {
+            this.multiSelectMode = true;
+          }
+          if (this.selectedIds.has(entry.id)) {
+            this.selectedIds.delete(entry.id);
+          } else {
+            this.selectedIds.add(entry.id);
+          }
+          this.renderBatchBar();
+          this.renderList(list);
+          return;
+        }
         if (isMobile) {
           this.activeIndex = index;
           this.activeProvider = -1;
@@ -10798,6 +11819,16 @@ ${exception.mark.snippet}`;
       });
       this.attachLongPress(list, isMobile);
       bodyWrap.appendChild(list);
+      if (isMobile) {
+        const fabNew = document.createElement("button");
+        fabNew.type = "button";
+        fabNew.className = "xlc-fab-new";
+        fabNew.setAttribute("aria-label", this.deps.t("quickNew"));
+        fabNew.title = this.deps.t("quickNew");
+        fabNew.textContent = "\uFF0B";
+        fabNew.addEventListener("click", () => this.deps.newItem());
+        bodyWrap.appendChild(fabNew);
+      }
       if (!isMobile) {
         const pane = document.createElement("div");
         pane.className = "xlc-pane";
@@ -10832,6 +11863,7 @@ ${exception.mark.snippet}`;
         bodyWrap.appendChild(pane);
       }
       root.appendChild(bodyWrap);
+      root.appendChild(this.buildBatchBar());
       const footer = document.createElement("div");
       footer.className = "xlc-footer";
       const count = document.createElement("span");
@@ -11026,6 +12058,46 @@ ${exception.mark.snippet}`;
         const entry = this.results[this.activeIndex];
         if (entry) void this.showActionMenu(entry);
       });
+      const embedBtn = document.createElement("button");
+      embedBtn.className = "b3-button b3-button--text xlc-btn-ghost";
+      embedBtn.textContent = "\u229E " + (this.deps.t("insertEmbed") || "\u540C\u6B65\u5D4C\u5165");
+      embedBtn.title = "\u4F5C\u4E3A\u601D\u6E90\u539F\u751F\u5D4C\u5165\u5757\u63D2\u5165\uFF08\u6E90\u53D8\u52A8\u65F6\u591A\u5904\u81EA\u52A8\u540C\u6B65\u66F4\u65B0\uFF0CShift+Enter\uFF09";
+      embedBtn.dataset.xlcPaneAct = "embed";
+      embedBtn.dataset.xlcControl = "preview.embed";
+      embedBtn.addEventListener("click", () => {
+        var _a, _b, _c, _d;
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+          if (isBlockId(targetBlockId)) {
+            void this.runActionFor(entry, void 0, "insert-embed");
+            if (!this.pinWindow) this.destroy();
+            (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", "\u5DF2\u63D2\u5165\u540C\u6B65\u5D4C\u5165\u5757\uFF08\u6E90\u53D8\u52A8\u65F6\u81EA\u52A8\u540C\u6B65\uFF09");
+          } else {
+            (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "error", "\u65E0\u6CD5\u5D4C\u5165\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
+          }
+        }
+      });
+      const refBtn = document.createElement("button");
+      refBtn.className = "b3-button b3-button--text xlc-btn-ghost";
+      refBtn.textContent = "\uFF0B " + (this.deps.t("insertRef") || "\u63D2\u5165\u5F15\u7528");
+      refBtn.title = "\u4F5C\u4E3A\u601D\u6E90\u539F\u751F\u5757\u5F15\u7528\u63D2\u5165\uFF08Alt+Enter\uFF09";
+      refBtn.dataset.xlcPaneAct = "ref";
+      refBtn.dataset.xlcControl = "preview.ref";
+      refBtn.addEventListener("click", () => {
+        var _a, _b, _c, _d;
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+          if (isBlockId(targetBlockId)) {
+            void this.runActionFor(entry, void 0, "insert-ref");
+            if (!this.pinWindow) this.destroy();
+            (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", "\u5DF2\u63D2\u5165\u5757\u5F15\u7528\u94FE\u63A5");
+          } else {
+            (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "error", "\u65E0\u6CD5\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
+          }
+        }
+      });
       const spacer = document.createElement("span");
       spacer.className = "xlc-foot-spacer";
       const source = document.createElement("button");
@@ -11085,17 +12157,20 @@ ${exception.mark.snippet}`;
           saveOmni.textContent = this.deps.t("loading");
           void this.deps.createFromOmni(entry).then((ok2) => {
             if (ok2) {
+              this.capturedOmniIds.add(entry.id);
               saveOmni.textContent = "\u2713 " + this.deps.t("saveToCommon");
             } else {
               saveOmni.disabled = false;
-              saveOmni.textContent = "\u2726 " + this.deps.t("saveToCommon");
+              saveOmni.textContent = "\u2726 " + this.deps.t("saveToCommon") + " (Alt+S)";
             }
           });
         }
       });
       foot.appendChild(insert);
-      foot.appendChild(aiBtn);
       foot.appendChild(copy);
+      foot.appendChild(embedBtn);
+      foot.appendChild(refBtn);
+      foot.appendChild(aiBtn);
       foot.appendChild(spacer);
       foot.appendChild(source);
       foot.appendChild(edit);
@@ -11105,7 +12180,7 @@ ${exception.mark.snippet}`;
     }
     /** 重新加载标签/分类选项；成功时清理已经不存在的持久化筛选，失败时保留当前筛选并给出提示。 */
     async refreshFilterOptions() {
-      var _a, _b;
+      var _a, _b, _c;
       const tagSelect = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-tag-select");
       const categorySelect = (_b = this.dialog) == null ? void 0 : _b.element.querySelector(".xlc-category-select");
       if (!tagSelect || !categorySelect) return false;
@@ -11175,6 +12250,32 @@ ${exception.mark.snippet}`;
       if (changed) {
         this.deps.setFilters({ type: current.type, tag: nextTag, category: nextCategory });
       }
+      const quickPillsHost = (_c = this.dialog) == null ? void 0 : _c.element.querySelector(".xlc-quick-filter-pills");
+      if (quickPillsHost) {
+        quickPillsHost.replaceChildren();
+        const topTags = tags.filter(Boolean).slice(0, 6);
+        if (topTags.length > 0) {
+          const label = document.createElement("span");
+          label.className = "xlc-quick-pill-label";
+          label.textContent = "\u5E38\u7528\u6807\u7B7E:";
+          quickPillsHost.appendChild(label);
+          for (const t of topTags) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            const isSelected = nextTag === t;
+            btn.className = "xlc-quick-pill" + (isSelected ? " xlc-quick-pill--on" : "");
+            btn.textContent = `#${t}`;
+            btn.title = isSelected ? `\u6E05\u9664 #${t} \u8FC7\u6EE4` : `\u6309 #${t} \u8FC7\u6EE4`;
+            btn.addEventListener("click", () => {
+              this.filterByTag(t);
+            });
+            quickPillsHost.appendChild(btn);
+          }
+          quickPillsHost.style.display = "flex";
+        } else {
+          quickPillsHost.style.display = "none";
+        }
+      }
       return changed;
     }
     attachLongPress(list, isMobile) {
@@ -11216,10 +12317,33 @@ ${exception.mark.snippet}`;
       void isMobile;
     }
     syncScopeChips() {
-      var _a;
+      var _a, _b, _c;
       (_a = this.dialog) == null ? void 0 : _a.element.querySelectorAll(".xlc-scope-chip").forEach((chip) => {
-        chip.classList.toggle("xlc-chip--on", chip.dataset.scope === this.currentScope);
+        const on = chip.dataset.scope === this.currentScope;
+        chip.classList.toggle("xlc-chip--on", on);
+        chip.classList.toggle("xlc-scope-chip--on", on);
       });
+      const searchBox = (_b = this.dialog) == null ? void 0 : _b.element.querySelector(".xlc-search");
+      if (searchBox) {
+        searchBox.classList.toggle("xlc-search--omni-mode", this.currentScope === "all-notes");
+      }
+      const input = (_c = this.dialog) == null ? void 0 : _c.element.querySelector(".xlc-search-input");
+      if (input) {
+        let ph = this.deps.t("searchPlaceholder");
+        if (this.currentScope === "all-notes") {
+          ph = "\u{1F50D} " + (this.deps.t("scopeAllNotesPlaceholder") || "\u641C\u7D22\u601D\u6E90\u5168\u5E93\u5185\u5BB9\u5757\u4E0E\u6587\u6863...");
+        } else if (this.currentScope === "current-doc") {
+          ph = "\u2635 " + (this.deps.t("scopeCurrentDocPlaceholder") || "\u641C\u7D22\u5F53\u524D\u6253\u5F00\u6587\u6863\u4E2D\u7684\u5185\u5BB9\u5757...");
+        } else if (this.currentScope === "favorites") {
+          ph = "\u2605 " + (this.deps.t("filterFavorites") || "\u6536\u85CF\u5E38\u7528\u8BED");
+        } else if (this.currentScope === "recent") {
+          ph = "\u{1F550} " + (this.deps.t("filterRecent") || "\u6700\u8FD1\u4F7F\u7528\u5E38\u7528\u8BED");
+        } else {
+          ph = this.deps.t("searchPlaceholder") + " (@ / \u68C0\u7D22\u5168\u5E93)";
+        }
+        input.placeholder = ph;
+        input.setAttribute("aria-label", ph);
+      }
     }
     buildQuery() {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i;
@@ -11287,7 +12411,8 @@ ${exception.mark.snippet}`;
           this.aiResults = false;
           if (aiBanner) aiBanner.style.display = "none";
         } else if (this.currentScope === "all-notes" && this.deps.searchAllNotes) {
-          const entries = await this.deps.searchAllNotes(query.text);
+          const cleanKeyword = query.text.replace(/^(@|\/|sy:)/, "").trim();
+          const entries = await this.deps.searchAllNotes(cleanKeyword);
           if (seq !== this.searchSeq) return;
           this.results = entries;
           total = entries.length;
@@ -11305,6 +12430,22 @@ ${exception.mark.snippet}`;
           loadError = result.error;
           this.aiResults = false;
           if (aiBanner) aiBanner.style.display = "none";
+          const trimmedQuery = query.text.trim();
+          const canCascade = this.currentScope === "all" && !query.itemType && !query.tag && !query.category && trimmedQuery.length >= 2 && this.results.length < 4 && Boolean(this.deps.searchAllNotes);
+          if (canCascade && this.deps.searchAllNotes) {
+            try {
+              const omniHits = await this.deps.searchAllNotes(trimmedQuery);
+              if (seq === this.searchSeq && omniHits.length > 0) {
+                const existingIds = new Set(this.results.map((r) => r.id));
+                const supplemental = omniHits.filter((o) => !existingIds.has(o.id)).slice(0, 6);
+                if (supplemental.length > 0) {
+                  this.results = [...this.results, ...supplemental];
+                  total = this.results.length;
+                }
+              }
+            } catch {
+            }
+          }
         }
       } catch (err) {
         if (seq !== this.searchSeq) return;
@@ -11457,10 +12598,13 @@ ${exception.mark.snippet}`;
     }
     /** 创建一行真实库条目。抽出后虚拟列表可以复用同一套交互与无障碍属性。 */
     createEntryRow(entry, index) {
-      var _a, _b, _c;
+      var _a, _b, _c, _d, _e, _f;
       const fav = this.deps.isFavorite(entry.id);
       const row = document.createElement("div");
       row.className = "xlc-row" + (index === this.activeIndex ? " xlc-row--active" : "") + (fav ? " xlc-row--fav" : "");
+      if (this.multiSelectMode && this.selectedIds.has(entry.id)) {
+        row.classList.add("xlc-row--selected");
+      }
       row.dataset.xlcControl = "item.row";
       row.dataset.xlcIndex = String(index);
       row.id = `xlc-result-${index}`;
@@ -11468,6 +12612,23 @@ ${exception.mark.snippet}`;
       row.setAttribute("aria-current", index === this.activeIndex ? "true" : "false");
       row.setAttribute("aria-posinset", String(index + 1));
       row.setAttribute("aria-setsize", String(this.results.length));
+      if (this.multiSelectMode) {
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "xlc-row-checkbox";
+        checkbox.checked = this.selectedIds.has(entry.id);
+        checkbox.setAttribute("aria-label", `\u9009\u62E9 ${entry.title}`);
+        checkbox.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (checkbox.checked) {
+            this.selectedIds.add(entry.id);
+          } else {
+            this.selectedIds.delete(entry.id);
+          }
+          this.renderBatchBar();
+        });
+        row.appendChild(checkbox);
+      }
       const main = document.createElement("div");
       main.className = "xlc-row-main";
       const title = document.createElement("div");
@@ -11488,7 +12649,14 @@ ${exception.mark.snippet}`;
       badge.title = this.deps.t(`type.${entry.itemType}`);
       badge.setAttribute("aria-label", this.deps.t(`type.${entry.itemType}`));
       title.appendChild(badge);
-      if (entry.category && entry.category.trim()) {
+      if (entry.isOmni) {
+        const omniBadge = document.createElement("span");
+        omniBadge.className = "xlc-badge xlc-badge--omni";
+        omniBadge.textContent = ((_b = entry.tags) == null ? void 0 : _b.includes("\u5168\u5E93\u5757")) ? "\u601D\u6E90\u5757" : ((_c = entry.tags) == null ? void 0 : _c.includes("\u5F53\u524D\u6587\u6863")) ? "\u672C\u6587\u6863" : "\u601D\u6E90";
+        omniBadge.title = "\u601D\u6E90\u5168\u5E93\u68C0\u7D22\u6761\u76EE\uFF0C\u53EF\u76F4\u63A5\u590D\u7528\u6216\u4E00\u952E\u6536\u5F55\u4E3A\u5E38\u7528\u8BED (Alt+S)";
+        title.appendChild(omniBadge);
+      }
+      if (entry.category && entry.category.trim() && !entry.isOmni) {
         const catBadge = document.createElement("span");
         const variant = getCategoryColorVariant(entry.category);
         catBadge.className = `xlc-badge xlc-badge--cat xlc-cat--${variant}`;
@@ -11496,6 +12664,13 @@ ${exception.mark.snippet}`;
         catBadge.title = `${this.deps.t("category")}\uFF1A${entry.category.trim()}`;
         catBadge.setAttribute("aria-label", `${this.deps.t("category")}\uFF1A${entry.category.trim()}`);
         title.appendChild(catBadge);
+      }
+      if (((_d = entry.varCount) != null ? _d : 0) > 0) {
+        const varBadge = document.createElement("span");
+        varBadge.className = "xlc-badge xlc-badge--var";
+        varBadge.textContent = `{${entry.varCount}} \u53D8\u91CF`;
+        varBadge.title = `\u6B64\u6761\u76EE\u542B\u6709 ${entry.varCount} \u4E2A\u52A8\u6001\u586B\u53C2\u5B57\u6BB5`;
+        title.appendChild(varBadge);
       }
       const cleanQuery = this.lastQueryText.trim().toLowerCase();
       if (cleanQuery && entry.alias && entry.alias.trim().toLowerCase() === cleanQuery) {
@@ -11511,7 +12686,7 @@ ${exception.mark.snippet}`;
       if (highlight) this.appendHighlighted(titleText, entry.title || this.deps.t("unknownType"), this.lastQueryText);
       else titleText.textContent = entry.title || this.deps.t("unknownType");
       title.appendChild(titleText);
-      if (((_b = entry.varCount) != null ? _b : 0) > 0) {
+      if (((_e = entry.varCount) != null ? _e : 0) > 0) {
         const varBadge = document.createElement("span");
         varBadge.className = "xlc-badge xlc-badge--var";
         varBadge.textContent = this.deps.t("varCountBadge", String(entry.varCount));
@@ -11528,6 +12703,15 @@ ${exception.mark.snippet}`;
       main.appendChild(title);
       const meta = document.createElement("div");
       meta.className = "xlc-row-meta";
+      if (entry.isOmni && entry.category) {
+        const breadcrumb = document.createElement("span");
+        breadcrumb.className = "xlc-row-breadcrumb";
+        const cleanPath = entry.category.replace(/^\/+/, "").replace(/\.sy$/, "");
+        const parts = cleanPath.split("/").filter(Boolean);
+        breadcrumb.textContent = parts.length > 0 ? parts.join(" \u203A ") : entry.category;
+        breadcrumb.title = `\u6240\u5C5E\u6587\u6863\u8DEF\u5F84\uFF1A${entry.category}`;
+        meta.appendChild(breadcrumb);
+      }
       const currentFilters = this.deps.getFilters();
       const cleanTags = entry.tags.filter(Boolean);
       const shownTags = cleanTags.slice(0, 3);
@@ -11559,12 +12743,20 @@ ${exception.mark.snippet}`;
         }
         meta.appendChild(tagsWrapper);
       }
-      const useCount = (_c = this.usageCounts.get(entry.id)) != null ? _c : 0;
-      if (entry.summary) {
+      const useCount = (_f = this.usageCounts.get(entry.id)) != null ? _f : 0;
+      const sourceTextForSummary = entry.content || entry.summary || "";
+      if (sourceTextForSummary) {
         const summarySpan = document.createElement("span");
         summarySpan.className = "xlc-row-summary";
-        const summaryText = entry.summary.length > 100 ? entry.summary.slice(0, 100) + "\u2026" : entry.summary;
-        summarySpan.textContent = (shownTags.length > 0 ? " \xB7 " : "") + summaryText;
+        const tokens = this.lastQueryText ? splitSearchTokens(this.lastQueryText) : [];
+        const summaryText = deriveSmartSummary(sourceTextForSummary, tokens, 90);
+        const prefix = shownTags.length > 0 || entry.isOmni && entry.category ? " \xB7 " : "";
+        if (prefix) summarySpan.appendChild(document.createTextNode(prefix));
+        if (this.lastQueryText && !this.lastQueryText.startsWith("?") && !this.aiResults) {
+          this.appendHighlighted(summarySpan, summaryText, this.lastQueryText);
+        } else {
+          summarySpan.appendChild(document.createTextNode(summaryText));
+        }
         meta.appendChild(summarySpan);
       }
       if (useCount > 0) {
@@ -11682,6 +12874,33 @@ ${exception.mark.snippet}`;
           empty.appendChild(clear);
         }
         const query = this.lastQueryText.trim();
+        if (this.currentScope === "all-notes" && /(?:in|path|book|box):/i.test(query)) {
+          const clearScopeBtn = document.createElement("button");
+          clearScopeBtn.type = "button";
+          clearScopeBtn.className = "b3-button xlc-btn-primary xlc-empty-action";
+          clearScopeBtn.textContent = "\u{1F50D} \u6E05\u9664\u8DEF\u5F84\u9650\u5B9A\uFF0C\u5728\u5168\u5E93\u65E0\u9650\u5236\u641C\u7D22";
+          clearScopeBtn.addEventListener("click", () => {
+            var _a2;
+            const input = (_a2 = this.dialog) == null ? void 0 : _a2.element.querySelector(".xlc-search-input");
+            if (input) {
+              input.value = query.replace(/(?:in|path|book|box):[^\s]+/gi, "").trim();
+              input.dispatchEvent(new Event("input", { bubbles: true }));
+              input.focus();
+            }
+          });
+          empty.appendChild(clearScopeBtn);
+        }
+        if (this.currentScope === "all-notes" && query) {
+          const tips = document.createElement("div");
+          tips.className = "xlc-empty-hint xlc-empty-omni-tips";
+          tips.innerHTML = `
+                    <div>\u2022 \u5C1D\u8BD5\u7F29\u77ED\u5173\u952E\u8BCD\u6216\u6539\u7528\u62FC\u97F3/\u9996\u5B57\u6BCD</div>
+                    <div>\u2022 \u652F\u6301 <code>type:code</code> \u4E13\u95E8\u68C0\u7D22\u4EE3\u7801\u5757</div>
+                    <div>\u2022 \u652F\u6301 <code>type:h</code> \u4E13\u95E8\u68C0\u7D22\u5927\u7EB2\u6807\u9898</div>
+                    <div>\u2022 \u652F\u6301 <code>in:\u76EE\u5F55\u540D</code> \u7F29\u5C0F\u68C0\u7D22\u8303\u56F4</div>
+                `;
+          empty.appendChild(tips);
+        }
         const hasScopeLimitation = shouldShowScopeFallback(query, this.currentScope);
         if (hasScopeLimitation) {
           const scopeFallback = document.createElement("button");
@@ -11869,6 +13088,7 @@ ${exception.mark.snippet}`;
         };
         renderWindow();
       } else {
+        let omniHeaderPlaced = false;
         for (let i = 0; i < this.results.length; i++) {
           while (headCursor + 1 < groupLabels.length && i === headStarts[headCursor + 1]) {
             headCursor++;
@@ -11876,6 +13096,14 @@ ${exception.mark.snippet}`;
             if (head) placeGroupHead(head.label, head.count);
           }
           const entry = this.results[i];
+          if (entry && entry.isOmni && !omniHeaderPlaced && this.results.some((r) => !r.isOmni)) {
+            omniHeaderPlaced = true;
+            const omniHead = document.createElement("div");
+            omniHead.className = "xlc-group-head xlc-group-head--omni";
+            const omniCount = this.results.filter((r) => r.isOmni).length;
+            omniHead.textContent = `\u{1F50D} \u601D\u6E90\u5168\u5E93\u5339\u914D\u5185\u5BB9\u5757 (${omniCount})`;
+            list.appendChild(omniHead);
+          }
           if (entry) list.appendChild(this.createEntryRow(entry, i));
         }
       }
@@ -11950,6 +13178,11 @@ ${exception.mark.snippet}`;
         const showOmniSave = act === "save-omni" && isOmniScope && Boolean(this.deps.createFromOmni);
         const showOmniEditCapture = act === "edit-and-capture-omni" && isOmniScope && Boolean(this.deps.captureOmniWithForm);
         btn.style.display = act === "save-omni" || act === "edit-and-capture-omni" ? showOmniSave && act === "save-omni" ? "" : showOmniEditCapture && act === "edit-and-capture-omni" ? "" : "none" : "";
+        if (act === "save-omni") {
+          const isCaptured = entry ? this.capturedOmniIds.has(entry.id) : false;
+          btn.textContent = isCaptured ? "\u2713 " + this.deps.t("saveToCommon") : "\u2726 " + this.deps.t("saveToCommon") + " (Alt+S)";
+          btn.disabled = isCaptured;
+        }
         if (act === "edit") {
           btn.textContent = isOmniScope && this.deps.quickEditBlock ? "\u270E " + this.deps.t("quickEditBlock") : this.deps.t("edit");
         }
@@ -12254,7 +13487,7 @@ ${exception.mark.snippet}`;
     }
     /** 预览窗格元数据行（R108，Raycast Detail.Metadata 惯例）：类型徽标 + 分类/标签可点筛选 + 更新日期。 */
     paintPaneMeta(entry) {
-      var _a, _b;
+      var _a, _b, _c, _d;
       const meta = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-pane-meta");
       if (!meta) return;
       meta.textContent = "";
@@ -12266,8 +13499,22 @@ ${exception.mark.snippet}`;
       typeBadge.className = `xlc-badge xlc-badge--${entry.itemType}`;
       typeBadge.textContent = (_b = TYPE_BADGES2[entry.itemType]) != null ? _b : "TXT";
       meta.appendChild(typeBadge);
+      if (entry.isOmni) {
+        const omniBadge = document.createElement("span");
+        omniBadge.className = "xlc-badge xlc-badge--omni";
+        omniBadge.textContent = ((_c = entry.tags) == null ? void 0 : _c.includes("\u5168\u5E93\u5757")) ? "\u601D\u6E90\u5168\u5E93\u5757" : ((_d = entry.tags) == null ? void 0 : _d.includes("\u5F53\u524D\u6587\u6863")) ? "\u5F53\u524D\u6587\u6863\u5757" : "\u601D\u6E90\u6587\u6863";
+        meta.appendChild(omniBadge);
+        if (entry.category) {
+          const docPathSpan = document.createElement("span");
+          docPathSpan.className = "xlc-row-breadcrumb";
+          const clean = entry.category.replace(/^\/+/, "").replace(/\.sy$/, "");
+          docPathSpan.textContent = clean.split("/").filter(Boolean).join(" \u203A ") || entry.category;
+          docPathSpan.title = `\u6240\u5C5E\u6587\u6863\u8DEF\u5F84\uFF1A${entry.category}`;
+          meta.appendChild(docPathSpan);
+        }
+      }
       const setFilter = (patch) => {
-        var _a2, _b2, _c, _d;
+        var _a2, _b2, _c2, _d2;
         const current = this.deps.getFilters();
         const next = {
           type: current.type,
@@ -12275,8 +13522,8 @@ ${exception.mark.snippet}`;
           category: (_b2 = patch.category) != null ? _b2 : current.category
         };
         this.deps.setFilters(next);
-        const tagSelect = (_c = this.dialog) == null ? void 0 : _c.element.querySelector(".xlc-tag-select");
-        const categorySelect = (_d = this.dialog) == null ? void 0 : _d.element.querySelector(".xlc-category-select");
+        const tagSelect = (_c2 = this.dialog) == null ? void 0 : _c2.element.querySelector(".xlc-tag-select");
+        const categorySelect = (_d2 = this.dialog) == null ? void 0 : _d2.element.querySelector(".xlc-category-select");
         if (tagSelect) tagSelect.value = next.tag;
         if (categorySelect) categorySelect.value = next.category;
         void this.refresh();
@@ -12315,6 +13562,21 @@ ${exception.mark.snippet}`;
         more.className = "xlc-meta-chip xlc-meta-chip--static";
         more.textContent = `+${cleanTags.length - shownTags.length}`;
         meta.appendChild(more);
+      }
+      if (entry.sourceDocPath) {
+        const pathBtn = document.createElement("button");
+        pathBtn.type = "button";
+        pathBtn.className = "xlc-meta-chip xlc-meta-chip--path";
+        pathBtn.textContent = "\u{1F4C4} " + entry.sourceDocPath;
+        pathBtn.title = "\u70B9\u51FB\u5728\u601D\u6E90\u4E2D\u6253\u5F00\u5E76\u5B9A\u4F4D\u6B64\u6587\u6863\u6216\u5757 (Alt+D)";
+        pathBtn.addEventListener("click", () => {
+          if (entry.isOmni && this.deps.openDocBlock) {
+            void this.deps.openDocBlock(entry.targetBlockId || entry.id);
+          } else {
+            void this.deps.openSource(entry.id);
+          }
+        });
+        meta.appendChild(pathBtn);
       }
       if (Number.isFinite(entry.updatedAt) && entry.updatedAt > 9466848e5) {
         const date = document.createElement("span");
@@ -12428,12 +13690,30 @@ ${exception.mark.snippet}`;
       if (this.primaryBusy || this.varFormOpen) return;
       await this.insertEntryWithVars(entry, (fills) => this.runActionFor(entry, fills));
     }
-    runActionFor(entry, fills) {
+    runActionFor(entry, fills, overrideMode) {
       if (this.insertTarget) {
         const target = this.insertTarget;
-        return this.deps.insertToDoc(entry.id, target.docId, target.hPath, fills);
+        const insertMode = overrideMode === "insert-embed" || overrideMode === "insert-ref" || overrideMode === "insert-content" ? overrideMode : "insert";
+        return this.deps.insertToDoc(entry.id, target.docId, target.hPath, fills, insertMode);
       }
-      const mode = entry.itemType === "blockref" ? "insert-ref" : "insert";
+      if (overrideMode === "insert-embed") {
+        const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+        return this.deps.insertProviderPayload(`{{select * from blocks where id='${targetBlockId}'}}`);
+      }
+      if (overrideMode === "insert-ref") {
+        const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+        const anchor = (entry.title || entry.summary || "\u5F15\u7528").slice(0, 50).replace(/[\r\n]+/g, " ");
+        return this.deps.insertProviderPayload(buildBlockRef(targetBlockId, anchor));
+      }
+      if (entry.isOmni) {
+        let finalContent = entry.content || entry.summary || "";
+        if (fills) {
+          finalContent = expandAsks(finalContent, fills);
+        }
+        finalContent = applyAskDefaults(stripCursorToken(finalContent));
+        return this.deps.insertProviderPayload(finalContent);
+      }
+      const mode = overrideMode || (entry.itemType === "blockref" ? "insert-ref" : "insert");
       return fills ? this.deps.runActionWithFills(entry.id, mode, fills) : this.deps.runAction(entry.id, mode);
     }
     /** F1：插入前询问变量（设置可关；无 ask 字段零打扰；code 条目不询问）。
@@ -12459,7 +13739,7 @@ ${exception.mark.snippet}`;
       let previewFailed = false;
       let templateText = "";
       try {
-        const content = await this.deps.preview(entry.id);
+        const content = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
         templateText = content || "";
         fields = entry.itemType === "code" || !content ? [] : listAskFields(content);
       } catch {
@@ -12499,7 +13779,7 @@ ${exception.mark.snippet}`;
         defaults,
         templateText,
         onConfirm: (fills) => {
-          var _a2, _b2;
+          var _a2, _b2, _c2, _d;
           this.varFormOpen = false;
           this.syncPaneActions();
           try {
@@ -12508,10 +13788,34 @@ ${exception.mark.snippet}`;
           }
           const execution = perform(fills);
           if (options == null ? void 0 : options.beforePerform) options.beforePerform();
-          else this.destroy();
+          else if (!this.pinWindow) this.destroy();
           void execution.finally(() => {
             releaseBusy();
           });
+          if (this.pinWindow) (_d = (_c2 = this.deps).notify) == null ? void 0 : _d.call(_c2, "info", "\u5DF2\u63D2\u5165\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u9009\u62E9\uFF09");
+        },
+        onCopy: async (fills) => {
+          var _a2, _b2, _c2, _d;
+          this.varFormOpen = false;
+          this.syncPaneActions();
+          try {
+            (_b2 = (_a2 = this.deps).rememberVariables) == null ? void 0 : _b2.call(_a2, fills);
+          } catch {
+          }
+          if (!this.pinWindow) this.destroy();
+          try {
+            if (entry.isOmni) {
+              let finalContent = entry.content || entry.summary || "";
+              finalContent = expandAsks(finalContent, fills);
+              finalContent = applyAskDefaults(stripCursorToken(finalContent));
+              await this.deps.copyProviderPayload(finalContent);
+            } else {
+              await this.deps.runActionWithFills(entry.id, "copy", fills);
+            }
+            (_d = (_c2 = this.deps).notify) == null ? void 0 : _d.call(_c2, "info", this.pinWindow ? "\u5DF2\u6839\u636E\u586B\u5165\u53D8\u91CF\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u6839\u636E\u586B\u5165\u53D8\u91CF\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+          } finally {
+            releaseBusy();
+          }
         },
         // 取消/关闭（Esc/scrim/取消钮）后焦点回搜索框，与浮层菜单一致（R128）
         onCancel: () => {
@@ -12557,7 +13861,7 @@ ${exception.mark.snippet}`;
         menu.appendChild(hint);
       };
       const buildDefault = () => {
-        var _a2;
+        var _a2, _b2;
         const lbl = document.createElement("div");
         lbl.className = "xlc-menu-lbl";
         lbl.textContent = (entry.title || this.deps.t("unknownType")) + " \xB7 " + this.deps.t("actionsNoun");
@@ -12596,7 +13900,32 @@ ${exception.mark.snippet}`;
         } else {
           addAction("\uFF0B", this.deps.t("insert"), () => this.insertEntryWithVars(entry, (fills) => this.runActionFor(entry, fills), { beforePerform: () => this.destroy() }), "xlc-menu-item", false);
           addAction("\u29C9", this.deps.t("copy"), () => this.deps.runAction(entry.id, "copy"));
+          if (((_a2 = entry.varCount) != null ? _a2 : 0) > 0) {
+            addAction("\u{1F4C4}", this.deps.t("copyRawTemplate"), async () => {
+              var _a3, _b3;
+              const raw = await this.deps.preview(entry.id);
+              await this.deps.copyProviderPayload(raw || entry.content || "");
+              (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", this.deps.t("copyRawTemplateDone"));
+            });
+          }
         }
+        const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+        if (isBlockId(targetBlockId)) {
+          addAction("((\u2022))", "\u590D\u5236\u5757\u5F15\u7528\u8BED\u6CD5 (Alt+R)", async () => {
+            var _a3, _b3;
+            const anchor = (entry.title || entry.summary || "\u5F15\u7528").slice(0, 50).replace(/[\r\n]+/g, " ");
+            const refCode = buildBlockRef(targetBlockId, anchor);
+            await this.deps.copyProviderPayload(refCode);
+            (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", `\u5DF2\u590D\u5236\u5757\u5F15\u7528: ${refCode}`);
+          }, "xlc-menu-item", !this.pinWindow);
+        }
+        addAction("\u{1F4C4}", "\u590D\u5236\u7EAF\u6587\u672C (Alt+Shift+C)", async () => {
+          var _a3, _b3;
+          const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
+          const plain = kramdownToPlainText(raw || entry.summary || "");
+          await this.deps.copyProviderPayload(plain);
+          (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\u5230\u526A\u8D34\u677F (\u9002\u7528\u4E8E\u5FAE\u4FE1/QQ)");
+        }, "xlc-menu-item", !this.pinWindow);
         menu.appendChild(sec1);
         if (this.deps.aiEnabled()) {
           const secAi = document.createElement("div");
@@ -12648,11 +13977,11 @@ ${exception.mark.snippet}`;
           addSilent("\u2197", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
           addSilent("\u270E", this.deps.t("edit"), () => this.deps.editItem(entry.id));
           addSilent("\u29C9", this.deps.t("duplicateItem"), () => this.deps.duplicateItem(entry.id));
-          const useCount = (_a2 = this.usageCounts.get(entry.id)) != null ? _a2 : 0;
+          const useCount = (_b2 = this.usageCounts.get(entry.id)) != null ? _b2 : 0;
           if (useCount > 0 && this.deps.resetItemUsage) {
             addSilent("\u21BA", this.deps.t("resetItemUsage", String(useCount)), async () => {
-              var _a3, _b2;
-              const ok2 = (_b2 = (_a3 = this.deps).resetItemUsage) == null ? void 0 : _b2.call(_a3, entry.id);
+              var _a3, _b3;
+              const ok2 = (_b3 = (_a3 = this.deps).resetItemUsage) == null ? void 0 : _b3.call(_a3, entry.id);
               if (ok2) {
                 this.usageCounts.delete(entry.id);
                 void this.refreshPreservingPosition();
@@ -12680,7 +14009,8 @@ ${exception.mark.snippet}`;
           let docDebounce = null;
           input.addEventListener("keydown", (ev) => {
             ev.stopPropagation();
-            if (ev.key === "Enter" && !ev.isComposing) {
+            if (ev.isComposing || ev.keyCode === 229) return;
+            if (ev.key === "Enter") {
               ev.preventDefault();
               if (docDebounce) {
                 clearTimeout(docDebounce);
@@ -12915,7 +14245,7 @@ ${exception.mark.snippet}`;
       (_f = menu.querySelector(".xlc-menu-item")) == null ? void 0 : _f.focus();
     }
     async onKeydown(e) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P;
       if (e.isComposing || e.keyCode === 229) return;
       const list = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-list");
       const input = (_b = this.dialog) == null ? void 0 : _b.element.querySelector(".xlc-search-input");
@@ -12983,16 +14313,48 @@ ${exception.mark.snippet}`;
         this.setNav(Math.max(this.navPosition() - 1, 0));
         this.paintActive();
         this.updatePreview();
-      } else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
-        if ((_l = (_k = e.target).closest) == null ? void 0 : _l.call(_k, ".xlc-row-action")) return;
+      } else if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+          if (isBlockId(targetBlockId)) {
+            await this.runActionFor(entry, void 0, "insert-embed");
+            if (!this.pinWindow) this.destroy();
+            (_l = (_k = this.deps).notify) == null ? void 0 : _l.call(_k, "info", "\u5DF2\u63D2\u5165\u540C\u6B65\u5D4C\u5165\u5757\uFF08\u6E90\u53D8\u52A8\u65F6\u81EA\u52A8\u540C\u6B65\uFF09");
+          } else {
+            (_n = (_m = this.deps).notify) == null ? void 0 : _n.call(_m, "error", "\u65E0\u6CD5\u5D4C\u5165\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
+          }
+        }
+        return;
+      } else if (e.key === "Enter" && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+          if (isBlockId(targetBlockId)) {
+            await this.runActionFor(entry, void 0, "insert-ref");
+            if (!this.pinWindow) this.destroy();
+            (_p = (_o = this.deps).notify) == null ? void 0 : _p.call(_o, "info", "\u5DF2\u63D2\u5165\u5757\u5F15\u7528\u94FE\u63A5");
+          } else {
+            (_r = (_q = this.deps).notify) == null ? void 0 : _r.call(_q, "error", "\u65E0\u6CD5\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
+          }
+        }
+        return;
+      } else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        if ((_t = (_s = e.target).closest) == null ? void 0 : _t.call(_s, ".xlc-row-action")) return;
         if (e.repeat) return;
         e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
         if (this.activeProvider >= 0) {
           const row = this.providerRows[this.activeProvider];
           if (row) {
-            const execution = this.deps.insertProviderPayload(row.payload, (_m = this.insertTarget) != null ? _m : void 0);
-            this.destroy();
+            const execution = this.deps.insertProviderPayload(row.payload, (_u = this.insertTarget) != null ? _u : void 0);
+            if (!this.pinWindow) this.destroy();
             await execution;
+            if (this.pinWindow) (_w = (_v = this.deps).notify) == null ? void 0 : _w.call(_v, "info", "\u5DF2\u63D2\u5165\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u9009\u62E9\uFF09");
           }
           return;
         }
@@ -13000,6 +14362,7 @@ ${exception.mark.snippet}`;
         if (entry) await this.runPrimary(entry);
       } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
         if (this.activeProvider >= 0) {
           const row = this.providerRows[this.activeProvider];
           if (row) await this.deps.copyProviderPayload(row.payload);
@@ -13007,8 +14370,108 @@ ${exception.mark.snippet}`;
         }
         const entry = this.results[this.activeIndex];
         if (entry) await this.deps.runAction(entry.id, "copy");
+      } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C")) {
+        e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
+          const plain = kramdownToPlainText(raw || entry.summary || "");
+          await this.deps.copyProviderPayload(plain);
+          if (!this.pinWindow) this.destroy();
+          (_y = (_x = this.deps).notify) == null ? void 0 : _y.call(_x, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\u5230\u526A\u8D34\u677F (\u9002\u7528\u4E8E\u5FAE\u4FE1/QQ)");
+        }
+        return;
+      } else if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C") || e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+        e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
+        if (this.activeProvider >= 0) {
+          const row = this.providerRows[this.activeProvider];
+          if (row) {
+            await this.deps.copyProviderPayload(row.payload);
+            if (!this.pinWindow) this.destroy();
+            (_A = (_z = this.deps).notify) == null ? void 0 : _A.call(_z, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+          }
+          return;
+        }
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          if (entry.isOmni) {
+            await this.deps.copyProviderPayload(entry.content || entry.summary || "");
+          } else {
+            await this.deps.runAction(entry.id, "copy");
+          }
+          if (!this.pinWindow) this.destroy();
+          (_C = (_B = this.deps).notify) == null ? void 0 : _C.call(_B, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+        }
+        return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R")) {
+        e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+          if (isBlockId(targetBlockId)) {
+            const anchor = (entry.title || entry.summary || "\u5F15\u7528").slice(0, 50).replace(/[\r\n]+/g, " ");
+            try {
+              const refCode = buildBlockRef(targetBlockId, anchor);
+              await this.deps.copyProviderPayload(refCode);
+              if (!this.pinWindow) this.destroy();
+              (_E = (_D = this.deps).notify) == null ? void 0 : _E.call(_D, "info", `\u5DF2\u590D\u5236\u5757\u5F15\u7528: ${refCode}`);
+            } catch {
+              (_G = (_F = this.deps).notify) == null ? void 0 : _G.call(_F, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u76EE\u6807\u5757 ID \u65E0\u6548");
+            }
+          } else {
+            (_I = (_H = this.deps).notify) == null ? void 0 : _I.call(_H, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
+          }
+        }
+        return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "d" || e.key === "D")) {
+        e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          if (entry.isOmni) {
+            if (this.deps.openDocBlock) {
+              void this.deps.openDocBlock(entry.targetBlockId || entry.id);
+            } else {
+              void this.deps.openSource(entry.id);
+            }
+          } else {
+            void this.deps.openSource(entry.id);
+          }
+          if (!this.pinWindow) this.destroy();
+        }
+        return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
+        e.preventDefault();
+        if (this.quickLookOpen) this.closeQuickLook();
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          const text = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
+          await this.deps.copyProviderPayload(text || entry.summary || "");
+          if (!this.pinWindow) this.destroy();
+          (_K = (_J = this.deps).notify) == null ? void 0 : _K.call(_J, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u539F\u59CB Markdown\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u539F\u59CB Markdown \u8BED\u6CD5\u5230\u526A\u8D34\u677F");
+        }
+        return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "h" || e.key === "H")) {
+        e.preventDefault();
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          const docPath = entry.sourceDocPath || entry.category || "\u672A\u547D\u540D\u8DEF\u5F84";
+          (_M = (_L = this.deps).notify) == null ? void 0 : _M.call(_L, "info", `\u{1F4CD} \u5757\u5C42\u7EA7\u8DEF\u5F84\uFF1A${docPath}`);
+        }
+        return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        this.togglePinWindow();
+        return;
       } else if (e.key === "Escape") {
         e.preventDefault();
+        if (this.multiSelectMode) {
+          this.exitMultiSelectMode();
+          return;
+        }
         this.destroy();
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (/^[1-9]$/.test(e.key) || /^Digit[1-9]$/.test(e.code))) {
         let num = null;
@@ -13031,7 +14494,7 @@ ${exception.mark.snippet}`;
           }
         }
       } else if (e.key === "Tab") {
-        const root = (_n = this.dialog) == null ? void 0 : _n.element;
+        const root = (_N = this.dialog) == null ? void 0 : _N.element;
         if (!root) return;
         const focusables = Array.from(root.querySelectorAll(
           'input:not([disabled]):not([type="hidden"]), select:not([disabled]), button:not([disabled]), [tabindex="0"]:not([disabled])'
@@ -13050,6 +14513,13 @@ ${exception.mark.snippet}`;
             await this.runPrimary(exactMatch);
             return;
           }
+          if (this.currentScope === "all" && this.results.length === 0 && input2.value.trim() && this.deps.searchAllNotes) {
+            e.preventDefault();
+            this.currentScope = "all-notes";
+            this.syncScopeChips();
+            void this.refresh().then(() => this.restoreFocusToSearch());
+            return;
+          }
           const previewAction = root.querySelector(".xlc-pane-foot button:not([disabled])");
           if (previewAction && focusables.includes(previewAction)) {
             e.preventDefault();
@@ -13063,6 +14533,17 @@ ${exception.mark.snippet}`;
         } else if (!e.shiftKey && active2 === last) {
           e.preventDefault();
           first == null ? void 0 : first.focus();
+        }
+      } else if ((e.altKey || (e.ctrlKey || e.metaKey) && e.shiftKey) && (e.key === "s" || e.key === "S")) {
+        const entry = this.results[this.activeIndex];
+        if ((entry == null ? void 0 : entry.isOmni) && this.deps.createFromOmni) {
+          e.preventDefault();
+          const ok2 = await this.deps.createFromOmni(entry);
+          if (ok2) {
+            this.capturedOmniIds.add(entry.id);
+            this.syncPaneActions();
+          }
+          return;
         }
       } else if ((e.ctrlKey || e.metaKey || e.altKey) && (e.key === "e" || e.key === "E")) {
         if (e.repeat) return;
@@ -13088,7 +14569,22 @@ ${exception.mark.snippet}`;
           await this.deps.duplicateItem(entry.id);
           await this.refresh();
         }
-      } else if (e.altKey && (e.key === "Delete" || e.key === "Backspace") || !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Delete" && !((_o = document.activeElement) == null ? void 0 : _o.matches("input, textarea"))) {
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "t" || e.key === "T")) {
+        e.preventDefault();
+        const scopeOrder = ["all", "favorites", "recent", "current-doc", "all-notes"];
+        const currentIdx = scopeOrder.indexOf(this.currentScope);
+        const nextIdx = (currentIdx + 1) % scopeOrder.length;
+        this.currentScope = (_O = scopeOrder[nextIdx]) != null ? _O : "all";
+        this.syncScopeChips();
+        void this.refresh().then(() => this.restoreFocusToSearch());
+        return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === "0") {
+        e.preventDefault();
+        this.currentScope = "all";
+        this.syncScopeChips();
+        void this.refresh().then(() => this.restoreFocusToSearch());
+        return;
+      } else if (e.altKey && (e.key === "Delete" || e.key === "Backspace") || !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Delete" && !((_P = document.activeElement) == null ? void 0 : _P.matches("input, textarea"))) {
         if (e.repeat) return;
         if (this.activeProvider >= 0) return;
         const entry = this.results[this.activeIndex];
@@ -13096,6 +14592,9 @@ ${exception.mark.snippet}`;
           e.preventDefault();
           await this.deps.deleteItem(entry.id);
         }
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
+        e.preventDefault();
+        this.toggleMultiSelectMode();
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "f" || e.key === "F" || e.key === "s" || e.key === "S")) {
         if (e.repeat) return;
         if (this.activeProvider >= 0) return;
@@ -13114,6 +14613,20 @@ ${exception.mark.snippet}`;
     getActiveEntry() {
       var _a;
       return (_a = this.results[this.activeIndex]) != null ? _a : null;
+    }
+    togglePinWindow() {
+      var _a, _b, _c;
+      this.pinWindow = !this.pinWindow;
+      const pinBtn = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-search-pin");
+      if (pinBtn) {
+        pinBtn.classList.toggle("xlc-search-pin--active", this.pinWindow);
+        pinBtn.title = this.pinWindow ? "\u5DF2\u56FA\u5B9A\u7A97\u53E3\uFF08\u8FDE\u7EED\u590D\u5236/\u63D2\u5165\u4E0D\u5173\u95ED\uFF0CAlt+P \u5207\u6362\uFF09" : "\u56FA\u5B9A\u7A97\u53E3\uFF08\u8FDE\u7EED\u590D\u5236/\u63D2\u5165\u4E0D\u5173\u95ED\uFF0CAlt+P \u5207\u6362\uFF09";
+      }
+      (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "info", this.pinWindow ? "\u5DF2\u5F00\u542F\u7A97\u53E3\u56FA\u5B9A\uFF1A\u8FDE\u7EED\u590D\u5236\u6216\u63D2\u5165\u5C06\u4FDD\u6301\u7A97\u53E3\u6253\u5F00 (Alt+P \u5207\u6362)" : "\u5DF2\u5173\u95ED\u7A97\u53E3\u56FA\u5B9A");
+      return this.pinWindow;
+    }
+    isPinWindow() {
+      return this.pinWindow;
     }
     /** 空格键极速大卡片预览的开关入口（供弹窗与测试共用） */
     toggleQuickLookPublic() {
@@ -13169,10 +14682,10 @@ ${exception.mark.snippet}`;
       title.textContent = entry.title || "";
       const meta = document.createElement("span");
       meta.className = "xlc-quicklook-meta";
-      meta.textContent = entry.itemType || "";
+      meta.textContent = `${entry.itemType}${entry.varCount ? ` \xB7 {${entry.varCount}} \u53D8\u91CF` : ""}${entry.alias ? ` \xB7 \u522B\u540D: ${entry.alias}` : ""}`;
       const hints = document.createElement("span");
       hints.className = "xlc-quicklook-hints";
-      hints.textContent = "Space / Esc \u5173\u95ED\u3000Enter \u63D2\u5165\u3000Alt+C \u590D\u5236";
+      hints.textContent = entry.isOmni ? "Space / Esc \u5173\u95ED\u3000Enter \u63D2\u5165\u3000Alt+S \u6536\u5F55\u5230\u5E38\u7528\u5E93" : "Space / Esc \u5173\u95ED\u3000Enter \u63D2\u5165\u3000Alt+C \u590D\u5236";
       head.append(title, meta, hints);
       const body = document.createElement("div");
       body.className = "xlc-quicklook-body";
@@ -13187,15 +14700,164 @@ ${exception.mark.snippet}`;
         this.closeQuickLook();
       });
       host.appendChild(overlay);
-      const id = entry.id;
-      void this.deps.preview(id).then((text) => {
-        if (this.quickLookSeq !== seq || !this.quickLookOpen) return;
+      if (entry.isOmni) {
         loading.remove();
+        const text = entry.content || entry.summary || "";
         renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
-      }).catch(() => {
-        loading.textContent = "\u9884\u89C8\u52A0\u8F7D\u5931\u8D25";
-      });
+      } else {
+        const id = entry.id;
+        void this.deps.preview(id).then((text) => {
+          if (this.quickLookSeq !== seq || !this.quickLookOpen) return;
+          loading.remove();
+          renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
+        }).catch(() => {
+          loading.textContent = "\u9884\u89C8\u52A0\u8F7D\u5931\u8D25";
+        });
+      }
       return true;
+    }
+    /** 切换多选模式（G30 / ADR 0082） */
+    toggleMultiSelectMode() {
+      var _a;
+      this.multiSelectMode = !this.multiSelectMode;
+      if (!this.multiSelectMode) {
+        this.selectedIds.clear();
+      }
+      this.renderBatchBar();
+      const list = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-list");
+      if (list) this.renderList(list);
+    }
+    exitMultiSelectMode() {
+      var _a;
+      if (!this.multiSelectMode) return;
+      this.multiSelectMode = false;
+      this.selectedIds.clear();
+      this.renderBatchBar();
+      const list = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-list");
+      if (list) this.renderList(list);
+    }
+    isMultiSelectMode() {
+      return this.multiSelectMode;
+    }
+    getSelectedCount() {
+      return this.selectedIds.size;
+    }
+    getSelectedIds() {
+      return Array.from(this.selectedIds);
+    }
+    /** 公开批量修改接口（供 UI 交互与测试桩调用） */
+    async applyBatchUpdate(patch) {
+      if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return null;
+      const ids = Array.from(this.selectedIds);
+      const receipt = await this.deps.batchUpdateMetadata(ids, patch);
+      this.exitMultiSelectMode();
+      await this.refresh();
+      return receipt;
+    }
+    buildBatchBar() {
+      const bar = document.createElement("div");
+      bar.className = "xlc-batch-bar";
+      bar.dataset.xlcControl = "search.batch.bar";
+      bar.style.display = "none";
+      const countSpan = document.createElement("span");
+      countSpan.className = "xlc-batch-count";
+      countSpan.textContent = "\u5DF2\u9009 0 \u9879";
+      const actions = document.createElement("div");
+      actions.className = "xlc-batch-actions";
+      const addTagBtn = document.createElement("button");
+      addTagBtn.type = "button";
+      addTagBtn.className = "b3-button";
+      addTagBtn.dataset.xlcControl = "search.batch.add-tags";
+      addTagBtn.textContent = "\uFF0B \u52A0\u6807\u7B7E";
+      addTagBtn.addEventListener("click", () => {
+        if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
+        const input = typeof window !== "undefined" && typeof window.prompt === "function" ? window.prompt("\u8BF7\u8F93\u5165\u8981\u6279\u91CF\u8FFD\u52A0\u7684\u6807\u7B7E\uFF08\u652F\u6301\u4E2D\u82F1\u6587\u9017\u53F7\u5206\u53F7\u5206\u9694\uFF09\uFF1A") : "";
+        if (!input || !input.trim()) return;
+        void this.applyBatchUpdate({ addTags: [input.trim()] });
+      });
+      const removeTagBtn = document.createElement("button");
+      removeTagBtn.type = "button";
+      removeTagBtn.className = "b3-button";
+      removeTagBtn.dataset.xlcControl = "search.batch.remove-tags";
+      removeTagBtn.textContent = "\uFF0D \u5220\u6807\u7B7E";
+      removeTagBtn.addEventListener("click", () => {
+        if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
+        const input = typeof window !== "undefined" && typeof window.prompt === "function" ? window.prompt("\u8BF7\u8F93\u5165\u8981\u6279\u91CF\u79FB\u9664\u7684\u6807\u7B7E\uFF08\u5927\u5C0F\u5199\u4E0D\u654F\u611F\uFF09\uFF1A") : "";
+        if (!input || !input.trim()) return;
+        void this.applyBatchUpdate({ removeTags: [input.trim()] });
+      });
+      const setCatBtn = document.createElement("button");
+      setCatBtn.type = "button";
+      setCatBtn.className = "b3-button";
+      setCatBtn.dataset.xlcControl = "search.batch.set-category";
+      setCatBtn.textContent = "\u{1F3F7}\uFE0F \u8BBE\u5206\u7C7B";
+      setCatBtn.addEventListener("click", () => {
+        if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
+        const input = typeof window !== "undefined" && typeof window.prompt === "function" ? window.prompt("\u8BF7\u8F93\u5165\u76EE\u6807\u5206\u7C7B\u540D\u79F0\uFF08\u7559\u7A7A\u8868\u793A\u6E05\u7A7A\u5206\u7C7B\uFF09\uFF1A") : null;
+        if (input === null) return;
+        void this.applyBatchUpdate({ setCategory: input.trim() });
+      });
+      const batchCaptureBtn = document.createElement("button");
+      batchCaptureBtn.type = "button";
+      batchCaptureBtn.className = "b3-button xlc-btn-primary";
+      batchCaptureBtn.dataset.xlcControl = "search.batch.capture-omni";
+      batchCaptureBtn.textContent = "\u2726 \u6279\u91CF\u6536\u5F55";
+      batchCaptureBtn.style.display = "none";
+      batchCaptureBtn.addEventListener("click", async () => {
+        var _a, _b;
+        if (this.selectedIds.size === 0 || !this.deps.createFromOmni) return;
+        const omniSelected = this.results.filter((r) => this.selectedIds.has(r.id) && r.isOmni);
+        if (omniSelected.length === 0) return;
+        batchCaptureBtn.disabled = true;
+        batchCaptureBtn.textContent = "\u6B63\u5728\u6536\u5F55\u2026";
+        let successCount = 0;
+        for (const item of omniSelected) {
+          try {
+            const ok2 = await this.deps.createFromOmni(item);
+            if (ok2) {
+              successCount++;
+              this.capturedOmniIds.add(item.id);
+            }
+          } catch {
+          }
+        }
+        (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", `\u5DF2\u6210\u529F\u6279\u91CF\u6536\u5F55 ${successCount} \u9879\u5230\u5E38\u7528\u8BED\u5E93`);
+        this.exitMultiSelectMode();
+        await this.refresh();
+      });
+      const exitBtn = document.createElement("button");
+      exitBtn.type = "button";
+      exitBtn.className = "b3-button xlc-btn-ghost";
+      exitBtn.dataset.xlcControl = "search.batch.exit";
+      exitBtn.textContent = "\u9000\u51FA\u591A\u9009 (Esc)";
+      exitBtn.addEventListener("click", () => this.exitMultiSelectMode());
+      actions.append(batchCaptureBtn, addTagBtn, removeTagBtn, setCatBtn, exitBtn);
+      bar.append(countSpan, actions);
+      this.batchBarEl = bar;
+      return bar;
+    }
+    renderBatchBar() {
+      if (!this.batchBarEl) return;
+      this.batchBarEl.style.display = this.multiSelectMode ? "flex" : "none";
+      const countSpan = this.batchBarEl.querySelector(".xlc-batch-count");
+      if (countSpan) {
+        countSpan.textContent = `\u5DF2\u9009 ${this.selectedIds.size} \u9879`;
+      }
+      const actionBtns = this.batchBarEl.querySelectorAll("button:not([data-xlc-control='search.batch.exit'])");
+      actionBtns.forEach((b) => {
+        b.disabled = this.selectedIds.size === 0;
+      });
+      const batchCaptureBtn = this.batchBarEl.querySelector("[data-xlc-control='search.batch.capture-omni']");
+      if (batchCaptureBtn) {
+        const omniSelected = this.results.filter((r) => this.selectedIds.has(r.id) && r.isOmni);
+        if (omniSelected.length > 0) {
+          batchCaptureBtn.style.display = "";
+          batchCaptureBtn.textContent = `\u2726 \u6279\u91CF\u6536\u5F55 (${omniSelected.length}\u9879)`;
+          batchCaptureBtn.disabled = false;
+        } else {
+          batchCaptureBtn.style.display = "none";
+        }
+      }
     }
     destroy() {
       var _a, _b, _c, _d;
@@ -14559,6 +16221,7 @@ ${exception.mark.snippet}`;
           void this.selectCandidate(candidate.key);
         });
         row.addEventListener("keydown", (event) => {
+          if (event.isComposing || event.keyCode === 229) return;
           if (event.target !== row || event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
           void this.selectCandidate(candidate.key);
@@ -15196,6 +16859,7 @@ ${details.join("\n")}` : ""}`;
   }
 
   // src/service/commands.ts
+  var siyuan = __toESM(require_stub_dom());
   var import_siyuan7 = __toESM(require_stub_dom());
   init_constants();
   init_actions();
@@ -15223,7 +16887,7 @@ ${details.join("\n")}` : ""}`;
     if (!markdown || !markdown.trim()) return "";
     const codeBlocks = [];
     const inlineCodes = [];
-    let raw = markdown.replace(/\r\n/g, "\n");
+    let raw = markdown.replace(/\r\n/g, "\n").replace(/\{:[^}]*\}/g, "");
     raw = raw.replace(/(?:^|\n)```([a-zA-Z0-9_-]*)\n([\s\S]*?)\n```(?:\n|$)/g, (_match, lang, code) => {
       const escapedCode = escapeHtml(code);
       const langAttr = lang ? ` data-language="${escapeHtml(lang)}"` : "";
@@ -15277,7 +16941,7 @@ ${placeholder}
       const flushList = () => {
         if (currentListType && currentListItems.length > 0) {
           const tag = currentListType;
-          const itemsHtml = currentListItems.map((li) => `  <li style="margin: 0.2em 0;">${li}</li>`).join("\n");
+          const itemsHtml = currentListItems.map((li) => li.startsWith("<li") ? `  ${li}` : `  <li style="margin: 0.2em 0;">${li}</li>`).join("\n");
           htmlParagraphs.push(`<${tag} style="margin: 0.6em 0; padding-left: 1.5em;">
 ${itemsHtml}
 </${tag}>`);
@@ -15293,18 +16957,27 @@ ${itemsHtml}
         }
       };
       for (const line of lines) {
+        const taskMatch = /^[-*]\s+\[([ xX])\]\s+(.*)$/.exec(line);
         const ulMatch = /^[-*]\s+(.*)$/.exec(line);
         const olMatch = /^\d+\.\s+(.*)$/.exec(line);
-        if (ulMatch) {
+        if (taskMatch) {
           flushPara();
           if (currentListType !== "ul") flushList();
           currentListType = "ul";
-          currentListItems.push(ulMatch[1]);
+          const isDone = taskMatch[1].toLowerCase() === "x";
+          const itemBody = taskMatch[2];
+          const rendered = isDone ? `<del>${itemBody}</del>` : itemBody;
+          currentListItems.push(`<li style="list-style-type: none; margin: 0.25em 0;"><input type="checkbox" ${isDone ? "checked" : ""} disabled style="margin-right: 6px; vertical-align: -1px;">${rendered}</li>`);
+        } else if (ulMatch) {
+          flushPara();
+          if (currentListType !== "ul") flushList();
+          currentListType = "ul";
+          currentListItems.push(`<li style="margin: 0.2em 0;">${ulMatch[1]}</li>`);
         } else if (olMatch) {
           flushPara();
           if (currentListType !== "ol") flushList();
           currentListType = "ol";
-          currentListItems.push(olMatch[1]);
+          currentListItems.push(`<li style="margin: 0.2em 0;">${olMatch[1]}</li>`);
         } else {
           flushList();
           currentParaLines.push(line);
@@ -15325,6 +16998,84 @@ ${itemsHtml}
     return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #24292f;">
 ${finalHtml}
 </div>`;
+  }
+
+  // src/ecosystem-bridge-kit.ts
+  var ECOSYSTEM_EVENTS = Object.freeze({
+    // 打卡
+    CHECKIN_RECORDED: "checkin:event-recorded",
+    CHECKIN_DELETED: "checkin:event-deleted",
+    // 人脉
+    CONTACTS_INTERACTION: "lv-contacts:interaction-logged",
+    CONTACTS_PERSON_CREATED: "lv-contacts:person-created",
+    CONTACTS_DATA_CHANGED: "lv-contacts:data-changed",
+    // 管家
+    HOME_DATA_CHANGED: "lv-home:data-changed",
+    // 雷切
+    RAIKIRI_NAVIGATED: "lv-raikiri:navigated",
+    // 拾遗
+    GLEAN_DATA_CHANGED: "lv-glean:data-changed",
+    GLEAN_STATUS_CHANGED: "lv-glean:clip-status-changed",
+    // 考试
+    EXAM_SESSION_ENDED: "lv-exam:session-ended",
+    EXAM_WRONGBOOK_CHANGED: "lv-exam:wrongbook-changed",
+    EXAM_STATS: "lv-exam:stats",
+    // 闪卡
+    CARDS_REVIEWED: "lv-cards:reviewed",
+    // 常用
+    COMMON_CREATED: "xiaolv:common:item-created",
+    COMMON_UPDATED: "xiaolv:common:item-updated",
+    COMMON_DELETED: "xiaolv:common:item-deleted",
+    // 快门
+    QUICKGATE_COMMAND_EXECUTED: "lv-quickgate:command-executed",
+    QUICKGATE_DATA_CHANGED: "lv-quickgate:data-changed"
+  });
+  var BRIDGE_ALIASES = Object.freeze({
+    checkin: ["siyuanCheckin", "LvCheckin", "lvCheckin", "xiaolvCheckin"],
+    contacts: ["LvContacts", "lvContacts", "xiaolvContacts", "siyuanContacts"],
+    home: ["LvHome", "lvHome", "xiaolvHome", "siyuanHome"],
+    raikiri: ["siyuanSpeedSwitch", "xiaolvSpeedSwitch", "xiaolvRaikiri", "lvRaikiri"],
+    glean: ["siyuanGlean", "xiaolvGlean", "lvGlean", "LvGlean"],
+    exam: ["LvExam", "siyuanExam", "xiaolvExam", "lvExam"],
+    cards: ["xiaolvCards", "lvCards", "LvCards", "siyuanCards"],
+    common: ["xiaolvCommon", "LvCommon", "lvCommon", "siyuanCommon"],
+    quickgate: ["LvQuickgate", "lvQuickgate", "xiaolvQuickgate", "siyuanQuickgate"]
+  });
+  function getBridgeSafely(target) {
+    if (typeof window === "undefined") return void 0;
+    const aliases = BRIDGE_ALIASES[target] || [];
+    const w = window;
+    for (const alias of aliases) {
+      if (w[alias] && typeof w[alias] === "object") {
+        return w[alias];
+      }
+    }
+    return void 0;
+  }
+  async function callBridge(target, requiredCapability, caller, fallback, timeoutMs = 2500) {
+    const bridge = getBridgeSafely(target);
+    if (!bridge) return fallback();
+    const anyBridge = bridge;
+    if (typeof anyBridge.whenReady === "function") {
+      try {
+        const readyP = Promise.resolve(anyBridge.whenReady());
+        const timeoutP = new Promise((_, reject) => setTimeout(() => reject(new Error("ready-timeout")), timeoutMs));
+        await Promise.race([readyP, timeoutP]);
+      } catch {
+        return fallback();
+      }
+    }
+    if (typeof anyBridge.hasCapability === "function") {
+      if (!anyBridge.hasCapability(requiredCapability)) {
+        return fallback();
+      }
+    }
+    try {
+      return await caller(bridge);
+    } catch (err) {
+      console.warn(`[\u5C0F\u9A74\u751F\u6001\u8054\u90A6] \u8C03\u7528 ${target}.${requiredCapability} \u5931\u8D25\uFF0C\u5DF2\u4F18\u96C5\u964D\u7EA7:`, err);
+      return fallback();
+    }
   }
 
   // src/service/commands.ts
@@ -15386,6 +17137,23 @@ ${finalHtml}
             clipboardText = "";
           }
           output = output.replaceAll("{{xlc:clipboard}}", clipboardText.slice(0, 4e3));
+        }
+        if (output.includes("{{xlc:checkin:today}}")) {
+          const checkinSummaryText = await callBridge(
+            "checkin",
+            "items.read",
+            (bridge) => {
+              const items = typeof bridge.queryItems === "function" ? bridge.queryItems({ includeArchived: false }) : typeof bridge.getItems === "function" ? bridge.getItems() : [];
+              if (Array.isArray(items)) {
+                const active2 = items.filter((it) => !it.archived);
+                if (active2.length === 0) return "\u4ECA\u65E5\u6253\u5361\uFF08\u65E0\u672A\u5B8C\u6210\u9879\uFF09";
+                return active2.map((i) => `\u2713 ${i.name || i.title || "\u6253\u5361\u9879"}`).join("\n");
+              }
+              return "\uFF08\u672A\u68C0\u6D4B\u5230\u6253\u5361\u6570\u636E\uFF09";
+            },
+            () => "\uFF08\u672A\u68C0\u6D4B\u5230\u5C0F\u9A74\u6253\u5361\uFF09"
+          );
+          output = output.replaceAll("{{xlc:checkin:today}}", checkinSummaryText);
         }
         return output;
       } catch {
@@ -15596,92 +17364,72 @@ ${finalHtml}
 
   // src/service/library.ts
   init_constants();
+  init_client();
+  init_item();
 
-  // src/kernel/client.ts
+  // src/model/batch-ops.ts
   init_constants();
-  init_errors();
-  function parseChildBlocks(data) {
-    if (!Array.isArray(data)) return [];
-    return data.filter((raw) => {
-      return !!raw && typeof raw.id === "string" && typeof raw.type === "string";
-    });
+  init_item();
+  function normalizeTagForCompare(tag) {
+    return (tag != null ? tag : "").trim().toLowerCase().replace(/^#+/, "").replace(/#+$/, "");
   }
-  function parseKramdown(data) {
-    if (!data || typeof data.id !== "string") return null;
-    const kramdown = data.kramdown;
-    return { id: data.id, kramdown: typeof kramdown === "string" ? kramdown : "" };
-  }
-  function parseBatchKramdowns(data) {
-    if (!data || typeof data !== "object" || Array.isArray(data)) return {};
-    const out = {};
-    for (const [blockId, value] of Object.entries(data)) {
-      if (/^\d{14}-[0-9a-z]{7}$/.test(blockId) && typeof value === "string") out[blockId] = value;
+  function mergeTags(currentTags, toAdd) {
+    const existing = cleanTagList(currentTags);
+    const added = cleanTagList(toAdd);
+    const seen = new Set(existing.map((t) => normalizeTagForCompare(t)));
+    const merged = [...existing];
+    for (const tag of added) {
+      const norm = normalizeTagForCompare(tag);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        merged.push(tag);
+        if (merged.length >= LIMITS.tags) break;
+      }
     }
-    return out;
+    return merged;
   }
-  function parseAttrs(data) {
-    if (!data || typeof data !== "object") return {};
-    const out = {};
-    for (const [k, v] of Object.entries(data)) {
-      if (typeof v === "string") out[k] = v;
+  function removeTags(currentTags, toRemove) {
+    const existing = cleanTagList(currentTags);
+    const removeSet = new Set(cleanTagList(toRemove).map((t) => normalizeTagForCompare(t)));
+    if (removeSet.size === 0) return existing;
+    return existing.filter((t) => !removeSet.has(normalizeTagForCompare(t)));
+  }
+  function applyBatchTagCategoryOps(item, patch) {
+    var _a, _b, _c;
+    let nextTags = [...(_a = item.tags) != null ? _a : []];
+    let tagsChanged = false;
+    if (patch.addTags && patch.addTags.length > 0) {
+      const afterMerge = mergeTags(nextTags, patch.addTags);
+      if (afterMerge.length !== nextTags.length || afterMerge.some((t, i) => t !== nextTags[i])) {
+        nextTags = afterMerge;
+        tagsChanged = true;
+      }
     }
-    return out;
-  }
-  function parseBatchAttrs(data) {
-    if (!data || typeof data !== "object") return {};
-    const out = {};
-    for (const [blockId, attrs] of Object.entries(data)) {
-      out[blockId] = parseAttrs(attrs);
+    if (patch.removeTags && patch.removeTags.length > 0) {
+      const afterRemove = removeTags(nextTags, patch.removeTags);
+      if (afterRemove.length !== nextTags.length) {
+        nextTags = afterRemove;
+        tagsChanged = true;
+      }
     }
-    return out;
-  }
-  function parseExistingMap(data) {
-    if (!data || typeof data !== "object") return {};
-    const out = {};
-    for (const [id, v] of Object.entries(data)) {
-      out[id] = v === true;
+    let nextCategory = (_b = item.category) != null ? _b : "";
+    let categoryChanged = false;
+    if (typeof patch.setCategory === "string") {
+      const cleanCat = patch.setCategory.trim().slice(0, LIMITS.category);
+      if (cleanCat !== ((_c = item.category) != null ? _c : "")) {
+        nextCategory = cleanCat;
+        categoryChanged = true;
+      }
     }
-    return out;
-  }
-  function parseDocId(data) {
-    return typeof data === "string" && data.length > 0 ? data : null;
-  }
-  function parseNotebookId(data) {
-    if (!data || typeof data !== "object" || Array.isArray(data)) return null;
-    const notebook = data.notebook;
-    if (!notebook || typeof notebook !== "object" || Array.isArray(notebook)) return null;
-    const id = notebook.id;
-    return typeof id === "string" && /^\d{8,14}$/.test(id) ? id : null;
-  }
-  function parseVoid(data) {
-    return data === null;
-  }
-  function parseString(data) {
-    return typeof data === "string" ? data : "";
-  }
-  function parseDocSearch(data) {
-    var _a;
-    if (!Array.isArray(data)) return [];
-    const out = [];
-    for (const raw of data) {
-      if (!raw || typeof raw !== "object") continue;
-      const obj = raw;
-      const path = typeof obj.path === "string" ? obj.path : "";
-      const m = path.match(/(\d{14}-[0-9a-z]{7})\.sy$/);
-      if (!m) continue;
-      out.push({
-        id: (_a = m[1]) != null ? _a : "",
-        hPath: typeof obj.hPath === "string" ? obj.hPath : "",
-        box: typeof obj.box === "string" ? obj.box : "",
-        name: typeof obj.name === "string" ? obj.name : ""
-      });
-      if (out.length >= 30) break;
-    }
-    return out;
+    const changed = tagsChanged || categoryChanged;
+    return {
+      tags: nextTags,
+      category: categoryChanged ? nextCategory : item.category || void 0,
+      changed
+    };
   }
 
   // src/service/library.ts
-  init_item();
   init_kramdown();
   init_pinyin();
   init_variables();
@@ -16610,9 +18358,71 @@ ${finalHtml}
       };
       return this.withWriteLock(key, action);
     }
+    /**
+     * 批量追加/移除标签与批量变更所属分类（G30 / ADR 0082 / T-0142）
+     * 串行更新、精准原子事务回执、自动失效索引
+     */
+    async batchUpdateTagsAndCategory(itemIds, patch) {
+      const receipt = {
+        total: itemIds.length,
+        updated: 0,
+        skipped: 0,
+        failed: 0,
+        items: []
+      };
+      if (itemIds.length === 0) return receipt;
+      for (const itemId of itemIds) {
+        const got = await this.getItem(itemId);
+        if (!got.ok) {
+          receipt.failed++;
+          receipt.items.push({
+            itemId,
+            title: itemId,
+            status: "failed",
+            error: got.message
+          });
+          continue;
+        }
+        const item = got.data;
+        const applied = applyBatchTagCategoryOps(item, patch);
+        if (!applied.changed) {
+          receipt.skipped++;
+          receipt.items.push({
+            itemId,
+            title: item.title,
+            status: "skipped"
+          });
+          continue;
+        }
+        const updateRes = await this.updateItem(itemId, {
+          tags: applied.tags,
+          category: applied.category
+        });
+        if (updateRes.ok) {
+          receipt.updated++;
+          receipt.items.push({
+            itemId,
+            title: item.title,
+            status: "updated"
+          });
+        } else {
+          receipt.failed++;
+          receipt.items.push({
+            itemId,
+            title: item.title,
+            status: "failed",
+            error: updateRes.message
+          });
+        }
+      }
+      if (receipt.updated > 0) {
+        this.invalidateIndex();
+      }
+      return receipt;
+    }
     async updateItemUnlocked(itemId, patch, options = {}) {
       var _a, _b, _c;
-      if (typeof patch.markdown === "string") {
+      if (typeof patch.markdown === "string" && patch.markdown.trim()) {
         const restriction = bodyWriteRestriction(patch.markdown);
         if (restriction) return fail("conflict", restriction);
       }
@@ -16991,6 +18801,8 @@ ${finalHtml}
     insertSourceContent: "\u63D2\u5165\u6E90\u5757\u6B63\u6587",
     insertEmbed: "\u63D2\u5165\u5D4C\u5165\u5757",
     copy: "\u590D\u5236",
+    copyRawTemplate: "\u590D\u5236\u6A21\u677F\u539F\u6587\uFF08\u4E0D\u5C55\u5F00\u53D8\u91CF\uFF09",
+    copyRawTemplateDone: "\u5DF2\u590D\u5236\u6A21\u677F\u539F\u6587\uFF08\u542B\u52A8\u6001\u53D8\u91CF\u8BED\u6CD5\uFF09",
     openSource: "\u6253\u5F00\u6765\u6E90",
     edit: "\u7F16\u8F91",
     delete: "\u5220\u9664",
@@ -17196,6 +19008,7 @@ ${finalHtml}
     paneSnippetsLabel: "\u5D4C\u5957 %s \u4E2A\u7247\u6BB5\uFF1A",
     insertVariable: "\u63D2\u5165\u53D8\u91CF\uFF1A",
     varFormTitle: "\u586B\u5199\u53D8\u91CF",
+    resetDefaults: "\u6062\u590D\u9ED8\u8BA4",
     varFormSub: "\u672C\u6761\u76EE\u542B %s \u4E2A\u53D8\u91CF\uFF0C\u586B\u5199\u540E\u4E00\u6B21\u6027\u63D2\u5165\uFF1B\u586B\u5199\u503C\u4EC5\u7528\u4E8E\u672C\u6B21\uFF0C\u4E0D\u56DE\u5199\u5E93\u3002",
     varFormHint: "Tab \u4E0B\u4E00\u9879 \xB7 Enter \u63D2\u5165",
     varFormHintMultiline: "Tab \u4E0B\u4E00\u9879 \xB7 \u591A\u884C\u6846\u5185 Enter \u6362\u884C\uFF0C\u70B9\u6309\u94AE\u63D2\u5165",
@@ -17253,6 +19066,7 @@ ${finalHtml}
     packSnippetsBadge: "%s \u6761\u542B\u5D4C\u5957\u7247\u6BB5",
     packMissingSnippetsBadge: "\u7F3A %s \u4E2A\u5B50\u7247\u6BB5",
     packMissingSnippetsHint: "\u6CE8\u610F\uFF1A\u6A21\u677F\u5305\u5F15\u7528\u7684\u7247\u6BB5\uFF08%s\uFF09\u672A\u968F\u5305\u9644\u5E26\uFF0C\u82E5\u5F53\u524D\u5E93\u4E2D\u65E0\u540C\u540D\u6761\u76EE\u5C06\u663E\u793A\u5360\u4F4D\u7B26\u3002",
+    packDepTreeTitle: "\u5D4C\u5957\u7247\u6BB5\u4F9D\u8D56\u5173\u7CFB\uFF1A",
     emptyFavorites: "\u8FD8\u6CA1\u6709\u6536\u85CF\u7684\u6761\u76EE",
     emptyFavoritesSub: "\u70B9\u51FB\u6761\u76EE\u53F3\u4FA7 \u2606 \u6536\u85CF\uFF0C\u53EF\u5728\u300C\u6536\u85CF\u300D\u4E2D\u5FEB\u901F\u627E\u5230",
     emptyRecent: "\u6682\u65E0\u6700\u8FD1\u4F7F\u7528\u7684\u6761\u76EE",
@@ -17341,8 +19155,11 @@ ${finalHtml}
     csvImportNone: "\u672A\u89E3\u6790\u51FA\u53EF\u7528\u6761\u76EE\uFF0C\u8BF7\u786E\u8BA4\u7C98\u8D34\u7684\u662F\u6709\u6548\u7684 CSV/TSV \u8868\u683C\u6587\u672C",
     searchCurrentDocAction: "\u5728\u5F53\u524D\u6253\u5F00\u6587\u6863\u4E2D\u68C0\u7D22\u300C%s\u300D",
     searchAllNotesAction: "\u5728\u5168\u5E93\u7B14\u8BB0\u4E2D\u68C0\u7D22\u300C%s\u300D",
+    scopeAll: "\u5168\u90E8",
     scopeCurrentDoc: "\u5F53\u524D\u6587\u6863",
+    scopeCurrentDocPlaceholder: "\u641C\u7D22\u5F53\u524D\u6253\u5F00\u6587\u6863\u4E2D\u7684\u5185\u5BB9\u5757...",
     scopeAllNotes: "\u5168\u5E93\u7B14\u8BB0",
+    scopeAllNotesPlaceholder: "\u641C\u7D22\u601D\u6E90\u5168\u5E93\u5185\u5BB9\u5757\u4E0E\u6587\u6863...",
     saveToCommon: "\u6536\u5F55\u4E3A\u5E38\u7528\u8BED",
     savedToCommon: "\u5DF2\u5C06\u300C%s\u300D\u6536\u5F55\u5230\u5E38\u7528\u8BED\u5E93",
     editAndCapture: "\u7F16\u8F91\u5E76\u6536\u5F55...",

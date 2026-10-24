@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.7.3 (2026-10-24)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Settings Bento Grid adds Top Snippets leaderboard with one-click copy pills, smart alias recommendation, and plain text stripped copy.
+> **Released: v0.7.4 (2026-10-24)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Full E2E audit: capture form type selector DOM mounting fix, updateItem empty markdown boundary fix, 77/77 interactive audit passes, and 14/14 real kernel lifecycle tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.7.3)
+## This release (v0.7.4)
+
+Full E2E Audit, Interaction Verification & Boundary Fixes:
+
+- **Capture Form Type Selector Mounting Fixed**: Fixed an issue where `typeSelect` was not attached to `typeWrap`, restoring the item type dropdown selector across all capture views.
+- **updateItem Empty Markdown Boundary Fixed**: Allows empty `markdown` when updating entry metadata (titles, aliases, tags) without tripping body-empty rejections, honoring the R150 contract.
+- **E2E Interactive & Real Kernel Verification**: 77/77 UI interaction audit steps verified in Playwright Chromium, plus 14/14 real kernel lifecycle integration tests passing.
+
+## Previous release (v0.7.3)
 
 Settings Bento Dashboard Top Snippets Leaderboard:
 

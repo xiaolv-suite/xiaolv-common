@@ -1233,7 +1233,7 @@ export class LibraryService {
     }
 
     private async updateItemUnlocked(itemId: string, patch: Partial<Pick<NewItemInput, "title" | "alias" | "tags" | "category" | "markdown" | "url" | "targetBlockId">>, options: WriteOptions = {}): Promise<Receipt<{item: CommonItem}>> {
-        if (typeof patch.markdown === "string") {
+        if (typeof patch.markdown === "string" && patch.markdown.trim()) {
             const restriction = bodyWriteRestriction(patch.markdown);
             if (restriction) return fail("conflict", restriction);
         }
