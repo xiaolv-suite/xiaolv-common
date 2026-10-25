@@ -37,6 +37,10 @@ test("evaluateMathExpression: 内置安全数学函数 (round, floor, ceil, abs)
     assert.equal(calc.evaluateMathExpression("ceil(10.1)"), "11");
     assert.equal(calc.evaluateMathExpression("abs(-42)"), "42");
     assert.equal(calc.evaluateMathExpression("abs(42)"), "42");
+    assert.equal(calc.evaluateMathExpression("max(10, 25, 5)"), "25");
+    assert.equal(calc.evaluateMathExpression("min(10, 25, 5)"), "5");
+    assert.equal(calc.evaluateMathExpression("pow(2, 8)"), "256");
+    assert.equal(calc.evaluateMathExpression("sqrt(144)"), "12");
 
     // 组合嵌套
     assert.equal(calc.evaluateMathExpression("round((50 + 70) * 0.85, 1)"), "102");

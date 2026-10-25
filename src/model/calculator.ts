@@ -17,6 +17,10 @@ const SUPPORTED_FUNCTIONS: Record<string, (...args: number[]) => number> = {
     floor: (val) => Math.floor(val),
     ceil: (val) => Math.ceil(val),
     abs: (val) => Math.abs(val),
+    max: (...args) => (args.length > 0 ? Math.max(...args) : 0),
+    min: (...args) => (args.length > 0 ? Math.min(...args) : 0),
+    pow: (base, exp = 2) => Math.pow(base, exp),
+    sqrt: (val) => (val >= 0 ? Math.sqrt(val) : NaN),
 };
 
 /** 词法切分 */

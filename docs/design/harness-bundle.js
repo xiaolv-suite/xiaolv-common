@@ -118,7 +118,7 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
-  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.7.7", iconName = "iconXlcCommon") {
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.7.8", iconName = "iconXlcCommon") {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
@@ -3325,7 +3325,7 @@
           this.currentDialog = dialog;
           const container = dialog.element.querySelector(".b3-dialog__container");
           container == null ? void 0 : container.classList.add("xlc-form-host");
-          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.7.7", "iconXlcCommon");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.7.8", "iconXlcCommon");
           const handleViewport = () => {
             if (!container || typeof window === "undefined" || !window.visualViewport) return;
             const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -4610,7 +4610,11 @@
         },
         floor: (val) => Math.floor(val),
         ceil: (val) => Math.ceil(val),
-        abs: (val) => Math.abs(val)
+        abs: (val) => Math.abs(val),
+        max: (...args) => args.length > 0 ? Math.max(...args) : 0,
+        min: (...args) => args.length > 0 ? Math.min(...args) : 0,
+        pow: (base, exp = 2) => Math.pow(base, exp),
+        sqrt: (val) => val >= 0 ? Math.sqrt(val) : NaN
       };
       MathParser = class {
         constructor(tokens) {
@@ -8320,7 +8324,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.7", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.8", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -11431,7 +11435,7 @@ ${exception.mark.snippet}`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.7.7", "iconXlcCommon");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.7.8", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
