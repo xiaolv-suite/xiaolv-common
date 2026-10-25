@@ -3,7 +3,7 @@
 // 写入前严格遵循 B-006 单行正文或完整代码围栏边界约束，杜绝破坏排版层级。
 
 import {Dialog} from "siyuan";
-import {getDialogBody} from "./dialog-dom";
+import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {validateOmniBlockUpdate} from "../service/omni-search";
 
 export interface QuickEditDeps {
@@ -26,8 +26,25 @@ export function openQuickEditDialog(
         width: "min(620px, 92vw)",
         destroyCallback: () => {
             closed = true;
+            if (typeof window !== "undefined" && window.visualViewport) {
+                window.visualViewport.removeEventListener("resize", handleViewport);
+                window.visualViewport.removeEventListener("scroll", handleViewport);
+            }
         },
     });
+
+    mountPlatformDialogTitleWrap(dialog.element, `${deps.t("quickEditBlock")} (${blockId.slice(0, 15)})`, "v0.7.5", "iconXlcCommon");
+
+    const containerDialog = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
+    const handleViewport = () => {
+        if (!containerDialog || typeof window === "undefined" || !window.visualViewport) return;
+        const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
+        containerDialog.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
+    };
+    if (typeof window !== "undefined" && window.visualViewport) {
+        window.visualViewport.addEventListener("resize", handleViewport);
+        window.visualViewport.addEventListener("scroll", handleViewport);
+    }
 
     const body = getDialogBody(dialog.element);
     const container = document.createElement("div");

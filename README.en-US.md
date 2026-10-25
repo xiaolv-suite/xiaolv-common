@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.7.4 (2026-10-24)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Full E2E audit: capture form type selector DOM mounting fix, updateItem empty markdown boundary fix, 77/77 interactive audit passes, and 14/14 real kernel lifecycle tests.
+> **Released: v0.7.5 (2026-10-25)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Quick edit dialog brand title-wrap unification, mobile virtual keyboard avoidance, and dialog lifecycle hardening.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.7.4)
+## This release (v0.7.5)
+
+Quick Edit Dialog Refinements:
+
+- **Quick Edit Dialog Title-Wrap Integration**: In-place block editor (`QuickEditDialog`) now mounts the brand `.lv-dialog-title-wrap` (22×22 purple logo + title + version badge) for unified visual consistency.
+- **Mobile Keyboard Avoidance**: Quick edit dialog attaches to `window.visualViewport` to dynamically adjust padding and prevent virtual keyboards from obscuring action buttons.
+
+## Previous release (v0.7.4)
 
 Full E2E Audit, Interaction Verification & Boundary Fixes:
 
