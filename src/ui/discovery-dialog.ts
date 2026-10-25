@@ -1,6 +1,6 @@
 import {Dialog} from "siyuan";
 import {LIMITS} from "../constants";
-import {getDialogBody} from "./dialog-dom";
+import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {isBlockId, ITEM_TYPES, ItemType} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {buildDiscoveryTagFacets, matchesDiscoveryTag} from "../model/discovery-facets";
@@ -344,6 +344,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         });
         this.dialog = dialog;
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-discovery-host");
+        mountPlatformDialogTitleWrap(dialog.element, this.options.title ?? this.tx(this.titleKey()), "v0.7.7", "iconXlcCommon");
         const body = getDialogBody(dialog.element);
         if (!body) return;
         body.innerHTML = "";

@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.7.6 (2026-10-25)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Zero-debounce immediate search on history pill clicks, 100% dialog brand title-wrap unification across all modals.
+> **Released: v0.7.7 (2026-10-25)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Exhaustive brand title wrap and mobile keyboard avoidance coverage across all sub-dialogs (CSV wizard, discovery, setup, pack export, Espanso, tag audit, import policy).
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.7.6)
+## This release (v0.7.7)
+
+Complete Sub-Dialog Aesthetics & Mobile Keyboard Avoidance:
+
+- **Full Coverage of Brand Title Wraps**: Attached `.lv-dialog-title-wrap` to all auxiliary dialogs including CSV/TSV wizard, Discovery session, setup onboarding, template pack export, Espanso import, AI tag audit, and import policy modals.
+- **Mobile Keyboard Avoidance Across Long Forms**: Dynamically scales safe bottom padding based on `visualViewport` in CSV wizard and other text entry views.
+
+## Previous release (v0.7.6)
 
 Search Response Latency & Dialog Header Complete Unification:
 

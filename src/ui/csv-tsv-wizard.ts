@@ -4,7 +4,7 @@
 // 实时预览前 5 行解析结果，确认后再进入导入策略对话框。
 
 import {Dialog} from "siyuan";
-import {getDialogBody} from "./dialog-dom";
+import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {inferColumnMapping} from "../service/csv-tsv-import";
 import {ExportedItem} from "../model/transfer";
 import {toErrorMessage} from "../model/errors";
@@ -34,8 +34,20 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
         width: "min(800px, 96vw)",
         height: "min(700px, 86vh)",
     });
-    const container = dialog.element.querySelector(".b3-dialog__container");
+    const container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("csvImportTitle"), "v0.7.7", "iconXlcCommon");
+
+    // 移动端虚拟键盘安全避让
+    const handleViewport = () => {
+        if (!container || typeof window === "undefined" || !window.visualViewport) return;
+        const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
+        container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
+    };
+    if (typeof window !== "undefined" && window.visualViewport) {
+        window.visualViewport.addEventListener("resize", handleViewport);
+        window.visualViewport.addEventListener("scroll", handleViewport);
+    }
     const body = getDialogBody(dialog.element);
     if (!body) {
         onClose?.();

@@ -113,6 +113,7 @@ export function openSetupDialog(ctx: SettingsUiContext, opts?: SetupDialogOption
     });
     activeSetupDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-setup-root-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("setupTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -141,7 +142,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     });
     activeSettingsDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.6", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -250,6 +251,7 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
         height: "min(680px, 90vh)", // 固定高：分类切换不顶跳（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("packExportTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -2289,6 +2291,7 @@ function openEspansoImportDialog(ctx: SettingsUiContext, onClose?: () => void): 
     });
     const container = dialog.element.querySelector(".b3-dialog__container");
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("espansoTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) {
         onClose?.();
@@ -2434,6 +2437,7 @@ async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown"> {
         height: "min(600px, 84vh)", // 固定高：建议清单增长不顶跳（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("tagAuditTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) throw new Error(t("kernelError", "无法打开体检结果"));
     body.innerHTML = "";
@@ -2486,6 +2490,7 @@ export function openImportPolicyDialog(
         height: "min(640px, 86vh)", // 固定高：策略卡片高度稳定（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("importPolicyTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";

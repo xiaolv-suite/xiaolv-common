@@ -118,7 +118,7 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
-  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.7.6", iconName = "iconXlcCommon") {
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.7.7", iconName = "iconXlcCommon") {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
@@ -3325,7 +3325,7 @@
           this.currentDialog = dialog;
           const container = dialog.element.querySelector(".b3-dialog__container");
           container == null ? void 0 : container.classList.add("xlc-form-host");
-          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.7.6", "iconXlcCommon");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.7.7", "iconXlcCommon");
           const handleViewport = () => {
             if (!container || typeof window === "undefined" || !window.visualViewport) return;
             const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -4277,6 +4277,16 @@
     });
     const container = dialog.element.querySelector(".b3-dialog__container");
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("csvImportTitle"), "v0.7.7", "iconXlcCommon");
+    const handleViewport = () => {
+      if (!container || typeof window === "undefined" || !window.visualViewport) return;
+      const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
+      container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
+    };
+    if (typeof window !== "undefined" && window.visualViewport) {
+      window.visualViewport.addEventListener("resize", handleViewport);
+      window.visualViewport.addEventListener("scroll", handleViewport);
+    }
     const body = getDialogBody(dialog.element);
     if (!body) {
       onClose == null ? void 0 : onClose();
@@ -8280,6 +8290,7 @@ ${exception.mark.snippet}`;
     });
     activeSetupDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-setup-root-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("setupTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -8309,7 +8320,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.6", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -8409,6 +8420,7 @@ ${exception.mark.snippet}`;
       // 固定高：分类切换不顶跳（R146）
     });
     (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("packExportTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -10310,6 +10322,7 @@ ${exception.mark.snippet}`;
     });
     const container = dialog.element.querySelector(".b3-dialog__container");
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("espansoTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) {
       onClose == null ? void 0 : onClose();
@@ -10447,6 +10460,7 @@ ${exception.mark.snippet}`;
       // 固定高：建议清单增长不顶跳（R146）
     });
     (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("tagAuditTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) throw new Error(t("kernelError", "\u65E0\u6CD5\u6253\u5F00\u4F53\u68C0\u7ED3\u679C"));
     body.innerHTML = "";
@@ -10494,6 +10508,7 @@ ${exception.mark.snippet}`;
       // 固定高：策略卡片高度稳定（R146）
     });
     (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, t("importPolicyTitle"), "v0.7.7", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -11416,7 +11431,7 @@ ${exception.mark.snippet}`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.7.6", "iconXlcCommon");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.7.7", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
@@ -11940,6 +11955,7 @@ ${exception.mark.snippet}`;
         width: "min(600px, 92vw)",
         height: "min(680px, 88vh)"
       });
+      mountPlatformDialogTitleWrap(guideDialog.element, this.deps.t("usageGuideTitle"), "v0.7.7", "iconXlcCommon");
       (_a = guideDialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-form-host");
       const body = getDialogBody(guideDialog.element);
       if (!body) return;
@@ -15254,7 +15270,7 @@ ${exception.mark.snippet}`;
       return replaceArgs(value, args);
     }
     open() {
-      var _a, _b;
+      var _a, _b, _c;
       if (this.dialog) return;
       this.closed = false;
       const dialog = new import_siyuan6.Dialog({
@@ -15264,14 +15280,14 @@ ${exception.mark.snippet}`;
         height: "min(840px, 92vh)",
         disableClose: true,
         destroyCallback: () => {
-          var _a2, _b2, _c, _d, _e, _f, _g;
+          var _a2, _b2, _c2, _d, _e, _f, _g;
           if (this.closed) return;
           this.closed = true;
           (_a2 = this.saveViewDialog) == null ? void 0 : _a2.destroy();
           this.saveViewDialog = null;
           (_b2 = this.closeConfirmationDialog) == null ? void 0 : _b2.destroy();
           this.closeConfirmationDialog = null;
-          const closed = this.deps.service.closeSession((_c = this.sessionId) != null ? _c : void 0);
+          const closed = this.deps.service.closeSession((_c2 = this.sessionId) != null ? _c2 : void 0);
           if (!closed.ok) {
             (_e = (_d = this.deps).notify) == null ? void 0 : _e.call(_d, "error", closed.reason === "conflict" ? this.tx("discoveryClosePendingWrites") : this.failureMessage(closed));
           }
@@ -15284,6 +15300,7 @@ ${exception.mark.snippet}`;
       });
       this.dialog = dialog;
       (_b = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _b.classList.add("xlc-form-host", "xlc-discovery-host");
+      mountPlatformDialogTitleWrap(dialog.element, (_c = this.options.title) != null ? _c : this.tx(this.titleKey()), "v0.7.7", "iconXlcCommon");
       const body = getDialogBody(dialog.element);
       if (!body) return;
       body.innerHTML = "";
