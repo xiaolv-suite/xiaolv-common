@@ -25,22 +25,29 @@ export interface XlcBridgeApi {
     readonly capabilities: readonly string[];
     /** 桥挂载即代表服务可调用（settings/library 已装配）；对齐打卡/管家/雷切 whenReady 惯例 */
     whenReady(): Promise<boolean>;
+    hasCapability(name: string): boolean;
     /** 完整能力描述符（含诚实限制标注）——消费方据此协商，桥 capabilities 只是快捷面 */
     getCapabilities(): CapabilityDescriptor[];
-    search(query?: BridgeSearchInput): Promise<ActionResult<CommonItemRef[]>>;
+    search(query?: BridgeSearchInput | string): Promise<ActionResult<CommonItemRef[]>>;
     get(itemId: string): Promise<ActionResult<CommonItem>>;
     getBatch(itemIds: string[]): Promise<ActionResult<CommonItem[]>>;
     resolve(itemId: string, fills?: Record<string, string>): Promise<ActionResult<ResolvedItemData>>;
     recall(aliasOrKeyword: string, fills?: Record<string, string>): Promise<ActionResult<RecallResult>>;
     getRecent(limit?: number): Promise<ActionResult<CommonItemRef[]>>;
+    recent?(limit?: number): Promise<ActionResult<CommonItemRef[]>>;
     getFavorites(): Promise<ActionResult<CommonItemRef[]>>;
+    favorites?(): Promise<ActionResult<CommonItemRef[]>>;
     getCategories(): Promise<ActionResult<string[]>>;
     getTags(): Promise<ActionResult<string[]>>;
 }
 
-/** 搜索入参收敛：非字符串字段丢弃（protocol invalid-input 语义交给 service 层表达） */
-function normalizeSearchInput(raw?: BridgeSearchInput): SearchQuery {
+/** 搜索入参收敛：支持纯字符串查询或对象参数 */
+function normalizeSearchInput(raw?: BridgeSearchInput | string): SearchQuery {
     const q: SearchQuery = {text: ""};
+    if (typeof raw === "string") {
+        q.text = raw;
+        return q;
+    }
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return q;
     if (typeof raw.text === "string") q.text = raw.text;
     if (typeof raw.itemType === "string") q.itemType = raw.itemType as SearchQuery["itemType"];
@@ -59,6 +66,10 @@ export function buildXlcBridge(service: XiaolvCommonService): XlcBridgeApi {
 
         whenReady() {
             return Promise.resolve(true);
+        },
+
+        hasCapability(name: string) {
+            return this.capabilities.includes(name);
         },
 
         getCapabilities() {
@@ -89,7 +100,15 @@ export function buildXlcBridge(service: XiaolvCommonService): XlcBridgeApi {
             return service.getRecent(typeof limit === "number" ? limit : undefined);
         },
 
+        recent(limit) {
+            return service.getRecent(typeof limit === "number" ? limit : undefined);
+        },
+
         getFavorites() {
+            return service.getFavorites();
+        },
+
+        favorites() {
             return service.getFavorites();
         },
 

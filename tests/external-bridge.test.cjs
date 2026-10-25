@@ -60,6 +60,11 @@ test("桥形状：protocol/protocolName/capabilities 只读能力；写方法不
     assert.equal(typeof bridge.getCategories, "function");
     assert.equal(typeof bridge.getTags, "function");
     assert.equal(typeof bridge.getCapabilities, "function");
+    assert.equal(typeof bridge.hasCapability, "function");
+    assert.equal(bridge.hasCapability("search"), true);
+    assert.equal(bridge.hasCapability("fake"), false);
+    assert.equal(typeof bridge.recent, "function");
+    assert.equal(typeof bridge.favorites, "function");
 });
 
 test("whenReady 立即可用；getCapabilities 透传完整描述符（含诚实限制）", async () => {

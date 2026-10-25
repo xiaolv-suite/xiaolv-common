@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.7.9 (2026-10-26)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Automatic usage metrics accounting and recent tracking on external recall calls, 729 passing automated tests.
+> **Released: v0.8.0 (2026-10-26)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Full Lv Ecosystem Bridge API alignment (hasCapability, recent, favorites, string query tolerance), universal brand title-wrap convergence, 729 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.7.9)
+## This release (v0.8.0)
+
+Ecosystem Federation Bridge Parity & Major Milestone:
+
+- **Ecosystem Bridge Parity**: `XlcBridgeApi` now implements `hasCapability(name)` for runtime capability negotiation, exposes `recent()` and `favorites()` helper shortcuts, and accepts raw search query strings seamlessly.
+- **Universal Dialog Title-Wrap Convergence**: 100% of auxiliary dialogs (search, capture, settings, quick-edit, sync diff, export sanitizer, CSV wizard, discovery, pack export, Espanso, and tag audit) now proudly sport `.lv-dialog-title-wrap`.
+
+## Previous release (v0.7.9)
 
 Automated Usage Accounting on External Recalls:
 
