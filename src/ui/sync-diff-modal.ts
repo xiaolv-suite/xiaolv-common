@@ -12,6 +12,7 @@ import {
     executeSyncMerge,
 } from "../model/sync-diff";
 import {escapeHtml} from "../model/clipboard";
+import {mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface SyncDiffModalProps {
     report: LibraryDiffReport;
@@ -354,6 +355,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
         const container = document.createElement("div");
         container.className = "b3-dialog__container xlc-sync-diff-modal";
         container.innerHTML = fullHtml;
+        mountPlatformDialogTitleWrap(container, titleText, "v0.7.6", "iconXlcCommon");
 
         const updateView = () => {
             currentPlan = planLibrarySync(props.report, currentStrategy, {mirrorDelete});

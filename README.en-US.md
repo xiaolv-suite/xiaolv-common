@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.7.5 (2026-10-25)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Quick edit dialog brand title-wrap unification, mobile virtual keyboard avoidance, and dialog lifecycle hardening.
+> **Released: v0.7.6 (2026-10-25)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Zero-debounce immediate search on history pill clicks, 100% dialog brand title-wrap unification across all modals.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.7.5)
+## This release (v0.7.6)
+
+Search Response Latency & Dialog Header Complete Unification:
+
+- **Zero-Debounce Instant Search on History Chips**: Clicking a search history chip bypasses the 200ms debounce and executes search immediately, preventing race conditions on rapid Enter.
+- **100% Brand Title-Wrap Across All Dialogs**: Extended `.lv-dialog-title-wrap` to `SyncDiffModal` and `ExportSanitizerModal`, achieving 100% dialog aesthetic convergence.
+
+## Previous release (v0.7.5)
 
 Quick Edit Dialog Refinements:
 

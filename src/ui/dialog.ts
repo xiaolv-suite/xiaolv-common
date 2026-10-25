@@ -187,7 +187,7 @@ export class CommonSearchDialog {
         }
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.7.5", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.7.6", "iconXlcCommon");
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             // 上次搜索词回填（跨会话保留）
@@ -349,6 +349,11 @@ export class CommonSearchDialog {
                     input.value = word;
                     input.dispatchEvent(new Event("input", {bubbles: true}));
                     input.focus();
+                    if (this.inputDebounce) {
+                        clearTimeout(this.inputDebounce);
+                        this.inputDebounce = null;
+                    }
+                    void this.refresh();
                 });
                 historyBar.appendChild(pill);
             }
