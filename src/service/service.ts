@@ -251,6 +251,8 @@ export class XiaolvCommonService {
             if (target) {
                 const resolved = await this.resolve(target.id, fills);
                 if (resolved.ok && resolved.data) {
+                    this.touchRecent(target.id);
+                    this.recordUsage(target.id);
                     return successEnvelope({ matched: "exact" as const, item: resolved.data });
                 }
             }
@@ -271,6 +273,8 @@ export class XiaolvCommonService {
             if (target) {
                 const resolved = await this.resolve(target.id, fills);
                 if (resolved.ok && resolved.data) {
+                    this.touchRecent(target.id);
+                    this.recordUsage(target.id);
                     return successEnvelope({ matched: "exact" as const, item: resolved.data });
                 }
             }
@@ -285,6 +289,8 @@ export class XiaolvCommonService {
             if (target) {
                 const resolved = await this.resolve(target.id, fills);
                 if (resolved.ok && resolved.data) {
+                    this.touchRecent(target.id);
+                    this.recordUsage(target.id);
                     return successEnvelope({ matched: "exact" as const, item: resolved.data });
                 }
             }
@@ -541,6 +547,19 @@ export class XiaolvCommonService {
         const recents = this.deps.state.recents.filter((r) => r.id !== id);
         recents.unshift({id, usedAt: Date.now()});
         this.deps.state.recents = recents.slice(0, 200);
+        this.deps.onStateChange();
+    }
+
+    recordUsage(itemId: string): void {
+        const id = String(itemId ?? "");
+        if (!id) return;
+        if (!this.deps.state.insert?.recordUsage) return;
+        this.deps.state.usage ??= {};
+        const current = this.deps.state.usage[id];
+        this.deps.state.usage[id] = {
+            count: Math.min((current?.count ?? 0) + 1, 1_000_000),
+            lastAt: Date.now(),
+        };
         this.deps.onStateChange();
     }
 

@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.7.8 (2026-10-25)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Extended pure recursive-descent math parser with max, min, pow, and sqrt functions, 729 passing automated tests.
+> **Released: v0.7.9 (2026-10-26)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Automatic usage metrics accounting and recent tracking on external recall calls, 729 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,13 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.7.8)
+## This release (v0.7.9)
+
+Automated Usage Accounting on External Recalls:
+
+- **Usage Metrics Accounting on External Invocations**: When snippets are invoked via external bridge `recall(aliasOrKeyword)` from Quicker or system scripts, the target item's usage count is automatically updated (`recordUsage`) and added to the recent list (`touchRecent`), reflecting accurately in Bento metrics.
+
+## Previous release (v0.7.8)
 
 Extended Pure Mathematical Evaluation Functions:
 
