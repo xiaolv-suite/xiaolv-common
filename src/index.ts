@@ -1211,18 +1211,20 @@ export default class XiaolvCommonPlugin extends Plugin {
             createFromOmni: async (entry: SearchEntry) => {
                 const content = (entry.content || entry.summary || "").trim();
                 if (!content) return false;
-                const meta = deriveOmniItemMetadata(entry);
+                const isClip = entry.id.startsWith("xlc-clip-");
+                const cleanTitle = (entry.title || "").replace(/^[📋🔍☵★☆✦✓\s]+/, "").trim() || entry.title;
+                const meta = deriveOmniItemMetadata({...entry, title: cleanTitle});
                 const created = await this.library.createItem({
                     itemType: entry.itemType,
                     markdown: content,
-                    title: entry.title,
+                    title: cleanTitle,
                     alias: meta.recommendedAlias || undefined,
                     tags: meta.tags,
-                    category: meta.category,
+                    category: isClip ? (meta.category === "待整理" ? "常用" : meta.category) : meta.category,
                     source: {
                         sourceDocId: entry.sourceDocId,
                         sourceBlockId: entry.targetBlockId || entry.sourceBlockId,
-                        sourceType: "external",
+                        sourceType: isClip ? "clipboard" : "external",
                     },
                 });
                 if (created.ok) {

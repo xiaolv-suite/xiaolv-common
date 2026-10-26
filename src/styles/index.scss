@@ -926,9 +926,37 @@
       }
     }
 
+    .xlc-row-action-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      flex-shrink: 0;
+
+      .xlc-row-action {
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        min-height: 24px;
+        font-size: var(--xlc-font-sm);
+        border-radius: var(--xlc-radius-sm);
+        color: var(--b3-theme-primary);
+        opacity: 0.55;
+
+        &:hover {
+          opacity: 1;
+          color: var(--b3-theme-on-primary);
+          background-color: var(--b3-theme-primary);
+        }
+      }
+    }
+
     // 收藏行 / 触屏：星标常驻（不依赖 hover）
     &--fav .xlc-row-action,
-    &--active .xlc-row-action { opacity: 1; }
+    &--active .xlc-row-action,
+    &--active .xlc-row-action-wrap .xlc-row-action { opacity: 1; }
+
+    &:hover .xlc-row-action,
+    &:hover .xlc-row-action-wrap .xlc-row-action { opacity: 1; }
 
     &--active .xlc-row-action:hover { background-color: transparent; }
   }

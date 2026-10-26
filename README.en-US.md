@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.8.2 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Contextual trailing row actions (omni ingestion/locate/clip-save), one-click clipboard history clearing, bridge clipboard history getter, 735 passing automated tests.
+> **Released: v0.8.3 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Trailing action wrap micro-interactions, clipboard auto title cleaning, explicit clipboard source provenance, 735 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.8.2)
+## This release (v0.8.3)
+
+Row Action Aesthetics & Clipboard Title Cleansing:
+
+- **Row Action Wrap Micro-Interactions (`.xlc-row-action-wrap`)**: Dual action buttons for omni blocks smoothly fade in on row hover with primary color highlights, reducing visual noise.
+- **Smart Cleansing on Clipboard Ingestion**: Automatically removes cosmetic icon prefixes like `📋 ` when turning transient clips into permanent snippets, recording clean `sourceType: "clipboard"` provenance.
+
+## Previous release (v0.8.2)
 
 Contextual Row Actions & Clipboard Privacy Management:
 
