@@ -601,4 +601,86 @@ export class OmniSearchService {
     async updateBlockContent(blockId: string, newContent: string): Promise<{success: boolean; error?: string}> {
         return updateDocBlock(this.kernel, blockId, newContent);
     }
+
+    async getAdjacentBlocks(blockId: string, docId: string): Promise<AdjacentBlocksContext | null> {
+        return fetchAdjacentBlocks(this.kernel, blockId, docId);
+    }
+}
+
+export interface AdjacentBlockItem {
+    id: string;
+    type: string;
+    content: string;
+}
+
+export interface AdjacentBlocksContext {
+    prev?: AdjacentBlockItem;
+    current: AdjacentBlockItem;
+    next?: AdjacentBlockItem;
+}
+
+/**
+ * 纯函数：查询当前思源块在所属源文档中的前后相邻上下文块（前后句子/段落探针）
+ */
+export async function fetchAdjacentBlocks(
+    kernel: IKernelClient,
+    blockId: string,
+    docId: string,
+): Promise<AdjacentBlocksContext | null> {
+    if (!isBlockId(blockId) || !isBlockId(docId)) return null;
+
+    try {
+        const rawChildren = await kernel.request("getChildBlocks", {id: docId}, {
+            latest: true,
+            raceKey: `omni.adjacent.${blockId}`,
+        });
+        const children = parseChildBlocks(rawChildren);
+        const idx = children.findIndex((c) => c.id === blockId);
+        if (idx === -1) {
+            // 若不是直接顶层子块，只读回自身
+            const selfKd = await kernel.request<{kramdown?: string}>("getBlockKramdown", {id: blockId});
+            return {
+                current: {
+                    id: blockId,
+                    type: "text",
+                    content: cleanSearchHighlight(selfKd?.kramdown || ""),
+                },
+            };
+        }
+
+        const idsToFetch: string[] = [];
+        const prevBlock = idx > 0 ? children[idx - 1] : undefined;
+        const currentBlock = children[idx]!;
+        const nextBlock = idx < children.length - 1 ? children[idx + 1] : undefined;
+
+        if (prevBlock) idsToFetch.push(prevBlock.id);
+        idsToFetch.push(currentBlock.id);
+        if (nextBlock) idsToFetch.push(nextBlock.id);
+
+        const rawKds = await kernel.request("getBlockKramdowns", {ids: idsToFetch}, {
+            latest: true,
+            raceKey: `omni.adjacentKds.${blockId}`,
+        });
+        const kdsMap = parseBatchKramdowns(rawKds);
+
+        return {
+            prev: prevBlock ? {
+                id: prevBlock.id,
+                type: prevBlock.type,
+                content: cleanSearchHighlight(kdsMap[prevBlock.id] || ""),
+            } : undefined,
+            current: {
+                id: currentBlock.id,
+                type: currentBlock.type,
+                content: cleanSearchHighlight(kdsMap[currentBlock.id] || ""),
+            },
+            next: nextBlock ? {
+                id: nextBlock.id,
+                type: nextBlock.type,
+                content: cleanSearchHighlight(kdsMap[nextBlock.id] || ""),
+            } : undefined,
+        };
+    } catch {
+        return null;
+    }
 }

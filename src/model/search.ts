@@ -33,7 +33,7 @@ export interface SearchContext {
     /** 手动排序（收藏序/置顶顺序），sort=manual 时生效 */
     manualOrder?: ReadonlyMap<string, number>;
     /** 排序模式（title 仅在无关键词浏览时生效，有关键词保持相关度优先） */
-    sort?: "manual" | "recent" | "frequent" | "title";
+    sort?: "manual" | "recent" | "frequent" | "frecency" | "title";
     /** 启用时间半衰期衰减评分加权（默认 false，开启时为最近使用记录注入半衰期相关度提升） */
     enableRecencyDecay?: boolean;
     /** 半衰期毫秒数（默认 7 天: 7 * 24 * 3600 * 1000） */
@@ -544,12 +544,53 @@ export function applyBasicFilters(entries: readonly SearchEntry[], query: Pick<S
     return entries.filter((e) => passesFilters(e, {text: "", itemType: query.itemType, tag: query.tag, category: query.category, scope: query.scope, dateRange: query.dateRange}, ctx));
 }
 
+/**
+ * 计算基于 Mozilla / Sublime Text 工业标准的 Frecency 智能热度分：
+ * 结合使用频次 (Frequency) 与时间半衰期衰减 (Recency)：
+ * - 24 小时内：基础权重 100
+ * - 7 天内：基础权重 70
+ * - 30 天内：基础权重 40
+ * - 90 天内：基础权重 20
+ * - 超过 90 天或未记录时间：基础权重 5
+ */
+export function calculateFrecencyScore(count: number, lastUsedAt: number | undefined, now: number): number {
+    const validCount = Math.max(0, Number.isFinite(count) ? count : 0);
+    if (!lastUsedAt || !Number.isFinite(lastUsedAt) || lastUsedAt <= 0) {
+        return validCount * 5;
+    }
+    const deltaMs = Math.max(0, now - lastUsedAt);
+    const deltaDays = deltaMs / (24 * 60 * 60 * 1000);
+
+    let weight = 5;
+    if (deltaDays <= 1) {
+        weight = 100;
+    } else if (deltaDays <= 7) {
+        weight = 70;
+    } else if (deltaDays <= 30) {
+        weight = 40;
+    } else if (deltaDays <= 90) {
+        weight = 20;
+    }
+
+    return validCount * weight;
+}
+
 function compareResults(a: ScoredResult, b: ScoredResult, ctx: SearchContext): number {
     // 标题排序：仅在无关键词浏览（score 全 0）时生效，有关键词保持相关度优先
     if (!ctx.sort || ctx.sort === "manual") {
         const ma = ctx.manualOrder?.get(a.entry.id) ?? Number.MAX_SAFE_INTEGER;
         const mb = ctx.manualOrder?.get(b.entry.id) ?? Number.MAX_SAFE_INTEGER;
         if (ma !== mb) return ma - mb;
+    }
+    // 智能热度排序（Frecency）：热度分 > 最近使用 > 稳定序
+    if (ctx.sort === "frecency") {
+        const now = ctx.now || Date.now();
+        const fa = calculateFrecencyScore(ctx.usage?.get(a.entry.id) ?? 0, ctx.recents.get(a.entry.id), now);
+        const fb = calculateFrecencyScore(ctx.usage?.get(b.entry.id) ?? 0, ctx.recents.get(b.entry.id), now);
+        if (fb !== fa) return fb - fa;
+        const ra = ctx.recents.get(a.entry.id) ?? 0;
+        const rb = ctx.recents.get(b.entry.id) ?? 0;
+        if (rb !== ra) return rb - ra;
     }
     // 常用排序（F3）：次数 > 最近使用 > 相关度/稳定序
     if (ctx.sort === "frequent") {

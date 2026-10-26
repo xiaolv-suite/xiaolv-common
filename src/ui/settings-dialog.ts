@@ -142,7 +142,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     });
     activeSettingsDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.1", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.2", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -1943,7 +1943,40 @@ return`;
         });
     });
 
-    btnRow.append(copyQuickerBtn, copyAhkBtn, copyCurlBtn);
+    const copyRaycastBtn = document.createElement("button");
+    copyRaycastBtn.type = "button";
+    copyRaycastBtn.className = "b3-button xlc-btn-ghost";
+    copyRaycastBtn.textContent = "⌘ 复制 Raycast Script 脚本";
+    copyRaycastBtn.addEventListener("click", () => {
+        const raycastScript = `#!/bin/bash
+# @raycast.schemaVersion 1
+# @raycast.title Xiaolv Recall
+# @raycast.mode silent
+# @raycast.packageName SiYuan
+# @raycast.argument1 { "type": "text", "placeholder": "常用语别名或拼音" }
+
+RES=$(curl -s -X POST "http://127.0.0.1:6806/api/plugin/callPlugin" \\
+  -H "Content-Type: application/json" \\
+  -d "{\\"plugin\\":\\"xiaolv-common\\",\\"action\\":\\"recall\\",\\"data\\":{\\"alias\\":\\"$1\\"}}")
+
+TEXT=$(echo "$RES" | grep -o '"plainText":"[^"]*' | cut -d'"' -f4)
+if [ -n "$TEXT" ]; then
+  echo -n "$TEXT" | pbcopy
+  osascript -e 'tell application "System Events" to keystroke "v" using command down'
+  echo "已上屏: $TEXT"
+else
+  echo "未找到对应常用语"
+fi`;
+
+        void navigator.clipboard.writeText(raycastScript).then(() => {
+            copyRaycastBtn.textContent = "✓ 已复制 Raycast 脚本";
+            setTimeout(() => {
+                copyRaycastBtn.textContent = "⌘ 复制 Raycast Script 脚本";
+            }, 3000);
+        });
+    });
+
+    btnRow.append(copyQuickerBtn, copyAhkBtn, copyRaycastBtn, copyCurlBtn);
     sec.appendChild(btnRow);
 
     // 小驴家族生态联动矩阵

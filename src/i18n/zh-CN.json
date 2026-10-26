@@ -307,6 +307,8 @@
   "ordinalShortcutHint": "Alt+%s 插入 · Alt+Shift+%s 复制",
   "sort.frequent": "使用频次",
   "sortHint.frequent": "先按使用次数排列，次数相同再按最近使用；搜索时也遵循此顺序",
+  "sort.frecency": "智能热度",
+  "sortHint.frecency": "综合使用频次与时间衰减热度智能排序；近期高频条目稳居前列",
   "varCountBadge": "%s 变量",
   "paneVarsLabel": "插入时将询问 %s 个变量：",
   "paneSnippetsLabel": "嵌套 %s 个片段：",

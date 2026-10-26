@@ -118,7 +118,7 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
-  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.9.1", iconName = "iconXlcCommon") {
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.9.2", iconName = "iconXlcCommon") {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
@@ -3325,7 +3325,7 @@
           this.currentDialog = dialog;
           const container = dialog.element.querySelector(".b3-dialog__container");
           container == null ? void 0 : container.classList.add("xlc-form-host");
-          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.9.1", "iconXlcCommon");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.9.2", "iconXlcCommon");
           const handleViewport = () => {
             if (!container || typeof window === "undefined" || !window.visualViewport) return;
             const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -8324,7 +8324,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.1", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.2", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -9989,7 +9989,38 @@ return`;
         }, 3e3);
       });
     });
-    btnRow.append(copyQuickerBtn, copyAhkBtn, copyCurlBtn);
+    const copyRaycastBtn = document.createElement("button");
+    copyRaycastBtn.type = "button";
+    copyRaycastBtn.className = "b3-button xlc-btn-ghost";
+    copyRaycastBtn.textContent = "\u2318 \u590D\u5236 Raycast Script \u811A\u672C";
+    copyRaycastBtn.addEventListener("click", () => {
+      const raycastScript = `#!/bin/bash
+# @raycast.schemaVersion 1
+# @raycast.title Xiaolv Recall
+# @raycast.mode silent
+# @raycast.packageName SiYuan
+# @raycast.argument1 { "type": "text", "placeholder": "\u5E38\u7528\u8BED\u522B\u540D\u6216\u62FC\u97F3" }
+
+RES=$(curl -s -X POST "http://127.0.0.1:6806/api/plugin/callPlugin" \\
+  -H "Content-Type: application/json" \\
+  -d "{\\"plugin\\":\\"xiaolv-common\\",\\"action\\":\\"recall\\",\\"data\\":{\\"alias\\":\\"$1\\"}}")
+
+TEXT=$(echo "$RES" | grep -o '"plainText":"[^"]*' | cut -d'"' -f4)
+if [ -n "$TEXT" ]; then
+  echo -n "$TEXT" | pbcopy
+  osascript -e 'tell application "System Events" to keystroke "v" using command down'
+  echo "\u5DF2\u4E0A\u5C4F: $TEXT"
+else
+  echo "\u672A\u627E\u5230\u5BF9\u5E94\u5E38\u7528\u8BED"
+fi`;
+      void navigator.clipboard.writeText(raycastScript).then(() => {
+        copyRaycastBtn.textContent = "\u2713 \u5DF2\u590D\u5236 Raycast \u811A\u672C";
+        setTimeout(() => {
+          copyRaycastBtn.textContent = "\u2318 \u590D\u5236 Raycast Script \u811A\u672C";
+        }, 3e3);
+      });
+    });
+    btnRow.append(copyQuickerBtn, copyAhkBtn, copyRaycastBtn, copyCurlBtn);
     sec.appendChild(btnRow);
     const ecoTitle = document.createElement("div");
     ecoTitle.className = "xlc-eco-matrix-title";
@@ -11586,7 +11617,7 @@ return`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.1", "iconXlcCommon");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.2", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
@@ -11809,6 +11840,7 @@ return`;
           { key: "Enter", action: "\u63D2\u5165\u6587\u672C\u5FEB\u7167" },
           { key: "Shift+Enter", action: "\u5D4C\u5165\u540C\u6B65\u5757" },
           { key: "Alt+Enter", action: "\u63D2\u5165\u5757\u5F15\u7528" },
+          { key: `${isApple ? "\u2325" : "Alt"} + J`, action: "\u524D\u540E\u6587\u63A2\u9488" },
           { key: `${isApple ? "\u2318" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy") },
           { key: `${isApple ? "\u2325" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert") },
           { key: `${isApple ? "\u2325 + \u21E7" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy") },
@@ -13763,7 +13795,7 @@ return`;
       var _a, _b, _c, _d, _e, _f;
       (_a = this.menuDismiss) == null ? void 0 : _a.call(this);
       this.menuDismiss = null;
-      const modes = ["manual", "recent", "frequent", "title"];
+      const modes = ["manual", "frecency", "frequent", "recent", "title"];
       const current = this.deps.getSort();
       const menu = document.createElement("div");
       menu.className = "xlc-menu xlc-menu--compact";
@@ -13927,6 +13959,15 @@ return`;
           }
         });
         meta.appendChild(pathBtn);
+        if (this.deps.getAdjacentBlocks) {
+          const probeBtn = document.createElement("button");
+          probeBtn.type = "button";
+          probeBtn.className = "xlc-meta-chip";
+          probeBtn.textContent = "\u{1F50D} \u524D\u540E\u6587 (Alt+J)";
+          probeBtn.title = "\u5C31\u5730\u5C55\u5F00\u6E90\u6587\u6863\u4E2D\u7684\u524D\u540E\u76F8\u90BB\u4E0A\u4E0B\u6587\u5757 (Alt+J)";
+          probeBtn.addEventListener("click", () => void this.toggleAdjacentContextProbe());
+          meta.appendChild(probeBtn);
+        }
       }
       if (Number.isFinite(entry.updatedAt) && entry.updatedAt > 9466848e5) {
         const date = document.createElement("span");
@@ -14819,6 +14860,10 @@ return`;
           (_K = (_J = this.deps).notify) == null ? void 0 : _K.call(_J, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u539F\u59CB Markdown\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u539F\u59CB Markdown \u8BED\u6CD5\u5230\u526A\u8D34\u677F");
         }
         return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "j" || e.key === "J")) {
+        e.preventDefault();
+        void this.toggleAdjacentContextProbe();
+        return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "h" || e.key === "H")) {
         e.preventDefault();
         const entry = this.results[this.activeIndex];
@@ -15329,6 +15374,58 @@ return`;
         root.removeEventListener("drop", onDrop);
         root.removeEventListener("paste", onPaste);
       };
+    }
+    async toggleAdjacentContextProbe() {
+      var _a, _b, _c;
+      const entry = this.results[this.activeIndex];
+      if (!entry) return;
+      const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+      const sourceDocId = entry.sourceDocId || entry.libraryDocId;
+      if (!isBlockId(targetBlockId) || !isBlockId(sourceDocId) || !this.deps.getAdjacentBlocks) {
+        (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", "\u5F53\u524D\u6761\u76EE\u672A\u5173\u8054\u601D\u6E90\u6E90\u6587\u6863\uFF0C\u65E0\u6CD5\u8C03\u53D6\u4E0A\u4E0B\u6587");
+        return;
+      }
+      const paneBody = (_c = this.dialog) == null ? void 0 : _c.element.querySelector(".xlc-pane-body");
+      if (!paneBody) return;
+      let host = paneBody.querySelector(".xlc-adjacent-context-box");
+      if (host) {
+        host.remove();
+        return;
+      }
+      host = document.createElement("div");
+      host.className = "xlc-adjacent-context-box";
+      host.style.cssText = "margin-top:16px; padding:12px; background:var(--xlc-soft, #f1f1f9); border:1px solid var(--b3-border-color); border-radius:8px; font-size:12px; display:flex; flex-direction:column; gap:8px;";
+      host.innerHTML = `<div style="font-weight:600; opacity:0.8;">\u{1F50D} \u4E0A\u4E0B\u6587\u8BED\u5883\u63A2\u9488 (\u524D\u540E\u76F8\u90BB\u5757 \xB7 Alt+J \u6536\u8D77)\uFF1A</div><div>\u6B63\u5728\u8C03\u53D6\u524D\u540E\u6587\u2026</div>`;
+      paneBody.appendChild(host);
+      try {
+        const data = await this.deps.getAdjacentBlocks(targetBlockId, sourceDocId);
+        if (!data) {
+          host.innerHTML = `<div style="opacity:0.7;">\u672A\u68C0\u7D22\u5230\u76F8\u90BB\u4E0A\u4E0B\u6587\u5757\u6216\u6E90\u6587\u6863\u65E0\u5176\u5B83\u5B50\u5757</div>`;
+          return;
+        }
+        host.innerHTML = `<div style="font-weight:600; color:var(--b3-theme-primary); display:flex; align-items:center; justify-content:space-between;">
+                <span>\u{1F50D} \u6E90\u6587\u6863\u524D\u540E\u76F8\u90BB\u5757\u8BED\u5883 (Alt+J \u6536\u8D77)</span>
+                <span style="font-size:11px; opacity:0.7; font-weight:normal;">\u6765\u6E90\uFF1A${entry.sourceDocPath || "\u6E90\u6587\u6863"}</span>
+            </div>`;
+        if (data.prev) {
+          const prevEl = document.createElement("div");
+          prevEl.style.cssText = "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
+          prevEl.innerHTML = `<strong style="opacity:0.6;">[\u4E0A\u6587]</strong> ${kramdownToPlainText(data.prev.content) || "(\u7A7A)"}`;
+          host.appendChild(prevEl);
+        }
+        const curEl = document.createElement("div");
+        curEl.style.cssText = "padding:8px; background:var(--b3-theme-background); border-left:3px solid var(--b3-theme-primary); border-radius:4px; font-weight:500;";
+        curEl.innerHTML = `<strong style="color:var(--b3-theme-primary);">[\u5F53\u524D]</strong> ${kramdownToPlainText(data.current.content) || "(\u5F53\u524D\u5757\u5185\u5BB9)"}`;
+        host.appendChild(curEl);
+        if (data.next) {
+          const nextEl = document.createElement("div");
+          nextEl.style.cssText = "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
+          nextEl.innerHTML = `<strong style="opacity:0.6;">[\u4E0B\u6587]</strong> ${kramdownToPlainText(data.next.content) || "(\u7A7A)"}`;
+          host.appendChild(nextEl);
+        }
+      } catch {
+        host.innerHTML = `<div style="color:var(--b3-theme-error);">\u8C03\u53D6\u76F8\u90BB\u4E0A\u4E0B\u6587\u5931\u8D25</div>`;
+      }
     }
   };
   // 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。
@@ -19370,6 +19467,8 @@ ${finalHtml}
     ordinalShortcutHint: "Alt+%s \u63D2\u5165 \xB7 Alt+Shift+%s \u590D\u5236",
     "sort.frequent": "\u4F7F\u7528\u9891\u6B21",
     "sortHint.frequent": "\u5148\u6309\u4F7F\u7528\u6B21\u6570\u6392\u5217\uFF0C\u6B21\u6570\u76F8\u540C\u518D\u6309\u6700\u8FD1\u4F7F\u7528\uFF1B\u641C\u7D22\u65F6\u4E5F\u9075\u5FAA\u6B64\u987A\u5E8F",
+    "sort.frecency": "\u667A\u80FD\u70ED\u5EA6",
+    "sortHint.frecency": "\u7EFC\u5408\u4F7F\u7528\u9891\u6B21\u4E0E\u65F6\u95F4\u8870\u51CF\u70ED\u5EA6\u667A\u80FD\u6392\u5E8F\uFF1B\u8FD1\u671F\u9AD8\u9891\u6761\u76EE\u7A33\u5C45\u524D\u5217",
     varCountBadge: "%s \u53D8\u91CF",
     paneVarsLabel: "\u63D2\u5165\u65F6\u5C06\u8BE2\u95EE %s \u4E2A\u53D8\u91CF\uFF1A",
     paneSnippetsLabel: "\u5D4C\u5957 %s \u4E2A\u7247\u6BB5\uFF1A",

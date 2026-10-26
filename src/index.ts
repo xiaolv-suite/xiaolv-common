@@ -1257,6 +1257,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             openDocBlock: (blockId: string) => {
                 this.host.openDoc("", blockId);
             },
+            getAdjacentBlocks: (blockId: string, docId: string) => {
+                return this.omniSearch.getAdjacentBlocks(blockId, docId);
+            },
             insertToDoc: async (itemId, docId, hPath, fills, mode = "insert") => {
                 const got = await this.library.getItem(itemId);
                 if (!got.ok) {

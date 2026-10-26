@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.1 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Advanced clipboard cleaner (zero-width character stripping, smart soft-break merging, empty line compaction), omni block outline probe navigation, 742 passing automated tests.
+> **Released: v0.9.2 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Industrial Frecency hybrid smart sort, SiYuan adjacent blocks context probe (Alt+J), Raycast Script Command integration, 745 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.1)
+## This release (v0.9.2)
+
+Smart Frecency Sorting & Adjacent Blocks Context Probe:
+
+- **Industrial Frecency Hybrid Sorting**: Introduced `frecency` sort inspired by Firefox and Raycast, combining usage frequency with time-decay brackets (24h/7d/30d/90d) so active snippets stay on top while stale items gracefully decay.
+- **SiYuan Adjacent Blocks Context Probe (`Alt+J`)**: In preview panels, pressing `Alt+J` or clicking "🔍 Context" extracts the preceding and succeeding blocks in the source document without opening the note.
+- **Raycast Script Command Integration**: Settings panel now includes one-click copyable Raycast script command configurations for macOS users.
+
+## Previous release (v0.9.1)
 
 Advanced Clipboard Cleaner & Omni Outline Probe:
 

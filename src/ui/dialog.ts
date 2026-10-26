@@ -7,6 +7,7 @@
 import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
+import {ItemSortMode} from "../model/storage";
 import {cleanClipboardText} from "../model/clipboard-cleaner";
 import {toErrorMessage} from "../model/errors";
 import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch} from "../model/search";
@@ -21,6 +22,8 @@ import {findPinyinMatches} from "../model/pinyin-tiny";
 import {renderSafePreview} from "./preview-renderer";
 import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
 
+import {AdjacentBlocksContext} from "../service/omni-search";
+
 export interface DialogDeps {
     t: (key: string, ...args: string[]) => string;
     notify?: (kind: "info" | "error", message: string) => void;
@@ -34,6 +37,7 @@ export interface DialogDeps {
     captureOmniWithForm?: (entry: SearchEntry) => void;
     quickEditBlock?: (blockId: string, currentContent: string) => Promise<void> | void;
     openDocBlock?: (blockId: string) => Promise<void> | void;
+    getAdjacentBlocks?: (blockId: string, docId: string) => Promise<AdjacentBlocksContext | null>;
     insertToDoc: (itemId: string, docId: string, hPath: string, fills?: Record<string, string>, mode?: "insert" | "insert-content" | "insert-ref" | "insert-embed") => Promise<boolean>;
     duplicateItem: (itemId: string) => Promise<void>;
     /** AI 变换结果存为新条目（来源=原条目；原条目不被修改） */
@@ -75,9 +79,9 @@ export interface DialogDeps {
     insertRaw: (markdown: string, target?: {docId: string; hPath: string}) => Promise<boolean>;
     /** 写剪贴板（复制变换结果用，区别于条目原始内容的 runAction copy） */
     copyText: (text: string) => Promise<boolean>;
-    getSort: () => "manual" | "recent" | "frequent" | "title";
+    getSort: () => ItemSortMode;
     /** 排序直选（R108：排序应可枚举而非循环切换——Raycast 动作可枚举惯例） */
-    setSort: (sort: "manual" | "recent" | "frequent" | "title") => void;
+    setSort: (sort: ItemSortMode) => void;
     openSetup: () => void;
     /** 提供方候选（pv: 虚拟条目；绝不进入块执行器） */
     providerSearch: (query: string) => Promise<ProviderRow[]>;
@@ -194,7 +198,7 @@ export class CommonSearchDialog {
         }
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.1", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.2", "iconXlcCommon");
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             // 上次搜索词回填（跨会话保留）
@@ -436,6 +440,7 @@ export class CommonSearchDialog {
                 {key: "Enter", action: "插入文本快照"},
                 {key: "Shift+Enter", action: "嵌入同步块"},
                 {key: "Alt+Enter", action: "插入块引用"},
+                {key: `${isApple ? "⌥" : "Alt"} + J`, action: "前后文探针"},
                 {key: `${isApple ? "⌘" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy")},
                 {key: `${isApple ? "⌥" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert")},
                 {key: `${isApple ? "⌥ + ⇧" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy")},
@@ -2564,7 +2569,7 @@ export class CommonSearchDialog {
     private showSortMenu(paintSort: () => void): void {
         this.menuDismiss?.();
         this.menuDismiss = null;
-        const modes = ["manual", "recent", "frequent", "title"] as const;
+        const modes = ["manual", "frecency", "frequent", "recent", "title"] as const;
         const current = this.deps.getSort();
         const menu = document.createElement("div");
         menu.className = "xlc-menu xlc-menu--compact";
@@ -2729,6 +2734,15 @@ export class CommonSearchDialog {
                 }
             });
             meta.appendChild(pathBtn);
+            if (this.deps.getAdjacentBlocks) {
+                const probeBtn = document.createElement("button");
+                probeBtn.type = "button";
+                probeBtn.className = "xlc-meta-chip";
+                probeBtn.textContent = "🔍 前后文 (Alt+J)";
+                probeBtn.title = "就地展开源文档中的前后相邻上下文块 (Alt+J)";
+                probeBtn.addEventListener("click", () => void this.toggleAdjacentContextProbe());
+                meta.appendChild(probeBtn);
+            }
         }
         // 更新日期（Raycast accessory date 惯例的详情面板版；1970 级脏值不显示）
         if (Number.isFinite(entry.updatedAt) && entry.updatedAt > 946684800000) {
@@ -3695,6 +3709,11 @@ export class CommonSearchDialog {
                 this.deps.notify?.("info", this.pinWindow ? "已复制原始 Markdown（窗口已固定，可连续取用）" : "已复制原始 Markdown 语法到剪贴板");
             }
             return;
+        } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "j" || e.key === "J")) {
+            // Alt+J: 切换查看源文档前后相邻上下文语境探针
+            e.preventDefault();
+            void this.toggleAdjacentContextProbe();
+            return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "h" || e.key === "H")) {
             // Alt+H: 上下文层级探针（查看当前块所属完整路径大纲）
             e.preventDefault();
@@ -4274,5 +4293,64 @@ export class CommonSearchDialog {
             root.removeEventListener("drop", onDrop);
             root.removeEventListener("paste", onPaste);
         };
+    }
+
+    private async toggleAdjacentContextProbe(): Promise<void> {
+        const entry = this.results[this.activeIndex];
+        if (!entry) return;
+        const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
+        const sourceDocId = entry.sourceDocId || entry.libraryDocId;
+        if (!isBlockId(targetBlockId) || !isBlockId(sourceDocId) || !this.deps.getAdjacentBlocks) {
+            this.deps.notify?.("info", "当前条目未关联思源源文档，无法调取上下文");
+            return;
+        }
+
+        const paneBody = this.dialog?.element.querySelector<HTMLElement>(".xlc-pane-body");
+        if (!paneBody) return;
+
+        let host = paneBody.querySelector<HTMLElement>(".xlc-adjacent-context-box");
+        if (host) {
+            host.remove();
+            return;
+        }
+
+        host = document.createElement("div");
+        host.className = "xlc-adjacent-context-box";
+        host.style.cssText = "margin-top:16px; padding:12px; background:var(--xlc-soft, #f1f1f9); border:1px solid var(--b3-border-color); border-radius:8px; font-size:12px; display:flex; flex-direction:column; gap:8px;";
+        host.innerHTML = `<div style="font-weight:600; opacity:0.8;">🔍 上下文语境探针 (前后相邻块 · Alt+J 收起)：</div><div>正在调取前后文…</div>`;
+        paneBody.appendChild(host);
+
+        try {
+            const data = await this.deps.getAdjacentBlocks(targetBlockId, sourceDocId);
+            if (!data) {
+                host.innerHTML = `<div style="opacity:0.7;">未检索到相邻上下文块或源文档无其它子块</div>`;
+                return;
+            }
+            host.innerHTML = `<div style="font-weight:600; color:var(--b3-theme-primary); display:flex; align-items:center; justify-content:space-between;">
+                <span>🔍 源文档前后相邻块语境 (Alt+J 收起)</span>
+                <span style="font-size:11px; opacity:0.7; font-weight:normal;">来源：${entry.sourceDocPath || "源文档"}</span>
+            </div>`;
+
+            if (data.prev) {
+                const prevEl = document.createElement("div");
+                prevEl.style.cssText = "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
+                prevEl.innerHTML = `<strong style="opacity:0.6;">[上文]</strong> ${kramdownToPlainText(data.prev.content) || "(空)"}`;
+                host.appendChild(prevEl);
+            }
+
+            const curEl = document.createElement("div");
+            curEl.style.cssText = "padding:8px; background:var(--b3-theme-background); border-left:3px solid var(--b3-theme-primary); border-radius:4px; font-weight:500;";
+            curEl.innerHTML = `<strong style="color:var(--b3-theme-primary);">[当前]</strong> ${kramdownToPlainText(data.current.content) || "(当前块内容)"}`;
+            host.appendChild(curEl);
+
+            if (data.next) {
+                const nextEl = document.createElement("div");
+                nextEl.style.cssText = "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
+                nextEl.innerHTML = `<strong style="opacity:0.6;">[下文]</strong> ${kramdownToPlainText(data.next.content) || "(空)"}`;
+                host.appendChild(nextEl);
+            }
+        } catch {
+            host.innerHTML = `<div style="color:var(--b3-theme-error);">调取相邻上下文失败</div>`;
+        }
     }
 }

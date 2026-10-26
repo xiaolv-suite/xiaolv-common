@@ -307,6 +307,8 @@
   "ordinalShortcutHint": "Alt+%s to insert · Alt+Shift+%s to copy",
   "sort.frequent": "Most used",
   "sortHint.frequent": "Sort by use count, then recent use for ties; this order also applies to search",
+  "sort.frecency": "Smart Frecency",
+  "sortHint.frecency": "Smart hybrid order balancing frequency and recency time decay",
   "varCountBadge": "%s vars",
   "paneVarsLabel": "Will prompt %s variables on insert:",
   "paneSnippetsLabel": "Includes %s snippets:",

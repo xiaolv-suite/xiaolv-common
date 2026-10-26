@@ -221,12 +221,14 @@ export interface ClipboardHistoryEntry {
     copiedAt: number;
 }
 
+export type ItemSortMode = "manual" | "recent" | "frequent" | "frecency" | "title";
+
 export interface PluginState {
     schemaVersion: number;
     favorites: string[];
     recents: RecentEntry[];
     usage: Record<string, UsageEntry>;
-    sort: "manual" | "recent" | "frequent" | "title";
+    sort: ItemSortMode;
     uiPrefs: {
         lastTypeFilter: "" | ItemType;
         lastTagFilter: string;
@@ -261,7 +263,7 @@ export function normalizeState(raw: unknown): PluginState {
         recents.push({id, usedAt});
         if (recents.length >= LIMITS.maxRecents) break;
     }
-    const sort = obj.sort === "manual" || obj.sort === "recent" || obj.sort === "frequent" || obj.sort === "title" ? obj.sort : "manual";
+    const sort = obj.sort === "manual" || obj.sort === "recent" || obj.sort === "frequent" || obj.sort === "frecency" || obj.sort === "title" ? obj.sort : "manual";
     const prefsRaw = (obj.uiPrefs ?? {}) as Record<string, unknown>;
     const lastTypeFilter = (prefsRaw.lastTypeFilter === "" || isItemType(prefsRaw.lastTypeFilter))
         ? prefsRaw.lastTypeFilter as "" | ItemType
