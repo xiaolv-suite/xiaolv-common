@@ -506,6 +506,11 @@ export class XiaolvCommonService {
         });
     }
 
+    async getClipboardHistory(): Promise<ActionResult<Array<{text: string; copiedAt: number}>>> {
+        const history = this.deps.state.clipboardHistory ?? [];
+        return successEnvelope(history.slice());
+    }
+
     // ---- provider 联动 ----
 
     registerProvider(descriptor: ProviderDescriptor, runtime?: {search?(query: string): Promise<Array<{title: string; payload: string}>>}): ActionResult<void> {

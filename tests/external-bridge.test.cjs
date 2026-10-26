@@ -45,7 +45,7 @@ test("桥形状：protocol/protocolName/capabilities 只读能力；写方法不
     const bridge = externalBridge.buildXlcBridge(makeService());
     assert.equal(bridge.protocol, 1);
     assert.equal(bridge.protocolName, "xiaolv-common");
-    assert.deepEqual(bridge.capabilities, ["search", "get", "getBatch", "resolve", "recall", "recent", "favorites", "categories", "tags"]);
+    assert.deepEqual(bridge.capabilities, ["search", "get", "getBatch", "resolve", "recall", "recent", "favorites", "categories", "tags", "clipboard"]);
     // 负向验证：写面不挂桥——意外扩面会让本断言失败
     for (const forbidden of ["save", "update", "remove", "insert", "copy", "openSource", "reindex"]) {
         assert.equal(bridge[forbidden], undefined, `写能力 ${forbidden} 不得出现在只读桥`);
@@ -65,6 +65,17 @@ test("桥形状：protocol/protocolName/capabilities 只读能力；写方法不
     assert.equal(bridge.hasCapability("fake"), false);
     assert.equal(typeof bridge.recent, "function");
     assert.equal(typeof bridge.favorites, "function");
+    assert.equal(typeof bridge.getClipboardHistory, "function");
+});
+
+test("bridge: getClipboardHistory 读取剪贴板历史", async () => {
+    const s = makeService();
+    s.deps.state.clipboardHistory = [{text: "历史文本", copiedAt: 12345}];
+    const bridge = externalBridge.buildXlcBridge(s);
+    const res = await bridge.getClipboardHistory();
+    assert.equal(res.ok, true);
+    assert.equal(res.data.length, 1);
+    assert.equal(res.data[0].text, "历史文本");
 });
 
 test("whenReady 立即可用；getCapabilities 透传完整描述符（含诚实限制）", async () => {

@@ -118,7 +118,7 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
-  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.8.1", iconName = "iconXlcCommon") {
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.8.2", iconName = "iconXlcCommon") {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
@@ -3325,7 +3325,7 @@
           this.currentDialog = dialog;
           const container = dialog.element.querySelector(".b3-dialog__container");
           container == null ? void 0 : container.classList.add("xlc-form-host");
-          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.8.1", "iconXlcCommon");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.8.2", "iconXlcCommon");
           const handleViewport = () => {
             if (!container || typeof window === "undefined" || !window.visualViewport) return;
             const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -8324,7 +8324,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.8.1", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.8.2", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -11395,6 +11395,7 @@ ${exception.mark.snippet}`;
       /** 大结果集只保留视口附近的行；窗口回调由 renderList 安装并在销毁/重绘时清理。 */
       this.virtualListCleanup = null;
       this.virtualEnsureIndex = null;
+      this.updateHistoryBarRef = null;
       /** 宿主拒绝请求时覆盖旧列表，避免用户继续对过期结果执行写操作。 */
       this.accessIssueMessage = null;
       /** 普通点击 = 主动作（insert；blockref = 插入引用）。含变量时先弹填充卡片（F1）。
@@ -11437,7 +11438,7 @@ ${exception.mark.snippet}`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.1", "iconXlcCommon");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.2", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
@@ -11559,6 +11560,40 @@ ${exception.mark.snippet}`;
       const updateHistoryBar = () => {
         var _a2, _b2, _c2;
         const hasText = input.value.trim().length > 0;
+        if (this.currentScope === "clipboard") {
+          const clips = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
+          if (clips.length === 0 || hasText) {
+            historyBar.style.display = "none";
+            return;
+          }
+          historyBar.replaceChildren();
+          const lbl2 = document.createElement("span");
+          lbl2.className = "xlc-history-label";
+          lbl2.textContent = `\u{1F4CB} \u526A\u8D34\u677F\u6682\u5B58 (${clips.length}\u6761):`;
+          historyBar.appendChild(lbl2);
+          const tip = document.createElement("span");
+          tip.style.cssText = "font-size:11px; opacity:0.8; margin-right:8px;";
+          tip.textContent = "\u4EC5\u4FA7\u8F66\u6682\u5B58\uFF0C\u4E0D\u6C61\u67D3\u601D\u6E90\u5757";
+          historyBar.appendChild(tip);
+          if (this.deps.clearClipboardHistory) {
+            const clearBtn2 = document.createElement("button");
+            clearBtn2.type = "button";
+            clearBtn2.className = "xlc-history-clear";
+            clearBtn2.textContent = "\u6E05\u7A7A\u6682\u5B58";
+            clearBtn2.title = "\u6E05\u7A7A\u526A\u8D34\u677F\u6682\u5B58\u5386\u53F2";
+            clearBtn2.addEventListener("click", (e) => {
+              var _a3, _b3, _c3, _d2;
+              e.stopPropagation();
+              (_b3 = (_a3 = this.deps).clearClipboardHistory) == null ? void 0 : _b3.call(_a3);
+              (_d2 = (_c3 = this.deps).notify) == null ? void 0 : _d2.call(_c3, "info", "\u5DF2\u6E05\u7A7A\u526A\u8D34\u677F\u6682\u5B58\u5386\u53F2");
+              updateHistoryBar();
+              void this.refresh();
+            });
+            historyBar.appendChild(clearBtn2);
+          }
+          historyBar.style.display = "flex";
+          return;
+        }
         if (hasText) {
           historyBar.style.display = "none";
           return;
@@ -11608,6 +11643,7 @@ ${exception.mark.snippet}`;
         historyBar.style.display = "flex";
       };
       updateHistoryBar();
+      this.updateHistoryBarRef = updateHistoryBar;
       searchBlock.appendChild(historyBar);
       topMain.appendChild(searchBlock);
       let kbdRow = null;
@@ -12345,7 +12381,7 @@ ${exception.mark.snippet}`;
       void isMobile;
     }
     syncScopeChips() {
-      var _a, _b, _c;
+      var _a, _b, _c, _d;
       (_a = this.dialog) == null ? void 0 : _a.element.querySelectorAll(".xlc-scope-chip").forEach((chip) => {
         const on = chip.dataset.scope === this.currentScope;
         chip.classList.toggle("xlc-chip--on", on);
@@ -12374,6 +12410,7 @@ ${exception.mark.snippet}`;
         input.placeholder = ph;
         input.setAttribute("aria-label", ph);
       }
+      (_d = this.updateHistoryBarRef) == null ? void 0 : _d.call(this);
     }
     buildQuery() {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i;
@@ -12832,18 +12869,76 @@ ${exception.mark.snippet}`;
       }
       main.appendChild(meta);
       row.appendChild(main);
-      const star = document.createElement("button");
-      star.className = "b3-button b3-button--small xlc-row-action";
-      star.dataset.xlcControl = "item.favorite";
-      star.textContent = fav ? "\u2605" : "\u2606";
-      star.setAttribute("aria-label", fav ? this.deps.t("unfavorite") : this.deps.t("favorite"));
-      star.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.deps.toggleFavorite(entry.id);
-        star.textContent = this.deps.isFavorite(entry.id) ? "\u2605" : "\u2606";
-        void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
-      });
-      row.appendChild(star);
+      if (entry.isOmni) {
+        if (entry.id.startsWith("xlc-clip-")) {
+          const saveBtn = document.createElement("button");
+          saveBtn.className = "b3-button b3-button--small xlc-row-action";
+          saveBtn.dataset.xlcControl = "item.save-to-common";
+          saveBtn.textContent = "\u2726";
+          saveBtn.title = "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED (Alt+S)";
+          saveBtn.setAttribute("aria-label", "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED");
+          saveBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (this.deps.captureOmniWithForm) {
+              this.deps.captureOmniWithForm(entry);
+            }
+          });
+          row.appendChild(saveBtn);
+        } else {
+          const actionsWrap = document.createElement("div");
+          actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
+          if (this.deps.openDocBlock) {
+            const locateBtn = document.createElement("button");
+            locateBtn.className = "b3-button b3-button--small xlc-row-action";
+            locateBtn.dataset.xlcControl = "item.locate-source";
+            locateBtn.textContent = "\u2197";
+            locateBtn.title = "\u5728\u601D\u6E90\u4E2D\u5B9A\u4F4D\u6E90\u5757";
+            locateBtn.setAttribute("aria-label", "\u5728\u601D\u6E90\u4E2D\u5B9A\u4F4D\u6E90\u5757");
+            locateBtn.addEventListener("click", (e) => {
+              var _a2, _b2;
+              e.stopPropagation();
+              void ((_b2 = (_a2 = this.deps).openDocBlock) == null ? void 0 : _b2.call(_a2, entry.targetBlockId || entry.id));
+            });
+            actionsWrap.appendChild(locateBtn);
+          }
+          const isCaptured = this.capturedOmniIds.has(entry.id);
+          const saveBtn = document.createElement("button");
+          saveBtn.className = "b3-button b3-button--small xlc-row-action";
+          saveBtn.dataset.xlcControl = "item.save-to-common";
+          saveBtn.textContent = isCaptured ? "\u2713" : "\u2726";
+          saveBtn.title = isCaptured ? "\u5DF2\u6536\u5F55\u5165\u5E38\u7528\u5E93" : "\u4E00\u952E\u6536\u5F55\u5165\u5E38\u7528\u5E93 (Alt+S)";
+          saveBtn.setAttribute("aria-label", isCaptured ? "\u5DF2\u6536\u5F55\u5165\u5E38\u7528\u5E93" : "\u4E00\u952E\u6536\u5F55\u5165\u5E38\u7528\u5E93");
+          saveBtn.disabled = isCaptured;
+          saveBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (this.deps.createFromOmni) {
+              const ok2 = await this.deps.createFromOmni(entry);
+              if (ok2) {
+                this.capturedOmniIds.add(entry.id);
+                saveBtn.textContent = "\u2713";
+                saveBtn.disabled = true;
+                saveBtn.title = "\u5DF2\u6536\u5F55\u5165\u5E38\u7528\u5E93";
+                this.syncPaneActions();
+              }
+            }
+          });
+          actionsWrap.appendChild(saveBtn);
+          row.appendChild(actionsWrap);
+        }
+      } else {
+        const star = document.createElement("button");
+        star.className = "b3-button b3-button--small xlc-row-action";
+        star.dataset.xlcControl = "item.favorite";
+        star.textContent = fav ? "\u2605" : "\u2606";
+        star.setAttribute("aria-label", fav ? this.deps.t("unfavorite") : this.deps.t("favorite"));
+        star.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.deps.toggleFavorite(entry.id);
+          star.textContent = this.deps.isFavorite(entry.id) ? "\u2605" : "\u2606";
+          void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
+        });
+        row.appendChild(star);
+      }
       return row;
     }
     renderList(list) {

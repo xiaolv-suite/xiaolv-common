@@ -83,3 +83,27 @@ test("normalizeState: 剪贴板历史安全归一化", () => {
     assert.equal(state.clipboardHistory[0].text, "有效暂存 1");
     assert.equal(state.clipboardHistory[1].text, "有效暂存 3");
 });
+
+test("service: getClipboardHistory 读取状态中的剪贴板历史", async () => {
+    const {service, library, ai, providers} = require("./.build/entry.cjs");
+    const lib = new library.LibraryService({
+        request: () => Promise.resolve(null),
+    });
+    const state = normalizeState({
+        clipboardHistory: [
+            {text: "剪贴板条目测试", copiedAt: 123456789},
+        ],
+    });
+    const s = new service.XiaolvCommonService({
+        library: lib,
+        executor: {},
+        registry: new providers.ProviderRegistry(),
+        ai: new ai.AiAssistant({request: async () => ({code: 0, data: null})}, state.ai),
+        state,
+        onStateChange: () => {},
+    });
+    const res = await s.getClipboardHistory();
+    assert.equal(res.ok, true);
+    assert.equal(res.data.length, 1);
+    assert.equal(res.data[0].text, "剪贴板条目测试");
+});

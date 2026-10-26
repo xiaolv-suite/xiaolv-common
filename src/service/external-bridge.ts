@@ -39,6 +39,7 @@ export interface XlcBridgeApi {
     favorites?(): Promise<ActionResult<CommonItemRef[]>>;
     getCategories(): Promise<ActionResult<string[]>>;
     getTags(): Promise<ActionResult<string[]>>;
+    getClipboardHistory(): Promise<ActionResult<Array<{text: string; copiedAt: number}>>>;
 }
 
 /** 搜索入参收敛：支持纯字符串查询或对象参数 */
@@ -62,7 +63,7 @@ export function buildXlcBridge(service: XiaolvCommonService): XlcBridgeApi {
         protocol: XLC_BRIDGE_PROTOCOL,
         protocolName: "xiaolv-common",
         // v1 只读面（ADR-0013）：写方法不挂桥对象——门禁测试锁定此边界
-        capabilities: ["search", "get", "getBatch", "resolve", "recall", "recent", "favorites", "categories", "tags"],
+        capabilities: ["search", "get", "getBatch", "resolve", "recall", "recent", "favorites", "categories", "tags", "clipboard"],
 
         whenReady() {
             return Promise.resolve(true);
@@ -118,6 +119,10 @@ export function buildXlcBridge(service: XiaolvCommonService): XlcBridgeApi {
 
         getTags() {
             return service.getTags();
+        },
+
+        getClipboardHistory() {
+            return service.getClipboardHistory();
         },
     };
 }

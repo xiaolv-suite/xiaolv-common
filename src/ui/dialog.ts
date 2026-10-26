@@ -154,6 +154,7 @@ export class CommonSearchDialog {
     /** 大结果集只保留视口附近的行；窗口回调由 renderList 安装并在销毁/重绘时清理。 */
     private virtualListCleanup: (() => void) | null = null;
     private virtualEnsureIndex: ((index: number) => void) | null = null;
+    private updateHistoryBarRef: (() => void) | null = null;
     /** 宿主拒绝请求时覆盖旧列表，避免用户继续对过期结果执行写操作。 */
     private accessIssueMessage: string | null = null;
     // 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。
@@ -192,7 +193,7 @@ export class CommonSearchDialog {
         }
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.1", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.2", "iconXlcCommon");
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             // 上次搜索词回填（跨会话保留）
@@ -329,6 +330,42 @@ export class CommonSearchDialog {
         historyBar.className = "xlc-search-history-bar";
         const updateHistoryBar = (): void => {
             const hasText = input.value.trim().length > 0;
+            if (this.currentScope === "clipboard") {
+                const clips = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
+                if (clips.length === 0 || hasText) {
+                    historyBar.style.display = "none";
+                    return;
+                }
+                historyBar.replaceChildren();
+                const lbl = document.createElement("span");
+                lbl.className = "xlc-history-label";
+                lbl.textContent = `📋 剪贴板暂存 (${clips.length}条):`;
+                historyBar.appendChild(lbl);
+
+                const tip = document.createElement("span");
+                tip.style.cssText = "font-size:11px; opacity:0.8; margin-right:8px;";
+                tip.textContent = "仅侧车暂存，不污染思源块";
+                historyBar.appendChild(tip);
+
+                if (this.deps.clearClipboardHistory) {
+                    const clearBtn = document.createElement("button");
+                    clearBtn.type = "button";
+                    clearBtn.className = "xlc-history-clear";
+                    clearBtn.textContent = "清空暂存";
+                    clearBtn.title = "清空剪贴板暂存历史";
+                    clearBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        this.deps.clearClipboardHistory?.();
+                        this.deps.notify?.("info", "已清空剪贴板暂存历史");
+                        updateHistoryBar();
+                        void this.refresh();
+                    });
+                    historyBar.appendChild(clearBtn);
+                }
+                historyBar.style.display = "flex";
+                return;
+            }
+
             if (hasText) {
                 historyBar.style.display = "none";
                 return;
@@ -379,6 +416,7 @@ export class CommonSearchDialog {
             historyBar.style.display = "flex";
         };
         updateHistoryBar();
+        this.updateHistoryBarRef = updateHistoryBar;
         searchBlock.appendChild(historyBar);
         topMain.appendChild(searchBlock);
         let kbdRow: HTMLDivElement | null = null;
@@ -1199,6 +1237,7 @@ export class CommonSearchDialog {
             input.placeholder = ph;
             input.setAttribute("aria-label", ph);
         }
+        this.updateHistoryBarRef?.();
     }
 
     private buildQuery(): SearchQuery {
@@ -1705,18 +1744,78 @@ export class CommonSearchDialog {
         }
         main.appendChild(meta);
         row.appendChild(main);
-        const star = document.createElement("button");
-        star.className = "b3-button b3-button--small xlc-row-action";
-        star.dataset.xlcControl = "item.favorite";
-        star.textContent = fav ? "★" : "☆";
-        star.setAttribute("aria-label", fav ? this.deps.t("unfavorite") : this.deps.t("favorite"));
-        star.addEventListener("click", (e) => {
-            e.stopPropagation();
-            this.deps.toggleFavorite(entry.id);
-            star.textContent = this.deps.isFavorite(entry.id) ? "★" : "☆";
-            void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
-        });
-        row.appendChild(star);
+
+        if (entry.isOmni) {
+            if (entry.id.startsWith("xlc-clip-")) {
+                const saveBtn = document.createElement("button");
+                saveBtn.className = "b3-button b3-button--small xlc-row-action";
+                saveBtn.dataset.xlcControl = "item.save-to-common";
+                saveBtn.textContent = "✦";
+                saveBtn.title = "沉淀为常用语 (Alt+S)";
+                saveBtn.setAttribute("aria-label", "沉淀为常用语");
+                saveBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    if (this.deps.captureOmniWithForm) {
+                        this.deps.captureOmniWithForm(entry);
+                    }
+                });
+                row.appendChild(saveBtn);
+            } else {
+                const actionsWrap = document.createElement("div");
+                actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
+
+                if (this.deps.openDocBlock) {
+                    const locateBtn = document.createElement("button");
+                    locateBtn.className = "b3-button b3-button--small xlc-row-action";
+                    locateBtn.dataset.xlcControl = "item.locate-source";
+                    locateBtn.textContent = "↗";
+                    locateBtn.title = "在思源中定位源块";
+                    locateBtn.setAttribute("aria-label", "在思源中定位源块");
+                    locateBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        void this.deps.openDocBlock?.(entry.targetBlockId || entry.id);
+                    });
+                    actionsWrap.appendChild(locateBtn);
+                }
+
+                const isCaptured = this.capturedOmniIds.has(entry.id);
+                const saveBtn = document.createElement("button");
+                saveBtn.className = "b3-button b3-button--small xlc-row-action";
+                saveBtn.dataset.xlcControl = "item.save-to-common";
+                saveBtn.textContent = isCaptured ? "✓" : "✦";
+                saveBtn.title = isCaptured ? "已收录入常用库" : "一键收录入常用库 (Alt+S)";
+                saveBtn.setAttribute("aria-label", isCaptured ? "已收录入常用库" : "一键收录入常用库");
+                saveBtn.disabled = isCaptured;
+                saveBtn.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    if (this.deps.createFromOmni) {
+                        const ok = await this.deps.createFromOmni(entry);
+                        if (ok) {
+                            this.capturedOmniIds.add(entry.id);
+                            saveBtn.textContent = "✓";
+                            saveBtn.disabled = true;
+                            saveBtn.title = "已收录入常用库";
+                            this.syncPaneActions();
+                        }
+                    }
+                });
+                actionsWrap.appendChild(saveBtn);
+                row.appendChild(actionsWrap);
+            }
+        } else {
+            const star = document.createElement("button");
+            star.className = "b3-button b3-button--small xlc-row-action";
+            star.dataset.xlcControl = "item.favorite";
+            star.textContent = fav ? "★" : "☆";
+            star.setAttribute("aria-label", fav ? this.deps.t("unfavorite") : this.deps.t("favorite"));
+            star.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.deps.toggleFavorite(entry.id);
+                star.textContent = this.deps.isFavorite(entry.id) ? "★" : "☆";
+                void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
+            });
+            row.appendChild(star);
+        }
         return row;
     }
 

@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.8.1 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Session clipboard history stream, FIFO auto-pruning, zero block bloat, and Alt+S one-click snippet assetization flywheel.
+> **Released: v0.8.2 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Contextual trailing row actions (omni ingestion/locate/clip-save), one-click clipboard history clearing, bridge clipboard history getter, 735 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,18 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.8.1)
+## This release (v0.8.2)
+
+Contextual Row Actions & Clipboard Privacy Management:
+
+- **Contextual Trailing Row Actions**:
+  - **Clipboard Entries**: Displays `✦ Save to Snippets (Alt+S)` for one-click assetization;
+  - **Omni SiYuan Blocks**: Displays `✦ Ingest (Alt+S)` (switches to `✓` once saved) and `↗ Locate in Document`;
+  - **Curated Snippets**: Preserves `★/☆ Favorite Toggle`, eliminating sidecar state pollution from unmanaged blocks.
+- **One-Click Clipboard Scratchpad Clearing**: Clipboard view provides `[Clear Scratchpad]` to erase transient cache immediately for privacy.
+- **Bridge Clipboard Stream Access**: Exposed `getClipboardHistory()` on `XlcBridgeApi` and `protocolCommands` for external Quicker/automation scripts.
+
+## Previous release (v0.8.1)
 
 Session Clipboard History Stream & One-Click Ingestion Flywheel:
 
