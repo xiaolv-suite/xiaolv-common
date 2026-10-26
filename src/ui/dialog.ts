@@ -7,6 +7,7 @@
 import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
+import {cleanClipboardText} from "../model/clipboard-cleaner";
 import {toErrorMessage} from "../model/errors";
 import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch} from "../model/search";
 import {BatchTagCategoryPatch, BatchOperationReceipt} from "../model/batch-ops";
@@ -193,7 +194,7 @@ export class CommonSearchDialog {
         }
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.0", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.1", "iconXlcCommon");
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             // 上次搜索词回填（跨会话保留）
@@ -1059,6 +1060,30 @@ export class CommonSearchDialog {
         foot.appendChild(edit);
         foot.appendChild(editAndCapture);
         foot.appendChild(saveOmni);
+
+        const cleanClipBtn = document.createElement("button");
+        cleanClipBtn.className = "b3-button b3-button--text xlc-btn-ghost";
+        cleanClipBtn.textContent = "🧹 格式清洗";
+        cleanClipBtn.title = "剥离零宽字符、合并软换行与压缩多余空行";
+        cleanClipBtn.dataset.xlcPaneAct = "clean-clip";
+        cleanClipBtn.dataset.xlcControl = "preview.clean-clip";
+        cleanClipBtn.style.display = "none";
+        cleanClipBtn.addEventListener("click", async () => {
+            const entry = this.results[this.activeIndex];
+            if (entry && entry.content) {
+                const cleaned = cleanClipboardText(entry.content, {mergeSoftBreaks: true});
+                if (cleaned.hasChanges) {
+                    entry.content = cleaned.cleanedText;
+                    entry.summary = cleaned.cleanedText.slice(0, 100).replace(/[\s\r\n]+/g, " ");
+                    await this.deps.copyProviderPayload(cleaned.cleanedText);
+                    this.updatePreview(entry.id);
+                    this.deps.notify?.("info", `已清洗并复制到剪贴板: ${cleaned.changeDetails.join("、") || "文本已规整"}`);
+                } else {
+                    this.deps.notify?.("info", "文本结构规范，无需清洗");
+                }
+            }
+        });
+        foot.appendChild(cleanClipBtn);
         return foot;
     }
 
@@ -2265,15 +2290,20 @@ export class CommonSearchDialog {
                 const entry = this.results[this.activeIndex];
                 const act = btn.dataset.xlcPaneAct ?? "";
                 const isOmniScope = this.currentScope === "current-doc" || this.currentScope === "all-notes" || this.currentScope === "clipboard";
+                const isClipEntry = Boolean(entry && entry.id.startsWith("xlc-clip-"));
                 const unavailable = !entry
                     || (act === "ai" && !this.deps.aiEnabled())
                     || (act === "source" && (isOmniScope ? !this.deps.openDocBlock : this.deps.isSourceMissing(entry)))
                     || (act === "edit" && isOmniScope && !this.deps.quickEditBlock);
                 const showOmniSave = act === "save-omni" && isOmniScope && Boolean(this.deps.createFromOmni);
                 const showOmniEditCapture = act === "edit-and-capture-omni" && isOmniScope && Boolean(this.deps.captureOmniWithForm);
-                btn.style.display = (act === "save-omni" || act === "edit-and-capture-omni")
-                    ? (showOmniSave && act === "save-omni" ? "" : (showOmniEditCapture && act === "edit-and-capture-omni" ? "" : "none"))
-                    : "";
+                if (act === "clean-clip") {
+                    btn.style.display = isClipEntry ? "" : "none";
+                } else {
+                    btn.style.display = (act === "save-omni" || act === "edit-and-capture-omni")
+                        ? (showOmniSave && act === "save-omni" ? "" : (showOmniEditCapture && act === "edit-and-capture-omni" ? "" : "none"))
+                        : "";
+                }
                 if (act === "save-omni") {
                     const isCaptured = entry ? this.capturedOmniIds.has(entry.id) : false;
                     btn.textContent = isCaptured ? "✓ " + this.deps.t("saveToCommon") : "✦ " + this.deps.t("saveToCommon") + " (Alt+S)";
@@ -2684,11 +2714,12 @@ export class CommonSearchDialog {
             more.textContent = `+${cleanTags.length - shownTags.length}`;
             meta.appendChild(more);
         }
-        if (entry.sourceDocPath) {
+        const effectiveDocPath = entry.sourceDocPath || (entry.category && entry.category !== "全库内容" && entry.category !== "剪贴板" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : undefined);
+        if (effectiveDocPath) {
             const pathBtn = document.createElement("button");
             pathBtn.type = "button";
             pathBtn.className = "xlc-meta-chip xlc-meta-chip--path";
-            pathBtn.textContent = "📄 " + entry.sourceDocPath;
+            pathBtn.textContent = "📄 " + effectiveDocPath;
             pathBtn.title = "点击在思源中打开并定位此文档或块 (Alt+D)";
             pathBtn.addEventListener("click", () => {
                 if (entry.isOmni && this.deps.openDocBlock) {
@@ -3125,17 +3156,31 @@ export class CommonSearchDialog {
                 return btn;
             };
             if (entry.isOmni) {
-                if (this.deps.openDocBlock) {
-                    addSilent("↗", this.deps.t("locateInDoc"), () => this.deps.openDocBlock!(entry.targetBlockId || entry.id));
-                }
-                if (this.deps.quickEditBlock) {
-                    addSilent("✎", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock!(entry.targetBlockId || entry.id, entry.content || entry.summary || ""));
-                }
-                if (this.deps.captureOmniWithForm) {
-                    addSilent("✦", this.deps.t("editAndCapture"), () => this.deps.captureOmniWithForm!(entry));
-                }
-                if (this.deps.createFromOmni) {
-                    addSilent("✓", this.deps.t("saveToCommon"), () => this.deps.createFromOmni!(entry));
+                if (entry.id.startsWith("xlc-clip-")) {
+                    addSilent("🧹", "清洗格式并复制 (去除断行/零宽符)", async () => {
+                        const cleaned = cleanClipboardText(entry.content || "", {mergeSoftBreaks: true});
+                        await this.deps.copyProviderPayload(cleaned.cleanedText);
+                        this.deps.notify?.("info", `已清洗并复制: ${cleaned.changeDetails.join("、") || "文本已规整"}`);
+                    });
+                    if (this.deps.captureOmniWithForm) {
+                        addSilent("✦", "清洗格式并存为常用语", () => {
+                            const cleaned = cleanClipboardText(entry.content || "", {mergeSoftBreaks: true});
+                            this.deps.captureOmniWithForm!({...entry, content: cleaned.cleanedText, summary: cleaned.cleanedText.slice(0, 100)});
+                        });
+                    }
+                } else {
+                    if (this.deps.openDocBlock) {
+                        addSilent("↗", this.deps.t("locateInDoc"), () => this.deps.openDocBlock!(entry.targetBlockId || entry.id));
+                    }
+                    if (this.deps.quickEditBlock) {
+                        addSilent("✎", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock!(entry.targetBlockId || entry.id, entry.content || entry.summary || ""));
+                    }
+                    if (this.deps.captureOmniWithForm) {
+                        addSilent("✦", this.deps.t("editAndCapture"), () => this.deps.captureOmniWithForm!(entry));
+                    }
+                    if (this.deps.createFromOmni) {
+                        addSilent("✓", this.deps.t("saveToCommon"), () => this.deps.createFromOmni!(entry));
+                    }
                 }
             } else {
                 addSilent("↗", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
@@ -3655,8 +3700,9 @@ export class CommonSearchDialog {
             e.preventDefault();
             const entry = this.results[this.activeIndex];
             if (entry) {
-                const docPath = entry.sourceDocPath || entry.category || "未命名路径";
-                this.deps.notify?.("info", `📍 块层级路径：${docPath}`);
+                const docPath = entry.sourceDocPath || (entry.category && entry.category !== "全库内容" && entry.category !== "剪贴板" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : "未关联文档");
+                const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
+                this.deps.notify?.("info", `📍 所属路径: ${docPath}${targetBlockId ? ` · [${targetBlockId.slice(0, 16)}]` : ""}`);
             }
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "p" || e.key === "P")) {

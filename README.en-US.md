@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.0 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Compound search syntax compiler (tag:, cat:, -exclude), tiered visual grouping headers, dual dispatch payloads (plainText & richHtml), out-of-the-box AutoHotkey & Quicker scripts.
+> **Released: v0.9.1 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Advanced clipboard cleaner (zero-width character stripping, smart soft-break merging, empty line compaction), omni block outline probe navigation, 742 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.0 Milestone)
+## This release (v0.9.1)
+
+Advanced Clipboard Cleaner & Omni Outline Probe:
+
+- **Advanced Clipboard Cleaner (`clipboard-cleaner.ts`)**: Cleans corrupted text copied from PDFs or chat apps by stripping zero-width invisible characters (`\u200B`, `\uFEFF`), intelligently merging soft linebreaks (CJK seamless joining vs English space insertion), and compacting excessive empty lines.
+- **Omni Block Outline Probe Navigation**: In preview panels, omni blocks now feature the clickable provenance document chip (`📄 Document Path`), allowing instantaneous jumping and locating in SiYuan via `Alt+H` or mouse click.
+
+## Previous release (v0.9.0)
 
 Omni-Search Deepening & Global Cross-Application Direct Dispatch:
 

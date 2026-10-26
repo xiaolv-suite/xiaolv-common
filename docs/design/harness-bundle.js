@@ -118,7 +118,7 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
-  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.9.0", iconName = "iconXlcCommon") {
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.9.1", iconName = "iconXlcCommon") {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
@@ -3325,7 +3325,7 @@
           this.currentDialog = dialog;
           const container = dialog.element.querySelector(".b3-dialog__container");
           container == null ? void 0 : container.classList.add("xlc-form-host");
-          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.9.0", "iconXlcCommon");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.9.1", "iconXlcCommon");
           const handleViewport = () => {
             if (!container || typeof window === "undefined" || !window.visualViewport) return;
             const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -8324,7 +8324,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.0", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.1", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -10754,6 +10754,99 @@ return`;
   var import_siyuan2 = __toESM(require_stub_dom());
   init_dialog_dom();
   init_item();
+
+  // src/model/clipboard-cleaner.ts
+  var INVISIBLE_CHARS_REGEX = /[\u200B-\u200D\uFEFF\u200E\u200F\u00AD]/g;
+  function stripInvisibleCharacters(text) {
+    let count = 0;
+    const result = text.replace(INVISIBLE_CHARS_REGEX, () => {
+      count++;
+      return "";
+    });
+    return { result, count };
+  }
+  function mergeSoftLinebreaks(text) {
+    if (!text || !text.includes("\n")) return { result: text, mergedCount: 0 };
+    const normalized = text.replace(/\r\n?/g, "\n");
+    const paragraphs = normalized.split(/\n{2,}/);
+    let totalMerged = 0;
+    const cleanedParagraphs = paragraphs.map((para) => {
+      var _a, _b;
+      const lines = para.split("\n");
+      if (lines.length <= 1) return para;
+      let merged = (_a = lines[0]) != null ? _a : "";
+      for (let i = 1; i < lines.length; i++) {
+        const nextLine = (_b = lines[i]) != null ? _b : "";
+        if (!nextLine.trim()) continue;
+        totalMerged++;
+        const lastChar = merged.slice(-1);
+        const firstChar = nextLine.charAt(0);
+        const isCjkLast = /[\u4e00-\u9fa5\u3040-\u30ff\uff00-\uffef]/.test(lastChar);
+        const isCjkFirst = /[\u4e00-\u9fa5\u3040-\u30ff\uff00-\uffef]/.test(firstChar);
+        if (isCjkLast && isCjkFirst) {
+          merged += nextLine.trim();
+        } else {
+          merged += " " + nextLine.trim();
+        }
+      }
+      return merged;
+    });
+    return { result: cleanedParagraphs.join("\n\n"), mergedCount: totalMerged };
+  }
+  function compactWhitespaceAndLines(text, trimLeading = false) {
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let trimmedCount = 0;
+    const cleanedLines = lines.map((l) => {
+      const rTrimmed = l.replace(/[ \t]+$/, "");
+      if (rTrimmed !== l) trimmedCount++;
+      return trimLeading ? rTrimmed.trimStart() : rTrimmed;
+    });
+    const intermediate = cleanedLines.join("\n");
+    const compacted = intermediate.replace(/\n{3,}/g, "\n\n");
+    return {
+      result: compacted.trim(),
+      trimmedLines: trimmedCount
+    };
+  }
+  function cleanClipboardText(text, options = {}) {
+    const opts = {
+      stripInvisible: options.stripInvisible !== false,
+      mergeSoftBreaks: options.mergeSoftBreaks === true,
+      compactEmptyLines: options.compactEmptyLines !== false,
+      trimLeadingIndent: options.trimLeadingIndent === true
+    };
+    let cur = text;
+    const details = [];
+    if (opts.stripInvisible) {
+      const res = stripInvisibleCharacters(cur);
+      if (res.count > 0) {
+        cur = res.result;
+        details.push(`\u79FB\u9664\u4E86 ${res.count} \u4E2A\u4E0D\u53EF\u89C1\u96F6\u5BBD\u5B57\u7B26`);
+      }
+    }
+    if (opts.mergeSoftBreaks) {
+      const res = mergeSoftLinebreaks(cur);
+      if (res.mergedCount > 0) {
+        cur = res.result;
+        details.push(`\u5408\u5E76\u4E86 ${res.mergedCount} \u5904\u610F\u5916\u786C\u65AD\u884C`);
+      }
+    }
+    if (opts.compactEmptyLines || opts.trimLeadingIndent) {
+      const res = compactWhitespaceAndLines(cur, opts.trimLeadingIndent);
+      cur = res.result;
+      if (res.trimmedLines > 0) {
+        details.push(`\u6E05\u9664\u4E86 ${res.trimmedLines} \u884C\u5C3E\u4F59\u7A7A\u767D\u5E76\u538B\u7F29\u4E86\u7A7A\u884C`);
+      }
+    }
+    return {
+      originalText: text,
+      cleanedText: cur,
+      hasChanges: cur !== text,
+      changeDetails: details
+    };
+  }
+
+  // src/ui/dialog.ts
   init_errors();
   init_search();
   init_actions();
@@ -11493,7 +11586,7 @@ return`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.0", "iconXlcCommon");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.1", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
@@ -12295,6 +12388,30 @@ return`;
       foot.appendChild(edit);
       foot.appendChild(editAndCapture);
       foot.appendChild(saveOmni);
+      const cleanClipBtn = document.createElement("button");
+      cleanClipBtn.className = "b3-button b3-button--text xlc-btn-ghost";
+      cleanClipBtn.textContent = "\u{1F9F9} \u683C\u5F0F\u6E05\u6D17";
+      cleanClipBtn.title = "\u5265\u79BB\u96F6\u5BBD\u5B57\u7B26\u3001\u5408\u5E76\u8F6F\u6362\u884C\u4E0E\u538B\u7F29\u591A\u4F59\u7A7A\u884C";
+      cleanClipBtn.dataset.xlcPaneAct = "clean-clip";
+      cleanClipBtn.dataset.xlcControl = "preview.clean-clip";
+      cleanClipBtn.style.display = "none";
+      cleanClipBtn.addEventListener("click", async () => {
+        var _a, _b, _c, _d;
+        const entry = this.results[this.activeIndex];
+        if (entry && entry.content) {
+          const cleaned = cleanClipboardText(entry.content, { mergeSoftBreaks: true });
+          if (cleaned.hasChanges) {
+            entry.content = cleaned.cleanedText;
+            entry.summary = cleaned.cleanedText.slice(0, 100).replace(/[\s\r\n]+/g, " ");
+            await this.deps.copyProviderPayload(cleaned.cleanedText);
+            this.updatePreview(entry.id);
+            (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", `\u5DF2\u6E05\u6D17\u5E76\u590D\u5236\u5230\u526A\u8D34\u677F: ${cleaned.changeDetails.join("\u3001") || "\u6587\u672C\u5DF2\u89C4\u6574"}`);
+          } else {
+            (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", "\u6587\u672C\u7ED3\u6784\u89C4\u8303\uFF0C\u65E0\u9700\u6E05\u6D17");
+          }
+        }
+      });
+      foot.appendChild(cleanClipBtn);
       return foot;
     }
     /** 重新加载标签/分类选项；成功时清理已经不存在的持久化筛选，失败时保留当前筛选并给出提示。 */
@@ -13401,10 +13518,15 @@ return`;
         const entry = this.results[this.activeIndex];
         const act = (_b2 = btn.dataset.xlcPaneAct) != null ? _b2 : "";
         const isOmniScope = this.currentScope === "current-doc" || this.currentScope === "all-notes" || this.currentScope === "clipboard";
+        const isClipEntry = Boolean(entry && entry.id.startsWith("xlc-clip-"));
         const unavailable = !entry || act === "ai" && !this.deps.aiEnabled() || act === "source" && (isOmniScope ? !this.deps.openDocBlock : this.deps.isSourceMissing(entry)) || act === "edit" && isOmniScope && !this.deps.quickEditBlock;
         const showOmniSave = act === "save-omni" && isOmniScope && Boolean(this.deps.createFromOmni);
         const showOmniEditCapture = act === "edit-and-capture-omni" && isOmniScope && Boolean(this.deps.captureOmniWithForm);
-        btn.style.display = act === "save-omni" || act === "edit-and-capture-omni" ? showOmniSave && act === "save-omni" ? "" : showOmniEditCapture && act === "edit-and-capture-omni" ? "" : "none" : "";
+        if (act === "clean-clip") {
+          btn.style.display = isClipEntry ? "" : "none";
+        } else {
+          btn.style.display = act === "save-omni" || act === "edit-and-capture-omni" ? showOmniSave && act === "save-omni" ? "" : showOmniEditCapture && act === "edit-and-capture-omni" ? "" : "none" : "";
+        }
         if (act === "save-omni") {
           const isCaptured = entry ? this.capturedOmniIds.has(entry.id) : false;
           btn.textContent = isCaptured ? "\u2713 " + this.deps.t("saveToCommon") : "\u2726 " + this.deps.t("saveToCommon") + " (Alt+S)";
@@ -13790,11 +13912,12 @@ return`;
         more.textContent = `+${cleanTags.length - shownTags.length}`;
         meta.appendChild(more);
       }
-      if (entry.sourceDocPath) {
+      const effectiveDocPath = entry.sourceDocPath || (entry.category && entry.category !== "\u5168\u5E93\u5185\u5BB9" && entry.category !== "\u526A\u8D34\u677F" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : void 0);
+      if (effectiveDocPath) {
         const pathBtn = document.createElement("button");
         pathBtn.type = "button";
         pathBtn.className = "xlc-meta-chip xlc-meta-chip--path";
-        pathBtn.textContent = "\u{1F4C4} " + entry.sourceDocPath;
+        pathBtn.textContent = "\u{1F4C4} " + effectiveDocPath;
         pathBtn.title = "\u70B9\u51FB\u5728\u601D\u6E90\u4E2D\u6253\u5F00\u5E76\u5B9A\u4F4D\u6B64\u6587\u6863\u6216\u5757 (Alt+D)";
         pathBtn.addEventListener("click", () => {
           if (entry.isOmni && this.deps.openDocBlock) {
@@ -14188,17 +14311,32 @@ return`;
           return btn;
         };
         if (entry.isOmni) {
-          if (this.deps.openDocBlock) {
-            addSilent("\u2197", this.deps.t("locateInDoc"), () => this.deps.openDocBlock(entry.targetBlockId || entry.id));
-          }
-          if (this.deps.quickEditBlock) {
-            addSilent("\u270E", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock(entry.targetBlockId || entry.id, entry.content || entry.summary || ""));
-          }
-          if (this.deps.captureOmniWithForm) {
-            addSilent("\u2726", this.deps.t("editAndCapture"), () => this.deps.captureOmniWithForm(entry));
-          }
-          if (this.deps.createFromOmni) {
-            addSilent("\u2713", this.deps.t("saveToCommon"), () => this.deps.createFromOmni(entry));
+          if (entry.id.startsWith("xlc-clip-")) {
+            addSilent("\u{1F9F9}", "\u6E05\u6D17\u683C\u5F0F\u5E76\u590D\u5236 (\u53BB\u9664\u65AD\u884C/\u96F6\u5BBD\u7B26)", async () => {
+              var _a3, _b3;
+              const cleaned = cleanClipboardText(entry.content || "", { mergeSoftBreaks: true });
+              await this.deps.copyProviderPayload(cleaned.cleanedText);
+              (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", `\u5DF2\u6E05\u6D17\u5E76\u590D\u5236: ${cleaned.changeDetails.join("\u3001") || "\u6587\u672C\u5DF2\u89C4\u6574"}`);
+            });
+            if (this.deps.captureOmniWithForm) {
+              addSilent("\u2726", "\u6E05\u6D17\u683C\u5F0F\u5E76\u5B58\u4E3A\u5E38\u7528\u8BED", () => {
+                const cleaned = cleanClipboardText(entry.content || "", { mergeSoftBreaks: true });
+                this.deps.captureOmniWithForm({ ...entry, content: cleaned.cleanedText, summary: cleaned.cleanedText.slice(0, 100) });
+              });
+            }
+          } else {
+            if (this.deps.openDocBlock) {
+              addSilent("\u2197", this.deps.t("locateInDoc"), () => this.deps.openDocBlock(entry.targetBlockId || entry.id));
+            }
+            if (this.deps.quickEditBlock) {
+              addSilent("\u270E", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock(entry.targetBlockId || entry.id, entry.content || entry.summary || ""));
+            }
+            if (this.deps.captureOmniWithForm) {
+              addSilent("\u2726", this.deps.t("editAndCapture"), () => this.deps.captureOmniWithForm(entry));
+            }
+            if (this.deps.createFromOmni) {
+              addSilent("\u2713", this.deps.t("saveToCommon"), () => this.deps.createFromOmni(entry));
+            }
           }
         } else {
           addSilent("\u2197", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
@@ -14685,8 +14823,9 @@ return`;
         e.preventDefault();
         const entry = this.results[this.activeIndex];
         if (entry) {
-          const docPath = entry.sourceDocPath || entry.category || "\u672A\u547D\u540D\u8DEF\u5F84";
-          (_M = (_L = this.deps).notify) == null ? void 0 : _M.call(_L, "info", `\u{1F4CD} \u5757\u5C42\u7EA7\u8DEF\u5F84\uFF1A${docPath}`);
+          const docPath = entry.sourceDocPath || (entry.category && entry.category !== "\u5168\u5E93\u5185\u5BB9" && entry.category !== "\u526A\u8D34\u677F" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : "\u672A\u5173\u8054\u6587\u6863");
+          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+          (_M = (_L = this.deps).notify) == null ? void 0 : _M.call(_L, "info", `\u{1F4CD} \u6240\u5C5E\u8DEF\u5F84: ${docPath}${targetBlockId ? ` \xB7 [${targetBlockId.slice(0, 16)}]` : ""}`);
         }
         return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "p" || e.key === "P")) {
