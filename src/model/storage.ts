@@ -216,6 +216,11 @@ export interface InsertPrefs {
     recordUsage: boolean;
 }
 
+export interface ClipboardHistoryEntry {
+    text: string;
+    copiedAt: number;
+}
+
 export interface PluginState {
     schemaVersion: number;
     favorites: string[];
@@ -233,6 +238,8 @@ export interface PluginState {
     insert: InsertPrefs;
     /** 变量填写值记忆（ADR 0074 / G22 / T-0133）：只存侧车，绝不出域 */
     variableMemory: VariableMemory;
+    /** 剪贴板历史暂存（流式暂存栈，上限 30 条，只存侧车不建块） */
+    clipboardHistory: ClipboardHistoryEntry[];
 }
 
 export function normalizeState(raw: unknown): PluginState {
@@ -336,7 +343,33 @@ export function normalizeState(raw: unknown): PluginState {
             recordUsage: !(insertRaw.recordUsage === false),
         },
         variableMemory: normalizeVariableMemory(obj.variableMemory),
+        clipboardHistory: normalizeClipboardHistory(obj.clipboardHistory),
     };
+}
+
+function normalizeClipboardHistory(raw: unknown): ClipboardHistoryEntry[] {
+    const clipRaw = Array.isArray(raw) ? raw : [];
+    const clipboardHistory: ClipboardHistoryEntry[] = [];
+    const clipSeen = new Set<string>();
+    for (const c of clipRaw) {
+        if (!c || typeof c !== "object") continue;
+        const text = typeof (c as ClipboardHistoryEntry).text === "string" ? (c as ClipboardHistoryEntry).text.trim() : "";
+        const copiedAt = Number((c as ClipboardHistoryEntry).copiedAt);
+        if (!text || text.length > 8000 || clipSeen.has(text)) continue;
+        if (!Number.isFinite(copiedAt) || copiedAt <= 0) continue;
+        clipSeen.add(text);
+        clipboardHistory.push({text, copiedAt});
+        if (clipboardHistory.length >= 30) break;
+    }
+    return clipboardHistory;
+}
+
+export function pushClipboardHistory(list: ClipboardHistoryEntry[] | undefined, text: string, max = 30): ClipboardHistoryEntry[] {
+    const clean = (text ?? "").trim();
+    if (!clean || clean.length < 2 || clean.length > 8000) return list ? [...list] : [];
+    const current = (list ?? []).filter((e) => e.text !== clean);
+    current.unshift({text: clean, copiedAt: Date.now()});
+    return current.slice(0, max);
 }
 
 /**

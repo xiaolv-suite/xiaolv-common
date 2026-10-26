@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.8.0 (2026-10-26)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Full Lv Ecosystem Bridge API alignment (hasCapability, recent, favorites, string query tolerance), universal brand title-wrap convergence, 729 passing automated tests.
+> **Released: v0.8.1 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Session clipboard history stream, FIFO auto-pruning, zero block bloat, and Alt+S one-click snippet assetization flywheel.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.8.0)
+## This release (v0.8.1)
+
+Session Clipboard History Stream & One-Click Ingestion Flywheel:
+
+- **Session `📋 Clipboard` History Scope**: Top scope track introduces the `📋 Clipboard` view! Automatically records and caches the 30 most recent clipboard entries without manual intervention.
+- **Zero Block Bloat & Layered Storage**: Strictly abides by architectural boundaries — transient clipboard data lives only in sidecar storage, **never creating dirty blocks in your SiYuan notebooks**.
+- **Alt+S One-Click Ingestion Flywheel**: Select any clipboard entry and hit `Alt+S` (or click "✦ Save to Common") to open the capture form with auto-derived title and pinyin alias, cementing transient snippets into permanent note blocks in 1 second!
+
+## Previous release (v0.8.0)
 
 Ecosystem Federation Bridge Parity & Major Milestone:
 

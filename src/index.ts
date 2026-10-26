@@ -20,7 +20,7 @@ import {collectDefaults, rememberValues} from "./model/variable-memory";
 import {ExportedItem, buildBundle, validateImport, ConflictPolicy, ImportReceipt} from "./model/transfer";
 import {importBundle as importBundleCore} from "./service/importer";
 import {importMarkdownBundle} from "./service/import-markdown";
-import {LibraryConfig, CONFIG_VERSION, migrateState, normalizeLibraryConfig, normalizeSavedDiscoveryViews, normalizeState, PluginState, pushRecentQuery, type SavedDiscoveryView} from "./model/storage";
+import {LibraryConfig, CONFIG_VERSION, migrateState, normalizeLibraryConfig, normalizeSavedDiscoveryViews, normalizeState, PluginState, pushRecentQuery, type SavedDiscoveryView, pushClipboardHistory} from "./model/storage";
 import {SearchContext, collectCategories, collectTags, searchEntries, applyBasicFilters, SearchEntry} from "./model/search";
 import {findDuplicateByContent} from "./model/dedupe";
 import {LruCache, PREVIEW_CACHE_CAPACITY, PREVIEW_CACHE_TTL_MS} from "./model/lru";
@@ -109,6 +109,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     private bridgeDisposer: (() => void) | null = null;
     /** 雷切工作台小组件卸载器（Epoch 6 标准） */
     private raikiriDisposer: (() => void) | null = null;
+    private clipboardListenerCleanup: (() => void) | null = null;
     private discoveryDialog: DiscoveryDialogController | null = null;
     private unloading = false;
 
@@ -128,6 +129,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.state = normalizeState(null);
         this.registerEntries();
         this.registerCommands();
+        this.setupClipboardTracking();
         try {
             this.bootServices();
         } catch (err) {
@@ -1083,6 +1085,42 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.persistSoon();
     }
 
+    public recordClipboard(text: string): void {
+        this.state.clipboardHistory = pushClipboardHistory(this.state.clipboardHistory, text);
+        this.persistSoon();
+    }
+
+    private setupClipboardTracking(): void {
+        const onCopyCut = (e: ClipboardEvent) => {
+            try {
+                const text = e.clipboardData?.getData("text/plain") || window.getSelection()?.toString();
+                if (text) this.recordClipboard(text);
+            } catch {
+                // ignore
+            }
+        };
+        const onWindowFocus = async () => {
+            try {
+                if (navigator.clipboard?.readText && window.isSecureContext) {
+                    const txt = await navigator.clipboard.readText();
+                    if (txt) this.recordClipboard(txt);
+                }
+            } catch {
+                // ignore
+            }
+        };
+        if (typeof window !== "undefined") {
+            window.addEventListener("copy", onCopyCut as any);
+            window.addEventListener("cut", onCopyCut as any);
+            window.addEventListener("focus", onWindowFocus);
+            this.clipboardListenerCleanup = () => {
+                window.removeEventListener("copy", onCopyCut as any);
+                window.removeEventListener("cut", onCopyCut as any);
+                window.removeEventListener("focus", onWindowFocus);
+            };
+        }
+    }
+
     /** 预览文本的有界可丢弃缓存（60s TTL：同步变更后预览最多陈旧一分钟；插入/复制仍现场取正文） */
     private previewCache = new LruCache<string>(PREVIEW_CACHE_CAPACITY, PREVIEW_CACHE_TTL_MS);
     private previewTasks = new Map<string, Promise<string>>();
@@ -1422,6 +1460,28 @@ export default class XiaolvCommonPlugin extends Plugin {
             clearRecentQueries: () => {
                 this.state.search.recentQueries = [];
                 this.persistSoon();
+            },
+            getClipboardHistory: () => this.state.clipboardHistory ?? [],
+            clearClipboardHistory: () => {
+                this.state.clipboardHistory = [];
+                this.persistSoon();
+            },
+            addClipboardHistory: (text: string) => {
+                this.recordClipboard(text);
+            },
+            syncSystemClipboard: async () => {
+                try {
+                    if (navigator.clipboard?.readText && window.isSecureContext) {
+                        const txt = await navigator.clipboard.readText();
+                        if (txt) {
+                            this.recordClipboard(txt);
+                            return txt;
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+                return null;
             },
             preview: async (itemId) => {
                 const cached = this.previewCache.get(itemId);
@@ -2053,6 +2113,12 @@ export default class XiaolvCommonPlugin extends Plugin {
             // 忽略
         }
         this.raikiriDisposer = null;
+        try {
+            this.clipboardListenerCleanup?.();
+        } catch {
+            // ignore
+        }
+        this.clipboardListenerCleanup = null;
         this.discoveryDialog?.close(true);
         this.discoveryDialog = null;
         // 事件总线/监听全部随 dialog destroy 释放；侧车已节流持久化

@@ -18,7 +18,7 @@ export interface SearchQuery {
     itemType?: "" | ItemType;
     tag?: string;
     category?: string;
-    scope?: "all" | "favorites" | "recent" | "current-doc" | "all-notes";
+    scope?: "all" | "favorites" | "recent" | "clipboard" | "current-doc" | "all-notes";
     dateRange?: DateRangeFilter;
 }
 

@@ -63,6 +63,10 @@ export interface DialogDeps {
     getRecentQueries?: () => string[];
     addRecentQuery?: (q: string) => void;
     clearRecentQueries?: () => void;
+    getClipboardHistory?: () => Array<{text: string; copiedAt: number}>;
+    clearClipboardHistory?: () => void;
+    addClipboardHistory?: (text: string) => void;
+    syncSystemClipboard?: () => Promise<string | null>;
     /** 定向插入目标（文档树入口；设置后 Enter/点按插入到该文档而非活动编辑器） */
     insertTarget?: {docId: string; hPath: string} | null;
     toggleFavorite: (itemId: string) => boolean;
@@ -163,6 +167,7 @@ export class CommonSearchDialog {
     insertTarget?: {docId: string; hPath: string} | null;
     open(): void {
         const isMobile = this.deps.isMobile();
+        void this.deps.syncSystemClipboard?.();
         const dialog = new Dialog({
             title: this.deps.t("pluginName"),
             content: "",
@@ -187,7 +192,7 @@ export class CommonSearchDialog {
         }
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.0", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.1", "iconXlcCommon");
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             // 上次搜索词回填（跨会话保留）
@@ -495,7 +500,7 @@ export class CommonSearchDialog {
         });
         filters.appendChild(categorySelect);
 
-        const scopes = ["all", "favorites", "recent", "current-doc", "all-notes"] as const;
+        const scopes = ["all", "favorites", "recent", "clipboard", "current-doc", "all-notes"] as const;
         const track = document.createElement("div");
         track.className = "xlc-segmented-track";
         track.setAttribute("role", "radiogroup");
@@ -511,6 +516,7 @@ export class CommonSearchDialog {
             if (scope === "all") text = this.deps.t("scopeAll") || "全部";
             else if (scope === "favorites") text = "★ " + this.deps.t("filterFavorites");
             else if (scope === "recent") text = "🕐 " + this.deps.t("filterRecent");
+            else if (scope === "clipboard") text = "📋 " + (this.deps.t("scopeClipboard") || "剪贴板");
             else if (scope === "current-doc") text = "☵ " + this.deps.t("scopeCurrentDoc");
             else if (scope === "all-notes") text = "🔍 " + this.deps.t("scopeAllNotes");
             chip.textContent = text;
@@ -1179,6 +1185,8 @@ export class CommonSearchDialog {
             let ph = this.deps.t("searchPlaceholder");
             if (this.currentScope === "all-notes") {
                 ph = "🔍 " + (this.deps.t("scopeAllNotesPlaceholder") || "搜索思源全库内容块与文档...");
+            } else if (this.currentScope === "clipboard") {
+                ph = "📋 " + (this.deps.t("scopeClipboardPlaceholder") || "搜索剪贴板历史暂存...");
             } else if (this.currentScope === "current-doc") {
                 ph = "☵ " + (this.deps.t("scopeCurrentDocPlaceholder") || "搜索当前打开文档中的内容块...");
             } else if (this.currentScope === "favorites") {
@@ -1255,6 +1263,38 @@ export class CommonSearchDialog {
                 }
             } else if (this.currentScope === "current-doc" && this.deps.searchCurrentDoc) {
                 const entries = await this.deps.searchCurrentDoc(query.text);
+                if (seq !== this.searchSeq) return;
+                this.results = entries;
+                total = entries.length;
+                truncated = false;
+                loading = false;
+                this.aiResults = false;
+                if (aiBanner) aiBanner.style.display = "none";
+            } else if (this.currentScope === "clipboard") {
+                const history = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
+                const cleanKeyword = query.text.trim().toLowerCase();
+                let filtered = history;
+                if (cleanKeyword) {
+                    filtered = history.filter((h) => h.text.toLowerCase().includes(cleanKeyword));
+                }
+                const entries: SearchEntry[] = filtered.map((h, i) => {
+                    const firstLine = h.text.trim().split(/[\r\n]+/)[0]?.slice(0, 35) || "剪贴板文本";
+                    return {
+                        id: `xlc-clip-${i}`,
+                        blockId: "",
+                        libraryDocId: "",
+                        title: `📋 ${firstLine}`,
+                        content: h.text,
+                        summary: h.text.slice(0, 100).replace(/[\s\r\n]+/g, " "),
+                        itemType: "text" as ItemType,
+                        category: "剪贴板",
+                        tags: ["剪贴板"],
+                        alias: "",
+                        createdAt: h.copiedAt,
+                        updatedAt: h.copiedAt,
+                        isOmni: true,
+                    };
+                });
                 if (seq !== this.searchSeq) return;
                 this.results = entries;
                 total = entries.length;
@@ -1354,6 +1394,8 @@ export class CommonSearchDialog {
                 status.textContent = "";
                 if (this.currentScope === "current-doc") {
                     this.emptyMessage = this.deps.t("emptyCurrentDoc");
+                } else if (this.currentScope === "clipboard") {
+                    this.emptyMessage = this.deps.t("emptyClipboard");
                 } else if (this.currentScope === "all-notes") {
                     this.emptyMessage = this.deps.t("emptyAllNotes");
                 } else if (!query.text.trim() && this.currentScope === "favorites") {
@@ -2110,7 +2152,7 @@ export class CommonSearchDialog {
                 }
                 const entry = this.results[this.activeIndex];
                 const act = btn.dataset.xlcPaneAct ?? "";
-                const isOmniScope = this.currentScope === "current-doc" || this.currentScope === "all-notes";
+                const isOmniScope = this.currentScope === "current-doc" || this.currentScope === "all-notes" || this.currentScope === "clipboard";
                 const unavailable = !entry
                     || (act === "ai" && !this.deps.aiEnabled())
                     || (act === "source" && (isOmniScope ? !this.deps.openDocBlock : this.deps.isSourceMissing(entry)))

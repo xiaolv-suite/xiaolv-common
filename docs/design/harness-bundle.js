@@ -118,7 +118,7 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
-  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.8.0", iconName = "iconXlcCommon") {
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.8.1", iconName = "iconXlcCommon") {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
@@ -3325,7 +3325,7 @@
           this.currentDialog = dialog;
           const container = dialog.element.querySelector(".b3-dialog__container");
           container == null ? void 0 : container.classList.add("xlc-form-host");
-          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.8.0", "iconXlcCommon");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.8.1", "iconXlcCommon");
           const handleViewport = () => {
             if (!container || typeof window === "undefined" || !window.visualViewport) return;
             const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -8324,7 +8324,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.8.0", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.8.1", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -11410,7 +11410,9 @@ ${exception.mark.snippet}`;
       this.dropCleanup = null;
     }
     open() {
+      var _a, _b;
       const isMobile = this.deps.isMobile();
+      void ((_b = (_a = this.deps).syncSystemClipboard) == null ? void 0 : _b.call(_a));
       const dialog = new import_siyuan2.Dialog({
         title: this.deps.t("pluginName"),
         content: "",
@@ -11435,7 +11437,7 @@ ${exception.mark.snippet}`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.0", "iconXlcCommon");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.1", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
@@ -11719,7 +11721,7 @@ ${exception.mark.snippet}`;
         void this.refresh();
       });
       filters.appendChild(categorySelect);
-      const scopes = ["all", "favorites", "recent", "current-doc", "all-notes"];
+      const scopes = ["all", "favorites", "recent", "clipboard", "current-doc", "all-notes"];
       const track = document.createElement("div");
       track.className = "xlc-segmented-track";
       track.setAttribute("role", "radiogroup");
@@ -11734,6 +11736,7 @@ ${exception.mark.snippet}`;
         if (scope === "all") text = this.deps.t("scopeAll") || "\u5168\u90E8";
         else if (scope === "favorites") text = "\u2605 " + this.deps.t("filterFavorites");
         else if (scope === "recent") text = "\u{1F550} " + this.deps.t("filterRecent");
+        else if (scope === "clipboard") text = "\u{1F4CB} " + (this.deps.t("scopeClipboard") || "\u526A\u8D34\u677F");
         else if (scope === "current-doc") text = "\u2635 " + this.deps.t("scopeCurrentDoc");
         else if (scope === "all-notes") text = "\u{1F50D} " + this.deps.t("scopeAllNotes");
         chip.textContent = text;
@@ -12357,6 +12360,8 @@ ${exception.mark.snippet}`;
         let ph = this.deps.t("searchPlaceholder");
         if (this.currentScope === "all-notes") {
           ph = "\u{1F50D} " + (this.deps.t("scopeAllNotesPlaceholder") || "\u641C\u7D22\u601D\u6E90\u5168\u5E93\u5185\u5BB9\u5757\u4E0E\u6587\u6863...");
+        } else if (this.currentScope === "clipboard") {
+          ph = "\u{1F4CB} " + (this.deps.t("scopeClipboardPlaceholder") || "\u641C\u7D22\u526A\u8D34\u677F\u5386\u53F2\u6682\u5B58...");
         } else if (this.currentScope === "current-doc") {
           ph = "\u2635 " + (this.deps.t("scopeCurrentDocPlaceholder") || "\u641C\u7D22\u5F53\u524D\u6253\u5F00\u6587\u6863\u4E2D\u7684\u5185\u5BB9\u5757...");
         } else if (this.currentScope === "favorites") {
@@ -12428,6 +12433,39 @@ ${exception.mark.snippet}`;
           }
         } else if (this.currentScope === "current-doc" && this.deps.searchCurrentDoc) {
           const entries = await this.deps.searchCurrentDoc(query.text);
+          if (seq !== this.searchSeq) return;
+          this.results = entries;
+          total = entries.length;
+          truncated = false;
+          loading = false;
+          this.aiResults = false;
+          if (aiBanner) aiBanner.style.display = "none";
+        } else if (this.currentScope === "clipboard") {
+          const history = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
+          const cleanKeyword = query.text.trim().toLowerCase();
+          let filtered = history;
+          if (cleanKeyword) {
+            filtered = history.filter((h) => h.text.toLowerCase().includes(cleanKeyword));
+          }
+          const entries = filtered.map((h, i) => {
+            var _a2;
+            const firstLine = ((_a2 = h.text.trim().split(/[\r\n]+/)[0]) == null ? void 0 : _a2.slice(0, 35)) || "\u526A\u8D34\u677F\u6587\u672C";
+            return {
+              id: `xlc-clip-${i}`,
+              blockId: "",
+              libraryDocId: "",
+              title: `\u{1F4CB} ${firstLine}`,
+              content: h.text,
+              summary: h.text.slice(0, 100).replace(/[\s\r\n]+/g, " "),
+              itemType: "text",
+              category: "\u526A\u8D34\u677F",
+              tags: ["\u526A\u8D34\u677F"],
+              alias: "",
+              createdAt: h.copiedAt,
+              updatedAt: h.copiedAt,
+              isOmni: true
+            };
+          });
           if (seq !== this.searchSeq) return;
           this.results = entries;
           total = entries.length;
@@ -12512,6 +12550,8 @@ ${exception.mark.snippet}`;
           status.textContent = "";
           if (this.currentScope === "current-doc") {
             this.emptyMessage = this.deps.t("emptyCurrentDoc");
+          } else if (this.currentScope === "clipboard") {
+            this.emptyMessage = this.deps.t("emptyClipboard");
           } else if (this.currentScope === "all-notes") {
             this.emptyMessage = this.deps.t("emptyAllNotes");
           } else if (!query.text.trim() && this.currentScope === "favorites") {
@@ -13198,7 +13238,7 @@ ${exception.mark.snippet}`;
         }
         const entry = this.results[this.activeIndex];
         const act = (_b2 = btn.dataset.xlcPaneAct) != null ? _b2 : "";
-        const isOmniScope = this.currentScope === "current-doc" || this.currentScope === "all-notes";
+        const isOmniScope = this.currentScope === "current-doc" || this.currentScope === "all-notes" || this.currentScope === "clipboard";
         const unavailable = !entry || act === "ai" && !this.deps.aiEnabled() || act === "source" && (isOmniScope ? !this.deps.openDocBlock : this.deps.isSourceMissing(entry)) || act === "edit" && isOmniScope && !this.deps.quickEditBlock;
         const showOmniSave = act === "save-omni" && isOmniScope && Boolean(this.deps.createFromOmni);
         const showOmniEditCapture = act === "edit-and-capture-omni" && isOmniScope && Boolean(this.deps.captureOmniWithForm);
@@ -19182,6 +19222,9 @@ ${finalHtml}
     searchCurrentDocAction: "\u5728\u5F53\u524D\u6253\u5F00\u6587\u6863\u4E2D\u68C0\u7D22\u300C%s\u300D",
     searchAllNotesAction: "\u5728\u5168\u5E93\u7B14\u8BB0\u4E2D\u68C0\u7D22\u300C%s\u300D",
     scopeAll: "\u5168\u90E8",
+    scopeClipboard: "\u526A\u8D34\u677F",
+    scopeClipboardPlaceholder: "\u641C\u7D22\u526A\u8D34\u677F\u5386\u53F2\u6682\u5B58...",
+    emptyClipboard: "\u6682\u65E0\u526A\u8D34\u677F\u5386\u53F2\u3002\u590D\u5236\u6587\u672C\u6216\u5207\u6362\u5230\u601D\u6E90\u7A97\u53E3\u65F6\u5C06\u81EA\u52A8\u6682\u5B58\u3002",
     scopeCurrentDoc: "\u5F53\u524D\u6587\u6863",
     scopeCurrentDocPlaceholder: "\u641C\u7D22\u5F53\u524D\u6253\u5F00\u6587\u6863\u4E2D\u7684\u5185\u5BB9\u5757...",
     scopeAllNotes: "\u5168\u5E93\u7B14\u8BB0",

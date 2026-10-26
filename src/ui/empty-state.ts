@@ -1,4 +1,4 @@
-export type SearchScope = "all" | "favorites" | "recent" | "current-doc" | "all-notes";
+export type SearchScope = "all" | "favorites" | "recent" | "clipboard" | "current-doc" | "all-notes";
 
 export function shouldShowScopeFallback(query: string, scope: SearchScope): boolean {
     return Boolean(query.trim()) && (scope === "favorites" || scope === "recent");
