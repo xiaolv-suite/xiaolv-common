@@ -23,10 +23,13 @@ export interface ParsedOmniQuery {
     paths: string[];
     notebook?: string;
     types?: Record<string, boolean>;
+    tag?: string;
+    category?: string;
+    excludeTokens?: string[];
 }
 
 /**
- * 纯函数：从搜索输入中解析范围限定语法（in:路径 / path:路径 / book:笔记本 / type:块类型）
+ * 纯函数：从搜索输入中解析范围限定语法（in:路径 / path:路径 / book:笔记本 / type:块类型 / tag:标签 / #标签 / cat:分类 / -排除词）
  */
 export function parseOmniQueryScope(query: string): ParsedOmniQuery {
     const raw = query.trim();
@@ -36,6 +39,9 @@ export function parseOmniQueryScope(query: string): ParsedOmniQuery {
     const paths: string[] = [];
     let notebook: string | undefined;
     const types: Record<string, boolean> = {};
+    let tag: string | undefined;
+    let category: string | undefined;
+    const excludeTokens: string[] = [];
     const cleanTokens: string[] = [];
 
     for (const token of tokens) {
@@ -51,6 +57,15 @@ export function parseOmniQueryScope(query: string): ParsedOmniQuery {
                 const b = m[1].trim().replace(/^['"]|['"]$/g, "");
                 if (b) notebook = b;
             }
+        } else if (/^tag:(.+)$/i.test(token)) {
+            tag = token.slice(4).trim().replace(/^['"]|['"]$/g, "");
+        } else if (/^#([^\s#]+)$/.test(token) && token.length > 1) {
+            tag = token.slice(1).trim();
+        } else if (/^(?:cat|category):(.+)$/i.test(token)) {
+            const idx = token.indexOf(":");
+            category = token.slice(idx + 1).trim().replace(/^['"]|['"]$/g, "");
+        } else if (/^-(.+)$/.test(token) && token.length > 1) {
+            excludeTokens.push(token.slice(1).trim().toLowerCase());
         } else if (/^type:(.+)$/i.test(token)) {
             const m = token.match(/^type:(.+)$/i);
             if (m && m[1]) {
@@ -81,6 +96,9 @@ export function parseOmniQueryScope(query: string): ParsedOmniQuery {
         paths,
         notebook,
         ...(Object.keys(types).length > 0 ? {types} : {}),
+        tag,
+        category,
+        excludeTokens: excludeTokens.length > 0 ? excludeTokens : undefined,
     };
 }
 

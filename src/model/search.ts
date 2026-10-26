@@ -20,6 +20,7 @@ export interface SearchQuery {
     category?: string;
     scope?: "all" | "favorites" | "recent" | "clipboard" | "current-doc" | "all-notes";
     dateRange?: DateRangeFilter;
+    excludeTokens?: string[];
 }
 
 export interface SearchContext {
@@ -284,6 +285,57 @@ export function splitSearchTokens(query: string): string[] {
     return trimmed.split(SEARCH_TOKEN_DELIMITER).map((t) => t.trim()).filter(Boolean);
 }
 
+/** 纯函数：从搜索输入中解析复合过滤语法（type:类型 / tag:标签 / #标签 / cat:分类 / -排除词） */
+export interface ParsedSearchGrammar {
+    text: string;
+    itemType?: "" | ItemType;
+    tag?: string;
+    category?: string;
+    excludeTokens: string[];
+}
+
+export function parseSearchGrammar(raw: string): ParsedSearchGrammar {
+    const trimmed = (raw || "").trim();
+    if (!trimmed) return {text: "", excludeTokens: []};
+
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    const cleanTokens: string[] = [];
+    const excludeTokens: string[] = [];
+    let itemType: "" | ItemType | undefined;
+    let tag: string | undefined;
+    let category: string | undefined;
+
+    for (const t of tokens) {
+        if (/^type:(.+)$/i.test(t)) {
+            const val = t.slice(5).trim().toLowerCase();
+            if (val === "code" || val === "c") itemType = "code";
+            else if (val === "text" || val === "t") itemType = "text";
+            else if (val === "url" || val === "u") itemType = "url";
+            else if (val === "markdown" || val === "md") itemType = "markdown";
+            else if (val === "blockref" || val === "ref") itemType = "blockref";
+        } else if (/^tag:(.+)$/i.test(t)) {
+            tag = t.slice(4).trim();
+        } else if (/^#([^\s#]+)$/.test(t) && t.length > 1) {
+            tag = t.slice(1).trim();
+        } else if (/^(?:cat|category):(.+)$/i.test(t)) {
+            const idx = t.indexOf(":");
+            category = t.slice(idx + 1).trim();
+        } else if (/^-(.+)$/.test(t) && t.length > 1) {
+            excludeTokens.push(t.slice(1).trim().toLowerCase());
+        } else {
+            cleanTokens.push(t);
+        }
+    }
+
+    return {
+        text: cleanTokens.join(" "),
+        itemType,
+        tag,
+        category,
+        excludeTokens,
+    };
+}
+
 export const ALIAS_EXACT_MATCH_BOOST = 400;
 export const ALIAS_PREFIX_MATCH_BOOST = 200;
 export const ALIAS_PINYIN_EXACT_BOOST = 150;
@@ -468,6 +520,12 @@ export function passesFilters(entry: SearchEntry, query: SearchQuery, ctx: Searc
     if (query.category && !matchesHierarchicalCategory(entry.category, query.category)) return false;
     if (query.scope === "favorites" && !ctx.favorites.has(entry.id)) return false;
     if (query.scope === "recent" && !ctx.recents.has(entry.id)) return false;
+    if (query.excludeTokens && query.excludeTokens.length > 0) {
+        const fullHaystack = `${entry.title}\n${entry.alias}\n${entry.tags.join(" ")}\n${entry.category}\n${entry.summary}`.toLowerCase();
+        for (const ex of query.excludeTokens) {
+            if (fullHaystack.includes(ex)) return false;
+        }
+    }
     if (query.dateRange) {
         const {from, to, field = "updatedAt"} = query.dateRange;
         const targetField = field === "createdAt" ? "createdAt" : "updatedAt";
@@ -520,6 +578,15 @@ function compareResults(a: ScoredResult, b: ScoredResult, ctx: SearchContext): n
 }
 
 export function searchEntries(entries: readonly SearchEntry[], query: SearchQuery, ctx: SearchContext, cap = 100): ScoredResult[] {
+    const parsedGrammar = parseSearchGrammar(query.text);
+    const effectiveQuery: SearchQuery = {
+        ...query,
+        text: parsedGrammar.text,
+        itemType: query.itemType || parsedGrammar.itemType,
+        tag: query.tag || parsedGrammar.tag,
+        category: query.category || parsedGrammar.category,
+        excludeTokens: [...(query.excludeTokens || []), ...parsedGrammar.excludeTokens],
+    };
     const results: ScoredResult[] = [];
     const useDecay = Boolean(ctx.enableRecencyDecay);
     const halfLife = ctx.recencyHalfLifeMs ?? DEFAULT_RECENCY_HALF_LIFE_MS;
@@ -527,8 +594,8 @@ export function searchEntries(entries: readonly SearchEntry[], query: SearchQuer
 
     for (let order = 0; order < entries.length; order++) {
         const entry = entries[order];
-        if (!entry || !passesFilters(entry, query, ctx)) continue;
-        const text = query.text.trim();
+        if (!entry || !passesFilters(entry, effectiveQuery, ctx)) continue;
+        const text = effectiveQuery.text.trim();
         let itemResult: ScoredResult;
         if (text) {
             const m = matchEntry(entry, text);

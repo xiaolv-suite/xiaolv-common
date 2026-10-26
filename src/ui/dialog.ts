@@ -193,7 +193,7 @@ export class CommonSearchDialog {
         }
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.3", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.0", "iconXlcCommon");
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             // 上次搜索词回填（跨会话保留）
@@ -2163,7 +2163,11 @@ export class CommonSearchDialog {
             };
             renderWindow();
         } else {
+            let commonHeaderPlaced = false;
             let omniHeaderPlaced = false;
+            const hasCommon = this.results.some((r) => !r.isOmni);
+            const hasOmni = this.results.some((r) => r.isOmni);
+
             for (let i = 0; i < this.results.length; i++) {
                 while (headCursor + 1 < groupLabels.length && i === headStarts[headCursor + 1]) {
                     headCursor++;
@@ -2171,7 +2175,15 @@ export class CommonSearchDialog {
                     if (head) placeGroupHead(head.label, head.count);
                 }
                 const entry = this.results[i];
-                if (entry && entry.isOmni && !omniHeaderPlaced && this.results.some((r) => !r.isOmni)) {
+                if (entry && !entry.isOmni && !commonHeaderPlaced && hasCommon && hasOmni && groupLabels.length === 0) {
+                    commonHeaderPlaced = true;
+                    const cHead = document.createElement("div");
+                    cHead.className = "xlc-group-head xlc-group-head--common";
+                    const commonCount = this.results.filter((r) => !r.isOmni).length;
+                    cHead.textContent = `📌 常用语资产 (${commonCount})`;
+                    list.appendChild(cHead);
+                }
+                if (entry && entry.isOmni && !omniHeaderPlaced && hasCommon) {
                     omniHeaderPlaced = true;
                     const omniHead = document.createElement("div");
                     omniHead.className = "xlc-group-head xlc-group-head--omni";

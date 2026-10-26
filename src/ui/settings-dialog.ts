@@ -142,7 +142,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     });
     activeSettingsDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.8.3", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.0", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -1843,7 +1843,7 @@ function buildExternalIntegrationSection(ctx: SettingsUiContext, root: HTMLEleme
     const desc = document.createElement("div");
     desc.className = "xlc-form-hint";
     desc.style.lineHeight = "1.6";
-    desc.textContent = "小驴常用已全面开放 Headless 纯求值与检索协议。支持在微信、Word、QQ、浏览器等任意外部窗口，通过全局热键、Quicker 动作或本地脚本，免切思源窗口直接检索常用语并秒级喷射文本。";
+    desc.textContent = "小驴常用已全面开放 Headless 纯求值与检索协议。支持在微信、Word、QQ、浏览器等任意外部窗口，通过全局热键、Quicker 动作或 AutoHotkey 脚本，免切思源窗口直接检索常用语并秒级喷射文本。";
     sec.appendChild(desc);
 
     const apiCard = document.createElement("div");
@@ -1851,19 +1851,23 @@ function buildExternalIntegrationSection(ctx: SettingsUiContext, root: HTMLEleme
 
     apiCard.innerHTML = `
         <div class="xlc-api-title">开放协议命令（思源内部命令 / WebSocket / 窗口桥）：</div>
+        <div>• <strong>xiaolv.common.recall</strong>: 别名闪电直达（输入别名或拼音缩写一步取回展开正文，含 plainText/richHtml）</div>
         <div>• <strong>xiaolv.common.resolve</strong>: 条目纯求值（自动展开嵌套片段并计算宏变量，支持填参 fills）</div>
-        <div>• <strong>xiaolv.common.recall</strong>: 别名闪电直达（输入别名或拼音缩写一步取回展开正文）</div>
         <div>• <strong>xiaolv.common.search</strong>: 按关键词检索常用条目清单（含别名/标签/分类/变量数）</div>
+        <div>• <strong>xiaolv.common.getClipboardHistory</strong>: 获取会话剪贴板历史暂存文本流</div>
         <div>• <strong>xiaolv.common.recent</strong>: 获取最近使用过的常用条目</div>
         <div>• <strong>xiaolv.common.get</strong>: 获取条目完整定义与元数据</div>
     `;
     sec.appendChild(apiCard);
 
-    const copyBtn = document.createElement("button");
-    copyBtn.type = "button";
-    copyBtn.className = "b3-button xlc-btn-ghost";
-    copyBtn.textContent = "复制 Quicker 动作调用配置与参数示例";
-    copyBtn.addEventListener("click", () => {
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;";
+
+    const copyQuickerBtn = document.createElement("button");
+    copyQuickerBtn.type = "button";
+    copyQuickerBtn.className = "b3-button xlc-btn-ghost";
+    copyQuickerBtn.textContent = "⧉ 复制 Quicker 动作配置";
+    copyQuickerBtn.addEventListener("click", () => {
         const examplePayload = JSON.stringify({
             target: "xiaolv-common",
             protocol: "xiaolv-common/v1",
@@ -1871,19 +1875,76 @@ function buildExternalIntegrationSection(ctx: SettingsUiContext, root: HTMLEleme
                 recall: { command: "xiaolv.common.recall", params: { alias: "yq", fills: { "客户姓名": "张经理" } } },
                 search: { command: "xiaolv.common.search", params: { keyword: "退款", limit: 20 } },
                 resolve: { command: "xiaolv.common.resolve", params: { itemId: "条目ID", fills: { "客户姓名": "张经理" } } },
-                recent: { command: "xiaolv.common.recent", params: { limit: 15 } }
+                clipboardHistory: { command: "xiaolv.common.getClipboardHistory" }
             },
-            quickerNote: "向思源内核 POST /api/command 发送上述指令，获取 recall/resolve 结果中的 resolvedText 即可由 Quicker 写入剪贴板并模拟 Ctrl+V 喷射。"
+            quickerNote: "向思源内核 POST /api/command 发送上述指令，获取 recall/resolve 结果中的 plainText（微信/QQ专用）或 richHtml（Word专用），由 Quicker 写入剪贴板并模拟 Ctrl+V 喷射。"
         }, null, 2);
 
         void navigator.clipboard.writeText(examplePayload).then(() => {
-            copyBtn.textContent = "✓ 已复制配置示例到剪贴板";
+            copyQuickerBtn.textContent = "✓ 已复制 Quicker 配置";
             setTimeout(() => {
-                copyBtn.textContent = "复制 Quicker 动作调用配置与参数示例";
+                copyQuickerBtn.textContent = "⧉ 复制 Quicker 动作配置";
             }, 3000);
         });
     });
-    sec.appendChild(copyBtn);
+
+    const copyAhkBtn = document.createElement("button");
+    copyAhkBtn.type = "button";
+    copyAhkBtn.className = "b3-button xlc-btn-ghost";
+    copyAhkBtn.textContent = "⚡ 复制 AutoHotkey (AHK) 全局直喷脚本";
+    copyAhkBtn.addEventListener("click", () => {
+        const ahkScript = `; ==========================================
+; 小驴常用 · AutoHotkey 全局直出脚本 (Ctrl+Alt+V)
+; 适用：微信、Word、QQ、浏览器输入框秒级上屏
+; ==========================================
+^!v::
+    InputBox, alias, 小驴常用, 请输入常用语别名或拼音缩写:,, 300, 130
+    if (ErrorLevel || alias = "")
+        return
+    ; 调用思源本地内核 HTTP API 执行 recall 别名闪电直达
+    url := "http://127.0.0.1:6806/api/plugin/callPlugin"
+    body := "{""plugin"":""xiaolv-common"",""action"":""recall"",""data"":{""alias"":""" . alias . """}}"
+    http := ComObjCreate("MSXML2.ServerXMLHTTP.6.0")
+    http.open("POST", url, false)
+    http.setRequestHeader("Content-Type", "application/json")
+    http.send(body)
+    resp := http.responseText
+    ; 提取 plainText 并粘贴到当前微信/Word 窗口
+    RegExMatch(resp, """plainText"":""(.*?)""", m)
+    if (m1 != "") {
+        Clipboard := m1
+        ClipWait, 1
+        Send, ^v
+    }
+return`;
+
+        void navigator.clipboard.writeText(ahkScript).then(() => {
+            copyAhkBtn.textContent = "✓ 已复制 AHK 脚本";
+            setTimeout(() => {
+                copyAhkBtn.textContent = "⚡ 复制 AutoHotkey (AHK) 全局直喷脚本";
+            }, 3000);
+        });
+    });
+
+    const copyCurlBtn = document.createElement("button");
+    copyCurlBtn.type = "button";
+    copyCurlBtn.className = "b3-button xlc-btn-ghost";
+    copyCurlBtn.textContent = "⌨ 复制 cURL / REST API 示例";
+    copyCurlBtn.addEventListener("click", () => {
+        const curlCmd = `curl -X POST "http://127.0.0.1:6806/api/plugin/callPlugin" \\
+  -H "Content-Type: application/json" \\
+  -d '{"plugin":"xiaolv-common","action":"recall","data":{"alias":"cwbx"}}'`;
+
+        void navigator.clipboard.writeText(curlCmd).then(() => {
+            copyCurlBtn.textContent = "✓ 已复制 cURL 示例";
+            setTimeout(() => {
+                copyCurlBtn.textContent = "⌨ 复制 cURL / REST API 示例";
+            }, 3000);
+        });
+    });
+
+    btnRow.append(copyQuickerBtn, copyAhkBtn, copyCurlBtn);
+    sec.appendChild(btnRow);
 
     // 小驴家族生态联动矩阵
     const ecoTitle = document.createElement("div");

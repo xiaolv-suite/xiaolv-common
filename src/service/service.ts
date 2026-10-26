@@ -9,6 +9,8 @@ import {PluginState} from "../model/storage";
 import {EVENTS, PROTOCOL_VERSION} from "../constants";
 import {listAskFields} from "../model/variables";
 import {ActionExecutor, type EditorInsertTargetSnapshot} from "./commands";
+import {kramdownToPlainText} from "../model/item";
+import {renderSafeHtmlFromMarkdown, isMarkdownFormattingPresent} from "../model/clipboard";
 import {AiAssistant} from "./ai";
 import {LibraryService, NewItemInput} from "./library";
 import {ProviderRegistry} from "./providers";
@@ -39,6 +41,10 @@ export interface ResolvedItemData {
         defaultValue?: string;
     }>;
     missingVariables: string[];
+    /** 针对微信、QQ、网页表单等纯文本输入框清洗后的纯文本（自动剥离 Markdown 语法标记） */
+    plainText: string;
+    /** 针对 Word、飞书、富文本邮件等渲染的 HTML 排版 */
+    richHtml?: string;
 }
 
 export type RecallMatchMode = "exact" | "multiple" | "none";
@@ -203,6 +209,11 @@ export class XiaolvCommonService {
             }
         }
 
+        const plainText = kramdownToPlainText(resolvedText) || resolvedText;
+        const richHtml = (item.itemType === "markdown" || (item.itemType === "text" && isMarkdownFormattingPresent(resolvedText)))
+            ? renderSafeHtmlFromMarkdown(resolvedText)
+            : undefined;
+
         return successEnvelope({
             id: item.id,
             title: item.title,
@@ -217,6 +228,8 @@ export class XiaolvCommonService {
                 defaultValue: f.defaultValue,
             })),
             missingVariables,
+            plainText,
+            richHtml,
         });
     }
 

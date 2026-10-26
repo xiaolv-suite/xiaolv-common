@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.8.3 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Trailing action wrap micro-interactions, clipboard auto title cleaning, explicit clipboard source provenance, 735 passing automated tests.
+> **Released: v0.9.0 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Compound search syntax compiler (tag:, cat:, -exclude), tiered visual grouping headers, dual dispatch payloads (plainText & richHtml), out-of-the-box AutoHotkey & Quicker scripts.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,16 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.8.3)
+## This release (v0.9.0 Milestone)
+
+Omni-Search Deepening & Global Cross-Application Direct Dispatch:
+
+- **Compound Search Syntax Compiler**: Full support for `type:code`, `tag:xxx`, `#xxx`, `cat:xxx`, and `-exclude` in both omni and local snippet searches.
+- **Tiered Grouping Headers**: Clearly separates `📌 Curated Snippets` and `🔍 Omni SiYuan Blocks` with sticky visual headers in cascade view.
+- **Dual Direct Dispatch Payloads (`plainText` & `richHtml`)**: `resolve()` and `recall()` now return sanitized plain text for WeChat/QQ and rich HTML for Word/Lark.
+- **Out-of-the-Box Global Scripts**: Settings panel offers copyable AutoHotkey (AHK global hotkey) scripts, Quicker action configurations, and cURL REST commands.
+
+## Previous release (v0.8.3)
 
 Row Action Aesthetics & Clipboard Title Cleansing:
 

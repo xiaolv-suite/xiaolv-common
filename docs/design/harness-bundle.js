@@ -118,7 +118,7 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
-  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.8.3", iconName = "iconXlcCommon") {
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.9.0", iconName = "iconXlcCommon") {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
@@ -3325,7 +3325,7 @@
           this.currentDialog = dialog;
           const container = dialog.element.querySelector(".b3-dialog__container");
           container == null ? void 0 : container.classList.add("xlc-form-host");
-          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.8.3", "iconXlcCommon");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.9.0", "iconXlcCommon");
           const handleViewport = () => {
             if (!container || typeof window === "undefined" || !window.visualViewport) return;
             const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -8324,7 +8324,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.8.3", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.0", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -9899,24 +9899,27 @@ ${exception.mark.snippet}`;
     const desc = document.createElement("div");
     desc.className = "xlc-form-hint";
     desc.style.lineHeight = "1.6";
-    desc.textContent = "\u5C0F\u9A74\u5E38\u7528\u5DF2\u5168\u9762\u5F00\u653E Headless \u7EAF\u6C42\u503C\u4E0E\u68C0\u7D22\u534F\u8BAE\u3002\u652F\u6301\u5728\u5FAE\u4FE1\u3001Word\u3001QQ\u3001\u6D4F\u89C8\u5668\u7B49\u4EFB\u610F\u5916\u90E8\u7A97\u53E3\uFF0C\u901A\u8FC7\u5168\u5C40\u70ED\u952E\u3001Quicker \u52A8\u4F5C\u6216\u672C\u5730\u811A\u672C\uFF0C\u514D\u5207\u601D\u6E90\u7A97\u53E3\u76F4\u63A5\u68C0\u7D22\u5E38\u7528\u8BED\u5E76\u79D2\u7EA7\u55B7\u5C04\u6587\u672C\u3002";
+    desc.textContent = "\u5C0F\u9A74\u5E38\u7528\u5DF2\u5168\u9762\u5F00\u653E Headless \u7EAF\u6C42\u503C\u4E0E\u68C0\u7D22\u534F\u8BAE\u3002\u652F\u6301\u5728\u5FAE\u4FE1\u3001Word\u3001QQ\u3001\u6D4F\u89C8\u5668\u7B49\u4EFB\u610F\u5916\u90E8\u7A97\u53E3\uFF0C\u901A\u8FC7\u5168\u5C40\u70ED\u952E\u3001Quicker \u52A8\u4F5C\u6216 AutoHotkey \u811A\u672C\uFF0C\u514D\u5207\u601D\u6E90\u7A97\u53E3\u76F4\u63A5\u68C0\u7D22\u5E38\u7528\u8BED\u5E76\u79D2\u7EA7\u55B7\u5C04\u6587\u672C\u3002";
     sec.appendChild(desc);
     const apiCard = document.createElement("div");
     apiCard.className = "xlc-api-code-block";
     apiCard.innerHTML = `
         <div class="xlc-api-title">\u5F00\u653E\u534F\u8BAE\u547D\u4EE4\uFF08\u601D\u6E90\u5185\u90E8\u547D\u4EE4 / WebSocket / \u7A97\u53E3\u6865\uFF09\uFF1A</div>
+        <div>\u2022 <strong>xiaolv.common.recall</strong>: \u522B\u540D\u95EA\u7535\u76F4\u8FBE\uFF08\u8F93\u5165\u522B\u540D\u6216\u62FC\u97F3\u7F29\u5199\u4E00\u6B65\u53D6\u56DE\u5C55\u5F00\u6B63\u6587\uFF0C\u542B plainText/richHtml\uFF09</div>
         <div>\u2022 <strong>xiaolv.common.resolve</strong>: \u6761\u76EE\u7EAF\u6C42\u503C\uFF08\u81EA\u52A8\u5C55\u5F00\u5D4C\u5957\u7247\u6BB5\u5E76\u8BA1\u7B97\u5B8F\u53D8\u91CF\uFF0C\u652F\u6301\u586B\u53C2 fills\uFF09</div>
-        <div>\u2022 <strong>xiaolv.common.recall</strong>: \u522B\u540D\u95EA\u7535\u76F4\u8FBE\uFF08\u8F93\u5165\u522B\u540D\u6216\u62FC\u97F3\u7F29\u5199\u4E00\u6B65\u53D6\u56DE\u5C55\u5F00\u6B63\u6587\uFF09</div>
         <div>\u2022 <strong>xiaolv.common.search</strong>: \u6309\u5173\u952E\u8BCD\u68C0\u7D22\u5E38\u7528\u6761\u76EE\u6E05\u5355\uFF08\u542B\u522B\u540D/\u6807\u7B7E/\u5206\u7C7B/\u53D8\u91CF\u6570\uFF09</div>
+        <div>\u2022 <strong>xiaolv.common.getClipboardHistory</strong>: \u83B7\u53D6\u4F1A\u8BDD\u526A\u8D34\u677F\u5386\u53F2\u6682\u5B58\u6587\u672C\u6D41</div>
         <div>\u2022 <strong>xiaolv.common.recent</strong>: \u83B7\u53D6\u6700\u8FD1\u4F7F\u7528\u8FC7\u7684\u5E38\u7528\u6761\u76EE</div>
         <div>\u2022 <strong>xiaolv.common.get</strong>: \u83B7\u53D6\u6761\u76EE\u5B8C\u6574\u5B9A\u4E49\u4E0E\u5143\u6570\u636E</div>
     `;
     sec.appendChild(apiCard);
-    const copyBtn = document.createElement("button");
-    copyBtn.type = "button";
-    copyBtn.className = "b3-button xlc-btn-ghost";
-    copyBtn.textContent = "\u590D\u5236 Quicker \u52A8\u4F5C\u8C03\u7528\u914D\u7F6E\u4E0E\u53C2\u6570\u793A\u4F8B";
-    copyBtn.addEventListener("click", () => {
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;";
+    const copyQuickerBtn = document.createElement("button");
+    copyQuickerBtn.type = "button";
+    copyQuickerBtn.className = "b3-button xlc-btn-ghost";
+    copyQuickerBtn.textContent = "\u29C9 \u590D\u5236 Quicker \u52A8\u4F5C\u914D\u7F6E";
+    copyQuickerBtn.addEventListener("click", () => {
       const examplePayload = JSON.stringify({
         target: "xiaolv-common",
         protocol: "xiaolv-common/v1",
@@ -9924,18 +9927,70 @@ ${exception.mark.snippet}`;
           recall: { command: "xiaolv.common.recall", params: { alias: "yq", fills: { "\u5BA2\u6237\u59D3\u540D": "\u5F20\u7ECF\u7406" } } },
           search: { command: "xiaolv.common.search", params: { keyword: "\u9000\u6B3E", limit: 20 } },
           resolve: { command: "xiaolv.common.resolve", params: { itemId: "\u6761\u76EEID", fills: { "\u5BA2\u6237\u59D3\u540D": "\u5F20\u7ECF\u7406" } } },
-          recent: { command: "xiaolv.common.recent", params: { limit: 15 } }
+          clipboardHistory: { command: "xiaolv.common.getClipboardHistory" }
         },
-        quickerNote: "\u5411\u601D\u6E90\u5185\u6838 POST /api/command \u53D1\u9001\u4E0A\u8FF0\u6307\u4EE4\uFF0C\u83B7\u53D6 recall/resolve \u7ED3\u679C\u4E2D\u7684 resolvedText \u5373\u53EF\u7531 Quicker \u5199\u5165\u526A\u8D34\u677F\u5E76\u6A21\u62DF Ctrl+V \u55B7\u5C04\u3002"
+        quickerNote: "\u5411\u601D\u6E90\u5185\u6838 POST /api/command \u53D1\u9001\u4E0A\u8FF0\u6307\u4EE4\uFF0C\u83B7\u53D6 recall/resolve \u7ED3\u679C\u4E2D\u7684 plainText\uFF08\u5FAE\u4FE1/QQ\u4E13\u7528\uFF09\u6216 richHtml\uFF08Word\u4E13\u7528\uFF09\uFF0C\u7531 Quicker \u5199\u5165\u526A\u8D34\u677F\u5E76\u6A21\u62DF Ctrl+V \u55B7\u5C04\u3002"
       }, null, 2);
       void navigator.clipboard.writeText(examplePayload).then(() => {
-        copyBtn.textContent = "\u2713 \u5DF2\u590D\u5236\u914D\u7F6E\u793A\u4F8B\u5230\u526A\u8D34\u677F";
+        copyQuickerBtn.textContent = "\u2713 \u5DF2\u590D\u5236 Quicker \u914D\u7F6E";
         setTimeout(() => {
-          copyBtn.textContent = "\u590D\u5236 Quicker \u52A8\u4F5C\u8C03\u7528\u914D\u7F6E\u4E0E\u53C2\u6570\u793A\u4F8B";
+          copyQuickerBtn.textContent = "\u29C9 \u590D\u5236 Quicker \u52A8\u4F5C\u914D\u7F6E";
         }, 3e3);
       });
     });
-    sec.appendChild(copyBtn);
+    const copyAhkBtn = document.createElement("button");
+    copyAhkBtn.type = "button";
+    copyAhkBtn.className = "b3-button xlc-btn-ghost";
+    copyAhkBtn.textContent = "\u26A1 \u590D\u5236 AutoHotkey (AHK) \u5168\u5C40\u76F4\u55B7\u811A\u672C";
+    copyAhkBtn.addEventListener("click", () => {
+      const ahkScript = `; ==========================================
+; \u5C0F\u9A74\u5E38\u7528 \xB7 AutoHotkey \u5168\u5C40\u76F4\u51FA\u811A\u672C (Ctrl+Alt+V)
+; \u9002\u7528\uFF1A\u5FAE\u4FE1\u3001Word\u3001QQ\u3001\u6D4F\u89C8\u5668\u8F93\u5165\u6846\u79D2\u7EA7\u4E0A\u5C4F
+; ==========================================
+^!v::
+    InputBox, alias, \u5C0F\u9A74\u5E38\u7528, \u8BF7\u8F93\u5165\u5E38\u7528\u8BED\u522B\u540D\u6216\u62FC\u97F3\u7F29\u5199:,, 300, 130
+    if (ErrorLevel || alias = "")
+        return
+    ; \u8C03\u7528\u601D\u6E90\u672C\u5730\u5185\u6838 HTTP API \u6267\u884C recall \u522B\u540D\u95EA\u7535\u76F4\u8FBE
+    url := "http://127.0.0.1:6806/api/plugin/callPlugin"
+    body := "{""plugin"":""xiaolv-common"",""action"":""recall"",""data"":{""alias"":""" . alias . """}}"
+    http := ComObjCreate("MSXML2.ServerXMLHTTP.6.0")
+    http.open("POST", url, false)
+    http.setRequestHeader("Content-Type", "application/json")
+    http.send(body)
+    resp := http.responseText
+    ; \u63D0\u53D6 plainText \u5E76\u7C98\u8D34\u5230\u5F53\u524D\u5FAE\u4FE1/Word \u7A97\u53E3
+    RegExMatch(resp, """plainText"":""(.*?)""", m)
+    if (m1 != "") {
+        Clipboard := m1
+        ClipWait, 1
+        Send, ^v
+    }
+return`;
+      void navigator.clipboard.writeText(ahkScript).then(() => {
+        copyAhkBtn.textContent = "\u2713 \u5DF2\u590D\u5236 AHK \u811A\u672C";
+        setTimeout(() => {
+          copyAhkBtn.textContent = "\u26A1 \u590D\u5236 AutoHotkey (AHK) \u5168\u5C40\u76F4\u55B7\u811A\u672C";
+        }, 3e3);
+      });
+    });
+    const copyCurlBtn = document.createElement("button");
+    copyCurlBtn.type = "button";
+    copyCurlBtn.className = "b3-button xlc-btn-ghost";
+    copyCurlBtn.textContent = "\u2328 \u590D\u5236 cURL / REST API \u793A\u4F8B";
+    copyCurlBtn.addEventListener("click", () => {
+      const curlCmd = `curl -X POST "http://127.0.0.1:6806/api/plugin/callPlugin" \\
+  -H "Content-Type: application/json" \\
+  -d '{"plugin":"xiaolv-common","action":"recall","data":{"alias":"cwbx"}}'`;
+      void navigator.clipboard.writeText(curlCmd).then(() => {
+        copyCurlBtn.textContent = "\u2713 \u5DF2\u590D\u5236 cURL \u793A\u4F8B";
+        setTimeout(() => {
+          copyCurlBtn.textContent = "\u2328 \u590D\u5236 cURL / REST API \u793A\u4F8B";
+        }, 3e3);
+      });
+    });
+    btnRow.append(copyQuickerBtn, copyAhkBtn, copyCurlBtn);
+    sec.appendChild(btnRow);
     const ecoTitle = document.createElement("div");
     ecoTitle.className = "xlc-eco-matrix-title";
     ecoTitle.textContent = "\u5C0F\u9A74\u5BB6\u65CF\u5168\u5BB6\u6876\u534F\u540C\u72B6\u6001\uFF08\u96F6\u5F3A\u4F9D\u8D56\uFF0C\u81EA\u52A8\u611F\u77E5\uFF09\uFF1A";
@@ -11438,7 +11493,7 @@ ${exception.mark.snippet}`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.8.3", "iconXlcCommon");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.0", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
@@ -13249,7 +13304,10 @@ ${exception.mark.snippet}`;
         };
         renderWindow();
       } else {
+        let commonHeaderPlaced = false;
         let omniHeaderPlaced = false;
+        const hasCommon = this.results.some((r) => !r.isOmni);
+        const hasOmni = this.results.some((r) => r.isOmni);
         for (let i = 0; i < this.results.length; i++) {
           while (headCursor + 1 < groupLabels.length && i === headStarts[headCursor + 1]) {
             headCursor++;
@@ -13257,7 +13315,15 @@ ${exception.mark.snippet}`;
             if (head) placeGroupHead(head.label, head.count);
           }
           const entry = this.results[i];
-          if (entry && entry.isOmni && !omniHeaderPlaced && this.results.some((r) => !r.isOmni)) {
+          if (entry && !entry.isOmni && !commonHeaderPlaced && hasCommon && hasOmni && groupLabels.length === 0) {
+            commonHeaderPlaced = true;
+            const cHead = document.createElement("div");
+            cHead.className = "xlc-group-head xlc-group-head--common";
+            const commonCount = this.results.filter((r) => !r.isOmni).length;
+            cHead.textContent = `\u{1F4CC} \u5E38\u7528\u8BED\u8D44\u4EA7 (${commonCount})`;
+            list.appendChild(cHead);
+          }
+          if (entry && entry.isOmni && !omniHeaderPlaced && hasCommon) {
             omniHeaderPlaced = true;
             const omniHead = document.createElement("div");
             omniHead.className = "xlc-group-head xlc-group-head--omni";
