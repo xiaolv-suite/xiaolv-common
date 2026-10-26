@@ -24,6 +24,39 @@ test("parseSearchGrammar: 提取 type / tag / #tag / cat / -excludeTokens 语法
     assert.deepEqual(plain.excludeTokens, []);
 });
 
+test("searchEntries: 多标签 #标签1 #标签2 交集过滤", () => {
+    const entries = [
+        {
+            id: "xlc-multi-1",
+            title: "微信退款处理",
+            summary: "客服常用语",
+            content: "退款流程",
+            itemType: "text",
+            tags: ["客服", "退款"],
+            category: "财务",
+            createdAt: 1000,
+            updatedAt: 1000,
+        },
+        {
+            id: "xlc-multi-2",
+            title: "客服问候语",
+            summary: "欢迎语",
+            content: "欢迎光临",
+            itemType: "text",
+            tags: ["客服", "问候"],
+            category: "通用",
+            createdAt: 1000,
+            updatedAt: 1000,
+        },
+    ];
+
+    const ctx = {favorites: new Set(), recents: new Map()};
+    // 检索 #客服 #退款：仅命中第一条
+    const hits = searchEntries(entries, {text: "#客服 #退款", scope: "all"}, ctx);
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].entry.id, "xlc-multi-1");
+});
+
 test("searchEntries: 排除语法 -exclude 过滤命中项", () => {
     const entries = [
         {

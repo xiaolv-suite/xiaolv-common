@@ -198,7 +198,7 @@ export class CommonSearchDialog {
         }
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.2", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.3", "iconXlcCommon");
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             // 上次搜索词回填（跨会话保留）
@@ -4168,6 +4168,14 @@ export class CommonSearchDialog {
         });
 
         const batchCaptureBtn = this.batchBarEl.querySelector<HTMLButtonElement>("[data-xlc-control='search.batch.capture-omni']");
+        const hasManagedSelected = this.results.some((r) => this.selectedIds.has(r.id) && !r.isOmni);
+        const addTagBtn = this.batchBarEl.querySelector<HTMLButtonElement>("[data-xlc-control='search.batch.add-tags']");
+        const removeTagBtn = this.batchBarEl.querySelector<HTMLButtonElement>("[data-xlc-control='search.batch.remove-tags']");
+        const setCatBtn = this.batchBarEl.querySelector<HTMLButtonElement>("[data-xlc-control='search.batch.set-category']");
+        if (addTagBtn) addTagBtn.style.display = hasManagedSelected ? "" : "none";
+        if (removeTagBtn) removeTagBtn.style.display = hasManagedSelected ? "" : "none";
+        if (setCatBtn) setCatBtn.style.display = hasManagedSelected ? "" : "none";
+
         if (batchCaptureBtn) {
             const omniSelected = this.results.filter((r) => this.selectedIds.has(r.id) && r.isOmni);
             if (omniSelected.length > 0) {

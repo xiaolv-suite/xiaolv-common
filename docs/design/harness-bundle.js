@@ -118,7 +118,7 @@
     var _a;
     return (_a = root.querySelector(".b3-dialog__body")) != null ? _a : root.querySelector(".b3-dialog__content");
   }
-  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.9.2", iconName = "iconXlcCommon") {
+  function mountPlatformDialogTitleWrap(dialogElement, titleText, badgeText = "v0.9.3", iconName = "iconXlcCommon") {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header == null ? void 0 : header.querySelector(".b3-dialog__title");
@@ -3325,7 +3325,7 @@
           this.currentDialog = dialog;
           const container = dialog.element.querySelector(".b3-dialog__container");
           container == null ? void 0 : container.classList.add("xlc-form-host");
-          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.9.2", "iconXlcCommon");
+          mountPlatformDialogTitleWrap(dialog.element, t("newItem"), "v0.9.3", "iconXlcCommon");
           const handleViewport = () => {
             if (!container || typeof window === "undefined" || !window.visualViewport) return;
             const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -8324,7 +8324,7 @@ ${exception.mark.snippet}`;
     });
     activeSettingsDialog = dialog;
     (_c = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _c.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.2", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.3", "iconXlcCommon");
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -11617,7 +11617,7 @@ fi`;
       }
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.2", "iconXlcCommon");
+      mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.3", "iconXlcCommon");
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const last = this.deps.getLastQuery();
@@ -15259,6 +15259,13 @@ fi`;
         b.disabled = this.selectedIds.size === 0;
       });
       const batchCaptureBtn = this.batchBarEl.querySelector("[data-xlc-control='search.batch.capture-omni']");
+      const hasManagedSelected = this.results.some((r) => this.selectedIds.has(r.id) && !r.isOmni);
+      const addTagBtn = this.batchBarEl.querySelector("[data-xlc-control='search.batch.add-tags']");
+      const removeTagBtn = this.batchBarEl.querySelector("[data-xlc-control='search.batch.remove-tags']");
+      const setCatBtn = this.batchBarEl.querySelector("[data-xlc-control='search.batch.set-category']");
+      if (addTagBtn) addTagBtn.style.display = hasManagedSelected ? "" : "none";
+      if (removeTagBtn) removeTagBtn.style.display = hasManagedSelected ? "" : "none";
+      if (setCatBtn) setCatBtn.style.display = hasManagedSelected ? "" : "none";
       if (batchCaptureBtn) {
         const omniSelected = this.results.filter((r) => this.selectedIds.has(r.id) && r.isOmni);
         if (omniSelected.length > 0) {

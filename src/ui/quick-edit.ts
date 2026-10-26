@@ -33,7 +33,7 @@ export function openQuickEditDialog(
         },
     });
 
-    mountPlatformDialogTitleWrap(dialog.element, `${deps.t("quickEditBlock")} (${blockId.slice(0, 15)})`, "v0.9.2", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, `${deps.t("quickEditBlock")} (${blockId.slice(0, 15)})`, "v0.9.3", "iconXlcCommon");
 
     const containerDialog = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     const handleViewport = () => {

@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.2 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Industrial Frecency hybrid smart sort, SiYuan adjacent blocks context probe (Alt+J), Raycast Script Command integration, 745 passing automated tests.
+> **Released: v0.9.3 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Multi-tag intersection filtering (#tag1 #tag2), contextual batch action bar pruning, multi-select clipboard batch ingestion, 746 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.2)
+## This release (v0.9.3)
+
+Multi-Tag Intersection & Contextual Batch Bar:
+
+- **Multi-Tag Intersection Filtering**: Compound search syntax now supports chained tags like `#support #refund`, returning only snippets matching all specified tags.
+- **Contextual Batch Action Bar**: When selecting unmanaged omni or clipboard items, metadata modification buttons are hidden to prominently feature `✦ Batch Ingest (N items)`.
+
+## Previous release (v0.9.2)
 
 Smart Frecency Sorting & Adjacent Blocks Context Probe:
 

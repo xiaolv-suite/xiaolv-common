@@ -17,6 +17,7 @@ export interface SearchQuery {
     text: string;
     itemType?: "" | ItemType;
     tag?: string;
+    tags?: string[];
     category?: string;
     scope?: "all" | "favorites" | "recent" | "clipboard" | "current-doc" | "all-notes";
     dateRange?: DateRangeFilter;
@@ -290,17 +291,19 @@ export interface ParsedSearchGrammar {
     text: string;
     itemType?: "" | ItemType;
     tag?: string;
+    tags: string[];
     category?: string;
     excludeTokens: string[];
 }
 
 export function parseSearchGrammar(raw: string): ParsedSearchGrammar {
     const trimmed = (raw || "").trim();
-    if (!trimmed) return {text: "", excludeTokens: []};
+    if (!trimmed) return {text: "", tags: [], excludeTokens: []};
 
     const tokens = trimmed.split(/\s+/).filter(Boolean);
     const cleanTokens: string[] = [];
     const excludeTokens: string[] = [];
+    const tags: string[] = [];
     let itemType: "" | ItemType | undefined;
     let tag: string | undefined;
     let category: string | undefined;
@@ -314,9 +317,13 @@ export function parseSearchGrammar(raw: string): ParsedSearchGrammar {
             else if (val === "markdown" || val === "md") itemType = "markdown";
             else if (val === "blockref" || val === "ref") itemType = "blockref";
         } else if (/^tag:(.+)$/i.test(t)) {
-            tag = t.slice(4).trim();
+            const parsedTag = t.slice(4).trim();
+            tag = parsedTag;
+            if (parsedTag) tags.push(parsedTag);
         } else if (/^#([^\s#]+)$/.test(t) && t.length > 1) {
-            tag = t.slice(1).trim();
+            const parsedTag = t.slice(1).trim();
+            tag = parsedTag;
+            if (parsedTag) tags.push(parsedTag);
         } else if (/^(?:cat|category):(.+)$/i.test(t)) {
             const idx = t.indexOf(":");
             category = t.slice(idx + 1).trim();
@@ -331,6 +338,7 @@ export function parseSearchGrammar(raw: string): ParsedSearchGrammar {
         text: cleanTokens.join(" "),
         itemType,
         tag,
+        tags,
         category,
         excludeTokens,
     };
@@ -517,6 +525,11 @@ export function matchEntry(entry: SearchEntry, rawQuery: string): Omit<ScoredRes
 export function passesFilters(entry: SearchEntry, query: SearchQuery, ctx: SearchContext): boolean {
     if (query.itemType && entry.itemType !== query.itemType) return false;
     if (query.tag && !matchesHierarchicalTag(entry.tags, query.tag)) return false;
+    if (query.tags && query.tags.length > 0) {
+        for (const reqTag of query.tags) {
+            if (!matchesHierarchicalTag(entry.tags, reqTag)) return false;
+        }
+    }
     if (query.category && !matchesHierarchicalCategory(entry.category, query.category)) return false;
     if (query.scope === "favorites" && !ctx.favorites.has(entry.id)) return false;
     if (query.scope === "recent" && !ctx.recents.has(entry.id)) return false;
@@ -625,6 +638,7 @@ export function searchEntries(entries: readonly SearchEntry[], query: SearchQuer
         text: parsedGrammar.text,
         itemType: query.itemType || parsedGrammar.itemType,
         tag: query.tag || parsedGrammar.tag,
+        tags: parsedGrammar.tags.length > 0 ? parsedGrammar.tags : (query.tag ? [query.tag] : undefined),
         category: query.category || parsedGrammar.category,
         excludeTokens: [...(query.excludeTokens || []), ...parsedGrammar.excludeTokens],
     };
