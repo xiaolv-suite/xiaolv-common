@@ -1,6 +1,6 @@
 // 全局常量：属性命名、上限、协议版本。改持久化语义必须同步迁移函数与测试。
 export const PLUGIN_NAME = "xiaolv-common";
-export const PLUGIN_VERSION = "0.9.3";
+export const PLUGIN_VERSION = "0.9.4";
 export const PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
 
 export const PROTOCOL_NAME = "xiaolv-common";

@@ -45,7 +45,7 @@ test("桥形状：protocol/protocolName/capabilities 只读能力；写方法不
     const bridge = externalBridge.buildXlcBridge(makeService());
     assert.equal(bridge.protocol, 1);
     assert.equal(bridge.protocolName, "xiaolv-common");
-    assert.deepEqual(bridge.capabilities, ["search", "get", "getBatch", "resolve", "recall", "recent", "favorites", "categories", "tags", "clipboard"]);
+    assert.deepEqual(bridge.capabilities, ["search", "get", "getBatch", "resolve", "recall", "captureQuote", "recent", "favorites", "categories", "tags", "clipboard"]);
     // 负向验证：写面不挂桥——意外扩面会让本断言失败
     for (const forbidden of ["save", "update", "remove", "insert", "copy", "openSource", "reindex"]) {
         assert.equal(bridge[forbidden], undefined, `写能力 ${forbidden} 不得出现在只读桥`);
@@ -66,6 +66,28 @@ test("桥形状：protocol/protocolName/capabilities 只读能力；写方法不
     assert.equal(typeof bridge.recent, "function");
     assert.equal(typeof bridge.favorites, "function");
     assert.equal(typeof bridge.getClipboardHistory, "function");
+    assert.equal(typeof bridge.captureQuote, "function");
+});
+
+test("桥 captureQuote：金句沉淀通道契约与错误隔离（响应 Issue #2）", async () => {
+    const bridge = externalBridge.buildXlcBridge(makeService());
+    // 1. 空输入 / 非法输入
+    const bad1 = await bridge.captureQuote(null);
+    assert.equal(bad1.ok, false);
+    assert.equal(bad1.reason, "invalid-input");
+
+    const bad2 = await bridge.captureQuote({quote: ""});
+    assert.equal(bad2.ok, false);
+    assert.equal(bad2.reason, "invalid-input");
+
+    // 2. 正常输入（由于 makeService 假内核 getChildBlocks 返回空，会安全推进到 library 创建）
+    const res = await bridge.captureQuote({
+        quote: "渐进学习的核心在于反思批判而非被动摘抄",
+        author: "沃兹尼亚克",
+        sourceTitle: "SuperMemo 理论集",
+    });
+    // 成功推进并返回结果
+    assert.ok(res !== undefined);
 });
 
 test("bridge: getClipboardHistory 读取剪贴板历史", async () => {

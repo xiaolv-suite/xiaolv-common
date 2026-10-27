@@ -405,6 +405,9 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.protocolCommands["xiaolv.common.getClipboardHistory"] = async () => {
             return this.service.getClipboardHistory();
         };
+        this.protocolCommands["xiaolv.common.captureQuote"] = async (payload) => {
+            return this.service.captureQuote(payload as any);
+        };
         // 按需发现协议面：提供当前文档/笔记本扫描、候选预览、收录与批次撤销。
         this.protocolCommands["xiaolv.common.discoverCurrentDocument"] = async () => this.discoverCurrentDocument();
         this.protocolCommands["xiaolv.common.discoverCurrentNotebook"] = async () => this.discoverCurrentNotebook();

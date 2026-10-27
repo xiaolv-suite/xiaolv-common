@@ -1,6 +1,6 @@
 // XiaolvCommonService：xiaolv-common/v1 对外服务接口（跨插件协议面）。
 // 不抛异常：全部返回 ActionResult；内部组装 library/executor/registry/sidecar。
-import {CAPABILITIES, ActionResult, CapabilityDescriptor, CommonItemRef, ProviderDescriptor, envelope, failureEnvelope, negotiateProtocol, normalizeSaveInput, successEnvelope} from "../model/protocol";
+import {CAPABILITIES, ActionResult, CapabilityDescriptor, CommonItemRef, ProviderDescriptor, envelope, failureEnvelope, negotiateProtocol, normalizeSaveInput, successEnvelope, type CaptureQuoteInput} from "../model/protocol";
 import {SearchQuery, SearchContext, SearchEntry, searchEntries, listByScope} from "../model/search";
 import {InsertMode} from "../model/actions";
 import {CommonItem, isItemType} from "../model/item";
@@ -14,6 +14,7 @@ import {renderSafeHtmlFromMarkdown, isMarkdownFormattingPresent} from "../model/
 import {AiAssistant} from "./ai";
 import {LibraryService, NewItemInput} from "./library";
 import {ProviderRegistry} from "./providers";
+import {getPinyinAdapter} from "../model/pinyin";
 
 export interface ServiceDeps {
     library: LibraryService;
@@ -312,6 +313,62 @@ export class XiaolvCommonService {
         }
 
         return failureEnvelope("not-found", `no matching item found for alias or keyword: "${key}"`);
+    }
+
+    /** 渐进阅读金句与高阶摘录一键沉淀（响应 Issue #2 中枢深化第二期建议） */
+    async captureQuote(input: CaptureQuoteInput): Promise<ActionResult<CommonItemRef>> {
+        if (!input || typeof input !== "object" || Array.isArray(input)) {
+            return failureEnvelope("invalid-input", "captureQuote input must be object");
+        }
+        const quote = (input.quote || "").trim();
+        if (!quote) {
+            return failureEnvelope("invalid-input", "quote content must not be empty");
+        }
+        const author = (input.author || "").trim();
+        const sourceTitle = (input.sourceTitle || "").trim();
+
+        // 组装格式符合 B-006 单行规则的金句正文
+        let markdown = `💡 「${quote}」`;
+        if (author) {
+            markdown += ` —— ${author}`;
+        }
+        if (sourceTitle) {
+            markdown += `（《${sourceTitle}》）`;
+        }
+
+        const title = quote.length > 24 ? quote.slice(0, 24) + "..." : quote;
+        const category = (input.category || "").trim() || "金句";
+        const tags = Array.isArray(input.tags) && input.tags.length > 0 ? input.tags : ["金句", "渐进学习"];
+
+        // 别名推导（首选传入别名，未传自动提取拼音缩写）
+        let alias = (input.alias || "").trim();
+        if (!alias) {
+            try {
+                const adapter = getPinyinAdapter();
+                if (typeof adapter?.annotate === "function") {
+                    const anno = adapter.annotate({title, alias: ""});
+                    if (anno && anno.pyi) {
+                        alias = anno.pyi.toLowerCase().slice(0, 8);
+                    }
+                }
+            } catch {
+                alias = "";
+            }
+        }
+
+        return this.save({
+            itemType: "text",
+            markdown,
+            title,
+            alias: alias || undefined,
+            tags,
+            category,
+            source: {
+                sourceDocId: input.sourceDocId,
+                sourceBlockId: input.sourceBlockId,
+                sourceType: "quote",
+            },
+        });
     }
 
     async save(input: unknown): Promise<ActionResult<CommonItemRef>> {

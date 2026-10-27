@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.3 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Multi-tag intersection filtering (#tag1 #tag2), contextual batch action bar pruning, multi-select clipboard batch ingestion, 746 passing automated tests.
+> **Released: v0.9.4 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · SuperMemo Reformulation Pack, quote assetization pipeline (`captureQuote`), and 751 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,16 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.3)
+## This release (v0.9.4)
+
+SuperMemo Reformulation Pack & Golden Quote Pipeline (Issue #2):
+
+- **SuperMemo Reformulation Pack**: In response to Issue #2, preconfigured with 6 high-level cognitive templates (thesis, critique, connection, action, quote, and full reformulation), 100% compliant with B-006 pre-write security restrictions.
+- **Golden Quote Assetization (`captureQuote`)**: Added `captureQuote` to window bridge `window.xiaolvCommon.captureQuote` and SiYuan command protocol `xiaolv.common.captureQuote`, accepting quotes, authors, source documents/blocks, and auto-deriving pinyin acronym aliases.
+- **Universal Dialog Version Alignment**: Harmonized all sub-dialog title badge versions to follow `PLUGIN_DISPLAY_VERSION`.
+- **Full CHANGELOG Synchronization**: Restored historical user-facing changelog records.
+
+## Previous release (v0.9.3)
 
 Multi-Tag Intersection & Contextual Batch Bar:
 

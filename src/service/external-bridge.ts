@@ -3,7 +3,7 @@
 // 写面（save/update/remove/insert/copy）不进 v1——桥写开关 + 外部来源标记留 v2 立项。
 // 挂载纪律对齐管家 LvHome 先例：首个实例持有窗口期，disposer 校验身份防误删新桥。
 import type {XiaolvCommonService, ResolvedItemData, RecallResult} from "./service";
-import type {CapabilityDescriptor} from "../model/protocol";
+import type {CapabilityDescriptor, CaptureQuoteInput} from "../model/protocol";
 import type {CommonItem, CommonItemRef} from "../model/item";
 import type {ActionResult} from "../model/protocol";
 import type {SearchQuery} from "../model/search";
@@ -40,6 +40,7 @@ export interface XlcBridgeApi {
     getCategories(): Promise<ActionResult<string[]>>;
     getTags(): Promise<ActionResult<string[]>>;
     getClipboardHistory(): Promise<ActionResult<Array<{text: string; copiedAt: number}>>>;
+    captureQuote(input: CaptureQuoteInput): Promise<ActionResult<CommonItemRef>>;
 }
 
 /** 搜索入参收敛：支持纯字符串查询或对象参数 */
@@ -63,7 +64,7 @@ export function buildXlcBridge(service: XiaolvCommonService): XlcBridgeApi {
         protocol: XLC_BRIDGE_PROTOCOL,
         protocolName: "xiaolv-common",
         // v1 只读面（ADR-0013）：写方法不挂桥对象——门禁测试锁定此边界
-        capabilities: ["search", "get", "getBatch", "resolve", "recall", "recent", "favorites", "categories", "tags", "clipboard"],
+        capabilities: ["search", "get", "getBatch", "resolve", "recall", "captureQuote", "recent", "favorites", "categories", "tags", "clipboard"],
 
         whenReady() {
             return Promise.resolve(true);
@@ -123,6 +124,10 @@ export function buildXlcBridge(service: XiaolvCommonService): XlcBridgeApi {
 
         getClipboardHistory() {
             return service.getClipboardHistory();
+        },
+
+        captureQuote(input) {
+            return service.captureQuote(input);
         },
     };
 }

@@ -13,6 +13,7 @@ export const CAPABILITIES = [
     "categories",
     "tags",
     "save",
+    "captureQuote",
     "update",
     "remove",
     "insert",
@@ -133,6 +134,17 @@ export function descriptorToRecord(d: ProviderDescriptor, now: number): Provider
         protocolVersion: d.protocolVersion,
         registeredAt: now,
     };
+}
+
+export interface CaptureQuoteInput {
+    quote: string;
+    author?: string;
+    sourceDocId?: string;
+    sourceBlockId?: string;
+    sourceTitle?: string;
+    tags?: string[];
+    category?: string;
+    alias?: string;
 }
 
 // ---- save() 协议输入（跨插件写入必须带正文；字段全部校验上界）----
