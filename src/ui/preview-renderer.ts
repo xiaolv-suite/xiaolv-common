@@ -27,6 +27,7 @@ export type MarkdownBlockType =
     | "list-ordered"
     | "task-item"
     | "hr"
+    | "table"
     | "code-fence"
     | "p";
 
@@ -42,6 +43,8 @@ export interface MarkdownBlock {
     inlines: MarkdownInlineToken[];
     lang?: string;
     isDone?: boolean;
+    tableHeader?: string[];
+    tableData?: string[][];
 }
 
 // 常见多语言关键字集合（JS/TS, Python, SQL, Go, Rust, Shell 等）
@@ -322,6 +325,34 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
             continue;
         }
 
+        // Markdown 表格结构 (Header | 分隔行 | 数据行)
+        if (trimmed.startsWith("|") && trimmed.endsWith("|") && l + 1 < lines.length) {
+            const nextLine = (lines[l + 1] ?? "").trim();
+            if (/^\|(?:\s*:?-+:?\s*\|)+\s*$/.test(nextLine)) {
+                const parseCells = (str: string): string[] => {
+                    const inner = str.replace(/^\|/, "").replace(/\|$/, "");
+                    return inner.split("|").map((c) => c.trim());
+                };
+                const tableHeader = parseCells(trimmed);
+                l++; // 跳过分隔行
+                const tableData: string[][] = [];
+                while (l + 1 < lines.length) {
+                    const rowLine = (lines[l + 1] ?? "").trim();
+                    if (!rowLine.startsWith("|") || !rowLine.endsWith("|")) break;
+                    l++;
+                    tableData.push(parseCells(rowLine));
+                }
+                blocks.push({
+                    type: "table",
+                    rawText: "",
+                    inlines: [],
+                    tableHeader,
+                    tableData,
+                });
+                continue;
+            }
+        }
+
         // 无序列表项
         if (/^[-*+]\s+/.test(trimmed)) {
             const content = trimmed.replace(/^[-*+]\s+/, "");
@@ -481,6 +512,42 @@ export function renderSafePreview(
             }
             pre.appendChild(codeEl);
             container.appendChild(pre);
+            continue;
+        }
+
+        if (block.type === "table" && block.tableHeader) {
+            const wrap = doc.createElement("div");
+            wrap.className = "xlc-md-table-wrap";
+            const table = doc.createElement("table");
+            table.className = "xlc-md-table";
+
+            const thead = doc.createElement("thead");
+            const trHead = doc.createElement("tr");
+            for (const h of block.tableHeader) {
+                const th = doc.createElement("th");
+                th.className = "xlc-md-th";
+                th.textContent = h;
+                trHead.appendChild(th);
+            }
+            thead.appendChild(trHead);
+            table.appendChild(thead);
+
+            if (block.tableData && block.tableData.length > 0) {
+                const tbody = doc.createElement("tbody");
+                for (const row of block.tableData) {
+                    const tr = doc.createElement("tr");
+                    for (const cell of row) {
+                        const td = doc.createElement("td");
+                        td.className = "xlc-md-td";
+                        td.textContent = cell;
+                        tr.appendChild(td);
+                    }
+                    tbody.appendChild(tr);
+                }
+                table.appendChild(tbody);
+            }
+            wrap.appendChild(table);
+            container.appendChild(wrap);
             continue;
         }
 

@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.0 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Visual paste queue indicator chip, automated changelog gate, and 774 passing automated tests.
+> **Released: v0.10.1 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Native Markdown table safe DOM rendering, high-fidelity preview, and 776 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.0)
+## This release (v0.10.1)
+
+Native Markdown Table DOM Rendering & Preview Fidelity:
+
+- **Structured Table Block Rendering (`table`)**: Detail preview pane and Spacebar Quick Look now render full Markdown tables natively using secure DOM trees (`<table>`, `<thead>`, `<tbody>`, `<tr>`, `<th>`, `<td>`), with zero `innerHTML` injection.
+- **Quality Gates**: All 776 unit tests pass.
+
+## Previous release (v0.10.0)
 
 Visual Paste Queue Status Chip & Automated CHANGELOG Quality Gate:
 

@@ -750,6 +750,28 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
     color: var(--xlc-accent);
   }
 
+  .xlc-md-table-wrap {
+    margin: var(--xlc-space-2) 0;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .xlc-md-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--xlc-font-sm);
+    line-height: var(--xlc-leading-normal);
+  }
+  .xlc-md-th, .xlc-md-td {
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    border: 1px solid var(--xlc-line);
+    text-align: left;
+  }
+  .xlc-md-th {
+    background: var(--xlc-soft);
+    font-weight: 600;
+    color: var(--xlc-ink);
+  }
+
   .xlc-md-link {
     color: var(--xlc-accent);
     text-decoration: underline;
