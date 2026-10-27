@@ -12,6 +12,8 @@ export interface ClipboardCleanOptions {
     trimLeadingIndent?: boolean;
     /** 是否执行盘古之白中英文智能排版空格规范化 (默认 false) */
     panguSpacing?: boolean;
+    /** 是否清洗 URL 中的跟踪分析参数 (默认 false) */
+    stripUrlTrackers?: boolean;
 }
 
 export interface ClipboardCleanResult {
@@ -125,6 +127,105 @@ export function tsvToMarkdownTable(text: string): {result: string; rowCount: num
         result: mdLines.join("\n"),
         rowCount: lines.length,
         colCount: maxCols,
+    };
+}
+
+const TRACKING_PARAM_REGEX = /^(utm_[a-z0-9_]+|spm_id_from|from_source|vd_source|share_[a-z0-9_]+|si|igshid|fbclid|gclid|msclkid|ref|ref_src|ref_url|_hsenc|_hsmi|mc_cid|mc_eid|nsukey)$/i;
+
+/**
+ * 清洗 URL 中的分析追踪参数（如 utm_*, spm_id_from, fbclid, share_token 等）
+ * 保护用户隐私并精简链接长度
+ */
+export function stripUrlTrackingParams(text: string): {result: string; cleanedCount: number} {
+    if (!text || !text.includes("http")) return {result: text ?? "", cleanedCount: 0};
+
+    let cleanedCount = 0;
+    const urlPattern = /https?:\/\/[^\s)）\]]+/g;
+
+    const result = text.replace(urlPattern, (urlStr) => {
+        try {
+            const parsed = new URL(urlStr);
+            const keysToDelete: string[] = [];
+            parsed.searchParams.forEach((_val, key) => {
+                if (TRACKING_PARAM_REGEX.test(key) || key.toLowerCase().startsWith("utm_")) {
+                    keysToDelete.push(key);
+                }
+            });
+
+            if (keysToDelete.length > 0) {
+                for (const k of keysToDelete) {
+                    parsed.searchParams.delete(k);
+                }
+                cleanedCount += keysToDelete.length;
+                let cleanUrl = parsed.toString();
+                // 若原 URL 无尾部斜杠且 path 为空，URL.toString() 会补 /，尽量保持原貌
+                if (!urlStr.endsWith("/") && cleanUrl.endsWith("/") && parsed.pathname === "/" && !parsed.search && !parsed.hash) {
+                    cleanUrl = cleanUrl.slice(0, -1);
+                }
+                return cleanUrl;
+            }
+            return urlStr;
+        } catch {
+            return urlStr;
+        }
+    });
+
+    return {result, cleanedCount};
+}
+
+export type ListFormatStyle = "markdown-ol" | "markdown-ul" | "chinese-circled";
+
+const CIRCLED_DIGITS = [
+    "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
+    "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳",
+];
+
+const LIST_PREFIX_REGEX = /^\s*(?:(\d{1,3})[、.．：:]|\(([0-9]{1,3})\)|（([0-9]{1,3})）|([①-⑳])|[一二三四五六七八九十]+[、.．]|[-*+])\s*/;
+
+/**
+ * 列表项与标点符号一键排版净化 (normalizeListFormatting)
+ * 将 1、/ 1. / (1) / ① / - / * 等混合散乱列表统一重构为目标列表规范
+ */
+export function normalizeListFormatting(
+    text: string,
+    targetStyle: ListFormatStyle = "markdown-ol",
+): {result: string; convertedCount: number} {
+    if (!text || !text.trim()) return {result: text ?? "", convertedCount: 0};
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let matchCount = 0;
+
+    for (const line of lines) {
+        if (LIST_PREFIX_REGEX.test(line)) matchCount++;
+    }
+
+    // 需有至少 2 行列表特征才转换，避免普通正文误伤
+    if (matchCount < 2) return {result: text, convertedCount: 0};
+
+    let itemIndex = 0;
+    const convertedLines = lines.map((line) => {
+        const m = line.match(LIST_PREFIX_REGEX);
+        if (!m) return line;
+
+        itemIndex++;
+        const content = line.slice(m[0].length).trim();
+
+        if (targetStyle === "markdown-ol") {
+            return `${itemIndex}. ${content}`;
+        }
+        if (targetStyle === "markdown-ul") {
+            return `- ${content}`;
+        }
+        if (targetStyle === "chinese-circled") {
+            const digit = CIRCLED_DIGITS[itemIndex - 1] || `(${itemIndex})`;
+            return `${digit} ${content}`;
+        }
+        return line;
+    });
+
+    return {
+        result: convertedLines.join("\n"),
+        convertedCount: matchCount,
     };
 }
 
@@ -262,6 +363,7 @@ export function cleanClipboardText(text: string, options: ClipboardCleanOptions 
         compactEmptyLines: options.compactEmptyLines !== false,
         trimLeadingIndent: options.trimLeadingIndent === true,
         panguSpacing: options.panguSpacing === true,
+        stripUrlTrackers: options.stripUrlTrackers === true,
     };
 
     let cur = text;
@@ -296,6 +398,14 @@ export function cleanClipboardText(text: string, options: ClipboardCleanOptions 
         if (res.spacedCount > 0) {
             cur = res.result;
             details.push(`规范化了 ${res.spacedCount} 处中英文排版间距`);
+        }
+    }
+
+    if (opts.stripUrlTrackers) {
+        const res = stripUrlTrackingParams(cur);
+        if (res.cleanedCount > 0) {
+            cur = res.result;
+            details.push(`移除了 ${res.cleanedCount} 个 URL 跟踪分析参数`);
         }
     }
 

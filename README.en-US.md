@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.7 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Paste Queue sequential stacking (⌥⇧Q), Surround Selection shortcut (⌥⇧W), JSON format/compact, and 762 passing automated tests.
+> **Released: v0.9.8 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · URL tracker scrubbing (✦ Clean URL), list numbering normalizer (✦ Norm List), clipboard type inference, and 767 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.7)
+## This release (v0.9.8)
+
+URL Tracker Stripping, List Normalizer & Adaptive Clipboard Type:
+
+- **Deep URL Tracker Stripping (`stripUrlTrackingParams`)**: Precision removal of noisy share parameters (`spm_id_from`, `utm_*`, `share_token`, `fbclid`, `si`, etc.) while keeping essential query IDs and hashes intact. Quick buttons in form variable bar and action menus.
+- **List & Numbering Normalizer (`normalizeListFormatting`)**: Restructures mixed numbering (`1、`, `(1)`, `①`, `-`, `*`) into clean Markdown ordered lists or Chinese circled digits (`①②③`).
+- **Clipboard Type Inference**: Automatically infers clipboard text type (code fence, URL, Markdown, table) to display accurate badges.
+
+## Previous release (v0.9.7)
 
 Sequential Paste Queue, Surround Selection & JSON Transformation:
 

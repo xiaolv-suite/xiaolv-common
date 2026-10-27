@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting} from "../model/clipboard-cleaner";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
     text: "TXT", markdown: "MD", url: "URL", code: "CODE",
@@ -508,6 +508,38 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(tableBtn);
+
+    const cleanUrlBtn = document.createElement("button");
+    cleanUrlBtn.type = "button";
+    cleanUrlBtn.className = "xlc-varbtn xlc-btn-ghost";
+    cleanUrlBtn.dataset.xlcControl = "capture.format.clean-url";
+    cleanUrlBtn.textContent = "✦ 净URL";
+    cleanUrlBtn.title = "自动剔除 URL 后的追踪分析参数 (utm_*, spm_id_from, share_token 等)";
+    cleanUrlBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const cleaned = stripUrlTrackingParams(el.value);
+        if (cleaned.cleanedCount > 0) {
+            el.value = cleaned.result;
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(cleanUrlBtn);
+
+    const listBtn = document.createElement("button");
+    listBtn.type = "button";
+    listBtn.className = "xlc-varbtn xlc-btn-ghost";
+    listBtn.dataset.xlcControl = "capture.format.norm-list";
+    listBtn.textContent = "✦ 规整列表";
+    listBtn.title = "将 1、/ 1. / (1) / ① / - 等混合列表一键重构为标准 Markdown 有序列表";
+    listBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const formatted = normalizeListFormatting(el.value, "markdown-ol");
+        if (formatted.convertedCount > 0) {
+            el.value = formatted.result;
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(listBtn);
 
     return bar;
 }

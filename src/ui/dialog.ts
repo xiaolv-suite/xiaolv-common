@@ -8,7 +8,8 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting} from "../model/clipboard-cleaner";
+import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {toErrorMessage} from "../model/errors";
 import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch} from "../model/search";
@@ -1356,7 +1357,7 @@ export class CommonSearchDialog {
                         title: `📋 ${firstLine}`,
                         content: h.text,
                         summary: h.text.slice(0, 100).replace(/[\s\r\n]+/g, " "),
-                        itemType: "text" as ItemType,
+                        itemType: inferTypeFromText(h.text),
                         category: "剪贴板",
                         tags: ["剪贴板"],
                         alias: "",
@@ -3227,6 +3228,25 @@ export class CommonSearchDialog {
                             this.deps.notify?.("info", "已压缩 JSON 并复制到剪贴板");
                         });
                     }
+                }
+                const urlClean = stripUrlTrackingParams(entry.content || "");
+                if (urlClean.cleanedCount > 0) {
+                    addSilent("🔗", `清洗 URL 追踪参数并复制 (清理 ${urlClean.cleanedCount} 个)`, async () => {
+                        await this.deps.copyProviderPayload(urlClean.result);
+                        this.deps.notify?.("info", `已清洗 ${urlClean.cleanedCount} 个 URL 追踪分析参数并复制`);
+                    });
+                }
+                const listCheck = normalizeListFormatting(entry.content || "", "markdown-ol");
+                if (listCheck.convertedCount > 0) {
+                    addSilent("☰", "规整为标准序号列表 (1. 2. 3.)", async () => {
+                        await this.deps.copyProviderPayload(listCheck.result);
+                        this.deps.notify?.("info", `已规整 ${listCheck.convertedCount} 行列表并复制`);
+                    });
+                    const circledCheck = normalizeListFormatting(entry.content || "", "chinese-circled");
+                    addSilent("①", "规整为带圈序号列表 (①②③)", async () => {
+                        await this.deps.copyProviderPayload(circledCheck.result);
+                        this.deps.notify?.("info", "已转为带圈序号列表并复制");
+                    });
                 }
                 const useCount = this.usageCounts.get(entry.id) ?? 0;
                 if (useCount > 0 && this.deps.resetItemUsage) {
