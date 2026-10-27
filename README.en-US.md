@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.4 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · SuperMemo Reformulation Pack, quote assetization pipeline (`captureQuote`), and 751 passing automated tests.
+> **Released: v0.9.5 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Template export privacy sanitizer (G31 closure), one-click sanitizer switch & rule configuration dialog, 753 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.4)
+## This release (v0.9.5)
+
+Export Privacy Sanitizer & Masking Suite (G31 Complete):
+
+- **Template Export Privacy Sanitizer (G31)**: In the template pack export dialog (`openPackExportDialog`), equipped a one-click sanitizer toggle and dedicated rules dialog (`openSanitizerOptionsDialog`). Supports mask mode and placeholder mode, scrubbing phones, emails, ID cards, API tokens (`sk-xxx`, `ghp_xxx`), and custom literal dictionaries with pure-function zero side-effects.
+- **Quality Gates**: All 753 unit tests pass.
+
+## Previous release (v0.9.4)
 
 SuperMemo Reformulation Pack & Golden Quote Pipeline (Issue #2):
 

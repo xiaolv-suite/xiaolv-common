@@ -20,6 +20,8 @@ import {openCsvTsvImportWizard} from "./csv-tsv-wizard";
 import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doctor";
 import {calculateUsageInsights, type UsageItemMeta} from "../model/usage-insights";
 import {detectEcosystem} from "../service/ecosystem";
+import {openSanitizerOptionsDialog} from "./export-sanitizer-modal";
+import type {SanitizerOptions} from "../model/export-sanitizer";
 
 type TFn = (key: string, ...args: string[]) => string;
 
@@ -315,6 +317,48 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     nameWrap.appendChild(nameInput);
     wrap.appendChild(nameWrap);
 
+    // 隐私安全脱敏选项（G31）
+    let currentSanitizer: SanitizerOptions | null = null;
+    const sanitizeRow = document.createElement("div");
+    sanitizeRow.className = "xlc-form-field";
+    sanitizeRow.style.display = "flex";
+    sanitizeRow.style.alignItems = "center";
+    sanitizeRow.style.justifyContent = "space-between";
+    sanitizeRow.style.marginTop = "8px";
+
+    const sanitizeLabelWrap = document.createElement("label");
+    sanitizeLabelWrap.className = "fn__flex";
+    sanitizeLabelWrap.style.alignItems = "center";
+    sanitizeLabelWrap.style.gap = "8px";
+    sanitizeLabelWrap.style.cursor = "pointer";
+
+    const sanitizeCheckbox = document.createElement("input");
+    sanitizeCheckbox.type = "checkbox";
+    sanitizeCheckbox.className = "b3-switch";
+    sanitizeCheckbox.dataset.xlcControl = "settings.pack-export.sanitizer-toggle";
+
+    const sanitizeLabelText = document.createElement("span");
+    sanitizeLabelText.className = "xlc-form-label";
+    sanitizeLabelText.style.marginBottom = "0";
+    sanitizeLabelText.textContent = t("packSanitizeLabel");
+    sanitizeLabelWrap.append(sanitizeCheckbox, sanitizeLabelText);
+
+    const configSanitizeBtn = document.createElement("button");
+    configSanitizeBtn.type = "button";
+    configSanitizeBtn.className = "b3-button b3-button--text";
+    configSanitizeBtn.textContent = t("packSanitizeConfigBtn");
+    configSanitizeBtn.style.fontSize = "12px";
+    configSanitizeBtn.addEventListener("click", () => {
+        openSanitizerOptionsDialog(currentSanitizer ?? {}, (opts) => {
+            currentSanitizer = opts;
+            sanitizeCheckbox.checked = true;
+            ctx.notify("info", t("packSanitizeConfigured"));
+        });
+    });
+
+    sanitizeRow.append(sanitizeLabelWrap, configSanitizeBtn);
+    wrap.appendChild(sanitizeRow);
+
     // 包含内容说明
     const contents = document.createElement("div");
     contents.className = "xlc-form-hint";
@@ -355,7 +399,11 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
         void (async () => {
             // 导出时才按筛选取正文（打开对话框零预取）
             const kramdownById = await collectKramdown(ctx, items);
-            const result = await buildMarkdownExport(items, kramdownById, (assetPath) => ctx.fetchAssetBytes(assetPath), {name: packName});
+            const sanitizer = sanitizeCheckbox.checked ? (currentSanitizer ?? {mode: "mask"}) : undefined;
+            const result = await buildMarkdownExport(items, kramdownById, (assetPath) => ctx.fetchAssetBytes(assetPath), {
+                pack: {name: packName},
+                sanitizer,
+            });
             const zipBytes = buildZip(result.entries);
             const blob = new Blob([zipBytes as unknown as BlobPart], {type: "application/zip"});
             const a = document.createElement("a");

@@ -3,7 +3,8 @@
 
 import type {SanitizerOptions, SanitizeMode} from "../model/export-sanitizer";
 import {escapeHtml} from "../model/clipboard";
-import {mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {Dialog} from "siyuan";
 
 export interface SanitizerModalProps {
     initialOptions?: SanitizerOptions;
@@ -212,4 +213,41 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
             props.onCancel?.();
         },
     };
+}
+
+/** 快捷打开独立脱敏配置弹窗 */
+export function openSanitizerOptionsDialog(
+    initialOptions?: SanitizerOptions,
+    onConfirm?: (options: SanitizerOptions) => void,
+): Dialog | null {
+    if (typeof Dialog === "undefined") return null;
+    let dialog: Dialog;
+    try {
+        dialog = new Dialog({
+            title: "导出安全脱敏选项",
+            content: "",
+            width: "min(560px, 92vw)",
+            height: "min(640px, 86vh)",
+        });
+    } catch {
+        return null;
+    }
+    const container = dialog.element.querySelector(".b3-dialog__container");
+    container?.classList.add("xlc-form-host", "xlc-settings-host");
+    const body = getDialogBody(dialog.element);
+    if (!body) return dialog;
+    body.innerHTML = "";
+
+    const modal = renderSanitizerOptionsModal({
+        initialOptions,
+        onConfirm: (opts) => {
+            dialog.destroy();
+            onConfirm?.(opts);
+        },
+        onCancel: () => {
+            dialog.destroy();
+        },
+    });
+    body.appendChild(modal.element as HTMLElement);
+    return dialog;
 }

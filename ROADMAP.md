@@ -4,7 +4,7 @@
 
 > 定位：**思源笔记的内容资产层**——高频内容是有元数据、有来源、可检索、可变通、可共享的真实块资产（v3，2026-10-07 调研后修订）。三大一级场景：客服/邮件模板、AI 提示词库、研发/写作常用件。
 > 精准定位与调研证据：[docs/positioning.md](docs/positioning.md)。UI 唯一视觉事实源：[docs/design/prototype.html](docs/design/prototype.html)（v4 实现镜像）+ [docs/design/design-spec.md](docs/design/design-spec.md)；组件清单：[docs/ui-component-catalog.md](docs/ui-component-catalog.md)。生产证据：docs/design/production-*.png。
-> 状态：**[v0.9.4 已在 GitHub 发布](https://github.com/ai68298100/xiaolv-common/releases/tag/v0.9.4)（2026-10-27）**。落地 SuperMemo 渐进反思批判模板包 (Reformulation Pack) 与金句沉淀通道 (`captureQuote`)，收敛全仓二级弹窗版本号，全量同步面向用户 CHANGELOG；当前本地质量门禁单元 751/751 项全绿、TypeScript 编译 0 错误、交互审计 77/77、构建/密钥/包检查全部通过；真实宿主边界仍按 B-001–B-006 分层。当前处于 Epoch 6 小驴全生态联邦协同演进阶段；集市（bazaar/plugins.txt）未经用户明确批准严禁自行推送。当期账本：[docs/dev-plan-2026-10-27-r300.md](docs/dev-plan-2026-10-27-r300.md)。
+> 状态：**[v0.9.5 已在 GitHub 发布](https://github.com/ai68298100/xiaolv-common/releases/tag/v0.9.5)（2026-10-27）**。落地模板包导出隐私安全脱敏 (G31 闭环)、一键脱敏开关与专属规则配置弹窗；当前本地质量门禁单元 753/753 项全绿、TypeScript 编译 0 错误、交互审计 77/77、构建/密钥/包检查全部通过；真实宿主边界仍按 B-001–B-006 分层。当前处于 Epoch 6 小驴全生态联邦协同演进阶段；集市（bazaar/plugins.txt）未经用户明确批准严禁自行推送。当期账本：[docs/dev-plan-2026-10-27-r300.md](docs/dev-plan-2026-10-27-r300.md)。
 
 ## R2：AI 融入与原型质感（2026-10-06，用户指令立项）
 
@@ -933,5 +933,5 @@
 - [x] **G28 常用语使用热力透视与打字时间节省计算看板**：（已在 T-0140 实现）对标 Raycast Usage Insights / TextExpander Statistics，建立打字速度与按键节省计算模型，在设置面板量化呈现累计调用、节省击键、工时收益与 7 天活跃指标，纯本地侧车计算。
 - [x] **G29 模板包片段嵌套依赖树形图谱分析与导入策略可视化**：（已在 T-0141 实现）解析并构建 Markdown 模板包内片段引用关系网，在导入策略对话框展示直观的层级依赖树，依赖脉络一览无余。
 - [x] **G30 批量条目分类与标签操作管理**：（已在 T-0142 实现）对标 Raycast Multi-select Actions / 邮箱批量处理，支持复选框/Shift 连选/Alt+M 批量选中，悬浮工具栏支持一键批量打标签与批量调整分类，防脏写与属性原子比对。
-- [ ] **G31 导出隐私脱敏与敏感文本屏蔽过滤器**：对标 1Password / 企业合规导出，在 Markdown 模板包导出时提供选项脱敏手机号、邮箱、IP、身份证及自定义关键词，保护个人与团队隐私。
-- [ ] **G32 别名与首字母权重动态倾斜检索算法**：对标 Alfred / Raycast 顶级命中体验，若查询词精确命中条目别名首字母或完整别名，大幅倾斜匹配权重置顶，杜绝正文稀释。
+- [x] **G31 导出隐私脱敏与敏感文本屏蔽过滤器**：（已在 T-0143/T-0195 实现）对标 1Password / 企业合规导出，在 Markdown 模板包导出时提供选项脱敏手机号、邮箱、IP、身份证及自定义关键词，保护个人与团队隐私。
+- [x] **G32 别名与首字母权重动态倾斜检索算法**：（已在 T-0144 实现）对标 Alfred / Raycast 顶级命中体验，若查询词精确命中条目别名首字母或完整别名，大幅倾斜匹配权重置顶，杜绝正文稀释。
