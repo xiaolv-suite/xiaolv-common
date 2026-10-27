@@ -1,6 +1,6 @@
 {
   "name": "xiaolv-common",
-  "version": "0.9.9",
+  "version": "0.10.0",
   "description": "SiYuan plugin: quick recall and reuse of common content anchored to real SiYuan blocks.",
   "main": "index.js",
   "scripts": {
@@ -16,6 +16,7 @@
     "e2e:discovery:iso": "node scripts/e2e-isolated.cjs --discovery-only",
     "scan": "node scripts/secret-scan.cjs",
     "check:errors": "node scripts/check-error-handling.cjs",
+    "check:changelog": "node scripts/check-changelog.cjs",
     "check:package": "node scripts/check-package.cjs",
     "it:kernel": "node scripts/integration-kernel.cjs"
   },

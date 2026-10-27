@@ -162,6 +162,7 @@ export class CommonSearchDialog {
     private virtualListCleanup: (() => void) | null = null;
     private virtualEnsureIndex: ((index: number) => void) | null = null;
     private updateHistoryBarRef: (() => void) | null = null;
+    private syncQueueChipRef: (() => void) | null = null;
     /** 宿主拒绝请求时覆盖旧列表，避免用户继续对过期结果执行写操作。 */
     private accessIssueMessage: string | null = null;
     // 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。
@@ -574,6 +575,32 @@ export class CommonSearchDialog {
             track.appendChild(chip);
         }
         filters.appendChild(track);
+
+        const queueChip = document.createElement("button");
+        queueChip.type = "button";
+        queueChip.className = "xlc-chip xlc-queue-chip";
+        queueChip.dataset.xlcControl = "queue.status-chip";
+        queueChip.style.display = "none";
+        const syncQueueChip = (): void => {
+            const queue = getActivePasteQueue();
+            const count = queue.size();
+            if (count > 0) {
+                queueChip.style.display = "inline-flex";
+                queueChip.textContent = `📋 队列: ${count}项 (⌥⇧Q) · [清空]`;
+                queueChip.title = `连续取用队列中还有 ${count} 项，按 ⌥⇧Q 依次粘贴输出。点击可一键清空队列。`;
+            } else {
+                queueChip.style.display = "none";
+            }
+        };
+        queueChip.addEventListener("click", () => {
+            const queue = getActivePasteQueue();
+            queue.clear();
+            syncQueueChip();
+            this.deps.notify?.("info", "已清空连续粘贴取用队列");
+        });
+        this.syncQueueChipRef = syncQueueChip;
+        filters.appendChild(queueChip);
+        syncQueueChip();
         // AI 语义结果横幅（? 查询命中时显示；原型顺序=筛选行首位）
         const aiBanner = document.createElement("span");
         aiBanner.className = "xlc-chip xlc-ai-banner";
@@ -1518,6 +1545,7 @@ export class CommonSearchDialog {
         this.finishSearchLoad(list);
         this.renderList(list);
         this.updatePreview();
+        this.syncQueueChipRef?.();
     }
 
     /** 收尾一次搜索刷新：解除列表加载反馈（成功与失败路径共用）。 */
@@ -4230,6 +4258,7 @@ export class CommonSearchDialog {
                 content: i.content || i.summary || "",
                 itemType: i.itemType,
             })));
+            this.syncQueueChipRef?.();
             this.exitMultiSelectMode();
             this.deps.notify?.("info", this.deps.t("setPasteQueueSuccess", String(selectedItems.length)));
         });

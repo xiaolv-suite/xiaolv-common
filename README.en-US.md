@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.9 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Auto Template Variable Wizard (✦ Auto Params), Punctuation Normalizer (✦ Norm Punct), and 771 passing automated tests.
+> **Released: v0.10.0 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Visual paste queue indicator chip, automated changelog gate, and 774 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.9)
+## This release (v0.10.0)
+
+Visual Paste Queue Status Chip & Automated CHANGELOG Quality Gate:
+
+- **Visual Paste Queue Indicator Chip (`xlc-queue-chip`)**: Dynamic status chip in the search dialog toolbar showing remaining items in the queue with one-click clearing.
+- **Automated CHANGELOG Synchronization Quality Gate (`scripts/check-changelog.cjs`)**: Hard gate enforcing that `CHANGELOG.md` exactly documents the current package version.
+
+## Previous release (v0.9.9)
 
 Auto Template Parameterizer & Punctuation Normalizer:
 
