@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.2 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Markdown table alignment syntax, text character metrics & reading time estimation, and 779 passing automated tests.
+> **Released: v0.10.3 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Selection toolbar deduplication, auto-filling selected text into dialogs, and 781 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.2)
+## This release (v0.10.3)
+
+Selection Toolbar Deduplication & Auto-Filling Selected Text:
+
+- **Protyle Toolbar Deduplication**: Fixed duplicate icon bug caused by simultaneous `updateProtyleToolbar` and `addToolbarItem` calls, guaranteeing a single toolbar action.
+- **Auto-Filling Selected Text**: Clicking the toolbar with short selected text automatically pre-fills the search input and focuses it; long/multiline selections automatically open the capture form with pre-filled content.
+- **Quality Gates**: All 781 unit tests pass.
+
+## Previous release (v0.10.2)
 
 Markdown Table Alignments & Text Metrics Reading Estimator:
 

@@ -30,6 +30,8 @@ import {AdjacentBlocksContext} from "../service/omni-search";
 export interface DialogDeps {
     t: (key: string, ...args: string[]) => string;
     notify?: (kind: "info" | "error", message: string) => void;
+    /** 打开搜索面板时主动注入的初始查询词（例如从编辑器划选文本时带入） */
+    initialQuery?: string;
     search: (query: SearchQuery) => Promise<{entries: SearchEntry[]; truncated: boolean; total: number; loading?: boolean; error?: string}>;
     /** 文档搜索（插入到指定文档的选择器） */
     searchDocs: (k: string) => Promise<Array<{id: string; hPath: string; name: string}>>;
@@ -205,12 +207,16 @@ export class CommonSearchDialog {
         mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"));
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
-            // 上次搜索词回填（跨会话保留）
-            const last = this.deps.getLastQuery();
-            if (last) {
-                input.value = last;
+            const initial = this.deps.initialQuery?.trim();
+            const queryToFill = initial || this.deps.getLastQuery();
+            if (queryToFill) {
+                input.value = queryToFill;
                 this.currentScope = "all";
                 input.dispatchEvent(new Event("input", {bubbles: true}));
+                if (initial) {
+                    // 若是由划选文本带入，全选以便用户可直接回车确认或敲键覆盖
+                    input.select();
+                }
             }
             input.focus();
         }

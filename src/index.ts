@@ -927,17 +927,36 @@ export default class XiaolvCommonPlugin extends Plugin {
         void t;
     }
 
+    /** 划选浮动工具栏点击：智能感知当前活动选区 */
+    private handleToolbarClick(): void {
+        const selectedText = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : "";
+        if (selectedText) {
+            // 如果划选的内容较长（如超过 120 字符）或包含换行，说明用户意图大概率是保存大段模板/文章
+            if (selectedText.length > 120 || selectedText.includes("\n")) {
+                void this.capture?.saveSelection();
+            } else {
+                // 简短词句（如“产业”）：直接弹出搜索弹窗并自动填入选定内容，立等检索并支持一键新建
+                this.openSearch(undefined, selectedText);
+            }
+        } else {
+            this.openSearch();
+        }
+    }
+
     /**
      * 编辑器工具栏入口（官方 Plugin.updateProtyleToolbar 覆写；宿主渲染工具栏时回调）。
-     * 桌面/移动通用：给编辑器工具栏加「常用」按钮。
+     * 桌面/移动通用：给编辑器工具栏加「常用」按钮，严格去重防双胞胎图标。
      */
     public updateProtyleToolbar(toolbar: Array<string | IMenuItem>): Array<string | IMenuItem> {
         try {
+            if (toolbar.some((item) => typeof item === "object" && item && item.name === "xiaolv-common-toolbar")) {
+                return toolbar;
+            }
             return [...toolbar, {
                 name: "xiaolv-common-toolbar",
                 icon: "iconXlcCommon",
                 tip: this.i18nFn()("openSearch"),
-                click: () => this.openSearch(),
+                click: () => this.handleToolbarClick(),
             }];
         } catch {
             return toolbar;
@@ -954,17 +973,6 @@ export default class XiaolvCommonPlugin extends Plugin {
             });
         } catch {
             // 旧宿主无此 API：命令面板仍可用
-        }
-        try {
-            // 移动端编辑器工具栏入口（桌面端该调用无害；失败静默走命令）
-            this.addToolbarItem({
-                name: "xiaolv-common-open",
-                icon: "iconXlcCommon",
-                tip: this.i18nFn()("openSearch"),
-                click: () => this.openSearch(),
-            });
-        } catch {
-            // 移动端工具栏 API 缺失：降级为命令触发
         }
         try {
             // 文档面包屑入口（官方 addBreadcrumbButton；callback 带该页签 protyle）：
@@ -1194,8 +1202,8 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     }
 
-    /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式（插入到指定文档） */
-    openSearch(insertTarget?: {docId: string; hPath: string}): void {
+    /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框 */
+    openSearch(insertTarget?: {docId: string; hPath: string}, initialQuery?: string): void {
         if (!this.library || !this.capture || !this.service) {
             showMessage(this.i18nFn()("startupFailed", "services unavailable"), 7000, "error");
             return;
@@ -1237,6 +1245,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.searchDialog?.destroy();
         this.searchDialog = new CommonSearchDialog({
             t: this.i18nFn(),
+            initialQuery,
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {
                 const loading = !this.library.getIndex();
