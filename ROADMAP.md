@@ -4,7 +4,7 @@
 
 > 定位：**思源笔记的内容资产层**——高频内容是有元数据、有来源、可检索、可变通、可共享的真实块资产（v3，2026-10-07 调研后修订）。三大一级场景：客服/邮件模板、AI 提示词库、研发/写作常用件。
 > 精准定位与调研证据：[docs/positioning.md](docs/positioning.md)。UI 唯一视觉事实源：[docs/design/prototype.html](docs/design/prototype.html)（v4 实现镜像）+ [docs/design/design-spec.md](docs/design/design-spec.md)；组件清单：[docs/ui-component-catalog.md](docs/ui-component-catalog.md)。生产证据：docs/design/production-*.png。
-> 状态：**[v0.10.4 已在 GitHub 发布](https://github.com/ai68298100/xiaolv-common/releases/tag/v0.10.4)（2026-10-28）**。落地 Task Horizon SOP 任务清单包与思源标准 Callout 提示框组件包；当前本地质量门禁单元 783/783 项全绿、TypeScript 编译 0 错误、交互审计 77/77、构建/密钥/包检查全部通过；真实宿主边界仍按 B-001–B-006 分层。当前处于 Epoch 6 小驴全生态联邦协同演进阶段；集市（bazaar/plugins.txt）未经用户明确批准严禁自行推送。当期账本：[docs/dev-plan-2026-10-27-r300.md](docs/dev-plan-2026-10-27-r300.md)。
+> 状态：**[v0.10.5 已在 GitHub 发布](https://github.com/ai68298100/xiaolv-common/releases/tag/v0.10.5)（2026-10-28）**。落地单条条目分享码极速生成与搜索框即刻识别导入闭环；当前本地质量门禁单元 785/785 项全绿、TypeScript 编译 0 错误、交互审计 77/77、构建/密钥/包检查全部通过；真实宿主边界仍按 B-001–B-006 分层。当前处于 Epoch 6 小驴全生态联邦协同演进阶段；集市（bazaar/plugins.txt）未经用户明确批准严禁自行推送。当期账本：[docs/dev-plan-2026-10-27-r300.md](docs/dev-plan-2026-10-27-r300.md)。
 
 ## R2：AI 融入与原型质感（2026-10-06，用户指令立项）
 

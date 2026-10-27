@@ -24,6 +24,7 @@ import {formatScopeFallbackQuery, shouldShowOmniSearchFallback, shouldShowScopeF
 import {findPinyinMatches} from "../model/pinyin-tiny";
 import {renderSafePreview} from "./preview-renderer";
 import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
+import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
 
 import {AdjacentBlocksContext} from "../service/omni-search";
 
@@ -77,6 +78,7 @@ export interface DialogDeps {
     clearClipboardHistory?: () => void;
     addClipboardHistory?: (text: string) => void;
     syncSystemClipboard?: () => Promise<string | null>;
+    importBundleText?: (text: string) => Promise<unknown>;
     /** 定向插入目标（文档树入口；设置后 Enter/点按插入到该文档而非活动编辑器） */
     insertTarget?: {docId: string; hPath: string} | null;
     toggleFavorite: (itemId: string) => boolean;
@@ -166,6 +168,7 @@ export class CommonSearchDialog {
     private virtualEnsureIndex: ((index: number) => void) | null = null;
     private updateHistoryBarRef: (() => void) | null = null;
     private syncQueueChipRef: (() => void) | null = null;
+    private compactBundleCandidate: ExportBundle | null = null;
     /** 宿主拒绝请求时覆盖旧列表，避免用户继续对过期结果执行写操作。 */
     private accessIssueMessage: string | null = null;
     // 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。
@@ -1347,7 +1350,19 @@ export class CommonSearchDialog {
         let directError = "";
         try {
             const text = query.text.trim();
-            if (text.startsWith("?") && text.length > 1) {
+            this.compactBundleCandidate = null;
+            if (text.startsWith(COMPACT_BUNDLE_PREFIX) || text.startsWith("xlc://import?")) {
+                const compact = deserializeCompactBundle(text);
+                if (compact && compact.items && compact.items.length > 0) {
+                    this.compactBundleCandidate = compact;
+                    this.results = [];
+                    total = compact.items.length;
+                    truncated = false;
+                    loading = false;
+                    this.aiResults = false;
+                    if (aiBanner) aiBanner.style.display = "none";
+                }
+            } else if (text.startsWith("?") && text.length > 1) {
                 // AI 语义找（仅元数据出域；未启用/失败诚实提示）
                 const aiScope: "all" | "favorites" | "recent" = this.currentScope === "favorites" || this.currentScope === "recent" ? this.currentScope : "all";
                 const aiResult = await this.deps.aiSemantic(text.slice(1), {itemType: query.itemType ?? "", tag: query.tag ?? "", category: query.category ?? "", scope: aiScope});
@@ -2071,6 +2086,30 @@ export class CommonSearchDialog {
                     });
                     empty.appendChild(allNotesBtn);
                 }
+            }
+
+            if (this.compactBundleCandidate && this.deps.importBundleText) {
+                const candidate = this.compactBundleCandidate;
+                const importBtn = document.createElement("button");
+                importBtn.type = "button";
+                importBtn.className = "b3-button xlc-btn-primary xlc-empty-action";
+                importBtn.dataset.xlcControl = "empty.import-compact-bundle";
+                const label = this.deps.t("detectedCompactBundle", String(candidate.items.length));
+                importBtn.textContent = label;
+                importBtn.setAttribute("aria-label", label);
+                importBtn.addEventListener("click", async () => {
+                    importBtn.disabled = true;
+                    importBtn.textContent = this.deps.t("loading");
+                    try {
+                        await this.deps.importBundleText!(this.lastQueryText);
+                        this.deps.notify?.("info", this.deps.t("importCompactBundleDone"));
+                        this.dialog?.element.querySelector<HTMLInputElement>(".xlc-search-input")?.focus();
+                    } catch (err) {
+                        this.deps.notify?.("error", toErrorMessage(err));
+                        importBtn.disabled = false;
+                    }
+                });
+                empty.appendChild(importBtn);
             }
 
             // 搜索无命中时同样提供下一步，避免用户只能返回其他入口再新建。
@@ -3254,6 +3293,29 @@ export class CommonSearchDialog {
                 addSilent("↗", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
                 addSilent("✎", this.deps.t("edit"), () => this.deps.editItem(entry.id));
                 addSilent("⧉", this.deps.t("duplicateItem"), () => this.deps.duplicateItem(entry.id));
+                addSilent("📦", this.deps.t("copyCompactBundle"), async () => {
+                    const raw = entry.content || await this.deps.preview(entry.id) || "";
+                    const kramdowns = new Map([[entry.id, raw]]);
+                    const itemObj: any = {
+                        id: entry.id,
+                        blockId: entry.blockId || entry.id,
+                        libraryDocId: entry.libraryDocId || "",
+                        itemType: entry.itemType,
+                        title: entry.title,
+                        alias: entry.alias || "",
+                        tags: entry.tags || [],
+                        category: entry.category || "",
+                        summary: entry.summary || "",
+                        varCount: entry.varCount || 0,
+                        source: {sourceType: "manual"},
+                        createdAt: entry.createdAt || Date.now(),
+                        updatedAt: entry.updatedAt || Date.now(),
+                    };
+                    const bundle = buildBundle([itemObj], kramdowns, Date.now());
+                    const code = serializeCompactBundle(bundle);
+                    await this.deps.copyProviderPayload(code);
+                    this.deps.notify?.("info", this.deps.t("copyCompactBundleSuccess"));
+                });
                 addSilent("✦", "盘古排版 (中英文加空格并复制)", async () => {
                     const raw = entry.content || await this.deps.preview(entry.id) || "";
                     const pangu = formatPanguSpacing(raw);

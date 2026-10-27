@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.4 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Task Horizon SOP checklists, standard Callout box components, and 783 passing automated tests.
+> **Released: v0.10.5 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Single-item share code generation, search-box share bundle detection & import, and 785 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.4)
+## This release (v0.10.5)
+
+Single-Item Compact Share Code & Search Ingestion:
+
+- **Single-Item Compact Share Code (`copyCompactBundle`)**: Action menu now supports copying individual snippets as compact `xlc-bundle:xxxx` Base64 strings directly to clipboard for peer-to-peer sharing.
+- **Search Bar Bundle Sniffing & One-Click Import**: Pasting `xlc-bundle:...` or `xlc://import?bundle=...` in the search bar automatically detects the pack and presents `📥 Detected Compact Share Bundle (N items), click to import`.
+- **Quality Gates**: All 785 unit tests pass.
+
+## Previous release (v0.10.4)
 
 Task Horizon SOP Checklists & Standard Callout Components:
 

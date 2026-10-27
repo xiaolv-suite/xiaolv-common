@@ -1538,6 +1538,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             addClipboardHistory: (text: string) => {
                 this.recordClipboard(text);
             },
+            importBundleText: async (text: string) => {
+                return this.importBundleText(text, "rename");
+            },
             syncSystemClipboard: async () => {
                 try {
                     if (navigator.clipboard?.readText && window.isSecureContext) {

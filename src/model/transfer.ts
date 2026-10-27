@@ -49,7 +49,7 @@ export function buildBundle(
                 itemType: item.itemType,
                 title: item.title,
                 alias: item.alias,
-                tags: [...item.tags],
+                tags: Array.isArray(item.tags) ? [...item.tags] : [],
                 category: item.category,
                 kramdown: body,
                 source: {...item.source},
@@ -98,6 +98,8 @@ export function deserializeCompactBundle(text: string): ExportBundle | null {
         const query = trimmed.slice("xlc://import?".length);
         const params = new URLSearchParams(query);
         b64 = params.get("bundle") ?? params.get("data") ?? "";
+        // 兼容 URL 参数解析将 base64 中的 '+' 误替换为空格
+        b64 = b64.replace(/ /g, "+");
     }
     if (!b64) return null;
     try {
