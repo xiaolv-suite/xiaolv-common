@@ -123,7 +123,7 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
         const container = document.createElement("div");
         container.className = "b3-dialog__container xlc-export-sanitizer-modal";
         container.innerHTML = htmlContent;
-        mountPlatformDialogTitleWrap(container, "导出安全脱敏选项", "v0.7.6", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(container, "导出安全脱敏选项");
 
         const parseOptions = (): SanitizerOptions => {
             const modeSelect = container.querySelector(".xlc-export-sanitizer-mode") as HTMLSelectElement | null;

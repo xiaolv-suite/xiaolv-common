@@ -355,7 +355,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
         const container = document.createElement("div");
         container.className = "b3-dialog__container xlc-sync-diff-modal";
         container.innerHTML = fullHtml;
-        mountPlatformDialogTitleWrap(container, titleText, "v0.7.6", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(container, titleText);
 
         const updateView = () => {
             currentPlan = planLibrarySync(props.report, currentStrategy, {mirrorDelete});

@@ -1,6 +1,6 @@
 # LvCommon (Beta)
 
-> **Unreleased local fix (R238):** Body creation, updates, and import currently accept only a single line or one complete code fence because multi-block integrity is unresolved. The example pack now has 25 items: 8 are safe under this restriction (the original 3 plus five single-line/code starters for email, address, invalid identity placeholders, URLs, and code), while 17 original multi-line templates are rejected. Full resumes, company introductions, and structured examples are unavailable. These protections are not in the published GitHub v0.4.2.
+> **Security Baseline (B-006):** To prevent uncontrolled nested container parsing in SiYuan and preserve block integrity, body creation, updates, and import enforce pre-write safeguards accepting a single line or a complete code fence; multi-line code or block references should be used for structured snippets. Safe single-line and code starter examples in the pack are readily usable. See [Known Limitations](#known-limitations).
 
 [![CI](https://github.com/ai68298100/xiaolv-common/actions/workflows/ci.yml/badge.svg)](https://github.com/ai68298100/xiaolv-common/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/github/v/tag/ai68298100/xiaolv-common?label=version&sort=semver)](https://github.com/ai68298100/xiaolv-common/releases)

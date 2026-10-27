@@ -36,7 +36,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     });
     const container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("csvImportTitle"), "v0.7.7", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("csvImportTitle"));
 
     // 移动端虚拟键盘安全避让
     const handleViewport = () => {

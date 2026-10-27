@@ -344,7 +344,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         });
         this.dialog = dialog;
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-discovery-host");
-        mountPlatformDialogTitleWrap(dialog.element, this.options.title ?? this.tx(this.titleKey()), "v0.7.7", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(dialog.element, this.options.title ?? this.tx(this.titleKey()));
         const body = getDialogBody(dialog.element);
         if (!body) return;
         body.innerHTML = "";

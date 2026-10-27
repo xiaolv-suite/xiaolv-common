@@ -1,3 +1,5 @@
+import {PLUGIN_DISPLAY_VERSION} from "../constants";
+
 /**
  * SiYuan 弹窗内容容器兼容层（R142 P0）。
  * 真实 v3.8.x 前端的 Dialog 内容容器是 .b3-dialog__body（旧版为 .b3-dialog__content）。
@@ -16,7 +18,7 @@ export function getDialogBody(root: HTMLElement | Document): HTMLElement | null 
 export function mountPlatformDialogTitleWrap(
     dialogElement: HTMLElement | null | undefined,
     titleText: string,
-    badgeText = "v0.9.3",
+    badgeText = PLUGIN_DISPLAY_VERSION,
     iconName = "iconXlcCommon",
 ): HTMLElement | null {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;

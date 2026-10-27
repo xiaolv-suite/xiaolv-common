@@ -198,7 +198,7 @@ export class CommonSearchDialog {
         }
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
-        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"), "v0.9.3", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"));
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             // 上次搜索词回填（跨会话保留）
@@ -816,7 +816,7 @@ export class CommonSearchDialog {
             width: "min(600px, 92vw)",
             height: "min(680px, 88vh)",
         });
-        mountPlatformDialogTitleWrap(guideDialog.element, this.deps.t("usageGuideTitle"), "v0.7.7", "iconXlcCommon");
+        mountPlatformDialogTitleWrap(guideDialog.element, this.deps.t("usageGuideTitle"));
         guideDialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
         const body = getDialogBody(guideDialog.element);
         if (!body) return;

@@ -388,6 +388,8 @@
   "quickCaptureDuplicate": "已存在同文条目「%s」，未重复保存",
   "promptPackBtn": "导入常用内容示例",
   "promptPackHint": "示例包包含 25 条分类模板，其中 8 条（邮箱、地址、无效身份占位、网址和代码入门等）符合当前单行内容或完整代码围栏限制；其余 17 条多行模板会被拒绝并列出原因（B-006）。建议跳过重复；完整简历、公司介绍和结构模板暂不可用，照片/PPT/PDF/DOCX 需先添加真实资源，示例包不会安装附件。",
+  "reformulationPackBtn": "导入渐进反思批判模板包 (SuperMemo)",
+  "reformulationPackHint": "基于 SuperMemo 渐进思考与深度加工理念预置 6 项高阶模板（论点提炼、反思质疑、网状联结、行动指引、金句摘录与四维重述卡），100% 符合 B-006 写前安全限制，开箱即用。",
   "clearSearch": "清空搜索",
   "shortcutLabel": "操作提示",
   "searchAllScopeAction": "在全部内容中搜索「%s」",

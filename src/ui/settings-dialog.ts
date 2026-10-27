@@ -14,7 +14,7 @@ import {ProviderRegistry} from "../service/providers";
 import {CommonItem} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {collectTags} from "../model/search";
-import {PROMPT_PACK_MD} from "../service/prompt-pack";
+import {PROMPT_PACK_MD, REFORMULATION_PACK_MD} from "../service/prompt-pack";
 import type {SavedDiscoveryScope, SavedDiscoveryView} from "../model/storage";
 import {openCsvTsvImportWizard} from "./csv-tsv-wizard";
 import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doctor";
@@ -113,7 +113,7 @@ export function openSetupDialog(ctx: SettingsUiContext, opts?: SetupDialogOption
     });
     activeSetupDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-setup-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("setupTitle"), "v0.7.7", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("setupTitle"));
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -142,7 +142,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     });
     activeSettingsDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"), "v0.9.3", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("openSettings"));
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -251,7 +251,7 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
         height: "min(680px, 90vh)", // 固定高：分类切换不顶跳（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("packExportTitle"), "v0.7.7", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("packExportTitle"));
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -2344,6 +2344,44 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
     templateRow.appendChild(templateBtn);
     dataSec.appendChild(templateRow);
 
+    // 渐进批判反思模板包导入（Issue #2）
+    const reformRow = document.createElement("div");
+    reformRow.className = "xlc-setting-row xlc-template-import-row";
+    const reformText = document.createElement("span");
+    reformText.className = "xlc-setting-text";
+    reformText.textContent = t("reformulationPackHint");
+    reformRow.appendChild(reformText);
+    const reformBtn = document.createElement("button");
+    reformBtn.type = "button";
+    reformBtn.className = "b3-button";
+    reformBtn.textContent = t("reformulationPackBtn");
+    reformBtn.dataset.xlcControl = "settings.data.reformulationImport";
+    reformBtn.addEventListener("click", () => {
+        if (reformBtn.disabled) return;
+        reformBtn.disabled = true;
+        reformBtn.setAttribute("aria-busy", "true");
+        const originalLabel = reformBtn.textContent ?? "";
+        reformBtn.textContent = t("loading");
+        setOperationStatus("loading", t("loading"));
+        const parsed = parseMarkdownPack(REFORMULATION_PACK_MD);
+        if (parsed.items.length === 0) {
+            const message = t("importFailed", t("importReasonPackEmpty"));
+            ctx.notify("error", message);
+            setOperationStatus("error", message, () => reformBtn.click());
+            reformBtn.disabled = false;
+            reformBtn.removeAttribute("aria-busy");
+            reformBtn.textContent = originalLabel;
+            return;
+        }
+        openImportPolicyDialog(ctx, {items: parsed.items, pack: parsed.pack}, parsed.issues, {kind: "markdown-pack", items: parsed.items});
+        setOperationStatus("success", t("importPreview", String(parsed.items.length), String(parsed.issues.length)));
+        reformBtn.disabled = false;
+        reformBtn.removeAttribute("aria-busy");
+        reformBtn.textContent = originalLabel;
+    });
+    reformRow.appendChild(reformBtn);
+    dataSec.appendChild(reformRow);
+
     // 思源原生属性视图（AV 数据库）自动化联动指引（G51）
     const avRow = document.createElement("div");
     avRow.className = "xlc-template-import-row";
@@ -2385,7 +2423,7 @@ function openEspansoImportDialog(ctx: SettingsUiContext, onClose?: () => void): 
     });
     const container = dialog.element.querySelector(".b3-dialog__container");
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("espansoTitle"), "v0.7.7", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("espansoTitle"));
     const body = getDialogBody(dialog.element);
     if (!body) {
         onClose?.();
@@ -2531,7 +2569,7 @@ async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown"> {
         height: "min(600px, 84vh)", // 固定高：建议清单增长不顶跳（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("tagAuditTitle"), "v0.7.7", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("tagAuditTitle"));
     const body = getDialogBody(dialog.element);
     if (!body) throw new Error(t("kernelError", "无法打开体检结果"));
     body.innerHTML = "";
@@ -2584,7 +2622,7 @@ export function openImportPolicyDialog(
         height: "min(640px, 86vh)", // 固定高：策略卡片高度稳定（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
-    mountPlatformDialogTitleWrap(dialog.element, t("importPolicyTitle"), "v0.7.7", "iconXlcCommon");
+    mountPlatformDialogTitleWrap(dialog.element, t("importPolicyTitle"));
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";

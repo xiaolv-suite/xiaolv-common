@@ -388,6 +388,8 @@
   "quickCaptureDuplicate": "Duplicate of \"%s\" exists; not saved again",
   "promptPackBtn": "Import common content examples",
   "promptPackHint": "The example pack has 25 categorized templates. Eight, including email, address, invalid identity placeholder, URL, and code starters, fit the current single-line or complete-code-fence limit; the other 17 multi-line templates are rejected with a reason (B-006). Skipping duplicates is recommended. Full resumes, company introductions, and structured templates are unavailable; add real images, PPT, PDF/DOCX, or resume files to SiYuan first because the pack does not install attachments.",
+  "reformulationPackBtn": "Import Reformulation Pack (SuperMemo)",
+  "reformulationPackHint": "Preconfigured with 6 cognitive templates inspired by SuperMemo (thesis, critique, connection, action, quote, and full reformulation), 100% compliant with B-006 pre-write security restrictions.",
   "clearSearch": "Clear search",
   "shortcutLabel": "Keyboard actions",
   "searchAllScopeAction": "Search \"%s\" in all items",
