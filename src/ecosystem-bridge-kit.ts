@@ -73,6 +73,8 @@ export const ECOSYSTEM_EVENTS = Object.freeze({
     // 快门
     QUICKGATE_COMMAND_EXECUTED: "lv-quickgate:command-executed",
     QUICKGATE_DATA_CHANGED: "lv-quickgate:data-changed",
+    // 联盟伙伴：Task Horizon (任务视界)
+    TASK_COMPLETED: "tm:task-completed",
 } as const);
 
 /* ========================================================================= */
@@ -298,6 +300,67 @@ export interface QuickGateBridgeApi {
     runCommand(plugin: string, command: string): Promise<ActionResult<unknown>>;
 }
 
+// --- ⑩ Task Horizon 任务视界 (siyuan-plugin-task-horizon) ---
+export interface TaskHorizonItem {
+    id: string;
+    blockId: string;
+    title: string;
+    docId: string;
+    status: string;
+    done: boolean;
+    priority: "high" | "medium" | "low" | "none" | string;
+    startDate?: string;
+    completionTime?: string;
+    tags: string[];
+}
+
+export interface TaskHorizonQueryOptions {
+    date?: "today" | string;
+    scope?: "current" | "all";
+    limit?: number;
+    includeCompleted?: boolean;
+}
+
+export interface TaskHorizonQueryResult {
+    tasks: TaskHorizonItem[];
+    total: number;
+    partial: boolean;
+    truncated: boolean;
+}
+
+export interface TaskHorizonStatusOption {
+    id: string;
+    name: string;
+    marker: string;
+}
+
+export interface TaskHorizonCompletedEventDetail {
+    id: string;
+    title: string;
+    blockId: string;
+    docId: string;
+    completedAt: number;
+    tags: string[];
+    operationId?: string;
+    occurrenceId?: string;
+    source?: string;
+}
+
+export interface TaskHorizonBridgeApi {
+    readonly protocol: "task-horizon";
+    readonly apiVersion: number;
+    readonly version: string;
+    readonly capabilities?: readonly string[];
+    isReady(): boolean;
+    whenReady(): Promise<boolean>;
+    hasCapability?(name: string): boolean;
+    getTodayTasks(): Promise<TaskHorizonItem[]>;
+    queryTasks(options?: TaskHorizonQueryOptions): Promise<TaskHorizonQueryResult>;
+    getStatusOptions(): TaskHorizonStatusOption[];
+    setTaskStatus(blockId: string, statusId: string): Promise<boolean>;
+    openView(viewType: "list" | "checklist" | "timeline" | "kanban" | "calendar" | "whiteboard"): Promise<void> | void;
+}
+
 /* ========================================================================= */
 /* 4. 统一别名检索表 (Ecosystem Bridge Aliases Registry)                      */
 /* ========================================================================= */
@@ -312,6 +375,7 @@ export const BRIDGE_ALIASES = Object.freeze({
     cards: ["xiaolvCards", "lvCards", "LvCards", "siyuanCards"],
     common: ["xiaolvCommon", "LvCommon", "lvCommon", "siyuanCommon"],
     quickgate: ["LvQuickgate", "lvQuickgate", "xiaolvQuickgate", "siyuanQuickgate"],
+    taskHorizon: ["TaskHorizon", "taskHorizon", "siyuanTaskHorizon"],
 } as const);
 
 /* ========================================================================= */
@@ -449,5 +513,29 @@ export function subscribeEcosystemEvent<T = Record<string, unknown>>(
     window.addEventListener(eventName, listener);
     return () => {
         window.removeEventListener(eventName, listener);
+    };
+}
+
+/**
+ * 监听 Task Horizon 任务完成事件 (tm:task-completed)
+ * 返回注销清理函数
+ */
+export function onTaskHorizonCompleted(
+    listener: (detail: TaskHorizonCompletedEventDetail) => void
+): () => void {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") {
+        return () => {};
+    }
+    const handler = (evt: Event) => {
+        try {
+            const custom = evt as CustomEvent<TaskHorizonCompletedEventDetail>;
+            if (custom.detail) listener(custom.detail);
+        } catch (e) {
+            console.error("[小驴生态联邦] 处理 Task Horizon 完成事件异常:", e);
+        }
+    };
+    window.addEventListener("tm:task-completed", handler);
+    return () => {
+        window.removeEventListener("tm:task-completed", handler);
     };
 }

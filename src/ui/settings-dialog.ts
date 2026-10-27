@@ -14,7 +14,7 @@ import {ProviderRegistry} from "../service/providers";
 import {CommonItem} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {collectTags} from "../model/search";
-import {PROMPT_PACK_MD, REFORMULATION_PACK_MD} from "../service/prompt-pack";
+import {PROMPT_PACK_MD, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_MD, CALLOUT_PACK_MD} from "../service/prompt-pack";
 import type {SavedDiscoveryScope, SavedDiscoveryView} from "../model/storage";
 import {openCsvTsvImportWizard} from "./csv-tsv-wizard";
 import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doctor";
@@ -2429,6 +2429,82 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
     });
     reformRow.appendChild(reformBtn);
     dataSec.appendChild(reformRow);
+
+    // Task Horizon 联动 SOP 任务清单包导入（Issue #3）
+    const thRow = document.createElement("div");
+    thRow.className = "xlc-setting-row xlc-template-import-row";
+    const thText = document.createElement("span");
+    thText.className = "xlc-setting-text";
+    thText.textContent = t("taskHorizonPackHint");
+    thRow.appendChild(thText);
+    const thBtn = document.createElement("button");
+    thBtn.type = "button";
+    thBtn.className = "b3-button";
+    thBtn.textContent = t("taskHorizonPackBtn");
+    thBtn.dataset.xlcControl = "settings.data.taskHorizonImport";
+    thBtn.addEventListener("click", () => {
+        if (thBtn.disabled) return;
+        thBtn.disabled = true;
+        thBtn.setAttribute("aria-busy", "true");
+        const originalLabel = thBtn.textContent ?? "";
+        thBtn.textContent = t("loading");
+        setOperationStatus("loading", t("loading"));
+        const parsed = parseMarkdownPack(TASK_HORIZON_PACK_MD);
+        if (parsed.items.length === 0) {
+            const message = t("importFailed", t("importReasonPackEmpty"));
+            ctx.notify("error", message);
+            setOperationStatus("error", message, () => thBtn.click());
+            thBtn.disabled = false;
+            thBtn.removeAttribute("aria-busy");
+            thBtn.textContent = originalLabel;
+            return;
+        }
+        openImportPolicyDialog(ctx, {items: parsed.items, pack: parsed.pack}, parsed.issues, {kind: "markdown-pack", items: parsed.items});
+        setOperationStatus("success", t("importPreview", String(parsed.items.length), String(parsed.issues.length)));
+        thBtn.disabled = false;
+        thBtn.removeAttribute("aria-busy");
+        thBtn.textContent = originalLabel;
+    });
+    thRow.appendChild(thBtn);
+    dataSec.appendChild(thRow);
+
+    // 思源标准 Callout 提示框组件包导入（Issue #3）
+    const calloutRow = document.createElement("div");
+    calloutRow.className = "xlc-setting-row xlc-template-import-row";
+    const calloutText = document.createElement("span");
+    calloutText.className = "xlc-setting-text";
+    calloutText.textContent = t("calloutPackHint");
+    calloutRow.appendChild(calloutText);
+    const calloutBtn = document.createElement("button");
+    calloutBtn.type = "button";
+    calloutBtn.className = "b3-button";
+    calloutBtn.textContent = t("calloutPackBtn");
+    calloutBtn.dataset.xlcControl = "settings.data.calloutImport";
+    calloutBtn.addEventListener("click", () => {
+        if (calloutBtn.disabled) return;
+        calloutBtn.disabled = true;
+        calloutBtn.setAttribute("aria-busy", "true");
+        const originalLabel = calloutBtn.textContent ?? "";
+        calloutBtn.textContent = t("loading");
+        setOperationStatus("loading", t("loading"));
+        const parsed = parseMarkdownPack(CALLOUT_PACK_MD);
+        if (parsed.items.length === 0) {
+            const message = t("importFailed", t("importReasonPackEmpty"));
+            ctx.notify("error", message);
+            setOperationStatus("error", message, () => calloutBtn.click());
+            calloutBtn.disabled = false;
+            calloutBtn.removeAttribute("aria-busy");
+            calloutBtn.textContent = originalLabel;
+            return;
+        }
+        openImportPolicyDialog(ctx, {items: parsed.items, pack: parsed.pack}, parsed.issues, {kind: "markdown-pack", items: parsed.items});
+        setOperationStatus("success", t("importPreview", String(parsed.items.length), String(parsed.issues.length)));
+        calloutBtn.disabled = false;
+        calloutBtn.removeAttribute("aria-busy");
+        calloutBtn.textContent = originalLabel;
+    });
+    calloutRow.appendChild(calloutBtn);
+    dataSec.appendChild(calloutRow);
 
     // 思源原生属性视图（AV 数据库）自动化联动指引（G51）
     const avRow = document.createElement("div");

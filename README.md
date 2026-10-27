@@ -12,7 +12,7 @@
 
 支持插入前填写变量、日期与随机占位符、片段嵌套、模板包分享、Espanso 配置导入、拼音搜索和 AI 辅助。插件可独立使用，也提供 `xiaolv-common/v1` 公开协议供小驴系列插件接入。
 
-> **已发布版本：v0.10.3（2026-10-28）** · [下载最新版](https://github.com/ai68298100/xiaolv-common/releases/latest) · 编辑器划词工具栏去重修复、划选内容自动输入弹出框、781 项单测全绿通过。
+> **已发布版本：v0.10.4（2026-10-28）** · [下载最新版](https://github.com/ai68298100/xiaolv-common/releases/latest) · Task Horizon SOP 任务清单包、官方标准 Callout 提示框组件包与 783 项单测全绿通过。
 
 ## 最新进阶演进（全域搜索终端、Headless 全局联动与同步比对合并 · R273~R292）
 
@@ -45,7 +45,15 @@
 - **计算与格式化**：纯函数递归下降四则算术求值器（`{{xlc:calc:100 * 1.13}}`）、UUID 生成器、文本命名范式转换器（camel/snake/kebab/pascal 等）、跨应用富文本双载荷剪贴板。
 - **安全治理**：批量标签与分类治理引擎、导出模板隐私安全脱敏（手机号/邮箱/Token 掩码或占位符化）。
 
-## 本次更新（v0.10.3）
+## 本次更新（v0.10.4）
+
+Task Horizon SOP 任务清单包与思源标准 Callout 提示框组件包（Issue #3 闭环）：
+
+- **Task Horizon 联动 SOP 任务清单模板包 (`TASK_HORIZON_PACK_MD`)**：预置标准 SOP 任务清单（项目发版 SOP、P0 故障排查 SOP、商务出行 SOP），原生注入标准属性（`custom-priority` 与 `custom-status`），插入文档后 Task Horizon 自动构建层级任务树与看板。
+- **思源官方标准 Callout 提示框组件包 (`CALLOUT_PACK_MD`)**：预置 Note、Tip、Important、Warning 与 Caution 五大高质感提示卡片，内嵌动态问答变量，一键插入高亮醒目的官方折叠 Callout 块。
+- **全套质量门禁**：单元测试 783/783 项全绿通过。
+
+## 历史版本（v0.10.3）
 
 编辑器划选浮动工具栏重复按钮修复与选定文本自动填入直达：
 

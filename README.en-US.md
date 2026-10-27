@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.3 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Selection toolbar deduplication, auto-filling selected text into dialogs, and 781 passing automated tests.
+> **Released: v0.10.4 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Task Horizon SOP checklists, standard Callout box components, and 783 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.3)
+## This release (v0.10.4)
+
+Task Horizon SOP Checklists & Standard Callout Components:
+
+- **Task Horizon SOP Checklist Pack (`TASK_HORIZON_PACK_MD`)**: Preconfigured with release, incident triage, and business trip checklists featuring Task Horizon standard priority and status attributes.
+- **SiYuan Standard Callout Components Pack (`CALLOUT_PACK_MD`)**: Preconfigured with Note, Tip, Important, Warning, and Caution cards with customizable prompt variables.
+- **Quality Gates**: All 783 unit tests pass.
+
+## Previous release (v0.10.3)
 
 Selection Toolbar Deduplication & Auto-Filling Selected Text:
 
