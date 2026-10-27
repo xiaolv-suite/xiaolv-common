@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.8 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · URL tracker scrubbing (✦ Clean URL), list numbering normalizer (✦ Norm List), clipboard type inference, and 767 passing automated tests.
+> **Released: v0.9.9 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Auto Template Variable Wizard (✦ Auto Params), Punctuation Normalizer (✦ Norm Punct), and 771 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.8)
+## This release (v0.9.9)
+
+Auto Template Parameterizer & Punctuation Normalizer:
+
+- **Auto Template Variable Wizard (`autoParameterizeText`)**: Dedicated button in authoring forms to auto-detect phones, emails, dates, amounts, and salutations, converting plain text into active `{{xlc:ask:...}}` dynamic templates.
+- **Punctuation Normalizer (`normalizePunctuation`)**: Auto-corrects ASCII punctuation into proper CJK punctuation in Chinese context while safely preserving code, decimals, and URLs.
+
+## Previous release (v0.9.8)
 
 URL Tracker Stripping, List Normalizer & Adaptive Clipboard Type:
 

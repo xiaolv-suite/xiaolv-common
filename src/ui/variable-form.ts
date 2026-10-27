@@ -6,7 +6,8 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation} from "../model/clipboard-cleaner";
+import {autoParameterizeText} from "../model/template-wizard";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
     text: "TXT", markdown: "MD", url: "URL", code: "CODE",
@@ -540,6 +541,38 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(listBtn);
+
+    const punctBtn = document.createElement("button");
+    punctBtn.type = "button";
+    punctBtn.className = "xlc-varbtn xlc-btn-ghost";
+    punctBtn.dataset.xlcControl = "capture.format.norm-punct";
+    punctBtn.textContent = "✦ 标点规整";
+    punctBtn.title = "将中文语境下的英文逗号、句号、问叹号与冒号一键规整为全角标点，跳过小数与URL";
+    punctBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const res = normalizePunctuation(el.value, "to-cjk");
+        if (res.convertedCount > 0) {
+            el.value = res.result;
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(punctBtn);
+
+    const paramBtn = document.createElement("button");
+    paramBtn.type = "button";
+    paramBtn.className = "xlc-varbtn xlc-btn-ghost";
+    paramBtn.dataset.xlcControl = "capture.format.auto-params";
+    paramBtn.textContent = "✦ 变量推导";
+    paramBtn.title = "智能侦测日期、称呼、金额、手机、邮箱等槽位，一键转换为动态常用语模板";
+    paramBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const paramRes = autoParameterizeText(el.value);
+        if (paramRes.suggestedCount > 0) {
+            el.value = paramRes.result;
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(paramBtn);
 
     return bar;
 }

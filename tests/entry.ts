@@ -54,6 +54,7 @@ import * as syncDiffModal from "../src/ui/sync-diff-modal";
 import * as ecosystem from "../src/service/ecosystem";
 import * as clipboardCleaner from "../src/model/clipboard-cleaner";
 import * as pasteQueue from "../src/model/paste-queue";
+import * as templateWizard from "../src/model/template-wizard";
 
 export {
     item,
@@ -108,4 +109,5 @@ export {
     ecosystem,
     clipboardCleaner,
     pasteQueue,
+    templateWizard,
 };

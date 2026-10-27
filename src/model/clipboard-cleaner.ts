@@ -140,7 +140,7 @@ export function stripUrlTrackingParams(text: string): {result: string; cleanedCo
     if (!text || !text.includes("http")) return {result: text ?? "", cleanedCount: 0};
 
     let cleanedCount = 0;
-    const urlPattern = /https?:\/\/[^\s)）\]]+/g;
+    const urlPattern = /https?:\/\/[^\s\u4e00-\u9fa5\u3040-\u30ff)）\]<>，。！？]+(?<![.,!?:;])/g;
 
     const result = text.replace(urlPattern, (urlStr) => {
         try {
@@ -173,7 +173,123 @@ export function stripUrlTrackingParams(text: string): {result: string; cleanedCo
     return {result, cleanedCount};
 }
 
+export type PunctuationMode = "to-cjk" | "to-ascii";
 export type ListFormatStyle = "markdown-ol" | "markdown-ul" | "chinese-circled";
+
+/**
+ * 中英文标点符号一键智能归一化与修正 (normalizePunctuation)
+ * to-cjk: 将中文句子中的英文标点 (, . ! ? : ; ( )) 转换为全角标点，智能跳过数字小数（如 3.14）、URL与代码
+ * to-ascii: 将中文全角标点转换为 ASCII 半角标点
+ */
+export function normalizePunctuation(
+    text: string,
+    mode: PunctuationMode = "to-cjk",
+): {result: string; convertedCount: number} {
+    if (!text || !text.trim()) return {result: text ?? "", convertedCount: 0};
+
+    // 保护代码块/行内代码与 URL
+    const codeBlocks: string[] = [];
+    let processed = text.replace(/(`{1,3})([\s\S]*?)\1/g, (match) => {
+        codeBlocks.push(match);
+        return `__XLC_CODE_PLACEHOLDER_${codeBlocks.length - 1}__`;
+    });
+
+    const urlBlocks: string[] = [];
+    processed = processed.replace(/(https?:\/\/[^\s\u4e00-\u9fa5\u3040-\u30ff)）\]<>，。！？]+(?<![.,!?:;])|\[[^\]]+\]\([^)]+\))/g, (match) => {
+        urlBlocks.push(match);
+        return `__XLC_URL_PLACEHOLDER_${urlBlocks.length - 1}__`;
+    });
+
+    let convertedCount = 0;
+
+    if (mode === "to-cjk") {
+        // 逗号：相邻汉字转中文逗号
+        processed = processed.replace(/([\u4e00-\u9fa5]),/g, (_m, cjk) => {
+            convertedCount++;
+            return `${cjk}，`;
+        });
+        processed = processed.replace(/,([\u4e00-\u9fa5])/g, (_m, cjk) => {
+            convertedCount++;
+            return `，${cjk}`;
+        });
+
+        // 句号：相邻汉字且后不接字母数字（避免小数与文件名）转中文句号
+        processed = processed.replace(/([\u4e00-\u9fa5])\.(?![a-zA-Z0-9])/g, (_m, cjk) => {
+            convertedCount++;
+            return `${cjk}。`;
+        });
+
+        // 问号/叹号
+        processed = processed.replace(/([\u4e00-\u9fa5])\?/g, (_m, cjk) => {
+            convertedCount++;
+            return `${cjk}？`;
+        });
+        processed = processed.replace(/([\u4e00-\u9fa5])!/g, (_m, cjk) => {
+            convertedCount++;
+            return `${cjk}！`;
+        });
+
+        // 分号/冒号（冒号后不直接跟斜杠防协议破坏）
+        processed = processed.replace(/([\u4e00-\u9fa5]);/g, (_m, cjk) => {
+            convertedCount++;
+            return `${cjk}；`;
+        });
+        processed = processed.replace(/([\u4e00-\u9fa5]):(?!\/)/g, (_m, cjk) => {
+            convertedCount++;
+            return `${cjk}：`;
+        });
+
+        // 括号
+        processed = processed.replace(/\(([\u4e00-\u9fa5])/g, (_m, cjk) => {
+            convertedCount++;
+            return `（${cjk}`;
+        });
+        processed = processed.replace(/([\u4e00-\u9fa5])\)/g, (_m, cjk) => {
+            convertedCount++;
+            return `${cjk}）`;
+        });
+    } else {
+        // to-ascii 全角转半角
+        const asciiMap: Record<string, string> = {
+            "，": ", ",
+            "。": ". ",
+            "！": "! ",
+            "？": "? ",
+            "：": ": ",
+            "；": "; ",
+            "（": " (",
+            "）": ") ",
+            "【": " [",
+            "】": "] ",
+            "“": '"',
+            "”": '"',
+            "‘": "'",
+            "’": "'",
+        };
+
+        for (const [cjkPunct, asciiPunct] of Object.entries(asciiMap)) {
+            if (processed.includes(cjkPunct)) {
+                const count = processed.split(cjkPunct).length - 1;
+                convertedCount += count;
+                processed = processed.replaceAll(cjkPunct, asciiPunct);
+            }
+        }
+        // 清理由于替换引入的双重连续空格
+        processed = processed.replace(/ {2,}/g, " ");
+    }
+
+    // 还原 URL
+    processed = processed.replace(/__XLC_URL_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+        return urlBlocks[Number(idx)] ?? "";
+    });
+
+    // 还原代码块
+    processed = processed.replace(/__XLC_CODE_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+        return codeBlocks[Number(idx)] ?? "";
+    });
+
+    return {result: processed, convertedCount};
+}
 
 const CIRCLED_DIGITS = [
     "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
