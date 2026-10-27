@@ -765,6 +765,10 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
     padding: var(--xlc-space-2) var(--xlc-space-3);
     border: 1px solid var(--xlc-line);
     text-align: left;
+
+    &.xlc-align-left { text-align: left; }
+    &.xlc-align-center { text-align: center; }
+    &.xlc-align-right { text-align: right; }
   }
   .xlc-md-th {
     background: var(--xlc-soft);

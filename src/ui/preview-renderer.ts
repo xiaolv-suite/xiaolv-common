@@ -45,6 +45,7 @@ export interface MarkdownBlock {
     isDone?: boolean;
     tableHeader?: string[];
     tableData?: string[][];
+    tableAlignments?: Array<"left" | "center" | "right">;
 }
 
 // 常见多语言关键字集合（JS/TS, Python, SQL, Go, Rust, Shell 等）
@@ -334,6 +335,15 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
                     return inner.split("|").map((c) => c.trim());
                 };
                 const tableHeader = parseCells(trimmed);
+                const separatorCells = parseCells(nextLine);
+                const tableAlignments: Array<"left" | "center" | "right"> = separatorCells.map((cell) => {
+                    const c = cell.trim();
+                    const leftColon = c.startsWith(":");
+                    const rightColon = c.endsWith(":");
+                    if (leftColon && rightColon) return "center";
+                    if (rightColon) return "right";
+                    return "left";
+                });
                 l++; // 跳过分隔行
                 const tableData: string[][] = [];
                 while (l + 1 < lines.length) {
@@ -348,6 +358,7 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
                     inlines: [],
                     tableHeader,
                     tableData,
+                    tableAlignments,
                 });
                 continue;
             }
@@ -523,12 +534,14 @@ export function renderSafePreview(
 
             const thead = doc.createElement("thead");
             const trHead = doc.createElement("tr");
-            for (const h of block.tableHeader) {
+            block.tableHeader.forEach((h, colIndex) => {
                 const th = doc.createElement("th");
-                th.className = "xlc-md-th";
+                const align = block.tableAlignments?.[colIndex] || "left";
+                th.className = `xlc-md-th xlc-align-${align}`;
+                th.style.textAlign = align;
                 th.textContent = h;
                 trHead.appendChild(th);
-            }
+            });
             thead.appendChild(trHead);
             table.appendChild(thead);
 
@@ -536,12 +549,14 @@ export function renderSafePreview(
                 const tbody = doc.createElement("tbody");
                 for (const row of block.tableData) {
                     const tr = doc.createElement("tr");
-                    for (const cell of row) {
+                    row.forEach((cell, colIndex) => {
                         const td = doc.createElement("td");
-                        td.className = "xlc-md-td";
+                        const align = block.tableAlignments?.[colIndex] || "left";
+                        td.className = `xlc-md-td xlc-align-${align}`;
+                        td.style.textAlign = align;
                         td.textContent = cell;
                         tr.appendChild(td);
-                    }
+                    });
                     tbody.appendChild(tr);
                 }
                 table.appendChild(tbody);

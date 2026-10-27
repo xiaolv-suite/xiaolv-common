@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.1 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Native Markdown table safe DOM rendering, high-fidelity preview, and 776 passing automated tests.
+> **Released: v0.10.2 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Markdown table alignment syntax, text character metrics & reading time estimation, and 779 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.1)
+## This release (v0.10.2)
+
+Markdown Table Alignments & Text Metrics Reading Estimator:
+
+- **Markdown Table Multi-Column Alignments (`tableAlignments`)**: Parses `:---` (left), `:---:` (center), and `---:` (right) in table delimiter rows and applies corresponding alignment classes.
+- **Text Metrics & Reading Time Estimator (`calculateTextMetrics`)**: Counts CJK characters, words, lines, and estimates reading duration, integrated into the preview pane (`.xlc-pane-reading-metrics`) and Spacebar Quick Look.
+- **Quality Gates**: All 779 unit tests pass.
+
+## Previous release (v0.10.1)
 
 Native Markdown Table DOM Rendering & Preview Fidelity:
 

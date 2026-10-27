@@ -11,6 +11,7 @@ import {ItemSortMode} from "../model/storage";
 import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
+import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
 import {toErrorMessage} from "../model/errors";
 import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch} from "../model/search";
 import {BatchTagCategoryPatch, BatchOperationReceipt} from "../model/batch-ops";
@@ -2591,6 +2592,16 @@ export class CommonSearchDialog {
             chip.textContent = "{{xlc:cursor}}";
             paneVars.appendChild(chip);
         }
+        if (text && text.trim().length > 0) {
+            const metrics = calculateTextMetrics(text);
+            if (metrics.nonWhitespaceChars > 0) {
+                const readingSpan = document.createElement("span");
+                readingSpan.className = "xlc-pane-reading-metrics";
+                readingSpan.dataset.xlcControl = "preview.reading-metrics";
+                readingSpan.textContent = (fields.length > 0 || snippets.length > 0 || hasCursor ? " · " : "") + formatReadingMetrics(metrics);
+                paneVars.appendChild(readingSpan);
+            }
+        }
         // 样式表默认 display:none，显示需显式内联覆盖
         paneVars.style.display = "flex";
     }
@@ -4077,12 +4088,22 @@ export class CommonSearchDialog {
         if (entry.isOmni) {
             loading.remove();
             const text = entry.content || entry.summary || "";
+            const metrics = calculateTextMetrics(text);
+            if (metrics.nonWhitespaceChars > 0) {
+                meta.textContent += ` · ${formatReadingMetrics(metrics)}`;
+            }
             renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
         } else {
             const id = entry.id;
             void this.deps.preview(id).then((text) => {
                 if (this.quickLookSeq !== seq || !this.quickLookOpen) return;
                 loading.remove();
+                if (text) {
+                    const metrics = calculateTextMetrics(text);
+                    if (metrics.nonWhitespaceChars > 0) {
+                        meta.textContent += ` · ${formatReadingMetrics(metrics)}`;
+                    }
+                }
                 renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
             }).catch(() => {
                 loading.textContent = "预览加载失败";

@@ -1160,6 +1160,13 @@
       // 多选项字段（上限 16 项）的语法 chip 是长 ASCII 串：无空格断点会撑破提示行（R162）
       word-break: break-all;
     }
+
+    .xlc-pane-reading-metrics {
+      color: var(--xlc-muted);
+      font-size: var(--xlc-font-2xs);
+      opacity: 0.85;
+      margin-left: auto;
+    }
   }
 
   .xlc-pane-warn {
