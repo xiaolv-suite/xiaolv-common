@@ -8,7 +8,8 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText} from "../model/clipboard-cleaner";
+import {getActivePasteQueue} from "../model/paste-queue";
 import {toErrorMessage} from "../model/errors";
 import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch} from "../model/search";
 import {BatchTagCategoryPatch, BatchOperationReceipt} from "../model/batch-ops";
@@ -3213,6 +3214,20 @@ export class CommonSearchDialog {
                     await this.deps.copyProviderPayload(pangu.result);
                     this.deps.notify?.("info", `已执行盘古排版规范化 (${pangu.spacedCount} 处间距调整)`);
                 });
+                const jsonCheck = formatJsonText(entry.content || "");
+                if (jsonCheck.formatted) {
+                    addSilent("{}", this.deps.t("jsonFormat"), async () => {
+                        await this.deps.copyProviderPayload(jsonCheck.result);
+                        this.deps.notify?.("info", "已格式化 JSON 并复制到剪贴板");
+                    });
+                    const compacted = compactJsonText(entry.content || "");
+                    if (compacted.compacted) {
+                        addSilent("{}", this.deps.t("jsonCompact"), async () => {
+                            await this.deps.copyProviderPayload(compacted.result);
+                            this.deps.notify?.("info", "已压缩 JSON 并复制到剪贴板");
+                        });
+                    }
+                }
                 const useCount = this.usageCounts.get(entry.id) ?? 0;
                 if (useCount > 0 && this.deps.resetItemUsage) {
                     addSilent("↺", this.deps.t("resetItemUsage", String(useCount)), async () => {
@@ -4180,6 +4195,25 @@ export class CommonSearchDialog {
             }
         });
 
+        const queueBtn = document.createElement("button");
+        queueBtn.type = "button";
+        queueBtn.className = "b3-button";
+        queueBtn.dataset.xlcControl = "search.batch.set-queue";
+        queueBtn.textContent = this.deps.t("setPasteQueue");
+        queueBtn.addEventListener("click", () => {
+            if (this.selectedIds.size === 0) return;
+            const selectedItems = this.results.filter((r) => this.selectedIds.has(r.id));
+            const queue = getActivePasteQueue();
+            queue.setQueue(selectedItems.map((i) => ({
+                id: i.id,
+                title: i.title || i.summary || "未命名",
+                content: i.content || i.summary || "",
+                itemType: i.itemType,
+            })));
+            this.exitMultiSelectMode();
+            this.deps.notify?.("info", this.deps.t("setPasteQueueSuccess", String(selectedItems.length)));
+        });
+
         const exitBtn = document.createElement("button");
         exitBtn.type = "button";
         exitBtn.className = "b3-button xlc-btn-ghost";
@@ -4187,7 +4221,7 @@ export class CommonSearchDialog {
         exitBtn.textContent = "退出多选 (Esc)";
         exitBtn.addEventListener("click", () => this.exitMultiSelectMode());
 
-        actions.append(batchCaptureBtn, batchMergeBtn, addTagBtn, removeTagBtn, setCatBtn, exitBtn);
+        actions.append(batchCaptureBtn, batchMergeBtn, queueBtn, addTagBtn, removeTagBtn, setCatBtn, exitBtn);
         bar.append(countSpan, actions);
         this.batchBarEl = bar;
         return bar;

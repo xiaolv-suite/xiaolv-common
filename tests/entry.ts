@@ -53,6 +53,7 @@ import * as syncDiff from "../src/model/sync-diff";
 import * as syncDiffModal from "../src/ui/sync-diff-modal";
 import * as ecosystem from "../src/service/ecosystem";
 import * as clipboardCleaner from "../src/model/clipboard-cleaner";
+import * as pasteQueue from "../src/model/paste-queue";
 
 export {
     item,
@@ -106,4 +107,5 @@ export {
     syncDiffModal,
     ecosystem,
     clipboardCleaner,
+    pasteQueue,
 };

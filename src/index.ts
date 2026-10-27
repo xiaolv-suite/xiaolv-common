@@ -48,6 +48,7 @@ import type {TransformKind} from "./service/ai";
 import {mountXlcBridge} from "./service/external-bridge";
 import {queryEcosystemItems} from "./service/ecosystem";
 import {registerRaikiriModuleSafely} from "./ecosystem-bridge-kit";
+import {getActivePasteQueue} from "./model/paste-queue";
 
 declare let __webpack_public_path__: string;
 
@@ -407,6 +408,17 @@ export default class XiaolvCommonPlugin extends Plugin {
         };
         this.protocolCommands["xiaolv.common.captureQuote"] = async (payload) => {
             return this.service.captureQuote(payload as any);
+        };
+        this.protocolCommands["xiaolv.common.pasteQueueNext"] = async () => {
+            const queue = getActivePasteQueue();
+            const item = queue.pop();
+            if (!item) return {ok: false, reason: "empty"};
+            if (this.host.hasActiveEditor()) {
+                await this.host.insertMarkdown(item.content);
+            } else {
+                await this.host.writeClipboard(item.content);
+            }
+            return {ok: true, item, remaining: queue.size()};
         };
         // 按需发现协议面：提供当前文档/笔记本扫描、候选预览、收录与批次撤销。
         this.protocolCommands["xiaolv.common.discoverCurrentDocument"] = async () => this.discoverCurrentDocument();
@@ -832,6 +844,38 @@ export default class XiaolvCommonPlugin extends Plugin {
             callback: () => this.openSearch(),
         });
         this.addCommand({
+            langKey: "pasteQueueNext",
+            hotkey: "⌥⇧Q",
+            callback: () => {
+                const queue = getActivePasteQueue();
+                const item = queue.pop();
+                if (!item) {
+                    this.notify("info", this.i18nFn()("pasteQueueEmpty"));
+                    return;
+                }
+                const hasEditor = this.host.hasActiveEditor();
+                if (hasEditor) {
+                    void this.host.insertMarkdown(item.content);
+                } else {
+                    void this.host.writeClipboard(item.content);
+                }
+                const remaining = queue.size();
+                this.notify("info", this.i18nFn()("pasteQueuePopped", item.title, String(remaining)));
+            },
+        });
+        this.addCommand({
+            langKey: "surroundSelection",
+            hotkey: "⌥⇧W",
+            callback: () => {
+                const sel = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : "";
+                if (!sel) {
+                    this.notify("info", this.i18nFn()("surroundNoSelection"));
+                    return;
+                }
+                this.openSearch();
+            },
+        });
+        this.addCommand({
             langKey: "saveSelection",
             hotkey: "⌥⇧S",
             callback: () => void this.capture?.saveSelection(),
@@ -942,6 +986,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                 menu.addItem({
                     icon: "iconXlcCommon",
                     label: this.i18nFn()("insertMenu"),
+                    click: () => this.openSearch(),
+                });
+                menu.addItem({
+                    icon: "iconXlcCommon",
+                    label: this.i18nFn()("surroundSelection"),
                     click: () => this.openSearch(),
                 });
                 menu.addItem({

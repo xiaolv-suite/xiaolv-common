@@ -127,6 +127,54 @@ export function tsvToMarkdownTable(text: string): {result: string; rowCount: num
         colCount: maxCols,
     };
 }
+
+/**
+ * 智能格式化 JSON 文本（带 2 空格缩进）
+ * 若非合法 JSON 复合结构，返回原文本
+ */
+export function formatJsonText(text: string): {result: string; formatted: boolean} {
+    if (!text || !text.trim()) return {result: text ?? "", formatted: false};
+    const trimmed = text.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+        return {result: text, formatted: false};
+    }
+    try {
+        const obj = JSON.parse(trimmed);
+        if (typeof obj !== "object" || obj === null) {
+            return {result: text, formatted: false};
+        }
+        return {
+            result: JSON.stringify(obj, null, 2),
+            formatted: true,
+        };
+    } catch {
+        return {result: text, formatted: false};
+    }
+}
+
+/**
+ * 智能紧凑化压缩 JSON 文本（移除所有多余空白和换行）
+ * 若非合法 JSON 复合结构，返回原文本
+ */
+export function compactJsonText(text: string): {result: string; compacted: boolean} {
+    if (!text || !text.trim()) return {result: text ?? "", compacted: false};
+    const trimmed = text.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+        return {result: text, compacted: false};
+    }
+    try {
+        const obj = JSON.parse(trimmed);
+        if (typeof obj !== "object" || obj === null) {
+            return {result: text, compacted: false};
+        }
+        return {
+            result: JSON.stringify(obj),
+            compacted: true,
+        };
+    } catch {
+        return {result: text, compacted: false};
+    }
+}
 export function stripInvisibleCharacters(text: string): {result: string; count: number} {
     let count = 0;
     const result = text.replace(INVISIBLE_CHARS_REGEX, () => {

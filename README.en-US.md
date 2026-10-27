@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.6 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Pangu spacing auto-format, TSV to Markdown table converter, contextual greeting macro `{{xlc:greeting}}`, clipboard multi-select merge ingestion, 759 passing automated tests.
+> **Released: v0.9.7 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Paste Queue sequential stacking (⌥⇧Q), Surround Selection shortcut (⌥⇧W), JSON format/compact, and 762 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.6)
+## This release (v0.9.7)
+
+Sequential Paste Queue, Surround Selection & JSON Transformation:
+
+- **Sequential Paste Queue (Stacking Mode)**: Multi-select items in the list and click `📋 Set as Paste Queue`. Press `⌥⇧Q` (`Alt+Shift+Q`) anywhere to paste items in sequential FIFO order without having to repeatedly invoke the dialog.
+- **Surround Selection Shortcut (`⌥⇧W`)**: Instant command and right-click menu item to wrap current editor selection with matching `{{xlc:selection}}` snippet templates.
+- **JSON Formatting & Compacting Engine**: Action menu provides 2-space indented formatting and single-line compacting for JSON text.
+
+## Previous release (v0.9.6)
 
 Pangu Spacing, TSV Table to Markdown & Contextual Greeting Macro:
 
