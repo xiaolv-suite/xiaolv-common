@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.9.5 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Template export privacy sanitizer (G31 closure), one-click sanitizer switch & rule configuration dialog, 753 passing automated tests.
+> **Released: v0.9.6 (2026-10-27)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Pangu spacing auto-format, TSV to Markdown table converter, contextual greeting macro `{{xlc:greeting}}`, clipboard multi-select merge ingestion, 759 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,16 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.9.5)
+## This release (v0.9.6)
+
+Pangu Spacing, TSV Table to Markdown & Contextual Greeting Macro:
+
+- **Pangu Text Spacing Auto-Formatting (`formatPanguSpacing`)**: Automatically inserts spaces between CJK and Latin/digits, strips redundant spaces around fullwidth punctuation, safely preserving URLs, code fences, and `{{xlc:...}}` tags. Quick buttons added to the variable bar and action menus.
+- **TSV Table to Markdown Converter (`tsvToMarkdownTable`)**: Sniffs tab-separated values copied from Excel, WPS, or web tables and converts them into standard Markdown tables with aligned headers and dividers.
+- **Contextual Time-of-Day Greeting Macro (`{{xlc:greeting}}`)**: Dynamic macro adapting to morning, afternoon, evening, and night, with English (`{{xlc:greeting|en}}`) and formal options.
+- **Clipboard Multi-Select Merge Ingestion**: Selecting 2+ clipboard entries reveals `⊞ Merge Ingest (N items)` to combine multiple fragments into a single structured snippet block.
+
+## Previous release (v0.9.5)
 
 Export Privacy Sanitizer & Masking Suite (G31 Complete):
 

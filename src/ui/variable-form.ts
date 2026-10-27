@@ -6,6 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
+import {formatPanguSpacing, tsvToMarkdownTable} from "../model/clipboard-cleaner";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
     text: "TXT", markdown: "MD", url: "URL", code: "CODE",
@@ -451,6 +452,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "week", text: "{{xlc:week}}"},
         {id: "timestamp", text: "{{xlc:timestamp}}"},
         {id: "random", text: "{{xlc:random|选项A,选项B}}"},
+        {id: "greeting", text: "{{xlc:greeting}}"},
         {id: "doc", text: "{{xlc:doc}}"},
         {id: "clipboard", text: "{{xlc:clipboard}}"},
     ];
@@ -473,5 +475,39 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         });
         bar.appendChild(btn);
     }
+
+    // 常用格式净化与转换快捷动作
+    const panguBtn = document.createElement("button");
+    panguBtn.type = "button";
+    panguBtn.className = "xlc-varbtn xlc-btn-ghost";
+    panguBtn.dataset.xlcControl = "capture.format.pangu";
+    panguBtn.textContent = "✦ 盘古排版";
+    panguBtn.title = "在中英文与数字间自动插入规范空格，清洗全角标点空格";
+    panguBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const pangu = formatPanguSpacing(el.value);
+        if (pangu.spacedCount > 0) {
+            el.value = pangu.result;
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(panguBtn);
+
+    const tableBtn = document.createElement("button");
+    tableBtn.type = "button";
+    tableBtn.className = "xlc-varbtn xlc-btn-ghost";
+    tableBtn.dataset.xlcControl = "capture.format.tsv-table";
+    tableBtn.textContent = "⊞ 转MD表格";
+    tableBtn.title = "将剪贴板或文本中的制表符表格 (TSV) 一键转换为标准 Markdown 表格";
+    tableBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const table = tsvToMarkdownTable(el.value);
+        if (table) {
+            el.value = table.result;
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(tableBtn);
+
     return bar;
 }

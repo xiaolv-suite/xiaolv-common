@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable} from "../model/clipboard-cleaner";
 import {toErrorMessage} from "../model/errors";
 import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch} from "../model/search";
 import {BatchTagCategoryPatch, BatchOperationReceipt} from "../model/batch-ops";
@@ -3171,6 +3171,13 @@ export class CommonSearchDialog {
             };
             if (entry.isOmni) {
                 if (entry.id.startsWith("xlc-clip-")) {
+                    const table = tsvToMarkdownTable(entry.content || "");
+                    if (table) {
+                        addSilent("⊞", `转为 Markdown 表格并复制 (${table.rowCount}行×${table.colCount}列)`, async () => {
+                            await this.deps.copyProviderPayload(table.result);
+                            this.deps.notify?.("info", `已转为 Markdown 表格并复制 (${table.rowCount}行)`);
+                        });
+                    }
                     addSilent("🧹", "清洗格式并复制 (去除断行/零宽符)", async () => {
                         const cleaned = cleanClipboardText(entry.content || "", {mergeSoftBreaks: true});
                         await this.deps.copyProviderPayload(cleaned.cleanedText);
@@ -3200,6 +3207,12 @@ export class CommonSearchDialog {
                 addSilent("↗", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
                 addSilent("✎", this.deps.t("edit"), () => this.deps.editItem(entry.id));
                 addSilent("⧉", this.deps.t("duplicateItem"), () => this.deps.duplicateItem(entry.id));
+                addSilent("✦", "盘古排版 (中英文加空格并复制)", async () => {
+                    const raw = entry.content || await this.deps.preview(entry.id) || "";
+                    const pangu = formatPanguSpacing(raw);
+                    await this.deps.copyProviderPayload(pangu.result);
+                    this.deps.notify?.("info", `已执行盘古排版规范化 (${pangu.spacedCount} 处间距调整)`);
+                });
                 const useCount = this.usageCounts.get(entry.id) ?? 0;
                 if (useCount > 0 && this.deps.resetItemUsage) {
                     addSilent("↺", this.deps.t("resetItemUsage", String(useCount)), async () => {
@@ -4142,6 +4155,31 @@ export class CommonSearchDialog {
             await this.refresh();
         });
 
+        // 剪贴板/全域多条合并沉淀按钮
+        const batchMergeBtn = document.createElement("button");
+        batchMergeBtn.type = "button";
+        batchMergeBtn.className = "b3-button xlc-btn-primary";
+        batchMergeBtn.dataset.xlcControl = "search.batch.merge-omni";
+        batchMergeBtn.textContent = "⊞ 合并收录";
+        batchMergeBtn.style.display = "none";
+        batchMergeBtn.addEventListener("click", () => {
+            if (this.selectedIds.size < 2) return;
+            const selectedItems = this.results.filter((r) => this.selectedIds.has(r.id));
+            if (selectedItems.length === 0) return;
+            const mergedText = selectedItems.map((i) => i.content || i.summary || "").filter(Boolean).join("\n\n");
+            if (!mergedText.trim()) return;
+            const first = selectedItems[0]!;
+            this.exitMultiSelectMode();
+            if (this.deps.captureOmniWithForm) {
+                this.deps.captureOmniWithForm({
+                    ...first,
+                    title: `合并沉淀 (${selectedItems.length}项)`,
+                    content: mergedText,
+                    summary: mergedText.slice(0, 100),
+                });
+            }
+        });
+
         const exitBtn = document.createElement("button");
         exitBtn.type = "button";
         exitBtn.className = "b3-button xlc-btn-ghost";
@@ -4149,7 +4187,7 @@ export class CommonSearchDialog {
         exitBtn.textContent = "退出多选 (Esc)";
         exitBtn.addEventListener("click", () => this.exitMultiSelectMode());
 
-        actions.append(batchCaptureBtn, addTagBtn, removeTagBtn, setCatBtn, exitBtn);
+        actions.append(batchCaptureBtn, batchMergeBtn, addTagBtn, removeTagBtn, setCatBtn, exitBtn);
         bar.append(countSpan, actions);
         this.batchBarEl = bar;
         return bar;
@@ -4168,6 +4206,7 @@ export class CommonSearchDialog {
         });
 
         const batchCaptureBtn = this.batchBarEl.querySelector<HTMLButtonElement>("[data-xlc-control='search.batch.capture-omni']");
+        const batchMergeBtn = this.batchBarEl.querySelector<HTMLButtonElement>("[data-xlc-control='search.batch.merge-omni']");
         const hasManagedSelected = this.results.some((r) => this.selectedIds.has(r.id) && !r.isOmni);
         const addTagBtn = this.batchBarEl.querySelector<HTMLButtonElement>("[data-xlc-control='search.batch.add-tags']");
         const removeTagBtn = this.batchBarEl.querySelector<HTMLButtonElement>("[data-xlc-control='search.batch.remove-tags']");
@@ -4176,14 +4215,23 @@ export class CommonSearchDialog {
         if (removeTagBtn) removeTagBtn.style.display = hasManagedSelected ? "" : "none";
         if (setCatBtn) setCatBtn.style.display = hasManagedSelected ? "" : "none";
 
+        const omniSelected = this.results.filter((r) => this.selectedIds.has(r.id) && r.isOmni);
         if (batchCaptureBtn) {
-            const omniSelected = this.results.filter((r) => this.selectedIds.has(r.id) && r.isOmni);
             if (omniSelected.length > 0) {
                 batchCaptureBtn.style.display = "";
                 batchCaptureBtn.textContent = `✦ 批量收录 (${omniSelected.length}项)`;
                 batchCaptureBtn.disabled = false;
             } else {
                 batchCaptureBtn.style.display = "none";
+            }
+        }
+        if (batchMergeBtn) {
+            if (omniSelected.length >= 2) {
+                batchMergeBtn.style.display = "";
+                batchMergeBtn.textContent = `⊞ 合并收录 (${omniSelected.length}项)`;
+                batchMergeBtn.disabled = false;
+            } else {
+                batchMergeBtn.style.display = "none";
             }
         }
     }

@@ -10,6 +10,8 @@ export interface ClipboardCleanOptions {
     compactEmptyLines?: boolean;
     /** 是否将全角制表符或多余缩进归一化 (默认 false) */
     trimLeadingIndent?: boolean;
+    /** 是否执行盘古之白中英文智能排版空格规范化 (默认 false) */
+    panguSpacing?: boolean;
 }
 
 export interface ClipboardCleanResult {
@@ -23,8 +25,108 @@ export interface ClipboardCleanResult {
 const INVISIBLE_CHARS_REGEX = /[\u200B-\u200D\uFEFF\u200E\u200F\u00AD]/g;
 
 /**
- * 剥离文本中的零宽与不可见控制字符
+ * 盘古之白中英文智能排版规范化 (formatPanguSpacing)
+ * 在汉字 (CJK) 与英文字母、数字之间自动添加规范空格，不污染代码块、URL及Markdown标记。
  */
+export function formatPanguSpacing(text: string): {result: string; spacedCount: number} {
+    if (!text || !text.trim()) return {result: text ?? "", spacedCount: 0};
+
+    let spacedCount = 0;
+    // 1. 保护代码块/行内代码
+    const codeBlocks: string[] = [];
+    let processed = text.replace(/(`{1,3})([\s\S]*?)\1/g, (match) => {
+        codeBlocks.push(match);
+        return `__XLC_CODE_PLACEHOLDER_${codeBlocks.length - 1}__`;
+    });
+
+    // 2. 保护 Markdown 链接与原生 URL
+    const urlBlocks: string[] = [];
+    processed = processed.replace(/(https?:\/\/[^\s)）\]]+|\[[^\]]+\]\([^)]+\))/g, (match) => {
+        urlBlocks.push(match);
+        return `__XLC_URL_PLACEHOLDER_${urlBlocks.length - 1}__`;
+    });
+
+    // 3. 保护动态模板占位符 {{xlc:...}}
+    const xlcBlocks: string[] = [];
+    processed = processed.replace(/\{\{xlc:[\s\S]*?\}\}/g, (match) => {
+        xlcBlocks.push(match);
+        return `__XLC_TAG_PLACEHOLDER_${xlcBlocks.length - 1}__`;
+    });
+
+    // 4. 清理全角标点符号两端的不必要空格（如：你好 ， 世界 -> 你好，世界）
+    processed = processed.replace(/ +([，。！？；：、“”‘’（）《》【】]) */g, "$1");
+    processed = processed.replace(/ *([，。！？；：、“”‘’（）《》【】]) +/g, "$1");
+
+    // 5. CJK 字符跟字母/数字之间加空格
+    const cjkToLatin = /([\u4e00-\u9fa5\u3040-\u30ff])([a-zA-Z0-9$#%@])/g;
+    processed = processed.replace(cjkToLatin, (_m, cjk, latin) => {
+        spacedCount++;
+        return `${cjk} ${latin}`;
+    });
+
+    // 6. 字母/数字跟 CJK 字符之间加空格
+    const latinToCjk = /([a-zA-Z0-9$#%@])([\u4e00-\u9fa5\u3040-\u30ff])/g;
+    processed = processed.replace(latinToCjk, (_m, latin, cjk) => {
+        spacedCount++;
+        return `${latin} ${cjk}`;
+    });
+
+    // 7. 还原动态占位符
+    processed = processed.replace(/__XLC_TAG_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+        return xlcBlocks[Number(idx)] ?? "";
+    });
+
+    // 8. 还原 URL
+    processed = processed.replace(/__XLC_URL_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+        return urlBlocks[Number(idx)] ?? "";
+    });
+
+    // 9. 还原代码块
+    processed = processed.replace(/__XLC_CODE_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+        return codeBlocks[Number(idx)] ?? "";
+    });
+
+    return {result: processed, spacedCount};
+}
+
+/**
+ * 将剪贴板制表符表格 (TSV，如从 Excel/网页表格复制) 转换为标准 Markdown 表格
+ * 必须包含至少 2 行有效文本，且大多数行包含制表符 \t
+ */
+export function tsvToMarkdownTable(text: string): {result: string; rowCount: number; colCount: number} | null {
+    if (!text || !text.includes("\t")) return null;
+    const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return null;
+
+    const tabLines = lines.filter((l) => l.includes("\t"));
+    if (tabLines.length / lines.length < 0.6) return null;
+
+    const rows = lines.map((l) => l.split("\t").map((c) => c.trim().replace(/\|/g, "\\|")));
+    const maxCols = Math.max(...rows.map((r) => r.length));
+    if (maxCols < 2) return null;
+
+    const normalizedRows = rows.map((r) => {
+        const padded = [...r];
+        while (padded.length < maxCols) padded.push("");
+        return padded;
+    });
+
+    const header = normalizedRows[0]!;
+    const separator = Array(maxCols).fill("---");
+    const dataRows = normalizedRows.slice(1);
+
+    const mdLines = [
+        `| ${header.join(" | ")} |`,
+        `| ${separator.join(" | ")} |`,
+        ...dataRows.map((r) => `| ${r.join(" | ")} |`),
+    ];
+
+    return {
+        result: mdLines.join("\n"),
+        rowCount: lines.length,
+        colCount: maxCols,
+    };
+}
 export function stripInvisibleCharacters(text: string): {result: string; count: number} {
     let count = 0;
     const result = text.replace(INVISIBLE_CHARS_REGEX, () => {
@@ -111,6 +213,7 @@ export function cleanClipboardText(text: string, options: ClipboardCleanOptions 
         mergeSoftBreaks: options.mergeSoftBreaks === true,
         compactEmptyLines: options.compactEmptyLines !== false,
         trimLeadingIndent: options.trimLeadingIndent === true,
+        panguSpacing: options.panguSpacing === true,
     };
 
     let cur = text;
@@ -137,6 +240,14 @@ export function cleanClipboardText(text: string, options: ClipboardCleanOptions 
         cur = res.result;
         if (res.trimmedLines > 0) {
             details.push(`清除了 ${res.trimmedLines} 行尾余空白并压缩了空行`);
+        }
+    }
+
+    if (opts.panguSpacing) {
+        const res = formatPanguSpacing(cur);
+        if (res.spacedCount > 0) {
+            cur = res.result;
+            details.push(`规范化了 ${res.spacedCount} 处中英文排版间距`);
         }
     }
 

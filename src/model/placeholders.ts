@@ -39,11 +39,11 @@ import {evaluateMathExpression} from "./calculator";
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|title|path|doc|random|uuid|id|calc|selection|timestamp|week|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|title|path|doc|random|uuid|id|calc|selection|timestamp|week|greeting|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -582,7 +582,39 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "regex": return "";
         case "timestamp": return String(Math.floor(now.getTime() / 1000));
         case "week": return `第${getIsoWeekNumber(now)}周`;
+        case "greeting": return resolveGreeting(now);
     }
+}
+
+/** 解析语境自适应问候语宏 */
+function resolveGreeting(now: Date, arg?: string): string {
+    const hours = now.getHours();
+    const cleanArg = arg?.trim().toLowerCase();
+
+    if (cleanArg === "en" || cleanArg === "english") {
+        if (hours >= 0 && hours < 12) return "Good morning";
+        if (hours >= 12 && hours < 18) return "Good afternoon";
+        return "Good evening";
+    }
+
+    if (cleanArg === "formal") {
+        if (hours >= 6 && hours < 12) return "上午好";
+        if (hours >= 12 && hours < 14) return "中午好";
+        if (hours >= 14 && hours < 18) return "下午好";
+        if (hours >= 18 && hours < 24) return "晚上好";
+        return "您好";
+    }
+
+    if (cleanArg === "short" || cleanArg === "simple") {
+        return "您好";
+    }
+
+    // 默认中文自然时段问候
+    if (hours >= 0 && hours < 6) return "夜深了";
+    if (hours >= 6 && hours < 12) return "早上好";
+    if (hours >= 12 && hours < 14) return "中午好";
+    if (hours >= 14 && hours < 18) return "下午好";
+    return "晚上好";
 }
 
 /**
@@ -632,6 +664,7 @@ export function resolvePlaceholder(
         if (cleanArg === "w") return `W${weekNum}`;
         return `第${weekNum}周`;
     }
+    if (kind === "greeting") return resolveGreeting(now, arg);
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
 }
