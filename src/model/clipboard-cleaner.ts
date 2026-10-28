@@ -2460,3 +2460,163 @@ export function convertChineseVariant(text: string, mode: "s2t" | "t2s" = "s2t")
         convertedCount,
     };
 }
+
+export interface CompactBlankLinesOptions {
+    /** 允许保留的最大连续空行数（默认 1） */
+    maxConsecutive?: number;
+    /** 是否将仅含空格或制表符的伪空行归一化为空串（默认 true） */
+    trimEmptyLines?: boolean;
+}
+
+export interface CompactBlankLinesResult {
+    result: string;
+    collapsedCount: number;
+}
+
+/**
+ * 多行文本连续空行折叠与压缩 (compactBlankLines)
+ */
+export function compactBlankLines(text: string, options: CompactBlankLinesOptions = {}): CompactBlankLinesResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", collapsedCount: 0};
+    }
+
+    const maxConsecutive = Math.max(0, options.maxConsecutive ?? 1);
+    const trimEmpty = options.trimEmptyLines !== false;
+
+    const rawLines = text.replace(/\r\n?/g, "\n").split("\n");
+    const output: string[] = [];
+    let consecutiveEmpty = 0;
+    let collapsedCount = 0;
+
+    for (const rawLine of rawLines) {
+        const isEmpty = trimEmpty ? rawLine.trim().length === 0 : rawLine.length === 0;
+
+        if (isEmpty) {
+            consecutiveEmpty++;
+            if (consecutiveEmpty <= maxConsecutive) {
+                output.push("");
+            } else {
+                collapsedCount++;
+            }
+        } else {
+            consecutiveEmpty = 0;
+            output.push(rawLine);
+        }
+    }
+
+    return {
+        result: output.join("\n"),
+        collapsedCount,
+    };
+}
+
+/**
+ * 将时间戳格式化为直观自然的相对时间 (formatRelativeTime)
+ * 如 "刚刚", "5分钟前", "2小时前", "昨天", "3天前"
+ */
+export function formatRelativeTime(timestamp: number | string | Date, baseNow?: Date): string {
+    if (!timestamp) return "";
+    let timeMs: number;
+
+    if (timestamp instanceof Date) {
+        timeMs = timestamp.getTime();
+    } else {
+        const num = Number(String(timestamp).trim());
+        if (!Number.isFinite(num)) {
+            const parsed = new Date(timestamp).getTime();
+            if (!Number.isFinite(parsed)) return String(timestamp);
+            timeMs = parsed;
+        } else {
+            // 若为 10 位秒级时间戳，转为毫秒
+            timeMs = num < 10000000000 ? num * 1000 : num;
+        }
+    }
+
+    const nowMs = (baseNow || new Date()).getTime();
+    const diffSec = Math.floor((nowMs - timeMs) / 1000);
+
+    if (diffSec < 0) {
+        // 未来时间
+        const absDiff = Math.abs(diffSec);
+        if (absDiff < 60) return "片刻后";
+        if (absDiff < 3600) return `${Math.floor(absDiff / 60)}分钟后`;
+        if (absDiff < 86400) return `${Math.floor(absDiff / 3600)}小时后`;
+        return `${Math.floor(absDiff / 86400)}天后`;
+    }
+
+    if (diffSec < 45) return "刚刚";
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}分钟前`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}小时前`;
+    if (diffSec < 172800) return "昨天";
+    if (diffSec < 2592000) return `${Math.floor(diffSec / 86400)}天前`;
+    if (diffSec < 31536000) return `${Math.floor(diffSec / 2592000)}个月前`;
+    return `${Math.floor(diffSec / 31536000)}年前`;
+}
+
+export interface WordFreqItem {
+    word: string;
+    count: number;
+    frequency: number;
+}
+
+export interface WordFreqResult {
+    items: WordFreqItem[];
+    totalWords: number;
+    uniqueWords: number;
+    result: string;
+}
+
+const COMMON_STOP_WORDS = new Set([
+    "the", "be", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not", "on", "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from",
+]);
+
+/**
+ * 常用语文本单词词频统计与分析 (countWordFrequency)
+ */
+export function countWordFrequency(
+    text: string,
+    options: {topN?: number; minLength?: number; ignoreStopWords?: boolean} = {},
+): WordFreqResult {
+    if (!text || typeof text !== "string") {
+        return {items: [], totalWords: 0, uniqueWords: 0, result: ""};
+    }
+
+    const topN = Math.max(1, options.topN ?? 10);
+    const minLen = Math.max(1, options.minLength ?? 2);
+    const ignoreStop = options.ignoreStopWords === true;
+
+    // 匹配英文单词与连续汉字词
+    const matches = text.match(/[a-zA-Z0-9_-]+|[\u4e00-\u9fa5]{2,4}/g) || [];
+    const counts = new Map<string, number>();
+    let validWordCount = 0;
+
+    for (const raw of matches) {
+        const clean = raw.trim().toLowerCase();
+        if (clean.length < minLen) continue;
+        if (ignoreStop && COMMON_STOP_WORDS.has(clean)) continue;
+
+        counts.set(clean, (counts.get(clean) || 0) + 1);
+        validWordCount++;
+    }
+
+    const sorted = Array.from(counts.entries())
+        .map(([word, count]) => ({
+            word,
+            count,
+            frequency: validWordCount > 0 ? parseFloat(((count / validWordCount) * 100).toFixed(1)) : 0,
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, topN);
+
+    const formattedLines = sorted.map(
+        (item, idx) => `${idx + 1}. ${item.word}: ${item.count}次 (${item.frequency}%)`,
+    );
+
+    return {
+        items: sorted,
+        totalWords: validWordCount,
+        uniqueWords: counts.size,
+        result: formattedLines.join("\n"),
+    };
+}

@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3658,6 +3658,34 @@ export class CommonSearchDialog {
                         const padded = padLines(raw, {align: "left"});
                         await this.deps.copyProviderPayload(padded);
                         this.deps.notify?.("info", "已等宽对齐排版多行并复制");
+                    });
+                    if (entry.content.includes("\n\n")) {
+                        addSilent("🧹", "折叠多余连续空行并复制", async () => {
+                            const raw = entry.content || await this.deps.preview(entry.id) || "";
+                            const res = compactBlankLines(raw, {maxConsecutive: 1});
+                            await this.deps.copyProviderPayload(res.result);
+                            this.deps.notify?.("info", `已压缩 ${res.collapsedCount} 个多余空行并复制`);
+                        });
+                    }
+                }
+                if (entry.content && /^\d{10,13}$/.test(entry.content.trim())) {
+                    addSilent("⏱", "时间戳转相对时间并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const rel = formatRelativeTime(raw.trim());
+                        if (rel) {
+                            await this.deps.copyProviderPayload(rel);
+                            this.deps.notify?.("info", `相对时间：${rel}`);
+                        }
+                    });
+                }
+                if (entry.content && entry.content.trim().length > 20) {
+                    addSilent("📊", "统计词频分布并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const freq = countWordFrequency(raw, {topN: 5, ignoreStopWords: true});
+                        if (freq.items.length > 0) {
+                            await this.deps.copyProviderPayload(freq.result);
+                            this.deps.notify?.("info", `已统计 ${freq.totalWords} 个单词的高频词并复制`);
+                        }
                     });
                 }
                 if (entry.content && /^(\S+\s+){4,6}\S+$/.test(entry.content.trim())) {
