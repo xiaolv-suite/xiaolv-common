@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -576,6 +576,8 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "stats", text: "{{xlc:stats|10,20,30,40,50}}"},
         {id: "radix.hex", text: "{{xlc:radix:hex|255}}"},
         {id: "radix.bin", text: "{{xlc:radix:bin|42}}"},
+        {id: "kv", text: "{{xlc:kv:key|key=value}}"},
+        {id: "match", text: "{{xlc:match|(\\d+)|[$1]|123}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -2010,6 +2012,86 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(stripAffixBtn);
+
+    const sortColBtn = document.createElement("button");
+    sortColBtn.type = "button";
+    sortColBtn.className = "xlc-varbtn xlc-btn-ghost";
+    sortColBtn.dataset.xlcControl = "capture.format.sort-column";
+    sortColBtn.textContent = "✦ 按列排序";
+    sortColBtn.title = "对多列数据按第 1 列进行字母/拼音字典序排序";
+    sortColBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const sorted = sortLinesByColumn(targetText, 1);
+        if (sorted && sorted !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + sorted + el.value.slice(end);
+                el.setSelectionRange(start, start + sorted.length);
+            } else {
+                el.value = sorted;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(sortColBtn);
+
+    const kvBtn = document.createElement("button");
+    kvBtn.type = "button";
+    kvBtn.className = "xlc-varbtn xlc-btn-ghost";
+    kvBtn.dataset.xlcControl = "capture.format.extract-kv";
+    kvBtn.textContent = "✦ 提键值";
+    kvBtn.title = "提取 URL 查询串中的参数为格式化键值对";
+    kvBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        if (targetText.includes("=") || targetText.includes(":")) {
+            const val = extractKvValue(targetText, "name") || extractKvValue(targetText, "id") || extractKvValue(targetText, "title");
+            if (val) {
+                if (hasSel) {
+                    el.value = el.value.slice(0, start) + val + el.value.slice(end);
+                    el.setSelectionRange(start, start + val.length);
+                } else {
+                    el.value = val;
+                }
+                el.focus();
+                el.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+        }
+    });
+    bar.appendChild(kvBtn);
+
+    const regexMatchBtn = document.createElement("button");
+    regexMatchBtn.type = "button";
+    regexMatchBtn.className = "xlc-varbtn xlc-btn-ghost";
+    regexMatchBtn.dataset.xlcControl = "capture.format.regex-match";
+    regexMatchBtn.textContent = "✦ 正则重组";
+    regexMatchBtn.title = "将日期 YYYY-MM-DD 快速重组为 YYYY年MM月DD日";
+    regexMatchBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = formatByRegexGroups(targetText, /(\d{4})-(\d{2})-(\d{2})/, "$1年$2月$3日");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(regexMatchBtn);
 
     return bar;
 }

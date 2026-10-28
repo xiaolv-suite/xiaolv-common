@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3772,6 +3772,37 @@ export class CommonSearchDialog {
                             this.deps.notify?.("info", `已转换十进制：${res}`);
                         });
                     }
+                }
+                if (entry.content && entry.content.includes("\n") && (entry.content.includes("\t") || entry.content.includes(",") || entry.content.includes("|"))) {
+                    addSilent("📊", "按第 1 列对多行数据排序并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const sorted = sortLinesByColumn(raw, 1);
+                        await this.deps.copyProviderPayload(sorted);
+                        this.deps.notify?.("info", "已按第 1 列排序多行并复制");
+                    });
+                    addSilent("📊", "按第 2 列数值/字典序对多行排序并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const sorted = sortLinesByColumn(raw, 2, {numeric: true});
+                        await this.deps.copyProviderPayload(sorted);
+                        this.deps.notify?.("info", "已按第 2 列排序多行并复制");
+                    });
+                }
+                if (entry.content && !entry.content.includes("\n") && entry.content.includes("&") && entry.content.includes("=")) {
+                    addSilent("🔑", "解析 URL 查询串为换行键值对并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const kv = parseKeyValuePairs(raw);
+                        const formatted = Object.entries(kv).map(([k, v]) => `${k}: ${v}`).join("\n");
+                        await this.deps.copyProviderPayload(formatted);
+                        this.deps.notify?.("info", `已解析 ${Object.keys(kv).length} 个键值对并复制`);
+                    });
+                }
+                if (entry.content && /^\d{4}-\d{2}-\d{2}$/.test(entry.content.trim())) {
+                    addSilent("📅", "重构日期为中文格式 (YYYY年MM月DD日) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const formatted = formatByRegexGroups(raw.trim(), /(\d{4})-(\d{2})-(\d{2})/, "$1年$2月$3日");
+                        await this.deps.copyProviderPayload(formatted);
+                        this.deps.notify?.("info", `已格式化日期：${formatted}`);
+                    });
                 }
                 if (entry.content && /^[+-]?\d{1,12}$/.test(entry.content.trim())) {
                     addSilent("🔤", "数字转英文拼写单词并复制", async () => {

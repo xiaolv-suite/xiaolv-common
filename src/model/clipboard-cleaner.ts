@@ -3720,3 +3720,211 @@ export function stripAffixWords(text: string, options: StripAffixWordsOptions = 
 
     return processed.join("\n");
 }
+
+export interface ParseKvOptions {
+    /** 字段间分隔符（默认自动切分换行符、&、或分号） */
+    delimiter?: string | RegExp;
+    /** 键与值之间的分隔符（默认 = 或 :） */
+    pairSeparator?: string | RegExp;
+    /** 是否对 key 和 value 执行 trim（默认 true） */
+    trim?: boolean;
+    /** 是否对 URL query 模式自动执行 decodeURIComponent（默认 true） */
+    urlDecode?: boolean;
+}
+
+/**
+ * 键值对提取与参数解析引擎 (parseKeyValuePairs)
+ * 支持 URL 查询串 (name=foo&age=20) 以及 YAML/Properties (name: foo\nage: 20)
+ */
+export function parseKeyValuePairs(text: string, options: ParseKvOptions = {}): Record<string, string> {
+    if (!text || typeof text !== "string") return {};
+    const trim = options.trim !== false;
+    const urlDecode = options.urlDecode !== false;
+
+    let clean = text.trim();
+    if (clean.startsWith("?")) clean = clean.slice(1);
+
+    const delim = options.delimiter !== undefined ? options.delimiter : /[\n\r&;]+/;
+    const pairSep = options.pairSeparator !== undefined ? options.pairSeparator : /[=:]/;
+
+    const pairs = clean.split(delim);
+    const result: Record<string, string> = {};
+
+    for (const rawPair of pairs) {
+        if (!rawPair.trim()) continue;
+        let matchIndex = -1;
+        if (typeof pairSep === "string") {
+            matchIndex = rawPair.indexOf(pairSep);
+        } else {
+            const m = rawPair.match(pairSep);
+            if (m && m.index !== undefined) {
+                matchIndex = m.index;
+            }
+        }
+
+        if (matchIndex === -1) {
+            const k = trim ? rawPair.trim() : rawPair;
+            if (k) result[k] = "";
+            continue;
+        }
+
+        let k = rawPair.slice(0, matchIndex);
+        let v = rawPair.slice(matchIndex + 1);
+
+        if (trim) {
+            k = k.trim();
+            v = v.trim();
+        }
+
+        if (urlDecode) {
+            try {
+                k = decodeURIComponent(k.replace(/\+/g, " "));
+                v = decodeURIComponent(v.replace(/\+/g, " "));
+            } catch {
+                // 保留原文防报错
+            }
+        }
+
+        if (k) {
+            result[k] = v;
+        }
+    }
+
+    return result;
+}
+
+/**
+ * 从多行或查询串文本中提取指定键的值 (extractKvValue)
+ */
+export function extractKvValue(text: string, key: string, fallback = "", options: ParseKvOptions = {}): string {
+    if (!text || !key) return fallback;
+    const kv = parseKeyValuePairs(text, options);
+    if (Object.prototype.hasOwnProperty.call(kv, key)) {
+        return kv[key] ?? fallback;
+    }
+    const lowerKey = key.toLowerCase();
+    for (const [k, v] of Object.entries(kv)) {
+        if (k.toLowerCase() === lowerKey) {
+            return v ?? fallback;
+        }
+    }
+    return fallback;
+}
+
+export interface SortLinesByColumnOptions {
+    /** 列分隔符（默认制表符、逗号、竖线或多个空格） */
+    delimiter?: string | RegExp;
+    /** 是否按数值大小排序（默认 false，字母/拼音字典序） */
+    numeric?: boolean;
+    /** 是否降序排序（默认 false，升序） */
+    descending?: boolean;
+    /** 是否首行是表头（默认 false，为 true 时首行保持在顶部不参与排序） */
+    hasHeader?: boolean;
+    /** 是否忽略空行（默认 true） */
+    ignoreEmpty?: boolean;
+}
+
+/**
+ * 多行文本基于指定列/字段排序引擎 (sortLinesByColumn)
+ * 支持指定列（从 1 开始计）、数值与自然拼音字典序、降序反转及表头保留
+ */
+export function sortLinesByColumn(
+    text: string,
+    columnIndex = 1,
+    options: SortLinesByColumnOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const colIdx = Math.max(1, columnIndex) - 1;
+    const delim = options.delimiter !== undefined ? options.delimiter : /[\t,|，；; ]+/;
+    const numeric = options.numeric === true;
+    const descending = options.descending === true;
+    const hasHeader = options.hasHeader === true;
+    const ignoreEmpty = options.ignoreEmpty !== false;
+
+    const allLines = text.replace(/\r\n?/g, "\n").split("\n");
+    if (allLines.length <= 1) return text;
+
+    let headerLine = "";
+    let linesToSort = allLines;
+
+    if (hasHeader && allLines.length > 0) {
+        headerLine = allLines[0]!;
+        linesToSort = allLines.slice(1);
+    }
+
+    if (ignoreEmpty) {
+        linesToSort = linesToSort.filter((l) => l.trim().length > 0);
+    }
+
+    const getColVal = (line: string): string => {
+        const parts = line.split(delim);
+        return (parts[colIdx] ?? "").trim();
+    };
+
+    linesToSort.sort((lineA, lineB) => {
+        const valA = getColVal(lineA);
+        const valB = getColVal(lineB);
+
+        let cmp = 0;
+        if (numeric) {
+            const numA = parseFloat(valA);
+            const numB = parseFloat(valB);
+            const validA = Number.isFinite(numA);
+            const validB = Number.isFinite(numB);
+
+            if (validA && validB) {
+                cmp = numA - numB;
+            } else if (validA) {
+                cmp = -1;
+            } else if (validB) {
+                cmp = 1;
+            } else {
+                cmp = valA.localeCompare(valB, "zh-Hans-CN");
+            }
+        } else {
+            cmp = valA.localeCompare(valB, "zh-Hans-CN");
+        }
+
+        return descending ? -cmp : cmp;
+    });
+
+    if (hasHeader) {
+        return [headerLine, ...linesToSort].join("\n");
+    }
+    return linesToSort.join("\n");
+}
+
+/**
+ * 正则多捕获组重组与格式化替换 (formatByRegexGroups)
+ * 例如 text="2026-10-28", pattern="(\\d{4})-(\\d{2})-(\\d{2})", template="$1年$2月$3日"
+ * 输出 "2026年10月28日"
+ */
+export function formatByRegexGroups(
+    text: string,
+    pattern: string | RegExp,
+    template: string,
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    if (!pattern || !template) return text;
+
+    let regex: RegExp;
+    if (pattern instanceof RegExp) {
+        regex = pattern;
+    } else {
+        try {
+            regex = new RegExp(pattern, "g");
+        } catch {
+            return text;
+        }
+    }
+
+    return text.replace(regex, (...args) => {
+        let out = template;
+        out = out.replace(/\$0/g, args[0] as string);
+        for (let i = 1; i < args.length - 2; i++) {
+            const capture = (args[i] !== undefined && args[i] !== null) ? String(args[i]) : "";
+            out = out.replace(new RegExp(`\\$${i}`, "g"), capture);
+        }
+        return out;
+    });
+}

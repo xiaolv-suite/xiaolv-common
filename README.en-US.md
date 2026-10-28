@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.33] — 2026-10-28 (Latest)
+### [v0.10.34] — 2026-10-28 (Latest)
 
-Line set operations (difference/intersection/union), multi-radix conversions with bit alignment, and code variable affix stripping:
-- **Line Set Operations Engine (`setOperationsOnLines`)**: Pure function supporting difference (A - B), intersection (A ∩ B), and union (A ∪ B), with case-sensitivity toggle, line trimming, and order preservation; wired to action menu and variable form.
-- **Multi-Radix Conversion Engine (`convertRadix`) & `{{xlc:radix}}` Macro**: Pure function supporting BIN (2), OCT (8), DEC (10), and HEX (16) conversions with prefix handling, bit padding (`padBits`), and uppercase formatting; expanded macro syntax with `{{xlc:radix|255}}`, `{{xlc:radix:bin|42}}`, `{{xlc:radix:hex2dec|...}}`; wired to action menu and variable form.
-- **Code Variable Affix Stripper (`stripAffixWords`)**: Pure function supporting batch removal of method prefixes (`get_`, `is_`, `has_`) and entity suffixes (`_id`, `Dto`, `VO`); wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 886/886 passing tests with verified negative tests.
+Key-value pair extraction, column-based multi-line sorting, and regex capture group formatting:
+- **Key-Value Pair Extraction Engine (`parseKeyValuePairs`/`extractKvValue`) & `{{xlc:kv}}` Macro**: Pure function supporting URL query string (`?name=foo&age=20`) and multi-line YAML/Properties parsing with URL decoding and case-insensitive fallback; dynamic macro `{{xlc:kv:key|...}}` and `{{xlc:kv|key|...}}` added; wired to action menu and variable form.
+- **Column-based Multi-line Sorting Engine (`sortLinesByColumn`)**: Pure function to sort multi-line delimited data by column N with numeric sorting, descending toggle, and table header preservation; wired to action menu and variable form.
+- **Regex Capture Group Formatter (`formatByRegexGroups`) & `{{xlc:match}}` Macro**: Pure function supporting regex capture groups (`$1`, `$2`, `$0`) interpolated into custom output templates; dynamic macro `{{xlc:match|pattern|template|text}}` added; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 890/890 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.32)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.33)</b></summary>
+
+#### [v0.10.33] — 2026-10-28
+- Line set operations (`setOperationsOnLines`).
+- Multi-radix conversion (`convertRadix`) & `{{xlc:radix}}` macro.
+- Code variable affix stripper (`stripAffixWords`).
 
 #### [v0.10.32] — 2026-10-28
 - Pairwise line merging (`zipLines`).

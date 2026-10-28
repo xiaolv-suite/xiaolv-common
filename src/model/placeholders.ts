@@ -30,7 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
-import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat, calculateStats, convertRadix} from "./clipboard-cleaner";
+import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat, calculateStats, convertRadix, extractKvValue, formatByRegexGroups} from "./clipboard-cleaner";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
 // 带参语法分隔符必须是 | 而非 :（R161 真机验收发现）：Lute 把 :date: 当 emoji 短代码转换，
 // {{xlc:date:+3d}} 落库即损坏成 {{xlc📅+3d}}；ask 冒号语法无此问题（:ask: 非短代码，真机已验证）。
@@ -40,11 +40,11 @@ import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEnti
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats" | "radix";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats" | "radix" | "kv" | "match";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -1049,6 +1049,61 @@ export function resolveRadixArg(rawArg: string, subMode?: string): string | null
     return convertRadix(numStr, 10, 16, {prefix: true, uppercase: true});
 }
 
+/** 解析 kv 语法参数（提取键值对或查询串中的指定键） */
+export function resolveKvArg(rawArg: string, subKey?: string): string | null {
+    const trimmed = rawArg.trim();
+    if (!trimmed) return null;
+    let targetKey = subKey?.trim();
+    let text = trimmed;
+
+    if (!targetKey) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe !== -1) {
+            targetKey = trimmed.slice(0, firstPipe).trim();
+            text = trimmed.slice(firstPipe + 1);
+        }
+    }
+
+    if (!targetKey) return null;
+    return extractKvValue(text, targetKey);
+}
+
+/** 解析 match 语法参数（正则多捕获组重组替换模板） */
+export function resolveMatchArg(rawArg: string, subPattern?: string): string | null {
+    const trimmed = rawArg.trim();
+    if (!trimmed) return null;
+
+    let pattern = subPattern?.trim() || "";
+    let template = "";
+    let text = "";
+
+    if (pattern) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe !== -1) {
+            template = trimmed.slice(0, firstPipe).trim();
+            text = trimmed.slice(firstPipe + 1);
+        } else {
+            template = trimmed;
+        }
+    } else {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe !== -1) {
+            pattern = trimmed.slice(0, firstPipe).trim();
+            const rest = trimmed.slice(firstPipe + 1);
+            const secondPipe = rest.indexOf("|");
+            if (secondPipe !== -1) {
+                template = rest.slice(0, secondPipe).trim();
+                text = rest.slice(secondPipe + 1);
+            } else {
+                template = rest.trim();
+            }
+        }
+    }
+
+    if (!pattern || !template) return null;
+    return formatByRegexGroups(text, pattern, template);
+}
+
 export function getIsoWeekNumber(d: Date): number {
     const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNr = (target.getUTCDay() + 6) % 7;
@@ -1109,6 +1164,8 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "color": return "";
         case "stats": return "";
         case "radix": return "";
+        case "kv": return "";
+        case "match": return "";
         case "password": return generateSecurePassword(14, "complex");
     }
 }
@@ -1266,6 +1323,16 @@ export function resolvePlaceholder(
         if (rawKind.includes(":")) {
             subAction = rawKind.split(":")[1];
         }
+    } else if (rawKind.startsWith("kv")) {
+        kind = "kv";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
+    } else if (rawKind.startsWith("match")) {
+        kind = "match";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -1339,6 +1406,8 @@ export function resolvePlaceholder(
     if (kind === "color") return arg ? resolveColorArg(arg, subAction) : null;
     if (kind === "stats") return arg ? resolveStatsArg(arg, subAction) : null;
     if (kind === "radix") return arg ? resolveRadixArg(arg, subAction) : null;
+    if (kind === "kv") return arg ? resolveKvArg(arg, subAction) : null;
+    if (kind === "match") return arg ? resolveMatchArg(arg, subAction) : null;
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
 }
@@ -1368,7 +1437,11 @@ export function listPlaceholders(text: string): PlaceholderKind[] {
                             ? "html"
                             : rawKind.startsWith("count")
                                 ? "count"
-                                : rawKind) as PlaceholderKind;
+                                : rawKind.startsWith("kv")
+                                    ? "kv"
+                                    : rawKind.startsWith("match")
+                                        ? "match"
+                                        : rawKind) as PlaceholderKind;
         if (!kinds.includes(kind)) kinds.push(kind);
     }
     return kinds;
