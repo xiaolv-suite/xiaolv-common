@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -570,6 +570,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "timeago", text: "{{xlc:timeago|1761624000}}"},
         {id: "summary", text: "{{xlc:summary|100|文本}}"},
         {id: "lunar", text: "{{xlc:lunar:year}}"},
+        {id: "choose", text: "{{xlc:choose|VIP:70,普通:30}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1710,6 +1711,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(repPhrasesBtn);
+
+    const extractCol1Btn = document.createElement("button");
+    extractCol1Btn.type = "button";
+    extractCol1Btn.className = "xlc-varbtn xlc-btn-ghost";
+    extractCol1Btn.dataset.xlcControl = "capture.format.extract-col1";
+    extractCol1Btn.textContent = "✦ 提首列";
+    extractCol1Btn.title = "提取选中文本或全文多行中的第 1 列数据";
+    extractCol1Btn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = extractColumnFromLines(targetText, 1);
+        if (res) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(extractCol1Btn);
+
+    const extractCol2Btn = document.createElement("button");
+    extractCol2Btn.type = "button";
+    extractCol2Btn.className = "xlc-varbtn xlc-btn-ghost";
+    extractCol2Btn.dataset.xlcControl = "capture.format.extract-col2";
+    extractCol2Btn.textContent = "✦ 提次列";
+    extractCol2Btn.title = "提取选中文本或全文多行中的第 2 列数据";
+    extractCol2Btn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = extractColumnFromLines(targetText, 2);
+        if (res) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(extractCol2Btn);
+
+    const pluralBtn = document.createElement("button");
+    pluralBtn.type = "button";
+    pluralBtn.className = "xlc-varbtn xlc-btn-ghost";
+    pluralBtn.dataset.xlcControl = "capture.format.pluralize";
+    pluralBtn.textContent = "✦ 转复数";
+    pluralBtn.title = "将选中文本或单词快速转换为英文复数形式";
+    pluralBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = (hasSel ? el.value.slice(start, end) : el.value).trim();
+        const res = pluralizeText(targetText, "plural");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(pluralBtn);
 
     return bar;
 }

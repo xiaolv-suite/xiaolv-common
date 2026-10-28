@@ -2907,3 +2907,153 @@ export function extractRepeatedPhrases(
         result: formattedLines.join("\n"),
     };
 }
+
+export interface ExtractColumnOptions {
+    /** 分隔符，支持字符串或正则（默认自动切分制表符、逗号、竖线或空格） */
+    delimiter?: string | RegExp;
+    /** 是否忽略空行（默认 true） */
+    ignoreEmpty?: boolean;
+    /** 是否对单元格内容进行首尾去空白（默认 true） */
+    trimCell?: boolean;
+}
+
+/**
+ * 从多行文本中提取指定列（从 1 开始计）(extractColumnFromLines)
+ */
+export function extractColumnFromLines(
+    text: string,
+    columnIndex = 1,
+    options: ExtractColumnOptions = {},
+): string {
+    if (!text || typeof text !== "string") return "";
+    const colIdx = Math.max(1, columnIndex) - 1;
+    const delim = options.delimiter !== undefined ? options.delimiter : /[\t,|，；; ]+/;
+    const ignoreEmpty = options.ignoreEmpty !== false;
+    const trimCell = options.trimCell !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const extracted: string[] = [];
+
+    for (const rawLine of lines) {
+        if (ignoreEmpty && rawLine.trim().length === 0) continue;
+        const parts = rawLine.split(delim);
+        let val = parts[colIdx] ?? "";
+        if (trimCell) val = val.trim();
+        extracted.push(val);
+    }
+
+    return extracted.join("\n");
+}
+
+/**
+ * 根据选项后权重标记进行加权概率随机抽取 (pickWeightedOption)
+ * 支持格式: "选项A:80, 选项B:20" 或 "VIP:70、普通:30"
+ */
+export function pickWeightedOption(rawOptions: string): string | null {
+    if (!rawOptions || typeof rawOptions !== "string") return null;
+
+    const items = rawOptions.split(/[,，、]/).map((s) => s.trim()).filter(Boolean);
+    if (items.length === 0) return null;
+
+    const candidates: Array<{option: string; weight: number}> = [];
+    let totalWeight = 0;
+
+    for (const item of items) {
+        const lastColon = item.lastIndexOf(":");
+        let opt = item;
+        let weight = 1;
+
+        if (lastColon !== -1) {
+            const rawWeight = item.slice(lastColon + 1).trim();
+            const parsedWeight = parseFloat(rawWeight);
+            if (Number.isFinite(parsedWeight) && parsedWeight > 0) {
+                weight = parsedWeight;
+                opt = item.slice(0, lastColon).trim();
+            }
+        }
+
+        candidates.push({option: opt, weight});
+        totalWeight += weight;
+    }
+
+    if (totalWeight <= 0) return candidates[0]?.option ?? null;
+
+    let rand = Math.random() * totalWeight;
+    for (const cand of candidates) {
+        if (rand < cand.weight) {
+            return cand.option;
+        }
+        rand -= cand.weight;
+    }
+
+    return candidates[candidates.length - 1]?.option ?? null;
+}
+
+const IRREGULAR_NOUNS: Record<string, string> = {
+    child: "children",
+    person: "people",
+    man: "men",
+    woman: "women",
+    tooth: "teeth",
+    foot: "feet",
+    mouse: "mice",
+    datum: "data",
+    criterion: "criteria",
+    ox: "oxen",
+};
+
+const REVERSE_IRREGULAR: Record<string, string> = {};
+for (const [s, p] of Object.entries(IRREGULAR_NOUNS)) {
+    REVERSE_IRREGULAR[p] = s;
+}
+
+/**
+ * 英文单词单数与复数规则互转 (pluralizeText)
+ */
+export function pluralizeText(word: string, mode: "plural" | "singular" = "plural"): string {
+    if (!word || typeof word !== "string") return word ?? "";
+    const trimmed = word.trim();
+    if (!/^[a-zA-Z]+$/.test(trimmed)) return word;
+
+    const isUpperFirst = /^[A-Z]/.test(trimmed);
+    const lower = trimmed.toLowerCase();
+
+    let result = lower;
+
+    if (mode === "plural") {
+        if (IRREGULAR_NOUNS[lower]) {
+            result = IRREGULAR_NOUNS[lower]!;
+        } else if (/(s|x|z|ch|sh)$/i.test(lower)) {
+            result = `${lower}es`;
+        } else if (/[^aeiou]y$/i.test(lower)) {
+            result = `${lower.slice(0, -1)}ies`;
+        } else if (/(fe|f)$/i.test(lower) && !/(roof|belief|chef|cliff)$/i.test(lower)) {
+            result = lower.endsWith("fe") ? `${lower.slice(0, -2)}ves` : `${lower.slice(0, -1)}ves`;
+        } else {
+            result = `${lower}s`;
+        }
+    } else {
+        // singular
+        if (REVERSE_IRREGULAR[lower]) {
+            result = REVERSE_IRREGULAR[lower]!;
+        } else if (lower.endsWith("ies") && lower.length > 3) {
+            result = `${lower.slice(0, -3)}y`;
+        } else if (lower.endsWith("ves") && lower.length > 3) {
+            const stem = lower.slice(0, -3);
+            if (["li", "kni", "wi"].includes(stem)) {
+                result = `${stem}fe`;
+            } else {
+                result = `${stem}f`;
+            }
+        } else if (lower.endsWith("es") && /(s|x|z|ch|sh)es$/i.test(lower)) {
+            result = lower.slice(0, -2);
+        } else if (lower.endsWith("s") && !lower.endsWith("ss") && lower.length > 1) {
+            result = lower.slice(0, -1);
+        }
+    }
+
+    if (isUpperFirst) {
+        result = result.charAt(0).toUpperCase() + result.slice(1);
+    }
+    return result;
+}

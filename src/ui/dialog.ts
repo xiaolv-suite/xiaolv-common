@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3689,6 +3689,38 @@ export class CommonSearchDialog {
                             this.deps.notify?.("info", `数值汇总：${summary.result}`);
                         });
                     }
+                    if (entry.content.includes(" ") || entry.content.includes("\t") || entry.content.includes(",")) {
+                        addSilent("📑", "提取多行第 1 列并复制", async () => {
+                            const raw = entry.content || await this.deps.preview(entry.id) || "";
+                            const col1 = extractColumnFromLines(raw, 1);
+                            await this.deps.copyProviderPayload(col1);
+                            this.deps.notify?.("info", "已提取多行第 1 列数据并复制");
+                        });
+                    }
+                }
+                if (entry.content && !entry.content.includes("\n") && /^[a-zA-Z]+$/.test(entry.content.trim())) {
+                    addSilent("🔤", "单词转复数 (Plural) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const plural = pluralizeText(raw.trim(), "plural");
+                        await this.deps.copyProviderPayload(plural);
+                        this.deps.notify?.("info", `复数形式：${plural}`);
+                    });
+                    addSilent("🔤", "单词转单数 (Singular) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const singular = pluralizeText(raw.trim(), "singular");
+                        await this.deps.copyProviderPayload(singular);
+                        this.deps.notify?.("info", `单数形式：${singular}`);
+                    });
+                }
+                if (entry.content && !entry.content.includes("\n") && (entry.content.includes(":") || entry.content.includes("：")) && (entry.content.includes(",") || entry.content.includes("，") || entry.content.includes("、"))) {
+                    addSilent("🎲", "加权随机抽取一项并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const picked = pickWeightedOption(raw);
+                        if (picked) {
+                            await this.deps.copyProviderPayload(picked);
+                            this.deps.notify?.("info", `抽取结果：${picked}`);
+                        }
+                    });
                 }
                 if (entry.content && /^(19\d\d|20\d\d)$/.test(entry.content.trim())) {
                     addSilent("🧧", "公历年转干支生肖并复制", async () => {

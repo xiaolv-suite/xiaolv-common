@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.28] — 2026-10-28 (Latest)
+### [v0.10.29] — 2026-10-28 (Latest)
 
-Multi-line numeric calculation & summary, Chinese lunar year calculator, and repeated phrase extraction:
-- **Multi-line Numeric Lines Summary (`sumNumericLines`)**: Automatically extracts numbers across lines and computes sum, average, count, and min/max bounds.
-- **Chinese Lunar Year & Zodiac Calculator (`getChineseZodiacAndStemBranch`)**: Converts Gregorian years to Chinese Stem-Branch and Zodiac designations (e.g. `2026` -> `丙午年 (马年)`). Dynamic macro `{{xlc:lunar:year}}` added.
-- **Repeated Phrases Extraction (`extractRepeatedPhrases`)**: Detects high-frequency repeating phrases (2-4 characters) using N-gram analysis.
-- **Quality Gates**: Unit test suite expanded to 866/866 passing tests with verified negative tests.
+Multi-line column extraction, weighted random choice, and English noun pluralization:
+- **Multi-line Column Extraction (`extractColumnFromLines`)**: Pure function to extract specified column (1-based) across multi-line text separated by tabs, commas, or spaces.
+- **Weighted Random Choice (`pickWeightedOption`) & `{{xlc:choose}}` Macro**: Supports relative weight syntax (e.g. `VIP:70, Standard:30`) with weighted roulette selection. Dynamic macro `{{xlc:choose|...}}` added.
+- **English Noun Pluralization (`pluralizeText`)**: Bidirectional conversion between singular and plural forms supporting irregular nouns and standard suffix rules.
+- **Quality Gates**: Unit test suite expanded to 870/870 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.27)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.28)</b></summary>
+
+#### [v0.10.28] — 2026-10-28
+- Multi-line numeric lines summary (`sumNumericLines`).
+- Chinese lunar year & zodiac calculator (`getChineseZodiacAndStemBranch`) and `{{xlc:lunar:year}}` macro.
+- Repeated phrases extraction (`extractRepeatedPhrases`).
 
 #### [v0.10.27] — 2026-10-28
 - Line symmetrical surrounding (`surroundEachLine`) with quotes/brackets.
