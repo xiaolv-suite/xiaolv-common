@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.45] — 2026-10-29 (Latest)
+### [v0.10.46] — 2026-10-29 (Latest)
 
-Safe code comments stripping, line grouping by pattern, and Markdown HRules normalization:
-- **Code Comments Stripping Engine (`stripCodeComments`)**: Pure function stripping single-line (`//`, `#`, `--`) and block (`/* ... */`) comments while protecting string literals (e.g. URLs and hex codes); wired to action menu and variable form.
-- **Line Grouping by Pattern (`groupLinesByPattern`)**: Pure function aggregating multi-line logs or tasks by prefixes (`[ERROR]`, `[INFO]`) into structured H3 outline sections; wired to action menu and variable form.
-- **Markdown HRules Normalization (`normalizeHorizontalRules`)**: Pure function standardizing horizontal rules (`***`, `___`, `---`) into uniform style (`---`) with blank lines to prevent Setext H2 heading traps; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 932/932 passing tests with verified negative tests.
+Markdown table column alignment batch conversion, fixed-width pad/truncate macro, and trailing whitespace/NBSP sanitization:
+- **Markdown Table Column Alignment Engine (`alignMarkdownTableColumns`)**: Pure function updating table delimiter row alignments (center `:---:`, right `---:`, left `:---`), supporting global setting or per-column array while preserving headers and cells; wired to action menu and variable form.
+- **Fixed-width Field Pad & Truncate (`padOrTruncate`) & `{{xlc:pad}}` Macro**: Pure function supporting fixed width, alignment direction (`left`, `right`, `center`), custom pad characters (e.g. leading zeros `0`), and ellipsis truncation with CJK double-width character calculation; expanded dynamic macro `{{xlc:pad|10|hello}}` and `{{xlc:pad:right|8|123|0}}`; wired to action menu and variable form.
+- **Line Endings & NBSP Sanitization Engine (`sanitizeLineEndingsAndSpaces`)**: Pure function deeply cleaning invisible non-breaking spaces (`\u00A0`), stripping line-trailing whitespace and tabs, and standardizing line endings to `\n`; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 936/936 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.44)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.45)</b></summary>
+
+#### [v0.10.45] — 2026-10-29
+- Safe code comments stripping (`stripCodeComments`) while protecting string literals.
+- Line grouping by prefix pattern (`groupLinesByPattern`) with H3 summaries.
+- Markdown HRules normalization (`normalizeHorizontalRules`) with heading trap protection.
 
 #### [v0.10.44] — 2026-10-29
 - Markdown blockquote nesting level shifting (`shiftMarkdownBlockquotes`).

@@ -5687,3 +5687,162 @@ export function normalizeHorizontalRules(
         normalizedCount: count,
     };
 }
+
+export type TableAlignment = "left" | "center" | "right";
+
+/**
+ * Markdown 表格对齐方式批量转换引擎 (alignMarkdownTableColumns)
+ */
+export function alignMarkdownTableColumns(
+    tableMarkdown: string,
+    alignments: TableAlignment | TableAlignment[] = "center",
+): string {
+    if (!tableMarkdown || typeof tableMarkdown !== "string") return tableMarkdown ?? "";
+
+    const lines = tableMarkdown.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return tableMarkdown;
+
+    const header = lines[0]!;
+    const separator = lines[1]!;
+
+    if (!header.includes("|") || !separator.includes("|")) return tableMarkdown;
+
+    const sepCells = separator.split("|").slice(1, -1);
+
+    const getAlignStr = (align: TableAlignment): string => {
+        if (align === "center") return " :---: ";
+        if (align === "right") return " ---: ";
+        return " :--- ";
+    };
+
+    const newSepCells = sepCells.map((_, idx) => {
+        let align: TableAlignment = "center";
+        if (Array.isArray(alignments)) {
+            align = alignments[idx] || "left";
+        } else if (typeof alignments === "string") {
+            align = alignments;
+        }
+        return getAlignStr(align);
+    });
+
+    const newSeparator = `|${newSepCells.join("|")}|`;
+    const rest = lines.slice(2);
+
+    return [header, newSeparator, ...rest].join("\n");
+}
+
+export interface PadTruncateOptions {
+    /** 对齐方向: "left" (左对齐，右侧补齐), "right" (右对齐，左侧补齐), "center" (居中补齐) */
+    direction?: "left" | "right" | "center";
+    /** 填充字符（默认空格 " "） */
+    padChar?: string;
+    /** 截断时是否追加省略号（默认 false） */
+    ellipsis?: boolean;
+}
+
+/**
+ * 文本字段定长补齐与截断引擎 (padOrTruncate)
+ */
+export function padOrTruncate(
+    text: string,
+    width = 10,
+    options: PadTruncateOptions = {},
+): string {
+    if (text === undefined || text === null) return "";
+    const str = String(text);
+    const targetWidth = Math.max(1, width);
+    const dir = options.direction || "left";
+    const padChar = options.padChar && options.padChar.length > 0 ? options.padChar.charAt(0) : " ";
+    const ellipsis = options.ellipsis === true;
+
+    const getCharWidth = (ch: string) => {
+        const code = ch.charCodeAt(0);
+        return (code >= 0x4e00 && code <= 0x9fa5) || code > 0xff ? 2 : 1;
+    };
+
+    const getStrWidth = (s: string) => {
+        let w = 0;
+        for (const c of s) w += getCharWidth(c);
+        return w;
+    };
+
+    const curWidth = getStrWidth(str);
+
+    if (curWidth === targetWidth) return str;
+
+    if (curWidth > targetWidth) {
+        if (ellipsis && targetWidth > 3) {
+            let truncated = "";
+            let w = 0;
+            const chars = Array.from(str);
+            for (const ch of chars) {
+                const cw = getCharWidth(ch);
+                if (w + cw + 3 <= targetWidth) {
+                    truncated += ch;
+                    w += cw;
+                } else {
+                    break;
+                }
+            }
+            return truncated + "...";
+        }
+
+        let truncated = "";
+        let w = 0;
+        const chars = Array.from(str);
+        for (const ch of chars) {
+            const cw = getCharWidth(ch);
+            if (w + cw <= targetWidth) {
+                truncated += ch;
+                w += cw;
+            } else {
+                break;
+            }
+        }
+        return truncated;
+    }
+
+    const diff = targetWidth - curWidth;
+    if (dir === "right") {
+        return padChar.repeat(diff) + str;
+    }
+    if (dir === "center") {
+        const left = Math.floor(diff / 2);
+        const right = diff - left;
+        return padChar.repeat(left) + str + padChar.repeat(right);
+    }
+    return str + padChar.repeat(diff);
+}
+
+export interface SanitizeLineResult {
+    result: string;
+    fixedCount: number;
+}
+
+/**
+ * 多行文本行尾空格与 NBSP 不换行隐形空格深度清洗引擎 (sanitizeLineEndingsAndSpaces)
+ */
+export function sanitizeLineEndingsAndSpaces(text: string): SanitizeLineResult {
+    if (!text || typeof text !== "string") return {result: text ?? "", fixedCount: 0};
+
+    let count = 0;
+    let cur = text.replace(/\u00a0/g, () => {
+        count++;
+        return " ";
+    });
+
+    const lines = cur.replace(/\r\n?/g, "\n").split("\n");
+    const processed = lines.map((line) => {
+        const trimmed = line.trimEnd();
+        if (trimmed.length < line.length) {
+            count++;
+            return trimmed;
+        }
+        return line;
+    });
+
+    return {
+        result: processed.join("\n"),
+        fixedCount: count,
+    };
+}
