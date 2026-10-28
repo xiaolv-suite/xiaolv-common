@@ -2304,3 +2304,159 @@ export function romanToArabic(roman: string): number | null {
 
     return total > 0 ? total : null;
 }
+
+export interface PadLinesOptions {
+    /** 目标总对齐宽度；若未提供且 autoMaxWidth 为 true，则自动计算最长行宽度 */
+    width?: number;
+    /** 对齐方式：left (左对齐右填充), right (右对齐左填充), center (居中填充) */
+    align?: "left" | "center" | "right";
+    /** 填充字符（默认半角空格 " "） */
+    padChar?: string;
+    /** 是否自动依据最长行对齐 (默认 true) */
+    autoMaxWidth?: boolean;
+}
+
+/**
+ * 多行文本等宽与居中/左右对齐填充 (padLines)
+ */
+export function padLines(text: string, options: PadLinesOptions = {}): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const align = options.align || "left";
+    const padChar = options.padChar ? options.padChar.charAt(0) : " ";
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let targetWidth = options.width;
+
+    if (!targetWidth && options.autoMaxWidth !== false) {
+        let maxW = 0;
+        for (const l of lines) {
+            const w = getDisplayWidth(l);
+            if (w > maxW) maxW = w;
+        }
+        targetWidth = maxW;
+    }
+
+    if (!targetWidth || targetWidth <= 0) return text;
+
+    const padded = lines.map((line) => {
+        const curW = getDisplayWidth(line);
+        const diff = Math.max(0, targetWidth! - curW);
+        if (diff === 0) return line;
+
+        if (align === "right") {
+            return padChar.repeat(diff) + line;
+        } else if (align === "center") {
+            const left = Math.floor(diff / 2);
+            const right = diff - left;
+            return padChar.repeat(left) + line + padChar.repeat(right);
+        } else {
+            return line + padChar.repeat(diff);
+        }
+    });
+
+    return padded.join("\n");
+}
+
+/**
+ * Cron 表达式自然语言解析与解释 (explainCronExpression)
+ * 支持 5 段（分 时 日 月 周）与 6~7 段（秒 分 时 日 月 周 [年]）
+ */
+export function explainCronExpression(cron: string): string {
+    if (!cron || typeof cron !== "string") return "";
+    const clean = cron.trim().replace(/\s+/g, " ");
+    const parts = clean.split(" ");
+
+    if (parts.length < 5 || parts.length > 7) {
+        return clean;
+    }
+
+    // 规整为标准 5 段 (分 时 日 月 周)
+    let min = parts[0]!;
+    let hour = parts[1]!;
+    let day = parts[2]!;
+    let month = parts[3]!;
+    let week = parts[4]!;
+
+    if (parts.length >= 6) {
+        // 含秒: 秒 分 时 日 月 周
+        min = parts[1]!;
+        hour = parts[2]!;
+        day = parts[3]!;
+        month = parts[4]!;
+        week = parts[5]!;
+    }
+
+    // 常见高频预设匹配
+    if (min === "*" && hour === "*" && day === "*" && month === "*" && week === "*") {
+        return "每分钟执行一次";
+    }
+    if (min.startsWith("*/") && hour === "*" && day === "*" && month === "*" && week === "*") {
+        const step = min.slice(2);
+        return `每 ${step} 分钟执行一次`;
+    }
+    if (min === "0" && hour === "*" && day === "*" && month === "*" && week === "*") {
+        return "每小时整点执行一次";
+    }
+    if (min === "0" && hour === "0" && day === "*" && month === "*" && week === "*") {
+        return "每天 00:00 执行一次";
+    }
+    if (/^\d{1,2}$/.test(min) && /^\d{1,2}$/.test(hour) && day === "*" && month === "*") {
+        const timeStr = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+        if (week === "*") {
+            return `每天 ${timeStr} 执行一次`;
+        }
+        if (week === "1-5") {
+            return `工作日 (周一至周五) ${timeStr} 执行一次`;
+        }
+        if (week === "0,6" || week === "6,0" || week === "7,6" || week === "6,7") {
+            return `周末 (周六和周日) ${timeStr} 执行一次`;
+        }
+    }
+
+    // 默认结构化分解描述
+    return `Cron: [分: ${min}, 时: ${hour}, 日: ${day}, 月: ${month}, 周: ${week}]`;
+}
+
+// 常用高频简繁对应字表（字对形式）
+const S2T_PAIRS = "万萬与與丑醜专專业業个個么麼为為义義乐樂云雲产產众衆优優体體会會传傳关關写寫准準创創办辦华華发發变變问問国國图圖块塊复復备備学學实實导導师師广廣应應开開录錄总總标標检檢欢歡权權归歸视視计計语語链鏈门門随隨码碼点點";
+
+const S2T_MAP = new Map<string, string>();
+const T2S_MAP = new Map<string, string>();
+
+for (let i = 0; i < S2T_PAIRS.length; i += 2) {
+    const s = S2T_PAIRS[i]!;
+    const t = S2T_PAIRS[i + 1]!;
+    S2T_MAP.set(s, t);
+    T2S_MAP.set(t, s);
+}
+
+export interface ChineseVariantResult {
+    result: string;
+    convertedCount: number;
+}
+
+/**
+ * 常用汉字简繁体双向转换 (convertChineseVariant)
+ */
+export function convertChineseVariant(text: string, mode: "s2t" | "t2s" = "s2t"): ChineseVariantResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", convertedCount: 0};
+    }
+
+    const map = mode === "s2t" ? S2T_MAP : T2S_MAP;
+    let convertedCount = 0;
+
+    const chars = Array.from(text).map((ch) => {
+        const mapped = map.get(ch);
+        if (mapped) {
+            convertedCount++;
+            return mapped;
+        }
+        return ch;
+    });
+
+    return {
+        result: chars.join(""),
+        convertedCount,
+    };
+}

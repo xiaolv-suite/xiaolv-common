@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3652,6 +3652,36 @@ export class CommonSearchDialog {
                         const filtered = filterLines(raw, /^\s*[^#\/\s]/);
                         await this.deps.copyProviderPayload(filtered.result);
                         this.deps.notify?.("info", `已保留 ${filtered.matchedCount} 行有效正文并复制`);
+                    });
+                    addSilent("📐", "多行等宽对齐排版并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const padded = padLines(raw, {align: "left"});
+                        await this.deps.copyProviderPayload(padded);
+                        this.deps.notify?.("info", "已等宽对齐排版多行并复制");
+                    });
+                }
+                if (entry.content && /^(\S+\s+){4,6}\S+$/.test(entry.content.trim())) {
+                    addSilent("⏰", "解释 Cron 定时表达式并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const exp = explainCronExpression(raw.trim());
+                        if (exp) {
+                            await this.deps.copyProviderPayload(exp);
+                            this.deps.notify?.("info", `已解释 Cron 表达式：${exp}`);
+                        }
+                    });
+                }
+                if (entry.content && /[\u4e00-\u9fa5]/.test(entry.content)) {
+                    addSilent("🀄", "简体转繁体并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = convertChineseVariant(raw, "s2t");
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已转换 ${res.convertedCount} 字为繁体并复制`);
+                    });
+                    addSilent("🀄", "繁体转简体并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = convertChineseVariant(raw, "t2s");
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已转换 ${res.convertedCount} 字为简体并复制`);
                     });
                 }
                 if (entry.content && /^[IVXLCDM]+$/i.test(entry.content.trim())) {

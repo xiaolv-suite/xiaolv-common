@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -566,6 +566,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "currency", text: "{{xlc:currency|1234.56}}"},
         {id: "filesize", text: "{{xlc:filesize|1048576}}"},
         {id: "reverse", text: "{{xlc:reverse|文本}}"},
+        {id: "cron", text: "{{xlc:cron|0 30 9 * * 1-5}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1446,6 +1447,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(romanBtn);
+
+    const padLinesBtn = document.createElement("button");
+    padLinesBtn.type = "button";
+    padLinesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    padLinesBtn.dataset.xlcControl = "capture.format.pad-lines";
+    padLinesBtn.textContent = "✦ 等宽对齐";
+    padLinesBtn.title = "多行文本等宽左对齐排版，自动依据最长行对齐填充空格";
+    padLinesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = padLines(targetText, {align: "left"});
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(padLinesBtn);
+
+    const s2tBtn = document.createElement("button");
+    s2tBtn.type = "button";
+    s2tBtn.className = "xlc-varbtn xlc-btn-ghost";
+    s2tBtn.dataset.xlcControl = "capture.format.s2t";
+    s2tBtn.textContent = "✦ 简转繁";
+    s2tBtn.title = "将选中文本或全文常用汉字转换为繁体中文";
+    s2tBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertChineseVariant(targetText, "s2t");
+        if (res.convertedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(s2tBtn);
+
+    const t2sBtn = document.createElement("button");
+    t2sBtn.type = "button";
+    t2sBtn.className = "xlc-varbtn xlc-btn-ghost";
+    t2sBtn.dataset.xlcControl = "capture.format.t2s";
+    t2sBtn.textContent = "✦ 繁转简";
+    t2sBtn.title = "将选中文本或全文常用汉字转换为简体中文";
+    t2sBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertChineseVariant(targetText, "t2s");
+        if (res.convertedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(t2sBtn);
 
     return bar;
 }
