@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.48] — 2026-10-29 (Latest)
+### [v0.10.49] — 2026-10-29 (Latest)
 
-Markdown list style bidirectional conversion, lightweight fingerprint hash macro, and task list status filtering:
-- **Markdown List Style Conversion (`convertListStyle`)**: Pure function converting between bullet unordered lists (`- `, `* `, `+ `) and sequential numbered lists (`1. `, `2. `, `3. `), preserving nested multi-level indentation with independent level counters and keeping checkbox status intact; wired to action menu and variable form.
-- **Short Hash Fingerprint (`generateShortHash`) & `{{xlc:fingerprint}}` Macro**: Pure function generating deterministic, uniform 64-bit dual-round FNV-1a hex fingerprints (default 8 chars, 4~32 chars configurable); expanded dynamic macro `{{xlc:fingerprint|hello}}` and `{{xlc:fingerprint:6|hello}}`; wired to action menu and variable form.
-- **Task List Status Filtering (`filterTaskItems`)**: Pure function extracting only pending tasks (`- [ ]`) or only completed tasks (`- [x]`) from mixed notes, supporting `stripCheckbox: true` to output clean bullet lists; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 944/944 passing tests with verified negative tests.
+Prefix/suffix line filtering, random color generator macro, and Markdown ordered list renumbering:
+- **Prefix/Suffix Line Filtering Engine (`filterLinesByAffix`)**: Pure function filtering multi-line text by prefix (e.g. `import `, `// `) or suffix (e.g. `.ts`, `;`), supporting case sensitivity toggle, inverse matching, and indentation trimming; wired to action menu and variable form.
+- **Random Color Generator (`generateRandomColor`) & `{{xlc:randomcolor}}` Macro**: Pure function generating uppercase HEX, RGB, or HSL color codes with `vibrant`, `pastel`, `dark`, and `light` tone presets; expanded dynamic macro `{{xlc:randomcolor}}`, `{{xlc:randomcolor:rgb}}`, `{{xlc:randomcolor:hsl}}`, `{{xlc:randomcolor|pastel}}`; wired to action menu and variable form.
+- **Markdown Ordered List Renumbering (`renumberOrderedList`)**: Pure function automatically repairing broken numbering sequences into continuous incremental indices per indentation level while preserving parenthesis/dot styles; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 948/948 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.47)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.48)</b></summary>
+
+#### [v0.10.48] — 2026-10-29
+- Markdown list style bidirectional conversion (`convertListStyle`).
+- Lightweight short hash fingerprint (`generateShortHash`) & `{{xlc:fingerprint}}` macro.
+- Task list status filtering (`filterTaskItems`) with checkbox stripping.
 
 #### [v0.10.47] — 2026-10-29
 - Identifier naming style conversion (`convertIdentifierNamingStyle`) for camelCase, snake_case, PascalCase, and kebab-case.

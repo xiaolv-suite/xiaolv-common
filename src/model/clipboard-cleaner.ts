@@ -6153,3 +6153,141 @@ export function filterTaskItems(
 
     return result.join("\n");
 }
+
+export interface FilterAffixOptions {
+    caseSensitive?: boolean;
+    invert?: boolean;
+    trimBeforeCheck?: boolean;
+}
+
+/**
+ * 文本行按指定前缀/后缀模式精准过滤引擎 (filterLinesByAffix)
+ */
+export function filterLinesByAffix(
+    text: string,
+    affix: string,
+    type: "prefix" | "suffix" = "prefix",
+    options: FilterAffixOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    if (!affix) return text;
+
+    const lines = text.split("\n");
+    const caseSensitive = options.caseSensitive !== false;
+    const invert = options.invert === true;
+    const trim = options.trimBeforeCheck !== false;
+    const targetAffix = caseSensitive ? affix : affix.toLowerCase();
+
+    const matches = (line: string): boolean => {
+        const inspected = trim ? (type === "prefix" ? line.trimStart() : line.trimEnd()) : line;
+        const comp = caseSensitive ? inspected : inspected.toLowerCase();
+        return type === "prefix" ? comp.startsWith(targetAffix) : comp.endsWith(targetAffix);
+    };
+
+    return lines.filter((line) => {
+        const m = matches(line);
+        return invert ? !m : m;
+    }).join("\n");
+}
+
+export type ColorTone = "any" | "vibrant" | "pastel" | "dark" | "light";
+
+/**
+ * 随机颜色值生成引擎 (generateRandomColor)
+ */
+export function generateRandomColor(
+    format: "hex" | "rgb" | "hsl" = "hex",
+    options: {tone?: ColorTone} = {},
+): string {
+    const tone = options.tone || "any";
+    let h = Math.floor(Math.random() * 360);
+    let s = 80;
+    let l = 50;
+
+    switch (tone) {
+        case "vibrant":
+            s = 85 + Math.floor(Math.random() * 15);
+            l = 45 + Math.floor(Math.random() * 15);
+            break;
+        case "pastel":
+            s = 65 + Math.floor(Math.random() * 20);
+            l = 80 + Math.floor(Math.random() * 12);
+            break;
+        case "dark":
+            s = 50 + Math.floor(Math.random() * 40);
+            l = 15 + Math.floor(Math.random() * 20);
+            break;
+        case "light":
+            s = 40 + Math.floor(Math.random() * 40);
+            l = 85 + Math.floor(Math.random() * 10);
+            break;
+        case "any":
+        default:
+            s = Math.floor(Math.random() * 101);
+            l = Math.floor(Math.random() * 101);
+            break;
+    }
+
+    if (format === "hsl") {
+        return `hsl(${h}, ${s}%, ${l}%)`;
+    }
+
+    const sDec = s / 100;
+    const lDec = l / 100;
+    const k = (n: number) => (n + h / 30) % 12;
+    const a = sDec * Math.min(lDec, 1 - lDec);
+    const f = (n: number) => lDec - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+
+    const r = Math.round(f(0) * 255);
+    const g = Math.round(f(8) * 255);
+    const b = Math.round(f(4) * 255);
+
+    if (format === "rgb") {
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    const toHex = (n: number) => n.toString(16).padStart(2, "0").toUpperCase();
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+export interface RenumberListOptions {
+    startNumber?: number;
+    style?: "dot" | "parenthesis";
+}
+
+/**
+ * Markdown 有序列表编号自动重排重整引擎 (renumberOrderedList)
+ */
+export function renumberOrderedList(
+    text: string,
+    options: RenumberListOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const startNum = options.startNumber !== undefined ? Math.max(0, options.startNumber) : 1;
+    const delim = options.style === "parenthesis" ? ")" : ".";
+
+    const counters = new Map<number, number>();
+
+    return lines.map((line) => {
+        const match = line.match(/^(\s*)(\d+)[.)](\s+.*)$/);
+        if (!match) {
+            if (line.trim().length > 0 && !line.match(/^\s*[-*+]\s+/)) {
+                counters.clear();
+            }
+            return line;
+        }
+
+        const [, indent, , rest] = match;
+        const indentLen = indent!.length;
+
+        for (const k of Array.from(counters.keys())) {
+            if (k > indentLen) counters.delete(k);
+        }
+
+        const count = (counters.get(indentLen) ?? (startNum - 1)) + 1;
+        counters.set(indentLen, count);
+
+        return `${indent}${count}${delim}${rest}`;
+    }).join("\n");
+}
