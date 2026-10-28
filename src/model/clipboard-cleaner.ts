@@ -2181,3 +2181,126 @@ export function shuffleLines(text: string, options: ShuffleLinesOptions = {}): s
 
     return linesToShuffle.join("\n");
 }
+
+export interface FilterLinesOptions {
+    /** 是否反转过滤条件（true 为排除匹配行，相当于 grep -v；默认 false 为保留匹配行） */
+    invert?: boolean;
+    /** 是否区分大小写（默认 false） */
+    caseSensitive?: boolean;
+    /** 是否预清理行首尾空白（默认 false） */
+    trimLines?: boolean;
+}
+
+export interface FilterLinesResult {
+    result: string;
+    matchedCount: number;
+    totalCount: number;
+}
+
+/**
+ * 多行文本关键词/正则过滤与提取 (filterLines)
+ */
+export function filterLines(text: string, pattern: string | RegExp, options: FilterLinesOptions = {}): FilterLinesResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", matchedCount: 0, totalCount: 0};
+    }
+
+    const invert = options.invert === true;
+    const caseSensitive = options.caseSensitive === true;
+    const trimLines = options.trimLines === true;
+
+    let regex: RegExp;
+    if (pattern instanceof RegExp) {
+        regex = pattern;
+    } else {
+        const escaped = String(pattern).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        regex = new RegExp(escaped, caseSensitive ? "" : "i");
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let matchedCount = 0;
+
+    const filtered = lines.filter((rawLine) => {
+        const line = trimLines ? rawLine.trim() : rawLine;
+        const matches = regex.test(line);
+        if (matches) matchedCount++;
+        return invert ? !matches : matches;
+    });
+
+    return {
+        result: filtered.join("\n"),
+        matchedCount,
+        totalCount: lines.length,
+    };
+}
+
+/**
+ * 字符级文本逆序反转 (reverseText)
+ * 正确处理多字节 Unicode 与 Emoji 符号
+ */
+export function reverseText(text: string): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    return Array.from(text).reverse().join("");
+}
+
+const ROMAN_MAP: Array<[string, number]> = [
+    ["M", 1000],
+    ["CM", 900],
+    ["D", 500],
+    ["CD", 400],
+    ["C", 100],
+    ["XC", 90],
+    ["L", 50],
+    ["XL", 40],
+    ["X", 10],
+    ["IX", 9],
+    ["V", 5],
+    ["IV", 4],
+    ["I", 1],
+];
+
+/**
+ * 阿拉伯数字转罗马数字 (arabicToRoman)
+ * 支持 1 ~ 3999
+ */
+export function arabicToRoman(num: number): string {
+    if (!Number.isFinite(num) || num < 1 || num > 3999) return "";
+    let n = Math.floor(num);
+    let roman = "";
+    for (const [sym, val] of ROMAN_MAP) {
+        while (n >= val) {
+            roman += sym;
+            n -= val;
+        }
+    }
+    return roman;
+}
+
+const ROMAN_VALS: Record<string, number> = {
+    I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000,
+};
+
+/**
+ * 罗马数字转阿拉伯数字 (romanToArabic)
+ * 如 "XIV" -> 14, "MMXXVI" -> 2026
+ */
+export function romanToArabic(roman: string): number | null {
+    if (!roman || typeof roman !== "string") return null;
+    const clean = roman.trim().toUpperCase();
+    if (!/^[IVXLCDM]+$/.test(clean)) return null;
+
+    let total = 0;
+    let prev = 0;
+
+    for (let i = clean.length - 1; i >= 0; i--) {
+        const cur = ROMAN_VALS[clean[i]!] || 0;
+        if (cur < prev) {
+            total -= cur;
+        } else {
+            total += cur;
+            prev = cur;
+        }
+    }
+
+    return total > 0 ? total : null;
+}

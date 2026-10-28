@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -565,6 +565,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "mask", text: "{{xlc:mask|phone|手机号}}"},
         {id: "currency", text: "{{xlc:currency|1234.56}}"},
         {id: "filesize", text: "{{xlc:filesize|1048576}}"},
+        {id: "reverse", text: "{{xlc:reverse|文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1385,6 +1386,66 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(shuffleBtn);
+
+    const reverseTextBtn = document.createElement("button");
+    reverseTextBtn.type = "button";
+    reverseTextBtn.className = "xlc-varbtn xlc-btn-ghost";
+    reverseTextBtn.dataset.xlcControl = "capture.format.reverse-text";
+    reverseTextBtn.textContent = "✦ 字符反转";
+    reverseTextBtn.title = "将选中文本或全文进行纯字符字面逆序反转 (Unicode/Emoji安全)";
+    reverseTextBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = reverseText(targetText);
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(reverseTextBtn);
+
+    const romanBtn = document.createElement("button");
+    romanBtn.type = "button";
+    romanBtn.className = "xlc-varbtn xlc-btn-ghost";
+    romanBtn.dataset.xlcControl = "capture.format.roman-num";
+    romanBtn.textContent = "✦ 罗马数字";
+    romanBtn.title = "在罗马数字与阿拉伯数字之间双向转换 (如 XIV <-> 14)";
+    romanBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = (hasSel ? el.value.slice(start, end) : el.value).trim();
+        let resStr = "";
+        if (/^[IVXLCDM]+$/i.test(targetText)) {
+            const num = romanToArabic(targetText);
+            if (num !== null) resStr = String(num);
+        } else if (/^\d{1,4}$/.test(targetText)) {
+            const roman = arabicToRoman(Number(targetText));
+            if (roman) resStr = roman;
+        }
+
+        if (resStr && resStr !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + resStr + el.value.slice(end);
+                el.setSelectionRange(start, start + resStr.length);
+            } else {
+                el.value = resStr;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(romanBtn);
 
     return bar;
 }

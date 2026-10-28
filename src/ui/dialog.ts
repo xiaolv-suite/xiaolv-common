@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3646,6 +3646,39 @@ export class CommonSearchDialog {
                         const shuffled = shuffleLines(raw);
                         await this.deps.copyProviderPayload(shuffled);
                         this.deps.notify?.("info", "已随机打乱多行文本顺序并复制");
+                    });
+                    addSilent("🔍", "过滤非空非注释行并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const filtered = filterLines(raw, /^\s*[^#\/\s]/);
+                        await this.deps.copyProviderPayload(filtered.result);
+                        this.deps.notify?.("info", `已保留 ${filtered.matchedCount} 行有效正文并复制`);
+                    });
+                }
+                if (entry.content && /^[IVXLCDM]+$/i.test(entry.content.trim())) {
+                    addSilent("🏛", "罗马数字转阿拉伯数字并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const arabic = romanToArabic(raw.trim());
+                        if (arabic !== null) {
+                            await this.deps.copyProviderPayload(String(arabic));
+                            this.deps.notify?.("info", `已转换为阿拉伯数字 ${arabic} 并复制`);
+                        }
+                    });
+                } else if (entry.content && /^\d{1,4}$/.test(entry.content.trim()) && Number(entry.content.trim()) >= 1 && Number(entry.content.trim()) <= 3999) {
+                    addSilent("🏛", "阿拉伯数字转罗马数字并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const roman = arabicToRoman(Number(raw.trim()));
+                        if (roman) {
+                            await this.deps.copyProviderPayload(roman);
+                            this.deps.notify?.("info", `已转换为罗马数字 ${roman} 并复制`);
+                        }
+                    });
+                }
+                if (entry.content && entry.content.trim().length > 1 && !entry.content.includes("\n")) {
+                    addSilent("🔄", "字符逆序反转并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const reversed = reverseText(raw);
+                        await this.deps.copyProviderPayload(reversed);
+                        this.deps.notify?.("info", "已反转字符并复制");
                     });
                 }
                 if (entry.content && (entry.content.includes("**") || entry.content.includes("`") || entry.content.includes("# ") || entry.content.includes("> "))) {
