@@ -7605,3 +7605,109 @@ export function shiftListIndentation(
         }
     }).join("\n");
 }
+
+export type FlattenListMode = "flat_bullets" | "prefix_parent";
+
+/**
+ * Markdown 嵌套列表展开打平引擎 (flattenNestedList)
+ */
+export function flattenNestedList(
+    text: string,
+    mode: FlattenListMode = "flat_bullets",
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const listRegex = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+
+    const parentStack: Array<{indentLen: number; text: string}> = [];
+
+    return lines.map((line) => {
+        const match = line.match(listRegex);
+        if (!match) return line;
+
+        const [, indent, , content] = match;
+        const indentLen = indent!.length;
+        const cleanContent = content!.trim();
+
+        if (mode === "prefix_parent") {
+            while (parentStack.length > 0 && parentStack[parentStack.length - 1]!.indentLen >= indentLen) {
+                parentStack.pop();
+            }
+
+            let fullText = cleanContent;
+            if (parentStack.length > 0) {
+                const parentPath = parentStack.map((p) => p.text).join(" > ");
+                fullText = `${parentPath}: ${cleanContent}`;
+            }
+
+            parentStack.push({indentLen, text: cleanContent});
+            return `- ${fullText}`;
+        }
+
+        return `- ${cleanContent}`;
+    }).join("\n");
+}
+
+export interface MaskRangeOptions {
+    start?: number;
+    length?: number;
+    keepStart?: number;
+    keepEnd?: number;
+    maskChar?: string;
+}
+
+/**
+ * 任意文本范围与留头尾掩码脱敏引擎 (maskTextRange)
+ */
+export function maskTextRange(
+    text: string,
+    options: MaskRangeOptions = {},
+): string {
+    if (!text || typeof text !== "string") return "";
+    const mask = options.maskChar && options.maskChar.length > 0 ? options.maskChar.charAt(0) : "*";
+    const chars = Array.from(text);
+    const total = chars.length;
+
+    if (options.keepStart !== undefined || options.keepEnd !== undefined) {
+        const ks = Math.max(0, options.keepStart || 0);
+        const ke = Math.max(0, options.keepEnd || 0);
+
+        if (total <= ks + ke) {
+            return text;
+        }
+
+        const maskedMiddle = mask.repeat(total - ks - ke);
+        const head = chars.slice(0, ks).join("");
+        const tail = chars.slice(total - ke).join("");
+        return `${head}${maskedMiddle}${tail}`;
+    }
+
+    const s = Math.max(0, options.start || 0);
+    const len = options.length !== undefined ? Math.max(0, options.length) : (total - s);
+
+    if (s >= total || len === 0) return text;
+
+    const end = Math.min(total, s + len);
+    const head = chars.slice(0, s).join("");
+    const masked = mask.repeat(end - s);
+    const tail = chars.slice(end).join("");
+
+    return `${head}${masked}${tail}`;
+}
+
+/**
+ * 中英文排版与标点空格综合规整引擎 (formatCJKSpacingComprehensive)
+ * 串联 NBSP 清洗、盘古之中英文空格、全角/半角标点间距标准化
+ */
+export function formatCJKSpacingComprehensive(text: string): {result: string; changed: boolean} {
+    if (!text || typeof text !== "string") return {result: text ?? "", changed: false};
+
+    const step1 = sanitizeLineEndingsAndSpaces(text).result;
+    const step2 = formatPanguSpacing(step1).result;
+    const step3 = formatPunctuationSpacing(step2);
+
+    return {
+        result: step3,
+        changed: step3 !== text,
+    };
+}

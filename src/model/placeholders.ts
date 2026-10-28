@@ -30,7 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
-import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat, calculateStats, convertRadix, extractKvValue, formatByRegexGroups, validateFormat, DataFormatType, parsePathParts, generateNanoId, renderSimpleTemplate, obfuscateText, ObfuscateMode, regexReplaceMultiline, scrambleText, formatNumberGrouping, calculateChecksum, padOrTruncate, generateNumericSequence, generateShortHash, generateRandomColor, ColorTone, truncateByBytes, extractChinesePinyinInitials, pluralizeText, escapeMacroPipe, repeatText, centerText, escapeBackslash, reverseWords, generateRandomName, evaluateTernaryCondition} from "./clipboard-cleaner";
+import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat, calculateStats, convertRadix, extractKvValue, formatByRegexGroups, validateFormat, DataFormatType, parsePathParts, generateNanoId, renderSimpleTemplate, obfuscateText, ObfuscateMode, regexReplaceMultiline, scrambleText, formatNumberGrouping, calculateChecksum, padOrTruncate, generateNumericSequence, generateShortHash, generateRandomColor, ColorTone, truncateByBytes, extractChinesePinyinInitials, pluralizeText, escapeMacroPipe, repeatText, centerText, escapeBackslash, reverseWords, generateRandomName, evaluateTernaryCondition, maskTextRange} from "./clipboard-cleaner";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
 // 带参语法分隔符必须是 | 而非 :（R161 真机验收发现）：Lute 把 :date: 当 emoji 短代码转换，
 // {{xlc:date:+3d}} 落库即损坏成 {{xlc📅+3d}}；ask 冒号语法无此问题（:ask: 非短代码，真机已验证）。
@@ -40,11 +40,11 @@ import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEnti
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "nanoid" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats" | "radix" | "kv" | "match" | "valid" | "template" | "obfuscate" | "scramble" | "thousands" | "checksum" | "pad" | "seq" | "fingerprint" | "randomcolor" | "btruncate" | "initials" | "plural" | "escape" | "repeat" | "center" | "slash" | "revwords" | "randomname" | "if";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "nanoid" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats" | "radix" | "kv" | "match" | "valid" | "template" | "obfuscate" | "scramble" | "thousands" | "checksum" | "pad" | "seq" | "fingerprint" | "randomcolor" | "btruncate" | "initials" | "plural" | "escape" | "repeat" | "center" | "slash" | "revwords" | "randomname" | "if" | "smask";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -1720,6 +1720,34 @@ export function resolveIfArg(rawArg: string, subAction?: string): string | null 
     return evaluateTernaryCondition(condition, thenVal, elseVal);
 }
 
+/** 解析 smask 语法参数（范围与留头尾脱敏） */
+export function resolveSmaskArg(rawArg: string, subMode?: string): string | null {
+    const trimmed = rawArg.trim();
+    if (!trimmed) return null;
+
+    let isKeepEnds = subMode === "ends" || subMode === "keep";
+    const parts = trimmed.split("|");
+
+    if (parts.length >= 3 && (parts[0]!.trim().toLowerCase() === "keep" || parts[0]!.trim().toLowerCase() === "ends")) {
+        isKeepEnds = true;
+        parts.shift();
+    }
+
+    if (isKeepEnds) {
+        const text = parts[0] ?? "";
+        const ks = parts[1] !== undefined ? parseInt(parts[1].trim(), 10) : 4;
+        const ke = parts[2] !== undefined ? parseInt(parts[2].trim(), 10) : 4;
+        const maskChar = parts[3] ? parts[3].trim() : "*";
+        return maskTextRange(text, {keepStart: ks, keepEnd: ke, maskChar});
+    }
+
+    const text = parts[0] ?? "";
+    const start = parts[1] !== undefined ? parseInt(parts[1].trim(), 10) : 3;
+    const len = parts[2] !== undefined ? parseInt(parts[2].trim(), 10) : undefined;
+    const maskChar = parts[3] ? parts[3].trim() : "*";
+    return maskTextRange(text, {start, length: len, maskChar});
+}
+
 export function getIsoWeekNumber(d: Date): number {
     const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNr = (target.getUTCDay() + 6) % 7;
@@ -1802,6 +1830,7 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "revwords": return "";
         case "randomname": return generateRandomName("zh");
         case "if": return "";
+        case "smask": return "";
         case "nanoid": return generateNanoId(10);
         case "password": return generateSecurePassword(14, "complex");
     }
@@ -2080,6 +2109,11 @@ export function resolvePlaceholder(
         if (rawKind.includes(":")) {
             subAction = rawKind.split(":")[1];
         }
+    } else if (rawKind.startsWith("smask")) {
+        kind = "smask";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -2176,6 +2210,7 @@ export function resolvePlaceholder(
     if (kind === "revwords") return arg ? resolveRevwordsArg(arg) : null;
     if (kind === "randomname") return resolveRandomNameArg(arg, subAction);
     if (kind === "if") return arg ? resolveIfArg(arg, subAction) : null;
+    if (kind === "smask") return arg ? resolveSmaskArg(arg, subAction) : null;
     if (kind === "path") {
         if (!arg && !subAction) return doc?.path ?? "";
         return resolvePathArg(arg, subAction, doc?.path ?? "");
@@ -2257,7 +2292,9 @@ export function listPlaceholders(text: string): PlaceholderKind[] {
                                                                                                                             ? "randomname"
                                                                                                                             : rawKind.startsWith("if")
                                                                                                                                 ? "if"
-                                                                                                                                : rawKind) as PlaceholderKind;
+                                                                                                                                : rawKind.startsWith("smask")
+                                                                                                                                    ? "smask"
+                                                                                                                                    : rawKind) as PlaceholderKind;
         if (!kinds.includes(kind)) kinds.push(kind);
     }
     return kinds;

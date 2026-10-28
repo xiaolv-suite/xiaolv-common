@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.59] — 2026-10-29 (Latest)
+### [v0.10.60] — 2026-10-29 (Latest)
 
-Visual width metrics, ternary conditional evaluation macro, and list indentation shifting:
-- **Visual Width Metrics (`measureVisualWidth`)**: Pure function accurately calculating CJK double-width visual column length, total character count, and CJK vs ASCII breakdown; wired to action menu and variable form.
-- **Ternary Conditional Evaluator (`evaluateTernaryCondition`) & `{{xlc:if}}` Macro**: Zero-eval safe condition parser supporting numeric comparisons (`>`, `<=`), exact string matching, substring checks (`contains`), and truthiness; expanded dynamic macro `{{xlc:if|10 > 5|大于五|小于等于五}}`, `{{xlc:if|role == 'admin'|管理员|普通用户}}`, `{{xlc:if:not|true|开启|关闭}}`; wired to variable form.
-- **List Indentation Shifting (`shiftListIndentation`)**: Pure function batch-shifting list item indentation (+2 or -2 spaces) while keeping standard paragraphs and blank lines intact; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 981/981 passing tests with verified negative tests.
+Markdown nested list flattening, string range masking macro, and comprehensive CJK spacing:
+- **Nested List Flattening (`flattenNestedList`)**: Pure function flattening multi-level nested lists into flat bullet items (`flat_bullets`) or prefixing ancestral paths (`prefix_parent`); wired to action menu and variable form.
+- **String Range Masking (`maskTextRange`) & `{{xlc:smask}}` Macro**: Pure function supporting head/tail character retention (e.g. keep first 4 and last 4 chars) or specific index range masking; expanded dynamic macro `{{xlc:smask|keep|13812345678|3|4}}`, `{{xlc:smask:ends|1234567890|2|2}}`; wired to variable form.
+- **Comprehensive CJK Spacing Formatter (`formatCJKSpacingComprehensive`)**: Pure function chaining NBSP removal, Pangu Chinese-English spacing, and punctuation normalization in a single idempotent pass; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 984/984 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.58)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.59)</b></summary>
+
+#### [v0.10.59] — 2026-10-29
+- Visual width metrics (`measureVisualWidth`).
+- Ternary conditional evaluation (`evaluateTernaryCondition`) & `{{xlc:if}}` macro.
+- List indentation shifting (`shiftListIndentation`).
 
 #### [v0.10.58] — 2026-10-29
 - Markdown KPI summary card (`formatKpiSummaryCard`).
