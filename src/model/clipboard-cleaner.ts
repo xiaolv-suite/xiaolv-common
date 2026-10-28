@@ -1919,3 +1919,169 @@ export function maskSensitiveText(text: string, options: MaskOptions | MaskType 
 
     return res;
 }
+
+export interface JoinLinesOptions {
+    /** 连接分隔符（默认 ", "） */
+    delimiter?: string;
+    /** 是否忽略空行（默认 true） */
+    ignoreEmpty?: boolean;
+    /** 是否预清洗行首尾空白（默认 true） */
+    trimLines?: boolean;
+}
+
+/**
+ * 将多行文本使用指定分隔符连成单行字符串 (joinLinesWithDelimiter)
+ */
+export function joinLinesWithDelimiter(text: string, options: string | JoinLinesOptions = {}): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const opts: JoinLinesOptions = typeof options === "string" ? {delimiter: options} : options;
+    const delim = opts.delimiter !== undefined ? opts.delimiter : ", ";
+    const ignoreEmpty = opts.ignoreEmpty !== false;
+    const trimLines = opts.trimLines !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const filtered = lines
+        .map((l) => (trimLines ? l.trim() : l))
+        .filter((l) => (ignoreEmpty ? l.length > 0 : true));
+    return filtered.join(delim);
+}
+
+/**
+ * 将使用常见标点（逗号、分号、竖线、制表符）分隔的单行文本拆分为多行文本 (splitTextToLines)
+ */
+export function splitTextToLines(text: string, delimiter: string | RegExp = /[,，;；|｜\t]+/): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    return text
+        .split(delimiter)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join("\n");
+}
+
+const CN_DIGITS = ["零", "壹", "贰", "叁", "肆", "伍", "陆", "柒", "捌", "玖"];
+const CN_UNITS = ["", "拾", "佰", "仟"];
+const CN_BIG_UNITS = ["", "万", "亿", "兆"];
+
+/**
+ * 将数字或金额字符串转换为标准中文人民币大写 (formatChineseCurrency)
+ * 如 1234.56 -> 壹仟贰佰叁拾肆元伍角陆分
+ */
+export function formatChineseCurrency(amount: number | string): string {
+    if (amount === undefined || amount === null || amount === "") return "";
+    let strVal = String(amount).trim();
+    if (strVal.startsWith("￥") || strVal.startsWith("$")) {
+        strVal = strVal.slice(1).trim();
+    }
+    const num = Number(strVal);
+    if (!Number.isFinite(num)) return String(amount);
+
+    if (num === 0) return "零元整";
+
+    let prefix = "";
+    let absNum = num;
+    if (absNum < 0) {
+        prefix = "负";
+        absNum = Math.abs(absNum);
+    }
+
+    // 四舍五入保留两位小数并转为分
+    const totalCents = Math.round(absNum * 100);
+    const integerPart = Math.floor(totalCents / 100);
+    const jiao = Math.floor((totalCents % 100) / 10);
+    const fen = totalCents % 10;
+
+    let chineseStr = "";
+
+    if (integerPart > 0) {
+        let intStr = String(integerPart);
+        // 按 4 位分节（从个位向高位）
+        const sections: string[] = [];
+        while (intStr.length > 0) {
+            sections.unshift(intStr.slice(-4));
+            intStr = intStr.slice(0, -4);
+        }
+
+        let hasPrecedingNonZero = false;
+
+        for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+            const section = sections[sIdx]!;
+            const sectionNum = parseInt(section, 10);
+            const bigUnit = CN_BIG_UNITS[sections.length - 1 - sIdx] || "";
+
+            if (sectionNum === 0) {
+                continue;
+            }
+
+            let sectionStr = "";
+            let zeroFlag = false;
+
+            if (hasPrecedingNonZero && section.length < 4) {
+                sectionStr += CN_DIGITS[0];
+            }
+
+            const rawLen = section.length;
+            for (let i = 0; i < rawLen; i++) {
+                const digit = parseInt(section[i]!, 10);
+                const unit = CN_UNITS[rawLen - 1 - i]!;
+                if (digit === 0) {
+                    zeroFlag = true;
+                } else {
+                    if (zeroFlag) {
+                        sectionStr += CN_DIGITS[0];
+                        zeroFlag = false;
+                    }
+                    sectionStr += CN_DIGITS[digit]! + unit;
+                }
+            }
+
+            chineseStr += sectionStr + bigUnit;
+            hasPrecedingNonZero = true;
+        }
+
+        chineseStr += "元";
+    }
+
+    if (jiao === 0 && fen === 0) {
+        chineseStr += "整";
+    } else {
+        if (integerPart > 0 && jiao === 0) {
+            chineseStr += "零";
+        }
+        if (jiao > 0) {
+            chineseStr += CN_DIGITS[jiao]! + "角";
+        }
+        if (fen > 0) {
+            chineseStr += CN_DIGITS[fen]! + "分";
+        }
+    }
+
+    return `${prefix}${chineseStr}`;
+}
+
+export interface InitialsOptions {
+    /** 是否强制大写 (默认 true) */
+    uppercase?: boolean;
+    /** 分隔符 (默认无分隔符 "") */
+    separator?: string;
+}
+
+/**
+ * 提取文本词组的首字母缩写 (extractInitials)
+ * 如 "Central Processing Unit" -> "CPU"
+ */
+export function extractInitials(text: string, options: InitialsOptions = {}): string {
+    if (!text || typeof text !== "string") return "";
+    const uppercase = options.uppercase !== false;
+    const sep = options.separator || "";
+
+    // 匹配单词或中文单字
+    const words = text.match(/[a-zA-Z0-9]+|[\u4e00-\u9fa5]/g);
+    if (!words || words.length === 0) return "";
+
+    const initials = words.map((w) => {
+        const first = w.charAt(0);
+        return uppercase ? first.toUpperCase() : first;
+    });
+
+    return initials.join(sep);
+}

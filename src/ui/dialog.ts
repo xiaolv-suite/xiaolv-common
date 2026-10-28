@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3634,6 +3634,40 @@ export class CommonSearchDialog {
                         const res = stripAffixes(raw, {prefix: "list"});
                         await this.deps.copyProviderPayload(res.result);
                         this.deps.notify?.("info", `已剥离 ${res.strippedCount} 处列表前缀并复制`);
+                    });
+                    addSilent("🔗", "多行合并为逗号行并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const joined = joinLinesWithDelimiter(raw, ", ");
+                        await this.deps.copyProviderPayload(joined);
+                        this.deps.notify?.("info", "已合并多行为逗号分隔单行并复制");
+                    });
+                }
+                if (entry.content && !entry.content.includes("\n") && (entry.content.includes(",") || entry.content.includes("，") || entry.content.includes(";"))) {
+                    addSilent("↵", "逗号/分号拆为多行并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const splitted = splitTextToLines(raw);
+                        await this.deps.copyProviderPayload(splitted);
+                        this.deps.notify?.("info", "已拆分为多行并复制");
+                    });
+                }
+                if (entry.content && /^[￥$]?\s*\d+(\.\d+)?$/.test(entry.content.trim())) {
+                    addSilent("￥", "金额转中文大写汉字并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const cny = formatChineseCurrency(raw);
+                        if (cny) {
+                            await this.deps.copyProviderPayload(cny);
+                            this.deps.notify?.("info", `已转换为中文大写金额并复制：${cny}`);
+                        }
+                    });
+                }
+                if (entry.content && entry.content.trim().length > 3) {
+                    addSilent("🔤", "提取首字母缩写 (Initials) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const initials = extractInitials(raw);
+                        if (initials) {
+                            await this.deps.copyProviderPayload(initials);
+                            this.deps.notify?.("info", `已提取首字母缩写 ${initials} 并复制`);
+                        }
                     });
                 }
                 if (entry.content && (entry.content.includes("=") || (entry.content.includes(":") && entry.content.includes("\n")))) {

@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -563,6 +563,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "number", text: "{{xlc:number:lines|文本}}"},
         {id: "truncate", text: "{{xlc:truncate|30|文本}}"},
         {id: "mask", text: "{{xlc:mask|phone|手机号}}"},
+        {id: "currency", text: "{{xlc:currency|1234.56}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1253,6 +1254,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(maskTextBtn);
+
+    const joinLinesBtn = document.createElement("button");
+    joinLinesBtn.type = "button";
+    joinLinesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    joinLinesBtn.dataset.xlcControl = "capture.format.join-lines";
+    joinLinesBtn.textContent = "✦ 连成单行";
+    joinLinesBtn.title = "将选中文本或全文的多行文本合并为逗号分隔的单行文本";
+    joinLinesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = joinLinesWithDelimiter(targetText, ", ");
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(joinLinesBtn);
+
+    const splitLinesBtn = document.createElement("button");
+    splitLinesBtn.type = "button";
+    splitLinesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    splitLinesBtn.dataset.xlcControl = "capture.format.split-lines";
+    splitLinesBtn.textContent = "✦ 拆为多行";
+    splitLinesBtn.title = "将以逗号、分号或竖线分隔的单行文本拆分为多行";
+    splitLinesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = splitTextToLines(targetText);
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(splitLinesBtn);
+
+    const initialsBtn = document.createElement("button");
+    initialsBtn.type = "button";
+    initialsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    initialsBtn.dataset.xlcControl = "capture.format.extract-initials";
+    initialsBtn.textContent = "✦ 提首字母";
+    initialsBtn.title = "提取选中文本或词组的首字母大写缩写 (如 Central Processing Unit -> CPU)";
+    initialsBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = extractInitials(targetText);
+        if (res) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(initialsBtn);
 
     return bar;
 }
