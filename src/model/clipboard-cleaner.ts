@@ -3230,3 +3230,180 @@ export function expandEnglishContractions(text: string): ExpandContractionsResul
         expandedCount,
     };
 }
+
+export interface DiffLinesResult {
+    diffResult: string;
+    addedCount: number;
+    removedCount: number;
+    unchangedCount: number;
+}
+
+/**
+ * 多行文本行级差异对比引擎 (diffLinesQuick)
+ * 基于 LCS 算法比较 A 与 B 的行级增删变动
+ */
+export function diffLinesQuick(textA: string, textB: string): DiffLinesResult {
+    const linesA = (textA ?? "").replace(/\r\n?/g, "\n").split("\n");
+    const linesB = (textB ?? "").replace(/\r\n?/g, "\n").split("\n");
+
+    const m = linesA.length;
+    const n = linesB.length;
+
+    // 构建 LCS 动态规划表 (限制最大 500 行防性能卡死)
+    const limitM = Math.min(m, 500);
+    const limitN = Math.min(n, 500);
+
+    const dp: number[][] = Array.from({length: limitM + 1}, () => new Array(limitN + 1).fill(0));
+
+    for (let i = 1; i <= limitM; i++) {
+        for (let j = 1; j <= limitN; j++) {
+            if (linesA[i - 1] === linesB[j - 1]) {
+                dp[i]![j] = dp[i - 1]![j - 1]! + 1;
+            } else {
+                dp[i]![j] = Math.max(dp[i - 1]![j]!, dp[i]![j - 1]!);
+            }
+        }
+    }
+
+    // 回溯生成差异清单
+    let i = limitM;
+    let j = limitN;
+    const diffEntries: string[] = [];
+    let addedCount = 0;
+    let removedCount = 0;
+    let unchangedCount = 0;
+
+    while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && linesA[i - 1] === linesB[j - 1]) {
+            diffEntries.unshift(`  ${linesA[i - 1]}`);
+            unchangedCount++;
+            i--;
+            j--;
+        } else if (j > 0 && (i === 0 || dp[i]![j - 1]! >= dp[i - 1]![j]!)) {
+            diffEntries.unshift(`+ ${linesB[j - 1]}`);
+            addedCount++;
+            j--;
+        } else if (i > 0 && (j === 0 || dp[i]![j - 1]! < dp[i - 1]![j]!)) {
+            diffEntries.unshift(`- ${linesA[i - 1]}`);
+            removedCount++;
+            i--;
+        }
+    }
+
+    return {
+        diffResult: diffEntries.join("\n"),
+        addedCount,
+        removedCount,
+        unchangedCount,
+    };
+}
+
+/**
+ * 颜色格式互转引擎 (convertColorFormat)
+ * 支持 HEX (#1E88E5 / #fff) ⇋ RGB (rgb(30, 136, 229)) ⇋ HSL
+ */
+export function convertColorFormat(color: string, targetFormat: "hex" | "rgb" | "hsl" = "rgb"): string {
+    if (!color || typeof color !== "string") return color ?? "";
+    const clean = color.trim().toLowerCase();
+
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let parsed = false;
+
+    // 1. 尝试解析 HEX
+    const hexMatch = clean.match(/^#?([a-f0-9]{3}|[a-f0-9]{6})$/);
+    if (hexMatch) {
+        let hex = hexMatch[1]!;
+        if (hex.length === 3) {
+            hex = hex.split("").map((c) => c + c).join("");
+        }
+        r = parseInt(hex.slice(0, 2), 16);
+        g = parseInt(hex.slice(2, 4), 16);
+        b = parseInt(hex.slice(4, 6), 16);
+        parsed = true;
+    }
+
+    // 2. 尝试解析 RGB
+    if (!parsed) {
+        const rgbMatch = clean.match(/^rgba?\((\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/);
+        if (rgbMatch) {
+            r = Math.min(255, parseInt(rgbMatch[1]!, 10));
+            g = Math.min(255, parseInt(rgbMatch[2]!, 10));
+            b = Math.min(255, parseInt(rgbMatch[3]!, 10));
+            parsed = true;
+        }
+    }
+
+    if (!parsed) return color;
+
+    if (targetFormat === "rgb") {
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    if (targetFormat === "hex") {
+        const hexR = r.toString(16).padStart(2, "0");
+        const hexG = g.toString(16).padStart(2, "0");
+        const hexB = b.toString(16).padStart(2, "0");
+        return `#${hexR}${hexG}${hexB}`.toUpperCase();
+    }
+
+    if (targetFormat === "hsl") {
+        const rf = r / 255;
+        const gf = g / 255;
+        const bf = b / 255;
+        const max = Math.max(rf, gf, bf);
+        const min = Math.min(rf, gf, bf);
+        let h = 0;
+        let s = 0;
+        const l = (max + min) / 2;
+
+        if (max !== min) {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case rf: h = (gf - bf) / d + (gf < bf ? 6 : 0); break;
+                case gf: h = (bf - rf) / d + 2; break;
+                case bf: h = (rf - gf) / d + 4; break;
+            }
+            h /= 6;
+        }
+
+        return `hsl(${Math.round(h * 360)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`;
+    }
+
+    return color;
+}
+
+export interface HumanizeOptions {
+    /** 是否每词首字母大写（默认 true） */
+    capitalize?: boolean;
+    /** 分隔符（默认空格 " "） */
+    separator?: string;
+}
+
+/**
+ * 变量标识符转人类可读自然短语 (humanizeIdentifier)
+ * 如 "getUserProfileById" -> "Get User Profile By Id"
+ */
+export function humanizeIdentifier(text: string, options: HumanizeOptions = {}): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const capitalize = options.capitalize !== false;
+    const sep = options.separator !== undefined ? options.separator : " ";
+
+    // 将连字符、下划线转为空格，并分离驼峰边界
+    const uncamel = text
+        .replace(/[-_]+/g, " ")
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+
+    const words = uncamel.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return text;
+
+    const formatted = words.map((w) => {
+        const lower = w.toLowerCase();
+        return capitalize ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
+    });
+
+    return formatted.join(sep);
+}

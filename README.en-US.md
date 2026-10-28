@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.30] — 2026-10-28 (Latest)
+### [v0.10.31] — 2026-10-28 (Latest)
 
-Multi-line table transposition, number to English words, and contraction expansion:
-- **Table Matrix Transposition (`transposeMatrixText`)**: Pure function to transpose table rows and columns across multi-line text separated by tabs, commas, or pipes.
-- **Number to English Words (`numberToEnglishWords`) & `{{xlc:words:en}}` Macro**: Converts integer numbers into natural English words (e.g. `42` -> `forty-two`, `100` -> `one hundred`). Dynamic macro `{{xlc:words:en|...}}` added.
-- **English Contractions Expansion (`expandEnglishContractions`)**: Expands informal spoken contractions into formal written word forms (e.g. `don't` -> `do not`, `can't` -> `cannot`, `I'm` -> `I am`).
-- **Quality Gates**: Unit test suite expanded to 874/874 passing tests with verified negative tests.
+Line-level diff comparison, HEX/RGB/HSL color conversion, and identifier humanization:
+- **Lightweight Line-level Diff (`diffLinesQuick`)**: Pure function based on LCS algorithm comparing two multi-line texts and outputting unified diff (+/-).
+- **Color Format Conversion (`convertColorFormat`) & `{{xlc:color}}` Macro**: Seamlessly converts between 3/6-digit HEX, RGB, and HSL. Dynamic macro `{{xlc:color:rgb|...}}` added.
+- **Identifier Humanization (`humanizeIdentifier`)**: Transforms camelCase, snake_case, and kebab-case identifiers into readable natural word phrases.
+- **Quality Gates**: Unit test suite expanded to 878/878 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.29)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.30)</b></summary>
+
+#### [v0.10.30] — 2026-10-28
+- Table matrix transposition (`transposeMatrixText`).
+- Number to English words (`numberToEnglishWords`) & `{{xlc:words:en}}` macro.
+- English contractions expansion (`expandEnglishContractions`).
 
 #### [v0.10.29] — 2026-10-28
 - Multi-line column extraction (`extractColumnFromLines`).

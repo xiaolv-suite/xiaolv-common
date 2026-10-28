@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -572,6 +572,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "lunar", text: "{{xlc:lunar:year}}"},
         {id: "choose", text: "{{xlc:choose|VIP:70,普通:30}}"},
         {id: "words.en", text: "{{xlc:words:en|42}}"},
+        {id: "color.rgb", text: "{{xlc:color:rgb|#336699}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1842,6 +1843,58 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(expandContractionsBtn);
+
+    const colorRgbBtn = document.createElement("button");
+    colorRgbBtn.type = "button";
+    colorRgbBtn.className = "xlc-varbtn xlc-btn-ghost";
+    colorRgbBtn.dataset.xlcControl = "capture.format.color-rgb";
+    colorRgbBtn.textContent = "✦ 转RGB色";
+    colorRgbBtn.title = "将选中文本中的十六进制 HEX 颜色 (#fff / #1E88E5) 转换为 rgb()";
+    colorRgbBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertColorFormat(targetText, "rgb");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(colorRgbBtn);
+
+    const humanizeBtn = document.createElement("button");
+    humanizeBtn.type = "button";
+    humanizeBtn.className = "xlc-varbtn xlc-btn-ghost";
+    humanizeBtn.dataset.xlcControl = "capture.format.humanize";
+    humanizeBtn.textContent = "✦ 变短语";
+    humanizeBtn.title = "将驼峰/下划线变量标识符 (如 getUserById) 转换为自然单词短语";
+    humanizeBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = humanizeIdentifier(targetText);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(humanizeBtn);
 
     return bar;
 }
