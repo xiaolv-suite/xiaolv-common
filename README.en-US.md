@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.60] — 2026-10-29 (Latest)
+### [v0.10.61] — 2026-10-29 (Latest)
 
-Markdown nested list flattening, string range masking macro, and comprehensive CJK spacing:
-- **Nested List Flattening (`flattenNestedList`)**: Pure function flattening multi-level nested lists into flat bullet items (`flat_bullets`) or prefixing ancestral paths (`prefix_parent`); wired to action menu and variable form.
-- **String Range Masking (`maskTextRange`) & `{{xlc:smask}}` Macro**: Pure function supporting head/tail character retention (e.g. keep first 4 and last 4 chars) or specific index range masking; expanded dynamic macro `{{xlc:smask|keep|13812345678|3|4}}`, `{{xlc:smask:ends|1234567890|2|2}}`; wired to variable form.
-- **Comprehensive CJK Spacing Formatter (`formatCJKSpacingComprehensive`)**: Pure function chaining NBSP removal, Pangu Chinese-English spacing, and punctuation normalization in a single idempotent pass; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 984/984 passing tests with verified negative tests.
+Number symbol conversion, keyword censoring macro, and Markdown code block extraction:
+- **Number Symbol Conversion (`convertNumberSymbols`)**: Pure function bidirectionally converting between plain digits 1~20, circled numbers (`①`~`⑳`), and bracketed numbers (`⑴`~`⒇`); wired to action menu and variable form.
+- **Sensitive Keyword Censoring (`censorText`) & `{{xlc:censor}}` Macro**: Pure function masking sensitive terms or blacklists with custom replacement or equal-length asterisks; expanded dynamic macro `{{xlc:censor|text|secret|***}}` and `{{xlc:censor:mask|text|secret}}`; wired to variable form.
+- **Markdown Code Block Extraction (`extractCodeBlocksFromMarkdown`)**: Pure function stripping article prose to extract only clean runnable code snippets with optional language filtering and headers; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 987/987 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.59)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.60)</b></summary>
+
+#### [v0.10.60] — 2026-10-29
+- Markdown nested list flattening (`flattenNestedList`).
+- String range masking (`maskTextRange`) & `{{xlc:smask}}` macro.
+- Comprehensive CJK spacing (`formatCJKSpacingComprehensive`).
 
 #### [v0.10.59] — 2026-10-29
 - Visual width metrics (`measureVisualWidth`).

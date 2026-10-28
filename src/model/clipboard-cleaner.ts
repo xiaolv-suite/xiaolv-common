@@ -7711,3 +7711,133 @@ export function formatCJKSpacingComprehensive(text: string): {result: string; ch
         changed: step3 !== text,
     };
 }
+
+const CIRCLED_NUMBERS = [
+    "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
+    "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"
+];
+
+const BRACKETED_NUMBERS = [
+    "⑴", "⑵", "⑶", "⑷", "⑸", "⑹", "⑺", "⑻", "⑼", "⑽",
+    "⑾", "⑿", "⒀", "⒁", "⒂", "⒃", "⒄", "⒅", "⒆", "⒇"
+];
+
+export type NumberSymbolStyle = "circled" | "bracketed" | "digits";
+
+/**
+ * 文本字符集与数字格式互转（圈号、括号序号与标准数字）引擎 (convertNumberSymbols)
+ */
+export function convertNumberSymbols(
+    text: string,
+    targetStyle: NumberSymbolStyle = "circled",
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    if (targetStyle === "digits") {
+        let cur = text;
+        for (let i = 0; i < 20; i++) {
+            cur = cur.replaceAll(CIRCLED_NUMBERS[i]!, String(i + 1));
+            cur = cur.replaceAll(BRACKETED_NUMBERS[i]!, String(i + 1));
+        }
+        return cur;
+    }
+
+    if (targetStyle === "circled") {
+        return text.replace(/\b([1-9]|1[0-9]|20)\b/g, (match) => {
+            const num = parseInt(match, 10);
+            return CIRCLED_NUMBERS[num - 1] || match;
+        });
+    }
+
+    if (targetStyle === "bracketed") {
+        return text.replace(/\b([1-9]|1[0-9]|20)\b/g, (match) => {
+            const num = parseInt(match, 10);
+            return BRACKETED_NUMBERS[num - 1] || match;
+        });
+    }
+
+    return text;
+}
+
+/**
+ * 敏感字符遮罩与屏蔽词过滤引擎 (censorText)
+ */
+export function censorText(
+    text: string,
+    wordsOrPattern: string | string[],
+    replacement?: string,
+): string {
+    if (!text || typeof text !== "string") return "";
+    if (!wordsOrPattern) return text;
+
+    let words: string[] = [];
+    if (Array.isArray(wordsOrPattern)) {
+        words = wordsOrPattern.map((w) => w.trim()).filter((w) => w.length > 0);
+    } else {
+        words = wordsOrPattern.split(/[,，|]/).map((w) => w.trim()).filter((w) => w.length > 0);
+    }
+
+    if (words.length === 0) return text;
+
+    let cur = text;
+    for (const w of words) {
+        if (!w) continue;
+        const repl = replacement !== undefined ? replacement : "*".repeat(w.length);
+        const escapedWord = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        cur = cur.replace(new RegExp(escapedWord, "gi"), repl);
+    }
+
+    return cur;
+}
+
+export interface ExtractCodeBlocksOptions {
+    languageFilter?: string;
+    includeLanguageHeader?: boolean;
+}
+
+/**
+ * Markdown 代码块提取与正文拆分引擎 (extractCodeBlocksFromMarkdown)
+ */
+export function extractCodeBlocksFromMarkdown(
+    text: string,
+    options: ExtractCodeBlocksOptions = {},
+): string {
+    if (!text || typeof text !== "string") return "";
+    const filterLang = options.languageFilter ? options.languageFilter.trim().toLowerCase() : undefined;
+    const withHeader = options.includeLanguageHeader === true;
+
+    const lines = text.split("\n");
+    const blocks: string[] = [];
+
+    let inCode = false;
+    let currentCode: string[] = [];
+    let currentLang = "";
+
+    for (const line of lines) {
+        const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})(.*)$/);
+        if (fenceMatch) {
+            if (!inCode) {
+                inCode = true;
+                currentLang = fenceMatch[3]!.trim().toLowerCase();
+                currentCode = [];
+            } else {
+                inCode = false;
+                if (!filterLang || currentLang === filterLang) {
+                    let codeText = currentCode.join("\n").trim();
+                    if (codeText) {
+                        if (withHeader && currentLang) {
+                            codeText = `// [${currentLang}]\n${codeText}`;
+                        }
+                        blocks.push(codeText);
+                    }
+                }
+                currentLang = "";
+                currentCode = [];
+            }
+        } else if (inCode) {
+            currentCode.push(line);
+        }
+    }
+
+    return blocks.join("\n\n");
+}
