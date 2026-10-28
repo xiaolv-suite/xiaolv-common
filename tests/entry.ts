@@ -32,6 +32,7 @@ import * as providers from "../src/service/providers";
 import * as service from "../src/service/service";
 import * as ai from "../src/service/ai";
 import * as startup from "../src/model/startup";
+import * as textFormatting from "../src/service/text-formatting";
 import * as externalBridge from "../src/service/external-bridge";
 import * as discovery from "../src/service/discovery";
 import * as discoveryTarget from "../src/model/discovery-target";
@@ -112,4 +113,5 @@ export {
     pasteQueue,
     templateWizard,
     textMetrics,
+    textFormatting,
 };
