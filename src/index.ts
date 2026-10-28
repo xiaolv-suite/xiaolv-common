@@ -872,7 +872,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     this.notify("info", this.i18nFn()("surroundNoSelection"));
                     return;
                 }
-                this.openSearch();
+                this.openSearch(undefined, undefined, sel);
             },
         });
         this.addCommand({
@@ -999,7 +999,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                 menu.addItem({
                     icon: "iconXlcCommon",
                     label: this.i18nFn()("surroundSelection"),
-                    click: () => this.openSearch(),
+                    click: () => {
+                        const sel = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : "";
+                        this.openSearch(undefined, undefined, sel || undefined);
+                    },
                 });
                 menu.addItem({
                     icon: "iconXlcCommon",
@@ -1202,8 +1205,8 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     }
 
-    /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框 */
-    openSearch(insertTarget?: {docId: string; hPath: string}, initialQuery?: string): void {
+    /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式 */
+    openSearch(insertTarget?: {docId: string; hPath: string}, initialQuery?: string, surroundText?: string): void {
         if (!this.library || !this.capture || !this.service) {
             showMessage(this.i18nFn()("startupFailed", "services unavailable"), 7000, "error");
             return;
@@ -1246,6 +1249,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.searchDialog = new CommonSearchDialog({
             t: this.i18nFn(),
             initialQuery,
+            surroundText,
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {
                 const loading = !this.library.getIndex();
@@ -1540,6 +1544,21 @@ export default class XiaolvCommonPlugin extends Plugin {
             },
             importBundleText: async (text: string) => {
                 return this.importBundleText(text, "rename");
+            },
+            getVariablePresets: (itemId: string) => {
+                return this.state.variablePresets?.[itemId];
+            },
+            saveVariablePreset: (itemId: string, name: string, fills: Record<string, string>) => {
+                this.state.variablePresets ??= {};
+                this.state.variablePresets[itemId] ??= {};
+                this.state.variablePresets[itemId][name] = fills;
+                this.persistSoon();
+            },
+            deleteVariablePreset: (itemId: string, name: string) => {
+                if (this.state.variablePresets?.[itemId]) {
+                    delete this.state.variablePresets[itemId][name];
+                    this.persistSoon();
+                }
             },
             syncSystemClipboard: async () => {
                 try {

@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.7 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Academic CSL citations pack (GB/T 7714 / APA), WeChat article inline style copy, and 790 passing automated tests.
+> **Released: v0.10.8 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Variable fill-in presets (💾 Save as Preset), selection surround mode banner & badge, and 792 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.7)
+## This release (v0.10.8)
+
+Variable Form Presets & Selection Surround Mode:
+
+- **Variable Form Presets**: Allows saving and switching multiple parameter presets (`💾 Save as Preset`) in the fill-in form, instantly backfilling all fields with live preview.
+- **Selection Surround Mode**: When invoked with active selection, displays a dedicated surround banner, tags compatible templates with a golden `✦ Wrap` badge, and applies priority boosting.
+- **Quality Gates**: All 792 unit tests pass.
+
+## Previous release (v0.10.7)
 
 Academic CSL Citations Pack & WeChat Article Inline Styling:
 

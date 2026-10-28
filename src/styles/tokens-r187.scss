@@ -938,4 +938,18 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
       outline-offset: 2px;
     }
   }
+
+  .xlc-surround-banner {
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    background-color: rgba(245, 158, 11, 0.12);
+    color: #9a6700;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: var(--xlc-radius-sm);
+    font-size: var(--xlc-font-xs);
+    margin: var(--xlc-space-1) var(--xlc-space-4) var(--xlc-space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-2);
+    font-weight: 500;
+  }
 }

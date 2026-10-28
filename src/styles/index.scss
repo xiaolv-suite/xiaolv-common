@@ -1482,6 +1482,7 @@
   &--warn      { color: var(--xlc-badge-warn); background-color: var(--xlc-badge-warn-bg); }
   &--ai        { color: var(--b3-theme-primary); background-color: var(--xlc-badge-md-bg); }
   &--direct    { color: #9a6700; background-color: rgba(245, 158, 11, 0.16); border: 1px solid rgba(245, 158, 11, 0.35); font-size: var(--xlc-font-2xs); font-weight: 600; }
+  &--surround  { color: #b45309; background-color: #fef3c7; border: 1px solid #fde68a; font-size: var(--xlc-font-2xs); font-weight: 600; }
   &--omni      { color: #0284c7; background-color: rgba(2, 132, 199, 0.12); border: 1px solid rgba(2, 132, 199, 0.28); font-size: var(--xlc-font-2xs); font-weight: 600; }
   &--var       { color: var(--xlc-var); background-color: var(--xlc-var-tint); font-family: var(--mono, inherit); font-weight: var(--xlc-weight-medium); letter-spacing: 0; }
   &--cat {

@@ -23,6 +23,11 @@ export interface VariableFillOptions {
     defaults?: Record<string, string>;
     /** 模板原始内容（用于交互式实时展开预览，G24 / ADR 0076） */
     templateText?: string;
+    itemId?: string;
+    /** 用户预存的参数预设方案字典（方案名 -> 字段值对） */
+    presets?: Record<string, Record<string, string>>;
+    onSavePreset?: (name: string, fills: Record<string, string>) => void;
+    onDeletePreset?: (name: string) => void;
     /** 确认：收集到的填充值（键=字段名；空值字段已由展开层兜底为 __名称__） */
     onConfirm: (fills: Record<string, string>) => void;
     /** 复制：将展开结果直接写入剪贴板并关闭（便于跨窗口粘贴，G49） */
@@ -306,6 +311,98 @@ export function openVariableFillCard(options: VariableFillOptions): void {
             input.addEventListener("change", scheduleLiveUpdate);
         }
     }
+
+    // 预设方案管理栏（Presets / Form Profiles）
+    const presetSchemes: Record<string, Record<string, string>> = {...(options.presets || {})};
+    const presetWrap = document.createElement("div");
+    presetWrap.className = "xlc-varform-preset-wrap";
+    presetWrap.style.display = "flex";
+    presetWrap.style.alignItems = "center";
+    presetWrap.style.gap = "8px";
+    presetWrap.style.margin = "8px 0";
+    presetWrap.style.fontSize = "12px";
+
+    const presetLabel = document.createElement("span");
+    presetLabel.className = "xlc-form-hint";
+    presetLabel.textContent = "📋 预设方案：";
+    presetWrap.appendChild(presetLabel);
+
+    const presetSelect = document.createElement("select");
+    presetSelect.className = "b3-select";
+    presetSelect.style.flex = "1";
+    presetSelect.style.fontSize = "12px";
+    presetSelect.dataset.xlcControl = "variable.preset-select";
+
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- 选择预设方案 --";
+    presetSelect.appendChild(defaultOpt);
+
+    const syncPresetOptions = () => {
+        presetSelect.innerHTML = "";
+        presetSelect.appendChild(defaultOpt);
+        for (const name of Object.keys(presetSchemes)) {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            presetSelect.appendChild(opt);
+        }
+    };
+    syncPresetOptions();
+
+    presetSelect.addEventListener("change", () => {
+        const selectedScheme = presetSelect.value;
+        if (!selectedScheme || !presetSchemes[selectedScheme]) return;
+        const schemeFills = presetSchemes[selectedScheme];
+        for (const input of inputs) {
+            const name = input.dataset.xlcVarField ?? "";
+            if (name && schemeFills[name] !== undefined) {
+                input.value = schemeFills[name]!;
+                input.dispatchEvent(new Event("input", {bubbles: true}));
+                input.dispatchEvent(new Event("change", {bubbles: true}));
+            }
+        }
+    });
+    presetWrap.appendChild(presetSelect);
+
+    const savePresetBtn = document.createElement("button");
+    savePresetBtn.type = "button";
+    savePresetBtn.className = "b3-button b3-button--text";
+    savePresetBtn.style.fontSize = "12px";
+    savePresetBtn.textContent = "💾 存为预设";
+    savePresetBtn.dataset.xlcControl = "variable.save-preset";
+    savePresetBtn.addEventListener("click", () => {
+        const name = (typeof window !== "undefined" && typeof window.prompt === "function")
+            ? window.prompt("请输入此套参数预设的名称（如：客户A专票）：", `方案 ${Object.keys(presetSchemes).length + 1}`)
+            : null;
+        if (!name || !name.trim()) return;
+        const cleanName = name.trim().slice(0, 32);
+        const currentFills = collect();
+        presetSchemes[cleanName] = currentFills;
+        syncPresetOptions();
+        presetSelect.value = cleanName;
+        options.onSavePreset?.(cleanName, currentFills);
+    });
+    presetWrap.appendChild(savePresetBtn);
+
+    const deletePresetBtn = document.createElement("button");
+    deletePresetBtn.type = "button";
+    deletePresetBtn.className = "b3-button b3-button--text";
+    deletePresetBtn.style.fontSize = "12px";
+    deletePresetBtn.textContent = "🗑";
+    deletePresetBtn.title = "删除当前选中的预设方案";
+    deletePresetBtn.dataset.xlcControl = "variable.delete-preset";
+    deletePresetBtn.addEventListener("click", () => {
+        const selectedScheme = presetSelect.value;
+        if (!selectedScheme || !presetSchemes[selectedScheme]) return;
+        delete presetSchemes[selectedScheme];
+        syncPresetOptions();
+        presetSelect.value = "";
+        options.onDeletePreset?.(selectedScheme);
+    });
+    presetWrap.appendChild(deletePresetBtn);
+
+    root.appendChild(presetWrap);
 
     const foot = document.createElement("div");
     foot.className = "xlc-varform-foot";

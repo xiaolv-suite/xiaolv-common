@@ -80,6 +80,14 @@ export interface DialogDeps {
     addClipboardHistory?: (text: string) => void;
     syncSystemClipboard?: () => Promise<string | null>;
     importBundleText?: (text: string) => Promise<unknown>;
+    /** 当前活动选区文本（选区包裹模式唤起时传入） */
+    surroundText?: string;
+    /** 获取条目的变量预设方案 */
+    getVariablePresets?: (itemId: string) => Record<string, Record<string, string>> | undefined;
+    /** 保存条目的变量预设方案 */
+    saveVariablePreset?: (itemId: string, name: string, fills: Record<string, string>) => void;
+    /** 删除条目的变量预设方案 */
+    deleteVariablePreset?: (itemId: string, name: string) => void;
     /** 定向插入目标（文档树入口；设置后 Enter/点按插入到该文档而非活动编辑器） */
     insertTarget?: {docId: string; hPath: string} | null;
     toggleFavorite: (itemId: string) => boolean;
@@ -234,6 +242,13 @@ export class CommonSearchDialog {
         // 顶部：搜索框。把普通搜索与 ? 语义搜索拆成可读提示，避免用户只看到一个神秘符号。
         const top = document.createElement("div");
         top.className = "xlc-top";
+        if (this.deps.surroundText) {
+            const surroundBanner = document.createElement("div");
+            surroundBanner.className = "xlc-surround-banner";
+            surroundBanner.dataset.xlcControl = "search.surround-banner";
+            surroundBanner.textContent = `✦ 选区包裹模式（已选 ${this.deps.surroundText.length} 字符）· 选中下方模板按回车即可直接包裹替换`;
+            top.appendChild(surroundBanner);
+        }
         const topMain = document.createElement("div");
         topMain.className = "xlc-top-main";
         const searchBlock = document.createElement("div");
@@ -1725,6 +1740,14 @@ export class CommonSearchDialog {
             varBadge.title = `此条目含有 ${entry.varCount} 个动态填参字段`;
             title.appendChild(varBadge);
         }
+        const hasSelectionPlaceholder = Boolean(entry.content?.includes("{{xlc:selection}}") || entry.summary?.includes("{{xlc:selection}}"));
+        if (hasSelectionPlaceholder) {
+            const surroundBadge = document.createElement("span");
+            surroundBadge.className = "xlc-badge xlc-badge--surround";
+            surroundBadge.textContent = "✦ 包裹";
+            surroundBadge.title = "支持选区包裹：插入时自动将当前选区文本嵌入此模板";
+            title.appendChild(surroundBadge);
+        }
         // G27 / ADR 0080: 唯一别名精确匹配金色直达徽标
         const cleanQuery = this.lastQueryText.trim().toLowerCase();
         if (cleanQuery && entry.alias && entry.alias.trim().toLowerCase() === cleanQuery) {
@@ -3055,6 +3078,14 @@ export class CommonSearchDialog {
             fields,
             defaults,
             templateText,
+            itemId: entry.id,
+            presets: this.deps.getVariablePresets?.(entry.id),
+            onSavePreset: (name, fills) => {
+                this.deps.saveVariablePreset?.(entry.id, name, fills);
+            },
+            onDeletePreset: (name) => {
+                this.deps.deleteVariablePreset?.(entry.id, name);
+            },
             onConfirm: (fills) => {
                 this.varFormOpen = false;
                 this.syncPaneActions();

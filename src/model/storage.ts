@@ -242,6 +242,8 @@ export interface PluginState {
     variableMemory: VariableMemory;
     /** 剪贴板历史暂存（流式暂存栈，上限 30 条，只存侧车不建块） */
     clipboardHistory: ClipboardHistoryEntry[];
+    /** 变量填参预设方案（按条目或模板标题归档的多套方案：itemId -> 方案名 -> 字段键值对） */
+    variablePresets?: Record<string, Record<string, Record<string, string>>>;
 }
 
 export function normalizeState(raw: unknown): PluginState {
@@ -346,7 +348,34 @@ export function normalizeState(raw: unknown): PluginState {
         },
         variableMemory: normalizeVariableMemory(obj.variableMemory),
         clipboardHistory: normalizeClipboardHistory(obj.clipboardHistory),
+        variablePresets: normalizeVariablePresets(obj.variablePresets),
     };
+}
+
+function normalizeVariablePresets(raw: unknown): Record<string, Record<string, Record<string, string>>> {
+    const rawPresets = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const variablePresets: Record<string, Record<string, Record<string, string>>> = {};
+    for (const [itemId, schemes] of Object.entries(rawPresets)) {
+        if (!schemes || typeof schemes !== "object") continue;
+        const validSchemes: Record<string, Record<string, string>> = {};
+        for (const [schemeName, fills] of Object.entries(schemes as Record<string, unknown>)) {
+            if (!fills || typeof fills !== "object") continue;
+            const validFills: Record<string, string> = {};
+            for (const [k, v] of Object.entries(fills as Record<string, unknown>)) {
+                if (typeof k === "string" && typeof v === "string") {
+                    validFills[k.slice(0, 64)] = v.slice(0, 2000);
+                }
+            }
+            if (Object.keys(validFills).length > 0) {
+                validSchemes[schemeName.trim().slice(0, 32)] = validFills;
+            }
+            if (Object.keys(validSchemes).length >= 5) break;
+        }
+        if (Object.keys(validSchemes).length > 0) {
+            variablePresets[itemId.slice(0, 64)] = validSchemes;
+        }
+    }
+    return variablePresets;
 }
 
 function normalizeClipboardHistory(raw: unknown): ClipboardHistoryEntry[] {
