@@ -710,6 +710,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
     align-items: baseline;
     gap: var(--xlc-space-2);
     margin: var(--xlc-space-1) 0;
+
+    &.xlc-md-nested {
+      padding-left: var(--xlc-space-3);
+      border-left: 2px solid var(--xlc-line);
+      margin-left: var(--xlc-space-2);
+    }
   }
   .xlc-md-bullet, .xlc-md-ordered-num {
     color: var(--xlc-accent);

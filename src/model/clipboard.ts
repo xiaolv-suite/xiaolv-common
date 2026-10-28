@@ -175,6 +175,21 @@ export function renderSafeHtmlFromMarkdown(markdown: string): string {
 }
 
 /**
+ * 将 Markdown 渲染为专供微信公众号与知乎后台粘贴的高保真内联排版 HTML
+ * 依据微信公众号排版美学：15px 正文、1.8 倍行高、0.5px 字间距、优雅色系与边框装饰
+ */
+export function renderWechatArticleHtml(markdown: string): string {
+    const rawHtml = renderSafeHtmlFromMarkdown(markdown);
+    if (!rawHtml) return "";
+
+    // 微信公众号专业级内联排版容器
+    return `
+<section style="font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; font-size: 15px; line-height: 1.8; letter-spacing: 0.5px; color: #353535; text-align: justify; word-break: break-word; padding: 10px 0;">
+  ${rawHtml}
+</section>`.trim();
+}
+
+/**
  * 跨平台/跨浏览器写入富文本剪贴板（含 text/plain 与 text/html 双载荷）
  * 优先使用标准异步 ClipboardItem API，失败时平滑降级到纯文本写入
  */

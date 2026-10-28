@@ -397,6 +397,8 @@
   "taskHorizonPackHint": "Preconfigured with multi-level SOP task checklists (release, bug incident, business trip) matching Task Horizon priority and status attributes.",
   "calloutPackBtn": "Import SiYuan Standard Callout Components Pack",
   "calloutPackHint": "Preconfigured with standard Callout box templates (Note, Tip, Warning, Important, Caution) with customizable prompt variables.",
+  "academicCitationPackBtn": "Import Academic CSL Citation Templates Pack",
+  "academicCitationPackHint": "Preconfigured with GB/T 7714-2015 and APA 7th academic reference and bibliography templates.",
   "pasteQueueNext": "Paste Next Item from Queue",
   "pasteQueueEmpty": "Paste queue is empty. Select multiple items in the list to set up a queue first.",
   "pasteQueuePopped": "Popped \"%s\", %s item(s) remaining in queue",

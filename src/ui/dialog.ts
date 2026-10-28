@@ -25,6 +25,7 @@ import {findPinyinMatches} from "../model/pinyin-tiny";
 import {renderSafePreview} from "./preview-renderer";
 import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
+import {renderWechatArticleHtml, writeRichClipboard} from "../model/clipboard";
 
 import {AdjacentBlocksContext} from "../service/omni-search";
 
@@ -3321,6 +3322,17 @@ export class CommonSearchDialog {
                     const pangu = formatPanguSpacing(raw);
                     await this.deps.copyProviderPayload(pangu.result);
                     this.deps.notify?.("info", `已执行盘古排版规范化 (${pangu.spacedCount} 处间距调整)`);
+                });
+                addSilent("📱", "复制为公众号排版 (内联CSS)", async () => {
+                    const raw = entry.content || await this.deps.preview(entry.id) || "";
+                    const html = renderWechatArticleHtml(raw);
+                    const plain = kramdownToPlainText(raw) || raw;
+                    const ok = await writeRichClipboard(plain, html);
+                    if (ok) {
+                        this.deps.notify?.("info", "已复制为微信公众号专属内联排版，可直接粘贴进后台！");
+                    } else {
+                        await this.deps.copyProviderPayload(raw);
+                    }
                 });
                 const jsonCheck = formatJsonText(entry.content || "");
                 if (jsonCheck.formatted) {

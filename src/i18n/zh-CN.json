@@ -397,6 +397,8 @@
   "taskHorizonPackHint": "预置发版、故障排查与差旅等标准 SOP 多层级任务清单，携带 Task Horizon 优先级与状态属性，思源插入后自动构建多层级任务树。",
   "calloutPackBtn": "导入思源标准 Callout 提示框组件包",
   "calloutPackHint": "预置 Note、Tip、Warning、Important 与 Caution 五大标准高亮折叠提示卡片组件，支持带参变量一键插入。",
+  "academicCitationPackBtn": "导入学术科研规范引文模板包",
+  "academicCitationPackHint": "预置 GB/T 7714-2015 顺序编码制标准期刊/专著/学位论文引文与 APA 7th 英文文献格式，配合变量快速生成标准参考文献。",
   "pasteQueueNext": "连续取用粘贴队列下一项",
   "pasteQueueEmpty": "连续取用队列已空，请先在常用列表多选条目设立队列",
   "pasteQueuePopped": "已取用「%s」，队列剩余 %s 项",

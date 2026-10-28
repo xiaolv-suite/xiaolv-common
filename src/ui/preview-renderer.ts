@@ -43,6 +43,7 @@ export interface MarkdownBlock {
     inlines: MarkdownInlineToken[];
     lang?: string;
     isDone?: boolean;
+    isNested?: boolean;
     tableHeader?: string[];
     tableData?: string[][];
     tableAlignments?: Array<"left" | "center" | "right">;
@@ -314,6 +315,7 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
 
         // 任务列表项（- [ ] 或 - [x]）
         const taskMatch = /^[-*+]\s+\[([ xX])\]\s+(.*)$/.exec(trimmed);
+        const isNested = /^(\s{2,}|\t)/.test(line);
         if (taskMatch) {
             const isDone = taskMatch[1]!.toLowerCase() === "x";
             const content = taskMatch[2]!;
@@ -322,6 +324,7 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
                 rawText: content,
                 inlines: tokenizeMarkdownInlines(content),
                 isDone,
+                isNested,
             });
             continue;
         }
@@ -367,14 +370,14 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
         // 无序列表项
         if (/^[-*+]\s+/.test(trimmed)) {
             const content = trimmed.replace(/^[-*+]\s+/, "");
-            blocks.push({type: "list-bullet", rawText: content, inlines: tokenizeMarkdownInlines(content)});
+            blocks.push({type: "list-bullet", rawText: content, inlines: tokenizeMarkdownInlines(content), isNested});
             continue;
         }
 
         // 有序列表项
         if (/^\d+\.\s+/.test(trimmed)) {
             const content = trimmed.replace(/^\d+\.\s+/, "");
-            blocks.push({type: "list-ordered", rawText: content, inlines: tokenizeMarkdownInlines(content)});
+            blocks.push({type: "list-ordered", rawText: content, inlines: tokenizeMarkdownInlines(content), isNested});
             continue;
         }
 
@@ -595,12 +598,12 @@ export function renderSafePreview(
             el.appendChild(num);
         } else if (block.type === "task-item") {
             el = doc.createElement("div");
-            el.className = "xlc-md-list-item xlc-md-task-item" + (block.isDone ? " xlc-md-task--done" : "");
+            el.className = "xlc-md-list-item xlc-md-task-item" + (block.isDone ? " xlc-md-task--done" : "") + (block.isNested ? " xlc-md-nested" : "");
             const checkbox = doc.createElement("input");
             checkbox.type = "checkbox";
-            checkbox.className = "xlc-md-task-checkbox";
+            checkbox.className = "b3-switch xlc-md-task-checkbox";
+            checkbox.checked = Boolean(block.isDone);
             checkbox.disabled = true;
-            if (block.isDone) checkbox.checked = true;
             el.appendChild(checkbox);
         } else {
             el = doc.createElement("p");

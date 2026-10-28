@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.6 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Independent notebook library mode fix (mode: notebook), multi-doc indexing, and 787 passing automated tests.
+> **Released: v0.10.7 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Academic CSL citations pack (GB/T 7714 / APA), WeChat article inline style copy, and 790 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,16 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.6)
+## This release (v0.10.7)
+
+Academic CSL Citations Pack & WeChat Article Inline Styling:
+
+- **Academic CSL Citation Pack (`ACADEMIC_CITATION_PACK_MD`)**: Preconfigured with GB/T 7714-2015 and APA 7th academic reference templates with variable prompts.
+- **WeChat Article Inline Style Copy (`renderWechatArticleHtml`)**: Added "📱 Copy as WeChat Article Format" in action menu to generate rich HTML with inline CSS tailored for WeChat Official Account platform.
+- **Nested List Threading Lines**: Automatically renders `.xlc-md-nested` vertical guide lines for indented list items.
+- **Quality Gates**: All 790 unit tests pass.
+
+## Previous release (v0.10.6)
 
 Independent Notebook Library Mode Alignment (Issue #1 Experience Loop):
 

@@ -14,7 +14,7 @@ import {ProviderRegistry} from "../service/providers";
 import {CommonItem} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {collectTags} from "../model/search";
-import {PROMPT_PACK_MD, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_MD, CALLOUT_PACK_MD} from "../service/prompt-pack";
+import {PROMPT_PACK_MD, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_MD, CALLOUT_PACK_MD, ACADEMIC_CITATION_PACK_MD} from "../service/prompt-pack";
 import type {SavedDiscoveryScope, SavedDiscoveryView} from "../model/storage";
 import {openCsvTsvImportWizard} from "./csv-tsv-wizard";
 import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doctor";
@@ -2505,6 +2505,44 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
     });
     calloutRow.appendChild(calloutBtn);
     dataSec.appendChild(calloutRow);
+
+    // 学术科研规范引文模板包导入
+    const citationRow = document.createElement("div");
+    citationRow.className = "xlc-setting-row xlc-template-import-row";
+    const citationText = document.createElement("span");
+    citationText.className = "xlc-setting-text";
+    citationText.textContent = t("academicCitationPackHint");
+    citationRow.appendChild(citationText);
+    const citationBtn = document.createElement("button");
+    citationBtn.type = "button";
+    citationBtn.className = "b3-button";
+    citationBtn.textContent = t("academicCitationPackBtn");
+    citationBtn.dataset.xlcControl = "settings.data.academicCitationImport";
+    citationBtn.addEventListener("click", () => {
+        if (citationBtn.disabled) return;
+        citationBtn.disabled = true;
+        citationBtn.setAttribute("aria-busy", "true");
+        const originalLabel = citationBtn.textContent ?? "";
+        citationBtn.textContent = t("loading");
+        setOperationStatus("loading", t("loading"));
+        const parsed = parseMarkdownPack(ACADEMIC_CITATION_PACK_MD);
+        if (parsed.items.length === 0) {
+            const message = t("importFailed", t("importReasonPackEmpty"));
+            ctx.notify("error", message);
+            setOperationStatus("error", message, () => citationBtn.click());
+            citationBtn.disabled = false;
+            citationBtn.removeAttribute("aria-busy");
+            citationBtn.textContent = originalLabel;
+            return;
+        }
+        openImportPolicyDialog(ctx, {items: parsed.items, pack: parsed.pack}, parsed.issues, {kind: "markdown-pack", items: parsed.items});
+        setOperationStatus("success", t("importPreview", String(parsed.items.length), String(parsed.issues.length)));
+        citationBtn.disabled = false;
+        citationBtn.removeAttribute("aria-busy");
+        citationBtn.textContent = originalLabel;
+    });
+    citationRow.appendChild(citationBtn);
+    dataSec.appendChild(citationRow);
 
     // 思源原生属性视图（AV 数据库）自动化联动指引（G51）
     const avRow = document.createElement("div");
