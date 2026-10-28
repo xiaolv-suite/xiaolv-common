@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.9 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Multi-line order-preserving deduplication (✦ Dedupe Lines), line sorting, and 795 passing automated tests.
+> **Current: v0.10.10 (2026-10-28 Local Ready)** · Scope rotation Alt+T closed loop, form snippet macros, stripped variable plain text copy, and 797 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,16 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.9)
+## This release (v0.10.10)
+
+Scope Cycling Alt+T & Form Snippet Macro Ingestion:
+
+- **Scope Cycling Alt+T Closed Loop**: Fixed missing clipboard history in Alt+T scope rotation, completing a seamless 6-scope cycle.
+- **Form Snippet Macro Buttons**: Added `{{xlc:selection}}`, `{{xlc:date:明天}}`, and `{{xlc:date:下周一}}` buttons to form toolbar.
+- **Stripped Variable Plain Text Copy**: Action menu supports copying pure text with all template macros stripped and default values retained.
+- **Quality Gates**: All 797 unit tests pass.
+
+## Previous release (v0.10.9)
 
 Multi-Line Deduplication & Natural Line Sorting:
 

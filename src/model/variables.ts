@@ -203,3 +203,19 @@ export function diagnoseSnippetRefs(
         hasSnippets: true,
     };
 }
+
+/**
+ * 剥离所有 {{xlc:...}} 变量与宏标记，有默认值取默认值，无默认值剥离为空白（或保留字段名）
+ */
+export function stripAllVariables(text: string, useDefault = true): string {
+    if (!text || !text.includes("{{xlc:")) return text ?? "";
+    let res = text.replace(ASK_PATTERN, (_m, rawName: string, rawOptions?: string) => {
+        const field = parseAskField(rawName, rawOptions);
+        if (!field) return "";
+        return useDefault && field.defaultValue ? field.defaultValue : "";
+    });
+    // 剥离其他 {{xlc:date...}}, {{xlc:cursor}}, {{xlc:selection}} 等占位符
+    res = res.replace(/\{\{xlc:[^}]*\}\}/g, "");
+    return res;
+}
+

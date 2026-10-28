@@ -18,7 +18,7 @@ import {BatchTagCategoryPatch, BatchOperationReceipt} from "../model/batch-ops";
 import {InsertMode, buildBlockRef} from "../model/actions";
 import {TransformKind} from "../service/ai";
 import {ProviderRow} from "../model/provider-section";
-import {AskField, askFieldTag, hasCursorToken, listAskFields, listSnippetRefs, expandAsks, applyAskDefaults, stripCursorToken} from "../model/variables";
+import {AskField, askFieldTag, hasCursorToken, listAskFields, listSnippetRefs, expandAsks, applyAskDefaults, stripCursorToken, stripAllVariables} from "../model/variables";
 import {openVariableFillCard} from "./variable-form";
 import {formatScopeFallbackQuery, shouldShowOmniSearchFallback, shouldShowScopeFallback, SearchScope} from "./empty-state";
 import {findPinyinMatches} from "../model/pinyin-tiny";
@@ -3405,6 +3405,15 @@ export class CommonSearchDialog {
                         this.deps.notify?.("info", `已消除 ${dedupeRes.removedCount} 处重复行并复制`);
                     });
                 }
+                const hasVariables = (entry.varCount ?? 0) > 0 || (entry.content || "").includes("{{xlc:");
+                if (hasVariables) {
+                    addSilent("📋", "复制剥离变量后的纯正文", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const stripped = stripAllVariables(raw, true);
+                        await this.deps.copyProviderPayload(stripped);
+                        this.deps.notify?.("info", "已复制剥离变量标记后的纯正文");
+                    });
+                }
                 const useCount = this.usageCounts.get(entry.id) ?? 0;
                 if (useCount > 0 && this.deps.resetItemUsage) {
                     addSilent("↺", this.deps.t("resetItemUsage", String(useCount)), async () => {
@@ -4048,9 +4057,9 @@ export class CommonSearchDialog {
                 await this.refresh();
             }
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "t" || e.key === "T")) {
-            // Alt+T 轮转搜索范围 (all -> favorites -> recent -> current-doc -> all-notes -> all)
+            // Alt+T 轮转搜索范围 (all -> favorites -> recent -> clipboard -> current-doc -> all-notes -> all)
             e.preventDefault();
-            const scopeOrder: SearchScope[] = ["all", "favorites", "recent", "current-doc", "all-notes"];
+            const scopeOrder: SearchScope[] = ["all", "favorites", "recent", "clipboard", "current-doc", "all-notes"];
             const currentIdx = scopeOrder.indexOf(this.currentScope);
             const nextIdx = (currentIdx + 1) % scopeOrder.length;
             this.currentScope = scopeOrder[nextIdx] ?? "all";
