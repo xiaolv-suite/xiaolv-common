@@ -7841,3 +7841,111 @@ export function extractCodeBlocksFromMarkdown(
 
     return blocks.join("\n\n");
 }
+
+export type HeadingListConvertMode = "headings_to_list" | "list_to_headings";
+
+/**
+ * Markdown 标题与列表双向智能互转引擎 (convertHeadingsToList)
+ */
+export function convertHeadingsToList(
+    text: string,
+    mode: HeadingListConvertMode = "headings_to_list",
+    options: {baseHeadingLevel?: number} = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const baseLevel = options.baseHeadingLevel !== undefined ? Math.max(1, Math.min(6, options.baseHeadingLevel)) : 1;
+
+    if (mode === "headings_to_list") {
+        let minLevel = 6;
+        for (const line of lines) {
+            const m = line.match(/^(#{1,6})\s+/);
+            if (m && m[1]!.length < minLevel) {
+                minLevel = m[1]!.length;
+            }
+        }
+        if (minLevel > 6) minLevel = 1;
+
+        return lines.map((line) => {
+            const m = line.match(/^(#{1,6})\s+(.*)$/);
+            if (!m) return line;
+            const lvl = m[1]!.length;
+            const content = m[2]!.trim().replace(/#+$/, "").trim();
+            const indent = "  ".repeat(Math.max(0, lvl - minLevel));
+            return `${indent}- ${content}`;
+        }).join("\n");
+    }
+
+    const listRegex = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+    return lines.map((line) => {
+        const m = line.match(listRegex);
+        if (!m) return line;
+        const [, indent, , content] = m;
+        const depth = Math.floor(indent!.length / 2);
+        const headingLvl = Math.min(6, baseLevel + depth);
+        return `${"#".repeat(headingLvl)} ${content!.trim()}`;
+    }).join("\n");
+}
+
+/**
+ * 列表词汇或行随机打乱引擎 (shuffleList)
+ */
+export function shuffleList(
+    text: string,
+    options: {delimiter?: string} = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    let delim = options.delimiter;
+    if (!delim) {
+        if (text.includes("\n")) {
+            delim = "\n";
+        } else if (text.includes(",")) {
+            delim = ",";
+        } else if (text.includes("，")) {
+            delim = "，";
+        } else {
+            delim = " ";
+        }
+    }
+
+    const items = text.split(delim);
+    if (items.length <= 1) return text;
+
+    for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = items[i]!;
+        items[i] = items[j]!;
+        items[j] = temp;
+    }
+
+    return items.join(delim);
+}
+
+/**
+ * 多行数据数值区间筛选过滤引擎 (filterNumericRangeLines)
+ */
+export function filterNumericRangeLines(
+    text: string,
+    min?: number,
+    max?: number,
+    options: {invert?: boolean} = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const invert = options.invert === true;
+
+    return lines.filter((line) => {
+        const numMatch = line.match(/[-+]?\d+(?:\.\d+)?/);
+        if (!numMatch) {
+            return invert;
+        }
+
+        const val = parseFloat(numMatch[0]);
+        let inRange = true;
+        if (min !== undefined && val < min) inRange = false;
+        if (max !== undefined && val > max) inRange = false;
+
+        return invert ? !inRange : inRange;
+    }).join("\n");
+}

@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.61] — 2026-10-29 (Latest)
+### [v0.10.62] — 2026-10-29 (Latest)
 
-Number symbol conversion, keyword censoring macro, and Markdown code block extraction:
-- **Number Symbol Conversion (`convertNumberSymbols`)**: Pure function bidirectionally converting between plain digits 1~20, circled numbers (`①`~`⑳`), and bracketed numbers (`⑴`~`⒇`); wired to action menu and variable form.
-- **Sensitive Keyword Censoring (`censorText`) & `{{xlc:censor}}` Macro**: Pure function masking sensitive terms or blacklists with custom replacement or equal-length asterisks; expanded dynamic macro `{{xlc:censor|text|secret|***}}` and `{{xlc:censor:mask|text|secret}}`; wired to variable form.
-- **Markdown Code Block Extraction (`extractCodeBlocksFromMarkdown`)**: Pure function stripping article prose to extract only clean runnable code snippets with optional language filtering and headers; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 987/987 passing tests with verified negative tests.
+Markdown headings to list conversion, list shuffle macro, and numeric range line filtering:
+- **Headings to List Bidirectional Conversion (`convertHeadingsToList`)**: Pure function converting multi-level headings (`#`~`######`) into indented lists and vice versa; wired to action menu and variable form.
+- **List Shuffling (`shuffleList`) & `{{xlc:shuffle}}` Macro**: Pure function randomly shuffling items or lines using Fisher-Yates algorithm across commas, semicolons, or newlines; expanded dynamic macro `{{xlc:shuffle|A,B,C,D,E}}`; wired to variable form.
+- **Numeric Range Line Filtering (`filterNumericRangeLines`)**: Pure function extracting numbers from lines and filtering records within a specified numeric range (min and max); wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 990/990 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.60)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.61)</b></summary>
+
+#### [v0.10.61] — 2026-10-29
+- Number symbol conversion (`convertNumberSymbols`) for plain, circled, and bracketed numbers.
+- Sensitive keyword censoring (`censorText`) & `{{xlc:censor}}` macro.
+- Markdown code block extraction (`extractCodeBlocksFromMarkdown`).
 
 #### [v0.10.60] — 2026-10-29
 - Markdown nested list flattening (`flattenNestedList`).
