@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.52] — 2026-10-29 (Latest)
+### [v0.10.53] — 2026-10-29 (Latest)
 
-Key-value to Markdown table, English plural/singular toggle macro, and Markdown outline TOC generation:
-- **Key-Value & JSON to Markdown Table (`keyValueToMarkdownTable`)**: Pure function converting YAML, Properties, delimited lines, or JSON objects into clean Markdown tables with escaped pipe `\|` characters; wired to action menu and variable form.
-- **English Plural/Singular Toggle (`pluralizeText`) & `{{xlc:plural}}` Macro**: Pure function dynamically determining singular or plural forms (rules and irregular nouns) based on count or mode; expanded dynamic macro `{{xlc:plural|item}}`, `{{xlc:plural|item|1}}`, `{{xlc:plural|category|2}}`, `{{xlc:plural:singular|people}}`; wired to variable form.
-- **Markdown Outline TOC Generator (`generateMarkdownToc`)**: Pure function extracting H1~H6 headings, calculating indentation, generating clean anchor slugs, and filtering out code fences; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 959/959 passing tests with verified negative tests.
+Markdown code fence language tagging, macro pipe delimiter escape macro, and multi-column grid formatting:
+- **Code Fence Language Tagging (`setMarkdownCodeFenceLang`)**: Pure function tracking code fences and batch-setting missing language tags (e.g. `ts`, `json`) on bare code blocks with overwrite option; wired to action menu and variable form.
+- **Macro Parameter Pipe Delimiter Escaping (`escapeMacroPipe`) & `{{xlc:escape}}` Macro**: Pure function encoding and decoding pipe symbols (`|` <-> `\|`) to eliminate syntax conflicts within nested template macros; expanded dynamic macro `{{xlc:escape|a|b|c}}` and `{{xlc:escape:unescape|a\|b}}`; wired to action menu and variable form.
+- **Multi-column Grid Formatter (`formatTextColumnsGrid`)**: Pure function formatting multi-line text into a visual $N$-column grid with equalized visual padding supporting CJK double-width calculation; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 962/962 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.51)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.52)</b></summary>
+
+#### [v0.10.52] — 2026-10-29
+- Key-value to Markdown table (`keyValueToMarkdownTable`).
+- English plural/singular toggle (`pluralizeText`) & `{{xlc:plural}}` macro.
+- Markdown outline TOC generator (`generateMarkdownToc`).
 
 #### [v0.10.51] — 2026-10-29
 - Markdown table to key-value & YAML (`markdownTableToKeyValue`).

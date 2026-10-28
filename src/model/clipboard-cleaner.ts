@@ -6668,3 +6668,134 @@ export function generateMarkdownToc(
 
     return tocItems.join("\n");
 }
+
+export interface CodeFenceLangOptions {
+    overwriteExisting?: boolean;
+}
+
+/**
+ * Markdown 代码块语言标识批量添加与修改引擎 (setMarkdownCodeFenceLang)
+ */
+export function setMarkdownCodeFenceLang(
+    text: string,
+    language: string,
+    options: CodeFenceLangOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const cleanLang = (language || "").trim().toLowerCase();
+    const overwrite = options.overwriteExisting === true;
+    const lines = text.split("\n");
+
+    let inCode = false;
+
+    return lines.map((line) => {
+        const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})(.*)$/);
+        if (!fenceMatch) return line;
+
+        const [, indent, fenceChars, infoString] = fenceMatch;
+        const trimmedInfo = infoString!.trim();
+
+        if (!inCode) {
+            inCode = true;
+            if (!trimmedInfo) {
+                return `${indent}${fenceChars}${cleanLang}`;
+            }
+            if (overwrite && cleanLang) {
+                return `${indent}${fenceChars}${cleanLang}`;
+            }
+            return line;
+        } else {
+            inCode = false;
+            return line;
+        }
+    }).join("\n");
+}
+
+/**
+ * 占位符宏参数安全转义与反转义引擎 (escapeMacroPipe)
+ */
+export function escapeMacroPipe(
+    text: string,
+    mode: "escape" | "unescape" = "escape",
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    if (mode === "unescape") {
+        return text
+            .replace(/\\\|/g, "|")
+            .replace(/&#124;/g, "|")
+            .replace(/%7C/gi, "|");
+    }
+    return text.replace(/\|/g, "\\|");
+}
+
+export interface GridColumnsOptions {
+    columnGap?: number;
+    skipEmptyLines?: boolean;
+}
+
+/**
+ * 多行文本基于列宽网格化（多列分栏排版）转换引擎 (formatTextColumnsGrid)
+ */
+export function formatTextColumnsGrid(
+    text: string,
+    columns = 3,
+    options: GridColumnsOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const colCount = Math.max(1, Math.min(10, columns));
+    const gap = Math.max(1, options.columnGap !== undefined ? options.columnGap : 2);
+    const skipEmpty = options.skipEmptyLines !== false;
+
+    let items = text.split("\n").map((l) => l.trimEnd());
+    if (skipEmpty) {
+        items = items.filter((l) => l.trim().length > 0);
+    }
+    if (items.length === 0) return "";
+
+    const getCharWidth = (ch: string) => {
+        const code = ch.charCodeAt(0);
+        return (code >= 0x4e00 && code <= 0x9fa5) || code > 0xff ? 2 : 1;
+    };
+
+    const getStrWidth = (s: string) => {
+        let w = 0;
+        for (const c of s) w += getCharWidth(c);
+        return w;
+    };
+
+    const grid: string[][] = [];
+    for (let i = 0; i < items.length; i += colCount) {
+        grid.push(items.slice(i, i + colCount));
+    }
+
+    const colWidths: number[] = new Array(colCount).fill(0);
+    for (const row of grid) {
+        for (let col = 0; col < row.length; col++) {
+            const w = getStrWidth(row[col]!);
+            if (w > colWidths[col]!) {
+                colWidths[col] = w;
+            }
+        }
+    }
+
+    const resultRows: string[] = [];
+    for (const row of grid) {
+        const paddedRow: string[] = [];
+        for (let col = 0; col < row.length; col++) {
+            const item = row[col]!;
+            const itemWidth = getStrWidth(item);
+            const targetWidth = colWidths[col]!;
+            const isLastCol = col === row.length - 1;
+
+            if (isLastCol) {
+                paddedRow.push(item);
+            } else {
+                const padSpaces = targetWidth - itemWidth + gap;
+                paddedRow.push(item + " ".repeat(Math.max(1, padSpaces)));
+            }
+        }
+        resultRows.push(paddedRow.join(""));
+    }
+
+    return resultRows.join("\n");
+}

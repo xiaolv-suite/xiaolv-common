@@ -119,16 +119,21 @@
 
 ## 🆕 最新更新动态
 
-### [v0.10.52] — 2026-10-29（最新）
+### [v0.10.53] — 2026-10-29（最新）
 
-键值对转Markdown表格、英文单复数智能切换宏与多级标题大纲TOC生成：
-- **键值对或 JSON 转 Markdown 表格转换引擎 (`keyValueToMarkdownTable`)**：纯函数支持自动解析 YAML、Properties、冒号/等号分隔行或 JSON 对象，自动生成标准 Markdown 表头与分隔行，并严格执行管道符转义（`\|`）；动作菜单接线「📊 转换键值对为 Markdown 表格并复制」，表单格式栏接入「✦ 键值转表格」。
-- **英文单复数智能切换引擎 (`pluralizeText`) 与 `{{xlc:plural}}` 动态宏**：纯函数支持根据传入动态数字数量或单复数模式智能转换英文单词词形（`item` -> `items`, `category` -> `categories`, `person` -> `people`）；扩展动态宏体系 `{{xlc:plural|item}}`、`{{xlc:plural|item|1}}`、`{{xlc:plural|category|2}}`、`{{xlc:plural:singular|people}}`；表单变量栏补充 `{{xlc:plural|item|2}}`。
-- **Markdown 各级标题大纲目录（TOC）纯函数提取引擎 (`generateMarkdownToc`)**：纯函数严格过滤代码块内部干扰，自动提取 H1~H6 标题级别并计算缩进空格，生成与 GitHub/思源规范一致的锚点 Slug，支持无序圆点与递增有序列表双重风格；动作菜单接线「📑 提取多级标题目录 (TOC) 并复制」，表单格式栏接入「✦ 提取目录TOC」。
-- **全套质量门禁**：单元测试增至 959/959 项全绿通过，双向严格负向注入验证通过。
+Markdown代码块语言标识批量补全、宏管道符转义宏与多列网格分栏排版：
+- **Markdown 代码块语言标识批量添加与修改引擎 (`setMarkdownCodeFenceLang`)**：纯函数支持状态机追踪代码围栏，批量为未声明语言的代码块补全指定语言类型（如 `ts`, `json`），并支持覆盖已有标识；动作菜单接线「🏷 批量为代码块补全 ts 语言高亮并复制」，表单格式栏接入「✦ 补全代码TS高亮」。
+- **占位符宏参数安全转义与反转义引擎 (`escapeMacroPipe`) 与 `{{xlc:escape}}` 动态宏**：纯函数支持对嵌套宏参数中的管道符（`|`）进行编码与还原，避免与动态占位符自身的分隔符冲突；扩展动态宏体系 `{{xlc:escape|a|b|c}}`、`{{xlc:escape:unescape|a\|b}}`；动作菜单接线「🛡 转义宏参数管道符 (\|) 并复制」，表单格式栏接入「✦ 转义管道符」，表单变量栏补充 `{{xlc:escape|hello|world}}`。
+- **多行文本基于列宽网格化（多列分栏排版）转换引擎 (`formatTextColumnsGrid`)**：纯函数支持自动按指定列数（默认 3 列）进行整齐排版，支持精准计算中英视觉宽度并填充补齐空格；动作菜单接线「📑 紧凑 3 列分栏网格排版并复制」，表单格式栏接入「✦ 3列分栏网格」。
+- **全套质量门禁**：单元测试增至 962/962 项全绿通过，双向严格负向注入验证通过。
 
 <details>
-<summary><b>📜 点击查看历史版本更新记录 (v0.10.0 ~ v0.10.51)</b></summary>
+<summary><b>📜 点击查看历史版本更新记录 (v0.10.0 ~ v0.10.52)</b></summary>
+
+#### [v0.10.52] — 2026-10-29
+- **键值对转 Markdown 表格 (`keyValueToMarkdownTable`)**：自动解析 YAML、Properties、JSON 并导出为表格；动作菜单与表单接入。
+- **英文单复数智能切换 (`pluralizeText`) 与 `{{xlc:plural}}` 动态宏**：根据数量或模式智能转换词尾规则与不规则单复数；扩展动态宏。
+- **多级标题大纲 TOC 提取 (`generateMarkdownToc`)**：提取各级标题生成锚点列表，避开代码块注释干扰；动作菜单与表单接入。
 
 #### [v0.10.51] — 2026-10-29
 - **Markdown 表格转键值对与 YAML (`markdownTableToKeyValue`)**：解析表格键值列并导出为 YAML、Properties 或 JSON；动作菜单与表单接入。
