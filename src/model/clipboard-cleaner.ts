@@ -5039,3 +5039,140 @@ export function regexReplaceMultiline(
         return text;
     }
 }
+
+export interface CodeLanguageDetectionResult {
+    language: string;
+    confidence: number;
+    isCode: boolean;
+}
+
+/**
+ * 代码片段编程语言智能嗅探与推导引擎 (detectCodeLanguage)
+ * 支持识别: json, sql, python, typescript, javascript, html, css, bash, rust, go, markdown
+ */
+export function detectCodeLanguage(code: string): CodeLanguageDetectionResult {
+    if (!code || typeof code !== "string") {
+        return {language: "text", confidence: 0, isCode: false};
+    }
+    const clean = code.trim();
+    if (clean.length < 5) {
+        return {language: "text", confidence: 0, isCode: false};
+    }
+
+    if ((clean.startsWith("{") && clean.endsWith("}")) || (clean.startsWith("[") && clean.endsWith("]"))) {
+        try {
+            JSON.parse(clean);
+            return {language: "json", confidence: 0.95, isCode: true};
+        } catch {
+            // continue
+        }
+    }
+
+    if (/<\/?[a-z][\s\S]*>/i.test(clean) && (clean.includes("</div>") || clean.includes("</span>") || clean.includes("<html") || clean.includes("<!DOCTYPE"))) {
+        return {language: "html", confidence: 0.9, isCode: true};
+    }
+
+    if (/\b(SELECT\s+.*FROM|INSERT\s+INTO|UPDATE\s+.*SET|DELETE\s+FROM|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE)\b/i.test(clean)) {
+        return {language: "sql", confidence: 0.9, isCode: true};
+    }
+
+    if (/\b(def\s+[a-zA-Z_]\w*\s*\(|class\s+[a-zA-Z_]\w*.*:|import\s+[a-zA-Z_]\w*|from\s+[a-zA-Z_]\w*\s+import|if\s+__name__\s*==\s*['"]__main__['"])\b/.test(clean)) {
+        return {language: "python", confidence: 0.9, isCode: true};
+    }
+
+    const hasTsSpecific = /\b(interface\s+[A-Z]\w*|type\s+[A-Z]\w*\s*=|:\s*(string|number|boolean|any|void)\b|<[A-Z]\w*>|\bas\s+const\b)/.test(clean);
+    const hasJsTs = /\b(const\s+[a-zA-Z_$]\w*\s*=|let\s+[a-zA-Z_$]\w*\s*=|function\s+[a-zA-Z_$]\w*|console\.log\(|=>\s*\{?|export\s+(default\s+)?(function|class|const))\b/.test(clean);
+    if (hasTsSpecific) {
+        return {language: "typescript", confidence: 0.9, isCode: true};
+    }
+    if (hasJsTs) {
+        return {language: "javascript", confidence: 0.85, isCode: true};
+    }
+
+    if (/(^|[.#])[a-zA-Z0-9_-]+\s*\{[^}]*\b(color|display|background|margin|padding|font|border|width|height|flex)\s*:/i.test(clean)) {
+        return {language: "css", confidence: 0.85, isCode: true};
+    }
+
+    if (/\b(fn\s+[a-zA-Z_]\w*\s*\(|let\s+mut\s+|impl\s+|match\s+[a-zA-Z_]\w*\s*\{|println!\(|pub\s+fn)\b/.test(clean)) {
+        return {language: "rust", confidence: 0.9, isCode: true};
+    }
+
+    if (/\b(func\s+(\([^)]+\)\s+)?[a-zA-Z_]\w*\(|package\s+[a-z_]\w*|fmt\.Print(ln|f)?|go\s+func\(|make\(chan\s+|make\(\[\])\b/.test(clean)) {
+        return {language: "go", confidence: 0.9, isCode: true};
+    }
+
+    if (/(^#!\/bin\/(bash|sh)|\b(echo\s+["']|chmod\s+\+x|mkdir\s+-p|sudo\s+|grep\s+-|curl\s+-s))\b/m.test(clean)) {
+        return {language: "bash", confidence: 0.85, isCode: true};
+    }
+
+    if (/^(\s*#{1,6}\s+|-\s+\[[ xX]\]|\*\s+\S+|>\s+\S+)/m.test(clean)) {
+        return {language: "markdown", confidence: 0.7, isCode: false};
+    }
+
+    return {language: "text", confidence: 0.1, isCode: false};
+}
+
+/**
+ * 随机打乱文本字符与单词洗牌引擎 (scrambleText)
+ * - words: 按空格打乱句子中的单词顺序
+ * - chars: 打乱字符串内部的字符顺序 (Anagram)
+ */
+export function scrambleText(text: string, mode: "words" | "chars" = "words"): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    const shuffleArray = <T>(arr: T[]): T[] => {
+        const copy = [...arr];
+        for (let i = copy.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const tmp = copy[i]!;
+            copy[i] = copy[j]!;
+            copy[j] = tmp;
+        }
+        return copy;
+    };
+
+    if (mode === "chars") {
+        const chars = Array.from(text);
+        return shuffleArray(chars).join("");
+    }
+
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length <= 1) return text;
+    return shuffleArray(words).join(" ");
+}
+
+export interface CompactCharsOptions {
+    /** 允许的最大重复次数（默认 1） */
+    maxRepeat?: number;
+    /** 仅压缩标点符号（默认 true） */
+    punctuationOnly?: boolean;
+}
+
+/**
+ * 文本重复字符与冗余标点智能压缩引擎 (compactRepeatedCharacters)
+ * 例如 "太棒了！！！！" -> "太棒了！", "真的吗？？？？" -> "真的吗？", "~~~~~~" -> "~"
+ */
+export function compactRepeatedCharacters(
+    text: string,
+    maxRepeat = 1,
+    options: CompactCharsOptions = {},
+): { result: string; compressedCount: number } {
+    if (!text || typeof text !== "string") return {result: text ?? "", compressedCount: 0};
+    const max = Math.max(1, maxRepeat);
+    const punctOnly = options.punctuationOnly !== false;
+
+    let count = 0;
+    const regex = punctOnly
+        ? /([\p{P}\p{S}])\1+/gu
+        : /(.)\1+/gu;
+
+    const result = text.replace(regex, (match, char) => {
+        if (match.length > max) {
+            count += (match.length - max);
+            return char.repeat(max);
+        }
+        return match;
+    });
+
+    return {result, compressedCount: count};
+}

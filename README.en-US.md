@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.41] — 2026-10-29 (Latest)
+### [v0.10.42] — 2026-10-29 (Latest)
 
-Markdown heading level shifting, idempotent line affixes, and multiline regex anchor macro:
-- **Heading Level Shifting Engine (`shiftMarkdownHeadings`)**: Pure function raising (delta -1, H2->H1) or lowering (delta +1, H1->H2) Markdown heading levels within H1~H6 limits while preserving ordinary lines and indentations; wired to action menu and variable form.
-- **Idempotent Line Affixes Engine (`ensureLineAffixes`)**: Pure function idempotently ensuring prefix and suffix on each line (e.g. SQL list `'val',` or task list `- [ ] `) without duplication; wired to action menu and variable form.
-- **Multiline Regex Anchors (`regexReplaceMultiline`) & `{{xlc:regex}}` Macro**: Pure function supporting multiline regex replacement with `^` and `$` line anchors; expanded dynamic macro `{{xlc:regex:mreplace|^|* |...}}`; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 917/917 passing tests with verified negative tests.
+Code language detection, word/character scrambling macro, and repetitive punctuation compacting:
+- **Code Language Detection Engine (`detectCodeLanguage`)**: Pure function analyzing syntax features to identify `json`, `sql`, `python`, `typescript`, `javascript`, `html`, `css`, `bash`, `rust`, `go`, and `markdown`, wrapping into fenced code blocks; wired to action menu and variable form.
+- **Word & Character Scrambling Engine (`scrambleText`) & `{{xlc:scramble}}` Macro**: Pure function using Fisher-Yates shuffle to scramble words or characters with Unicode/Emoji safety; expanded dynamic macro `{{xlc:scramble|words|...}}` and `{{xlc:scramble:chars|...}}`; wired to action menu and variable form.
+- **Repetitive Punctuation Compacter (`compactRepeatedCharacters`)**: Pure function compressing multiple redundant punctuation marks (`太棒了！！！！` -> `太棒了！`, `????` -> `?`, `~~~~` -> `~`) to clean thresholds; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 921/921 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.40)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.41)</b></summary>
+
+#### [v0.10.41] — 2026-10-29
+- Markdown heading level shifting (`shiftMarkdownHeadings`).
+- Idempotent line affixes (`ensureLineAffixes`).
+- Multiline regex anchors (`regexReplaceMultiline`) & macro.
 
 #### [v0.10.40] — 2026-10-29
 - Adaptive punctuation correction (`normalizePunctuationAdaptive`).
