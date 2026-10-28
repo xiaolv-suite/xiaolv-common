@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -574,6 +574,8 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "words.en", text: "{{xlc:words:en|42}}"},
         {id: "color.rgb", text: "{{xlc:color:rgb|#336699}}"},
         {id: "stats", text: "{{xlc:stats|10,20,30,40,50}}"},
+        {id: "radix.hex", text: "{{xlc:radix:hex|255}}"},
+        {id: "radix.bin", text: "{{xlc:radix:bin|42}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1922,6 +1924,92 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(slugBtn);
+
+    const setOpsBtn = document.createElement("button");
+    setOpsBtn.type = "button";
+    setOpsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    setOpsBtn.dataset.xlcControl = "capture.format.set-diff";
+    setOpsBtn.textContent = "✦ 差集过滤";
+    setOpsBtn.title = "对多行文本按 --- 分割的前后两段列表计算差集 A - B (在 A 中剔除 B)";
+    setOpsBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        if (targetText.includes("---")) {
+            const parts = targetText.split(/\n\s*---\s*\n/);
+            if (parts.length >= 2) {
+                const res = setOperationsOnLines(parts[0]!, parts[1]!, "difference");
+                if (hasSel) {
+                    el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                    el.setSelectionRange(start, start + res.length);
+                } else {
+                    el.value = res;
+                }
+                el.focus();
+                el.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+        }
+    });
+    bar.appendChild(setOpsBtn);
+
+    const radixBtn = document.createElement("button");
+    radixBtn.type = "button";
+    radixBtn.className = "xlc-varbtn xlc-btn-ghost";
+    radixBtn.dataset.xlcControl = "capture.format.radix-hex";
+    radixBtn.textContent = "✦ 转十六进制";
+    radixBtn.title = "将选中的十进制数字转换为十六进制 (如 255 -> 0xFF)";
+    radixBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = (hasSel ? el.value.slice(start, end) : el.value).trim();
+        if (/^\d+$/.test(targetText)) {
+            const res = convertRadix(targetText, 10, 16, {prefix: true, uppercase: true});
+            if (res) {
+                if (hasSel) {
+                    el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                    el.setSelectionRange(start, start + res.length);
+                } else {
+                    el.value = res;
+                }
+                el.focus();
+                el.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+        }
+    });
+    bar.appendChild(radixBtn);
+
+    const stripAffixBtn = document.createElement("button");
+    stripAffixBtn.type = "button";
+    stripAffixBtn.className = "xlc-varbtn xlc-btn-ghost";
+    stripAffixBtn.dataset.xlcControl = "capture.format.strip-affixes";
+    stripAffixBtn.textContent = "✦ 剥离词缀";
+    stripAffixBtn.title = "批量剥离常见代码词缀 (如 get_, is_, _id, Dto)";
+    stripAffixBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = stripAffixWords(targetText, {
+            prefix: /^(get_|set_|is_|has_)/i,
+            suffix: /(_id|_ids|Dto|DTO|VO|Vo)$/,
+        });
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(stripAffixBtn);
 
     return bar;
 }

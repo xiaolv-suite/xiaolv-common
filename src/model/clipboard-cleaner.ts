@@ -3552,3 +3552,171 @@ export function slugifyText(text: string, options: SlugifyOptions = {}): string 
 
     return lower ? clean.toLowerCase() : clean;
 }
+
+export type SetOperation = "union" | "intersection" | "difference";
+
+export interface SetOperationsOptions {
+    /** 是否区分大小写（默认 true） */
+    caseSensitive?: boolean;
+    /** 是否预清理行首尾空白（默认 true） */
+    trimLines?: boolean;
+    /** 是否忽略空行（默认 true） */
+    ignoreEmpty?: boolean;
+}
+
+/**
+ * 多行文本集合运算引擎 (setOperationsOnLines)
+ * 支持 union (并集 A∪B), intersection (交集 A∩B), difference (差集 A-B)
+ */
+export function setOperationsOnLines(
+    textA: string,
+    textB: string,
+    operation: SetOperation = "difference",
+    options: SetOperationsOptions = {},
+): string {
+    const caseSensitive = options.caseSensitive !== false;
+    const trimLines = options.trimLines !== false;
+    const ignoreEmpty = options.ignoreEmpty !== false;
+
+    const processLines = (txt: string): string[] => {
+        return (txt ?? "").replace(/\r\n?/g, "\n").split("\n")
+            .map((l) => (trimLines ? l.trim() : l))
+            .filter((l) => (ignoreEmpty ? l.length > 0 : true));
+    };
+
+    const linesA = processLines(textA);
+    const linesB = processLines(textB);
+
+    const makeKey = (s: string) => (caseSensitive ? s : s.toLowerCase());
+
+    const setB = new Set(linesB.map(makeKey));
+    const result: string[] = [];
+
+    if (operation === "difference") {
+        // A - B: 在 A 中但不在 B 中
+        for (const line of linesA) {
+            if (!setB.has(makeKey(line))) {
+                result.push(line);
+            }
+        }
+    } else if (operation === "intersection") {
+        // A ∩ B: 既在 A 中又在 B 中（按 A 去重保序）
+        const seen = new Set<string>();
+        for (const line of linesA) {
+            const k = makeKey(line);
+            if (setB.has(k) && !seen.has(k)) {
+                seen.add(k);
+                result.push(line);
+            }
+        }
+    } else {
+        // union (A ∪ B): 并集去重保序
+        const seen = new Set<string>();
+        for (const line of linesA) {
+            const k = makeKey(line);
+            if (!seen.has(k)) {
+                seen.add(k);
+                result.push(line);
+            }
+        }
+        for (const line of linesB) {
+            const k = makeKey(line);
+            if (!seen.has(k)) {
+                seen.add(k);
+                result.push(line);
+            }
+        }
+    }
+
+    return result.join("\n");
+}
+
+export interface RadixConvertOptions {
+    /** 是否包含前缀（如 0x, 0b, 0o，默认 false） */
+    prefix?: boolean;
+    /** 补零位数对齐（默认不对齐） */
+    padBits?: number;
+    /** 字母是否大写（默认 false） */
+    uppercase?: boolean;
+}
+
+/**
+ * 跨进制数值互转引擎 (convertRadix)
+ * 支持 2 (BIN), 8 (OCT), 10 (DEC), 16 (HEX) 任意进制互转
+ */
+export function convertRadix(
+    numOrStr: number | string,
+    fromRadix = 10,
+    toRadix = 16,
+    options: RadixConvertOptions = {},
+): string {
+    if (numOrStr === undefined || numOrStr === null || numOrStr === "") return "";
+    let clean = String(numOrStr).trim().toLowerCase();
+
+    // 自动剥离常见前缀
+    if (clean.startsWith("0x")) clean = clean.slice(2);
+    else if (clean.startsWith("0b")) clean = clean.slice(2);
+    else if (clean.startsWith("0o")) clean = clean.slice(2);
+
+    const parsed = parseInt(clean, fromRadix);
+    if (!Number.isFinite(parsed)) return String(numOrStr);
+
+    let converted = parsed.toString(toRadix);
+    if (options.uppercase) converted = converted.toUpperCase();
+
+    if (options.padBits && options.padBits > converted.length) {
+        converted = converted.padStart(options.padBits, "0");
+    }
+
+    if (options.prefix) {
+        if (toRadix === 16) converted = `0x${converted}`;
+        else if (toRadix === 2) converted = `0b${converted}`;
+        else if (toRadix === 8) converted = `0o${converted}`;
+    }
+
+    return converted;
+}
+
+export interface StripAffixWordsOptions {
+    /** 要剥离的前缀字符串或正则 */
+    prefix?: string | RegExp;
+    /** 要剥离的后缀字符串或正则 */
+    suffix?: string | RegExp;
+    /** 是否忽略空行（默认 true） */
+    ignoreEmpty?: boolean;
+}
+
+/**
+ * 代码变量词缀（如 get_, is_, _id, Dto）批量剥离与提取 (stripAffixWords)
+ */
+export function stripAffixWords(text: string, options: StripAffixWordsOptions = {}): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const ignoreEmpty = options.ignoreEmpty !== false;
+
+    let preRegex: RegExp | null = null;
+    if (options.prefix instanceof RegExp) {
+        preRegex = options.prefix;
+    } else if (typeof options.prefix === "string" && options.prefix.length > 0) {
+        const esc = options.prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        preRegex = new RegExp(`^${esc}`);
+    }
+
+    let sufRegex: RegExp | null = null;
+    if (options.suffix instanceof RegExp) {
+        sufRegex = options.suffix;
+    } else if (typeof options.suffix === "string" && options.suffix.length > 0) {
+        const esc = options.suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        sufRegex = new RegExp(`${esc}$`);
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const processed = lines.map((line) => {
+        if (ignoreEmpty && line.trim().length === 0) return line;
+        let cur = line;
+        if (preRegex) cur = cur.replace(preRegex, "");
+        if (sufRegex) cur = cur.replace(sufRegex, "");
+        return cur;
+    });
+
+    return processed.join("\n");
+}

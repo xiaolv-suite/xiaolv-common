@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3719,6 +3719,57 @@ export class CommonSearchDialog {
                             const zipped = zipLines(firstHalf, secondHalf, {separator: ": "});
                             await this.deps.copyProviderPayload(zipped);
                             this.deps.notify?.("info", "已配对合并两段列表并复制");
+                        });
+                    }
+                    if (entry.content.includes("---")) {
+                        const parts = entry.content.split(/\n\s*---\s*\n/);
+                        if (parts.length >= 2) {
+                            addSilent("⊖", "前后两段列表多行求差集 (A - B) 并复制", async () => {
+                                const raw = entry.content || await this.deps.preview(entry.id) || "";
+                                const [pA, pB] = raw.split(/\n\s*---\s*\n/);
+                                const res = setOperationsOnLines(pA || "", pB || "", "difference");
+                                await this.deps.copyProviderPayload(res);
+                                this.deps.notify?.("info", "已计算两段差集 (A - B) 并复制");
+                            });
+                            addSilent("∪", "前后两段列表多行求并集 (A ∪ B) 并复制", async () => {
+                                const raw = entry.content || await this.deps.preview(entry.id) || "";
+                                const [pA, pB] = raw.split(/\n\s*---\s*\n/);
+                                const res = setOperationsOnLines(pA || "", pB || "", "union");
+                                await this.deps.copyProviderPayload(res);
+                                this.deps.notify?.("info", "已合并两段并集去重 (A ∪ B) 并复制");
+                            });
+                        }
+                    }
+                }
+                if (entry.content && (/(get_|set_|is_|has_)/i.test(entry.content) || /(_id|_ids|Dto|DTO|VO|Vo)\b/.test(entry.content))) {
+                    addSilent("✂", "批量剥离常见代码词缀 (get_/is_/_id/Dto) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = stripAffixWords(raw, {
+                            prefix: /^(get_|set_|is_|has_)/i,
+                            suffix: /(_id|_ids|Dto|DTO|VO|Vo)$/,
+                        });
+                        await this.deps.copyProviderPayload(res);
+                        this.deps.notify?.("info", "已剥离常见变量词缀并复制");
+                    });
+                }
+                if (entry.content && /^(0x[0-9a-fA-F]+|\d+|0b[01]+)$/.test(entry.content.trim())) {
+                    const trimmed = entry.content.trim();
+                    if (/^\d+$/.test(trimmed)) {
+                        addSilent("🔢", "数值转十六进制 (DEC→HEX) 并复制", async () => {
+                            const res = convertRadix(trimmed, 10, 16, {prefix: true, uppercase: true});
+                            await this.deps.copyProviderPayload(res);
+                            this.deps.notify?.("info", `已转换十六进制：${res}`);
+                        });
+                        addSilent("🔢", "数值转二进制 (DEC→BIN) 并复制", async () => {
+                            const res = convertRadix(trimmed, 10, 2, {prefix: true});
+                            await this.deps.copyProviderPayload(res);
+                            this.deps.notify?.("info", `已转换二进制：${res}`);
+                        });
+                    } else if (trimmed.startsWith("0x") || /^[0-9a-fA-F]+$/.test(trimmed)) {
+                        addSilent("🔢", "十六进制转十进制 (HEX→DEC) 并复制", async () => {
+                            const res = convertRadix(trimmed, 16, 10);
+                            await this.deps.copyProviderPayload(res);
+                            this.deps.notify?.("info", `已转换十进制：${res}`);
                         });
                     }
                 }
