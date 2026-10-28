@@ -4279,3 +4279,180 @@ export function deduplicateWithCount(text: string, options: DedupeCountOptions =
 
     return formatted.join("\n");
 }
+
+export type QuoteStyle = "straight" | "curly" | "corner";
+
+/**
+ * 文本标点两端引号智能配对与规范化引擎 (normalizeSmartQuotes)
+ * - straight: 转为直引号 "..." 与 '...'
+ * - curly: 转为中文/西文规范弯引号 “...” 与 ‘...’
+ * - corner: 转为直角引号 「...」 与 『...』
+ */
+export function normalizeSmartQuotes(text: string, targetStyle: QuoteStyle = "curly"): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    if (targetStyle === "straight") {
+        return text
+            .replace(/[“”「」『』]/g, '"')
+            .replace(/[‘’]/g, "'");
+    }
+
+    if (targetStyle === "corner") {
+        let cur = text
+            .replace(/["“”]/g, '"')
+            .replace(/['‘’]/g, "'");
+
+        cur = cur.replace(/"([^"\r\n]+)"/g, "「$1」");
+        cur = cur.replace(/'([^'\r\n]+)'/g, "『$1』");
+        return cur;
+    }
+
+    let cur = text
+        .replace(/[「」]/g, '"')
+        .replace(/[『』]/g, "'");
+
+    cur = cur.replace(/"([^"\r\n]+)"/g, "“$1”");
+    cur = cur.replace(/'([^'\r\n]+)'/g, "‘$1’");
+
+    return cur;
+}
+
+export interface InterleaveLinesOptions {
+    /** 当一段文本行数较多时，是否保留多余的行（默认 true） */
+    keepExceeding?: boolean;
+    /** 是否忽略空行（默认 false） */
+    ignoreEmpty?: boolean;
+}
+
+/**
+ * 多行文本交替穿插合并引擎 (interleaveLines)
+ * 例如 A1\nA2 与 B1\nB2 -> A1\nB1\nA2\nB2
+ */
+export function interleaveLines(
+    textA: string,
+    textB: string,
+    options: InterleaveLinesOptions = {},
+): string {
+    const keepExceeding = options.keepExceeding !== false;
+    const ignoreEmpty = options.ignoreEmpty === true;
+
+    const processLines = (txt: string) => {
+        let lines = (txt ?? "").replace(/\r\n?/g, "\n").split("\n");
+        if (ignoreEmpty) lines = lines.filter((l) => l.trim().length > 0);
+        return lines;
+    };
+
+    const linesA = processLines(textA);
+    const linesB = processLines(textB);
+
+    const maxLen = Math.max(linesA.length, linesB.length);
+    const result: string[] = [];
+
+    for (let i = 0; i < maxLen; i++) {
+        if (i < linesA.length) {
+            result.push(linesA[i]!);
+        } else if (!keepExceeding) {
+            break;
+        }
+
+        if (i < linesB.length) {
+            result.push(linesB[i]!);
+        } else if (!keepExceeding) {
+            break;
+        }
+    }
+
+    return result.join("\n");
+}
+
+export type KeyCaseStyle = "camel" | "snake" | "kebab" | "pascal";
+
+function transformKey(key: string, style: KeyCaseStyle): string {
+    const trimmed = key.trim();
+    if (!trimmed) return key;
+
+    const words = trimmed
+        .replace(/[-_]+/g, " ")
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+        .split(/\s+/)
+        .filter(Boolean);
+
+    if (words.length === 0) return key;
+
+    if (style === "snake") {
+        return words.map((w) => w.toLowerCase()).join("_");
+    }
+    if (style === "kebab") {
+        return words.map((w) => w.toLowerCase()).join("-");
+    }
+    if (style === "pascal") {
+        return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join("");
+    }
+    return words.map((w, idx) => {
+        const lower = w.toLowerCase();
+        if (idx === 0) return lower;
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+    }).join("");
+}
+
+/**
+ * JSON 对象或 Properties 键名风格批量转换引擎 (convertObjectKeysCase)
+ */
+export function convertObjectKeysCase(text: string, targetCase: KeyCaseStyle = "camel"): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const clean = text.trim();
+
+    if ((clean.startsWith("{") && clean.endsWith("}")) || (clean.startsWith("[") && clean.endsWith("]"))) {
+        try {
+            const parsed = JSON.parse(clean);
+            const transformObj = (val: any): any => {
+                if (Array.isArray(val)) {
+                    return val.map(transformObj);
+                }
+                if (val !== null && typeof val === "object") {
+                    const res: Record<string, any> = {};
+                    for (const [k, v] of Object.entries(val)) {
+                        const newKey = transformKey(k, targetCase);
+                        res[newKey] = transformObj(v);
+                    }
+                    return res;
+                }
+                return val;
+            };
+
+            const transformed = transformObj(parsed);
+            return JSON.stringify(transformed, null, 2);
+        } catch {
+            // fallback
+        }
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const converted = lines.map((line) => {
+        const colonIdx = line.indexOf(":");
+        const equalIdx = line.indexOf("=");
+
+        let sepIdx = -1;
+        let sepChar = "";
+
+        if (colonIdx !== -1 && (equalIdx === -1 || colonIdx < equalIdx)) {
+            sepIdx = colonIdx;
+            sepChar = ":";
+        } else if (equalIdx !== -1) {
+            sepIdx = equalIdx;
+            sepChar = "=";
+        }
+
+        if (sepIdx === -1) return line;
+
+        const rawK = line.slice(0, sepIdx);
+        const rawV = line.slice(sepIdx + 1);
+
+        const newK = transformKey(rawK, targetCase);
+        const prefixSpaces = rawK.match(/^\s*/)?.[0] || "";
+        return `${prefixSpaces}${newK}${sepChar}${rawV}`;
+    });
+
+    return converted.join("\n");
+}

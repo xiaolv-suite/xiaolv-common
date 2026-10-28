@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.36] — 2026-10-29 (Latest)
+### [v0.10.37] — 2026-10-29 (Latest)
 
-Line parts swapping, file path & URL component parsing, and deduplication with frequency counting:
-- **Line Parts Swapping Engine (`swapLineParts`)**: Pure function to swap two parts of delimited lines (e.g., `key: value` -> `value: key` or `A -> B` -> `B -> A`) with custom delimiter handling and trim options; wired to action menu and variable form.
-- **Path & URL Parser (`parsePathParts`) & `{{xlc:path}}` Macro**: Pure function to parse file paths and URLs into `dir`, `filename`, `stem`, and `ext`; expanded macro syntax `{{xlc:path:filename|...}}`, `{{xlc:path:ext|...}}`, `{{xlc:path:stem|...}}` and automatic current document fallback `{{xlc:path:filename}}`; wired to action menu and variable form.
-- **Deduplication with Counts (`deduplicateWithCount`)**: Pure function to deduplicate lines, calculate occurrence counts, and sort descending by frequency; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 898/898 passing tests with verified negative tests.
+Smart quotes normalization, multi-line interleaving, and JSON/Properties keys case conversion:
+- **Smart Quotes Normalization Engine (`normalizeSmartQuotes`)**: Pure function to convert quotes between straight (`"..."`), curly (`“...”`), and corner brackets (`「...」`); wired to action menu and variable form.
+- **Multi-line Interleaving Engine (`interleaveLines`)**: Pure function to merge two multi-line texts alternately line-by-line (`A1\nB1\nA2\nB2`), ideal for bilingual notes, Q&A pairs, and text diffs; wired to action menu and variable form.
+- **Object Keys Case Converter (`convertObjectKeysCase`)**: Pure function supporting batch conversion of JSON and Properties keys into camelCase, snake_case, kebab-case, or PascalCase; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite passed milestone of 900+ tests, reaching 901/901 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.35)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.36)</b></summary>
+
+#### [v0.10.36] — 2026-10-29
+- Line parts swapping (`swapLineParts`).
+- Path and URL component parsing (`parsePathParts`) & `{{xlc:path}}` macro.
+- Deduplication with occurrence counts (`deduplicateWithCount`).
 
 #### [v0.10.35] — 2026-10-29
 - Multi-line custom indentation/outdentation (`indentLines`/`outdentLines`).
