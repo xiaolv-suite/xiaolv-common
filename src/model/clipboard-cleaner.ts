@@ -3928,3 +3928,167 @@ export function formatByRegexGroups(
         return out;
     });
 }
+
+export interface IndentLinesOptions {
+    /** 缩进大小（默认 2） */
+    count?: number;
+    /** 缩进字符（默认空格 " "，也可传入 "\t"） */
+    indentChar?: string;
+    /** 是否对空行跳过缩进（默认 true） */
+    skipEmpty?: boolean;
+}
+
+/**
+ * 多行文本指定层级缩进引擎 (indentLines)
+ */
+export function indentLines(text: string, options: IndentLinesOptions | number = 2): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const opts: IndentLinesOptions = typeof options === "number" ? {count: options} : options;
+    const count = Math.max(0, opts.count !== undefined ? opts.count : 2);
+    const indentChar = opts.indentChar !== undefined ? opts.indentChar : " ";
+    const skipEmpty = opts.skipEmpty !== false;
+
+    const pad = indentChar.repeat(count);
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+
+    const indented = lines.map((line) => {
+        if (skipEmpty && line.trim().length === 0) return line;
+        return pad + line;
+    });
+
+    return indented.join("\n");
+}
+
+/**
+ * 多行文本指定层级反向缩进 (减缩进) 引擎 (outdentLines)
+ */
+export function outdentLines(text: string, options: IndentLinesOptions | number = 2): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const opts: IndentLinesOptions = typeof options === "number" ? {count: options} : options;
+    const count = Math.max(0, opts.count !== undefined ? opts.count : 2);
+    const indentChar = opts.indentChar !== undefined ? opts.indentChar : " ";
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+
+    const outdented = lines.map((line) => {
+        if (indentChar === "\t") {
+            let removed = 0;
+            let cur = line;
+            while (cur.startsWith("\t") && removed < count) {
+                cur = cur.slice(1);
+                removed++;
+            }
+            return cur;
+        }
+
+        let removed = 0;
+        let cur = line;
+        while (removed < count && (cur.startsWith(" ") || cur.startsWith("\t"))) {
+            if (cur.startsWith("\t")) {
+                cur = cur.slice(1);
+                removed += count;
+            } else {
+                cur = cur.slice(1);
+                removed++;
+            }
+        }
+        return cur;
+    });
+
+    return outdented.join("\n");
+}
+
+export type DataFormatType = "email" | "phone" | "idcard" | "ipv4" | "url" | "number" | "date";
+
+/**
+ * 常见数据格式规范性校验 (validateFormat)
+ */
+export function validateFormat(text: string, type: DataFormatType = "email"): boolean {
+    if (!text || typeof text !== "string") return false;
+    const clean = text.trim();
+    if (!clean) return false;
+
+    switch (type) {
+        case "email":
+            return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(clean);
+        case "phone":
+            return /^1[3-9]\d{9}$/.test(clean);
+        case "idcard":
+            return /^[1-9]\d{5}(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[0-9Xx]$/.test(clean);
+        case "ipv4":
+            if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(clean)) return false;
+            return clean.split(".").every((part) => {
+                const n = parseInt(part, 10);
+                return n >= 0 && n <= 255 && String(n) === part;
+            });
+        case "url":
+            return /^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(clean);
+        case "number":
+            return /^[+-]?(\d+(\.\d+)?|\.\d+)$/.test(clean);
+        case "date":
+            return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(clean);
+        default:
+            return false;
+    }
+}
+
+export interface FilterMarkdownTableOptions {
+    /** 是否对单元格内容首尾去空白（默认 true） */
+    trimCell?: boolean;
+    /** 是否反向筛选 (排除匹配行，默认 false) */
+    invert?: boolean;
+}
+
+/**
+ * Markdown 表格按指定列内容过滤筛选行 (filterMarkdownTable)
+ * 保留表头行与分隔线行，仅对数据行按 columnIndex（从 1 开始计）进行筛选
+ */
+export function filterMarkdownTable(
+    tableMarkdown: string,
+    columnIndex: number,
+    filter: string | RegExp | ((val: string) => boolean),
+    options: FilterMarkdownTableOptions = {},
+): string {
+    if (!tableMarkdown || typeof tableMarkdown !== "string") return tableMarkdown ?? "";
+    const colIdx = Math.max(1, columnIndex) - 1;
+    const trimCell = options.trimCell !== false;
+    const invert = options.invert === true;
+
+    const lines = tableMarkdown.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return tableMarkdown;
+
+    const header = lines[0]!;
+    const separator = lines[1]!;
+
+    if (!header.includes("|") || !separator.includes("|")) {
+        return tableMarkdown;
+    }
+
+    const dataLines = lines.slice(2);
+    const passedDataLines: string[] = [];
+
+    const isMatch = (val: string): boolean => {
+        if (typeof filter === "function") {
+            return filter(val);
+        }
+        if (filter instanceof RegExp) {
+            return filter.test(val);
+        }
+        return val.includes(String(filter));
+    };
+
+    for (const row of dataLines) {
+        if (!row.includes("|")) continue;
+        const cells = row.split("|").slice(1, -1);
+        let cellVal = cells[colIdx] ?? "";
+        if (trimCell) cellVal = cellVal.trim();
+
+        const match = isMatch(cellVal);
+        const shouldKeep = invert ? !match : match;
+        if (shouldKeep) {
+            passedDataLines.push(row);
+        }
+    }
+
+    return [header, separator, ...passedDataLines].join("\n");
+}

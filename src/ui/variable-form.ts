@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -578,6 +578,8 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "radix.bin", text: "{{xlc:radix:bin|42}}"},
         {id: "kv", text: "{{xlc:kv:key|key=value}}"},
         {id: "match", text: "{{xlc:match|(\\d+)|[$1]|123}}"},
+        {id: "valid.email", text: "{{xlc:valid:email|test@example.com}}"},
+        {id: "valid.phone", text: "{{xlc:valid:phone|13800000000}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -2092,6 +2094,108 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(regexMatchBtn);
+
+    const indentBtn = document.createElement("button");
+    indentBtn.type = "button";
+    indentBtn.className = "xlc-varbtn xlc-btn-ghost";
+    indentBtn.dataset.xlcControl = "capture.format.indent-lines";
+    indentBtn.textContent = "✦ 增缩进";
+    indentBtn.title = "对多行文本整体增加 2 空格缩进";
+    indentBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = indentLines(targetText, 2);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(indentBtn);
+
+    const outdentBtn = document.createElement("button");
+    outdentBtn.type = "button";
+    outdentBtn.className = "xlc-varbtn xlc-btn-ghost";
+    outdentBtn.dataset.xlcControl = "capture.format.outdent-lines";
+    outdentBtn.textContent = "✦ 减缩进";
+    outdentBtn.title = "对多行文本整体反向减少 2 空格缩进";
+    outdentBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = outdentLines(targetText, 2);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(outdentBtn);
+
+    const filterTableBtn = document.createElement("button");
+    filterTableBtn.type = "button";
+    filterTableBtn.className = "xlc-varbtn xlc-btn-ghost";
+    filterTableBtn.dataset.xlcControl = "capture.format.filter-table";
+    filterTableBtn.textContent = "✦ 表格筛选";
+    filterTableBtn.title = "剔除 Markdown 表格中第 1 列为空值的行";
+    filterTableBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        if (targetText.includes("|") && targetText.includes("\n")) {
+            const res = filterMarkdownTable(targetText, 1, (v) => v.trim().length > 0);
+            if (res && res !== targetText) {
+                if (hasSel) {
+                    el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                    el.setSelectionRange(start, start + res.length);
+                } else {
+                    el.value = res;
+                }
+                el.focus();
+                el.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+        }
+    });
+    bar.appendChild(filterTableBtn);
+
+    const verifyFormatBtn = document.createElement("button");
+    verifyFormatBtn.type = "button";
+    verifyFormatBtn.className = "xlc-varbtn xlc-btn-ghost";
+    verifyFormatBtn.dataset.xlcControl = "capture.format.verify-format";
+    verifyFormatBtn.textContent = "✦ 校验格式";
+    verifyFormatBtn.title = "校验选中文本是否为合法邮箱/手机号/URL并在控制台或属性反馈";
+    verifyFormatBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = (hasSel ? el.value.slice(start, end) : el.value).trim();
+        if (targetText) {
+            const isEmail = validateFormat(targetText, "email");
+            const isPhone = validateFormat(targetText, "phone");
+            const isUrl = validateFormat(targetText, "url");
+            const res = isEmail ? "email:valid" : (isPhone ? "phone:valid" : (isUrl ? "url:valid" : "invalid"));
+            el.setAttribute("data-xlc-validated", res);
+        }
+    });
+    bar.appendChild(verifyFormatBtn);
 
     return bar;
 }

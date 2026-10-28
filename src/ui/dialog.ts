@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3802,6 +3802,37 @@ export class CommonSearchDialog {
                         const formatted = formatByRegexGroups(raw.trim(), /(\d{4})-(\d{2})-(\d{2})/, "$1年$2月$3日");
                         await this.deps.copyProviderPayload(formatted);
                         this.deps.notify?.("info", `已格式化日期：${formatted}`);
+                    });
+                }
+                if (entry.content && entry.content.includes("\n")) {
+                    addSilent("➡️", "多行整体增加 2 空格缩进并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const indented = indentLines(raw, 2);
+                        await this.deps.copyProviderPayload(indented);
+                        this.deps.notify?.("info", "已多行整体缩进 2 空格并复制");
+                    });
+                    addSilent("⬅️", "多行整体反向减少 2 空格缩进并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const outdented = outdentLines(raw, 2);
+                        await this.deps.copyProviderPayload(outdented);
+                        this.deps.notify?.("info", "已多行整体减缩进 2 空格并复制");
+                    });
+                }
+                if (entry.content && entry.content.includes("|") && entry.content.includes("\n") && (entry.content.includes("-|-") || entry.content.includes("---|---"))) {
+                    addSilent("⊞", "Markdown 表格按第 1 列排除空值行并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const filtered = filterMarkdownTable(raw, 1, (v) => v.trim().length > 0);
+                        await this.deps.copyProviderPayload(filtered);
+                        this.deps.notify?.("info", "已过滤表格空值行并复制");
+                    });
+                }
+                if (entry.content && !entry.content.includes("\n") && (entry.content.includes("@") || /^\d{11}$/.test(entry.content.trim()) || /^https?:\/\//.test(entry.content.trim()))) {
+                    const trimmed = entry.content.trim();
+                    const type = trimmed.includes("@") ? "email" : (/^\d{11}$/.test(trimmed) ? "phone" : "url");
+                    const valid = validateFormat(trimmed, type);
+                    addSilent(valid ? "✅" : "❌", `校验是否为合法 ${type} (${valid ? "合法" : "非法"}) 并复制`, async () => {
+                        await this.deps.copyProviderPayload(String(valid));
+                        this.deps.notify?.("info", `${type} 格式校验结果: ${valid ? "规范合法" : "格式非法"}`);
                     });
                 }
                 if (entry.content && /^[+-]?\d{1,12}$/.test(entry.content.trim())) {

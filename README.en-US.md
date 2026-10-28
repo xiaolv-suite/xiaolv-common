@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.34] — 2026-10-28 (Latest)
+### [v0.10.35] — 2026-10-29 (Latest)
 
-Key-value pair extraction, column-based multi-line sorting, and regex capture group formatting:
-- **Key-Value Pair Extraction Engine (`parseKeyValuePairs`/`extractKvValue`) & `{{xlc:kv}}` Macro**: Pure function supporting URL query string (`?name=foo&age=20`) and multi-line YAML/Properties parsing with URL decoding and case-insensitive fallback; dynamic macro `{{xlc:kv:key|...}}` and `{{xlc:kv|key|...}}` added; wired to action menu and variable form.
-- **Column-based Multi-line Sorting Engine (`sortLinesByColumn`)**: Pure function to sort multi-line delimited data by column N with numeric sorting, descending toggle, and table header preservation; wired to action menu and variable form.
-- **Regex Capture Group Formatter (`formatByRegexGroups`) & `{{xlc:match}}` Macro**: Pure function supporting regex capture groups (`$1`, `$2`, `$0`) interpolated into custom output templates; dynamic macro `{{xlc:match|pattern|template|text}}` added; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 890/890 passing tests with verified negative tests.
+Multi-line custom indentation/outdentation, data format validation, and Markdown table column filtering:
+- **Multi-line Indentation/Outdentation Engine (`indentLines`/`outdentLines`)**: Pure function to adjust line indentation (spaces or tabs), skip blank lines, and preserving outline hierarchies; wired to action menu and variable form.
+- **Data Format Validation Engine (`validateFormat`) & `{{xlc:valid}}` Macro**: Pure function supporting email, phone, idcard, ipv4, url, and number format checks; expanded dynamic macro `{{xlc:valid:email|...}}` and `{{xlc:valid|type|val|trueTxt|falseTxt}}`; wired to action menu and variable form.
+- **Markdown Table Column Filter (`filterMarkdownTable`)**: Pure function to filter table rows by column values (keywords, regexes, or custom predicates) while preserving headers and alignment separators; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 894/894 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.33)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.34)</b></summary>
+
+#### [v0.10.34] — 2026-10-28
+- Key-value pair extraction (`parseKeyValuePairs`) & `{{xlc:kv}}` macro.
+- Column-based multi-line sorting (`sortLinesByColumn`).
+- Regex capture group formatting (`formatByRegexGroups`) & `{{xlc:match}}` macro.
 
 #### [v0.10.33] — 2026-10-28
 - Line set operations (`setOperationsOnLines`).
