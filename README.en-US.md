@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.38] — 2026-10-29 (Latest)
+### [v0.10.39] — 2026-10-29 (Latest)
 
-Unit spacing formatting, character set filtering, and compact unique NanoID dynamic macro:
-- **Unit Spacing Engine (`formatUnitSpacing`)**: Pure function inserting standard spaces between numbers and measurement/data units (`100MB` -> `100 MB`, `3.5GHz` -> `3.5 GHz`, `50kg` -> `50 kg`), preserving temperatures and percentages; wired to action menu and variable form.
-- **Character Set Filter (`filterCharacterSet`)**: Pure function supporting chinese-only, alphanumeric-only, ascii-only, punctuation stripping, and emoji stripping; wired to action menu and variable form.
-- **Compact NanoID Generator (`generateNanoId`) & `{{xlc:nanoid}}` Macro**: Pure function generating URL-safe compact unique identifiers; expanded dynamic macro `{{xlc:nanoid}}` (default 10) and `{{xlc:nanoid|16}}`; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 905/905 passing tests with verified negative tests.
+Multi-line code comments toggle, simple template variable interpolation, and brackets balance check:
+- **Line Comments Toggling Engine (`toggleLineComments`)**: Pure function automatically detecting line comment states to batch toggle line comment prefixes (`// `, `# `, `-- `), preserving leading indentation; wired to action menu and variable form.
+- **Simple Template Interpolator (`renderSimpleTemplate`) & `{{xlc:template}}` Macro**: Pure function supporting `{key}` and `{{key}}` parameter interpolation with plain objects, JSON strings, or URL query/YAML strings; expanded dynamic macro `{{xlc:template|...}}`; wired to action menu and variable form.
+- **Brackets Balance Checker (`checkBracketsBalance`)**: Pure function verifying paired balance of `()`, `[]`, `{}`, `《》`, `【】`, `「」`, `『』`, and `“”`, pinpointing unclosed brackets; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 909/909 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.37)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.38)</b></summary>
+
+#### [v0.10.38] — 2026-10-29
+- Unit spacing formatting (`formatUnitSpacing`).
+- Character set filtering (`filterCharacterSet`).
+- Compact unique NanoID generator (`generateNanoId`) & `{{xlc:nanoid}}` macro.
 
 #### [v0.10.37] — 2026-10-29
 - Smart quotes normalization (`normalizeSmartQuotes`).

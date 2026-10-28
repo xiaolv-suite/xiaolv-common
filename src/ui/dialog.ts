@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3840,6 +3840,12 @@ export class CommonSearchDialog {
                     });
                 }
                 if (entry.content && entry.content.includes("\n")) {
+                    addSilent("💬", "批量切换代码行注释 (//) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = toggleLineComments(raw, "// ");
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", res.mode === "comment" ? `已添加注释 (${res.changedLines}行)` : `已移除注释 (${res.changedLines}行)`);
+                    });
                     addSilent("➡️", "多行整体增加 2 空格缩进并复制", async () => {
                         const raw = entry.content || await this.deps.preview(entry.id) || "";
                         const indented = indentLines(raw, 2);
@@ -3885,6 +3891,26 @@ export class CommonSearchDialog {
                         const res = `${parts.filename} (基本名: ${parts.stem}, 扩展名: ${parts.ext})`;
                         await this.deps.copyProviderPayload(parts.filename);
                         this.deps.notify?.("info", `提取文件信息：${res}`);
+                    });
+                }
+                if (entry.content && (entry.content.includes("(") || entry.content.includes("[") || entry.content.includes("{") || entry.content.includes("《") || entry.content.includes("「"))) {
+                    addSilent("🔍", "检测标点与括号闭合平衡性", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = checkBracketsBalance(raw);
+                        if (res.isBalanced) {
+                            this.deps.notify?.("info", "✓ 括号配对完全闭合平衡");
+                        } else {
+                            this.deps.notify?.("error", `⚠ 括号未闭合: ${res.errorSummary}`);
+                        }
+                    });
+                }
+                if (entry.content && (entry.content.includes("{") && entry.content.includes("}")) && entry.content.includes("---")) {
+                    addSilent("📑", "按 --- 分割渲染变量模板并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const [tpl, data] = raw.split(/\n\s*---\s*\n/);
+                        const res = renderSimpleTemplate(tpl || "", data || "");
+                        await this.deps.copyProviderPayload(res);
+                        this.deps.notify?.("info", "已完成模板变量渲染并复制");
                     });
                 }
                 if (entry.content && entry.content.includes("\n") && entry.content.split("\n").filter(Boolean).length >= 3) {

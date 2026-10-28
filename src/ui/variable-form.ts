@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -583,6 +583,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "path.name", text: "{{xlc:path:filename}}"},
         {id: "path.ext", text: "{{xlc:path:ext}}"},
         {id: "nanoid", text: "{{xlc:nanoid|12}}"},
+        {id: "template", text: "{{xlc:template|你好 {name}|name=张三}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -2457,6 +2458,79 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         el.dispatchEvent(new Event("input", {bubbles: true}));
     });
     bar.appendChild(nanoBtn);
+
+    const toggleCommentsBtn = document.createElement("button");
+    toggleCommentsBtn.type = "button";
+    toggleCommentsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    toggleCommentsBtn.dataset.xlcControl = "capture.format.toggle-comments";
+    toggleCommentsBtn.textContent = "✦ 切换注释";
+    toggleCommentsBtn.title = "对选中文本或全文多行批量添加/移除代码注释前缀 (// )";
+    toggleCommentsBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = toggleLineComments(targetText, "// ");
+        if (res.changedLines > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(toggleCommentsBtn);
+
+    const checkBracketsBtn = document.createElement("button");
+    checkBracketsBtn.type = "button";
+    checkBracketsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    checkBracketsBtn.dataset.xlcControl = "capture.format.check-brackets";
+    checkBracketsBtn.textContent = "✦ 检查括号";
+    checkBracketsBtn.title = "校验文本中的中英文括号与标点是否成对闭合平衡";
+    checkBracketsBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = checkBracketsBalance(targetText);
+        el.setAttribute("data-xlc-brackets", res.isBalanced ? "balanced" : "unbalanced");
+        el.title = res.isBalanced ? "✓ 括号配对完全闭合" : `⚠ ${res.errorSummary}`;
+    });
+    bar.appendChild(checkBracketsBtn);
+
+    const renderTplBtn = document.createElement("button");
+    renderTplBtn.type = "button";
+    renderTplBtn.className = "xlc-varbtn xlc-btn-ghost";
+    renderTplBtn.dataset.xlcControl = "capture.format.render-tpl";
+    renderTplBtn.textContent = "✦ 渲染模板";
+    renderTplBtn.title = "按 --- 分割渲染简单的变量插值模板 (前半段模板，后半段键值)";
+    renderTplBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        if (targetText.includes("---")) {
+            const [tpl, data] = targetText.split(/\n\s*---\s*\n/);
+            const res = renderSimpleTemplate(tpl || "", data || "");
+            if (res && res !== targetText) {
+                if (hasSel) {
+                    el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                    el.setSelectionRange(start, start + res.length);
+                } else {
+                    el.value = res;
+                }
+                el.focus();
+                el.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+        }
+    });
+    bar.appendChild(renderTplBtn);
 
     return bar;
 }

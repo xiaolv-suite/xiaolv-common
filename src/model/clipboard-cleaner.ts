@@ -4542,3 +4542,200 @@ export function generateNanoId(size = 10, alphabet: string = NANO_DEFAULT_ALPHAB
     }
     return id;
 }
+
+export interface ToggleCommentsResult {
+    result: string;
+    mode: "comment" | "uncomment";
+    changedLines: number;
+}
+
+export interface ToggleCommentsOptions {
+    /** 注释前缀（默认 "// "） */
+    prefix?: string;
+    /** 空行是否跳过（默认 true） */
+    skipEmpty?: boolean;
+}
+
+/**
+ * 多行文本批量添加与移除注释符号 (toggleLineComments)
+ */
+export function toggleLineComments(
+    text: string,
+    prefixOrOptions?: string | ToggleCommentsOptions,
+    options?: ToggleCommentsOptions,
+): ToggleCommentsResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", mode: "comment", changedLines: 0};
+    }
+
+    let opts: ToggleCommentsOptions = {};
+    if (typeof prefixOrOptions === "string") {
+        opts = {...(options || {}), prefix: prefixOrOptions};
+    } else if (prefixOrOptions && typeof prefixOrOptions === "object") {
+        opts = prefixOrOptions;
+    }
+
+    const prefix = opts.prefix !== undefined ? opts.prefix : "// ";
+    const cleanPrefix = prefix.trim();
+    const skipEmpty = opts.skipEmpty !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const nonEmptyLines = lines.filter((l) => l.trim().length > 0);
+
+    const allCommented = nonEmptyLines.length > 0 && nonEmptyLines.every((line) => {
+        const trimmed = line.trim();
+        return trimmed.startsWith(cleanPrefix);
+    });
+
+    let changedCount = 0;
+    const targetMode = allCommented ? "uncomment" : "comment";
+
+    const processed = lines.map((line) => {
+        if (skipEmpty && line.trim().length === 0) return line;
+
+        if (targetMode === "uncomment") {
+            const indentMatch = line.match(/^(\s*)/);
+            const indent = indentMatch ? indentMatch[1]! : "";
+            const rest = line.slice(indent.length);
+
+            if (rest.startsWith(prefix)) {
+                changedCount++;
+                return indent + rest.slice(prefix.length);
+            }
+            if (rest.startsWith(cleanPrefix)) {
+                changedCount++;
+                let stripped = rest.slice(cleanPrefix.length);
+                if (stripped.startsWith(" ")) stripped = stripped.slice(1);
+                return indent + stripped;
+            }
+            return line;
+        } else {
+            changedCount++;
+            const indentMatch = line.match(/^(\s*)/);
+            const indent = indentMatch ? indentMatch[1]! : "";
+            const rest = line.slice(indent.length);
+            return `${indent}${prefix}${rest}`;
+        }
+    });
+
+    return {
+        result: processed.join("\n"),
+        mode: targetMode,
+        changedLines: changedCount,
+    };
+}
+
+/**
+ * 字符串模板简单变量插值渲染引擎 (renderSimpleTemplate)
+ * 支持 {key} 与 {{key}} 占位符插值替换
+ */
+export function renderSimpleTemplate(
+    template: string,
+    data: Record<string, any> | string = {},
+): string {
+    if (!template || typeof template !== "string") return template ?? "";
+
+    let dict: Record<string, any> = {};
+    if (typeof data === "string") {
+        const cleanData = data.trim();
+        if (cleanData.startsWith("{") && cleanData.endsWith("}")) {
+            try {
+                dict = JSON.parse(cleanData);
+            } catch {
+                dict = parseKeyValuePairs(cleanData);
+            }
+        } else {
+            dict = parseKeyValuePairs(cleanData);
+        }
+    } else if (data && typeof data === "object") {
+        dict = data;
+    }
+
+    return template.replace(/\{{1,2}(?!\s*xlc:)([a-zA-Z0-9_.-]+)\}{1,2}/g, (match, key) => {
+        if (Object.prototype.hasOwnProperty.call(dict, key)) {
+            const val = dict[key];
+            return val !== undefined && val !== null ? String(val) : "";
+        }
+        const lowerKey = key.toLowerCase();
+        for (const [k, v] of Object.entries(dict)) {
+            if (k.toLowerCase() === lowerKey) {
+                return v !== undefined && v !== null ? String(v) : "";
+            }
+        }
+        return match;
+    });
+}
+
+export interface BracketsBalanceResult {
+    isBalanced: boolean;
+    unclosed: string[];
+    unexpected: string[];
+    errorSummary: string;
+}
+
+const BALANCE_PAIRS: Record<string, string> = {
+    "(": ")",
+    "[": "]",
+    "{": "}",
+    "《": "》",
+    "【": "】",
+    "「": "」",
+    "『": "』",
+    "“": "”",
+};
+
+const CLOSE_TO_OPEN: Record<string, string> = {
+    ")": "(",
+    "]": "[",
+    "}": "{",
+    "》": "《",
+    "】": "【",
+    "」": "「",
+    "』": "『",
+    "”": "“",
+};
+
+/**
+ * 文本括号标点成对闭合与平衡校验引擎 (checkBracketsBalance)
+ */
+export function checkBracketsBalance(text: string): BracketsBalanceResult {
+    if (!text || typeof text !== "string") {
+        return {isBalanced: true, unclosed: [], unexpected: [], errorSummary: ""};
+    }
+
+    const stack: Array<{char: string; pos: number}> = [];
+    const unexpected: string[] = [];
+
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i]!;
+
+        if (BALANCE_PAIRS[ch]) {
+            stack.push({char: ch, pos: i});
+        } else if (CLOSE_TO_OPEN[ch]) {
+            const expectedOpen = CLOSE_TO_OPEN[ch]!;
+            if (stack.length > 0 && stack[stack.length - 1]!.char === expectedOpen) {
+                stack.pop();
+            } else {
+                unexpected.push(ch);
+            }
+        }
+    }
+
+    const unclosed = stack.map((s) => s.char);
+    const isBalanced = unclosed.length === 0 && unexpected.length === 0;
+
+    let errorSummary = "";
+    if (!isBalanced) {
+        const parts: string[] = [];
+        if (unclosed.length > 0) parts.push(`未闭合左括号: ${unclosed.join(" ")}`);
+        if (unexpected.length > 0) parts.push(`多余右括号: ${unexpected.join(" ")}`);
+        errorSummary = parts.join("；");
+    }
+
+    return {
+        isBalanced,
+        unclosed,
+        unexpected,
+        errorSummary,
+    };
+}
