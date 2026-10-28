@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3640,6 +3640,30 @@ export class CommonSearchDialog {
                         const joined = joinLinesWithDelimiter(raw, ", ");
                         await this.deps.copyProviderPayload(joined);
                         this.deps.notify?.("info", "已合并多行为逗号分隔单行并复制");
+                    });
+                    addSilent("🔀", "随机打乱行顺序 (Shuffle Lines) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const shuffled = shuffleLines(raw);
+                        await this.deps.copyProviderPayload(shuffled);
+                        this.deps.notify?.("info", "已随机打乱多行文本顺序并复制");
+                    });
+                }
+                if (entry.content && (entry.content.includes("**") || entry.content.includes("`") || entry.content.includes("# ") || entry.content.includes("> "))) {
+                    addSilent("📄", "剥离 Markdown 格式为纯文本并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const plain = stripMarkdownFormatting(raw);
+                        await this.deps.copyProviderPayload(plain);
+                        this.deps.notify?.("info", "已剥离 Markdown 格式为纯文本并复制");
+                    });
+                }
+                if (entry.content && /^\d{3,12}$/.test(entry.content.trim())) {
+                    addSilent("💾", "字节转易读容量单位并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const sizeStr = formatByteSize(raw.trim());
+                        if (sizeStr) {
+                            await this.deps.copyProviderPayload(sizeStr);
+                            this.deps.notify?.("info", `已转换容量格式为 ${sizeStr} 并复制`);
+                        }
                     });
                 }
                 if (entry.content && !entry.content.includes("\n") && (entry.content.includes(",") || entry.content.includes("，") || entry.content.includes(";"))) {

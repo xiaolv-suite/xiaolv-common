@@ -2085,3 +2085,99 @@ export function extractInitials(text: string, options: InitialsOptions = {}): st
 
     return initials.join(sep);
 }
+
+export interface StripMarkdownOptions {
+    /** 是否保留超链接中的文本（默认 true，如 [思源](url) -> 思源） */
+    keepLinksText?: boolean;
+    /** 是否保留代码块/行内代码的内容（默认 true） */
+    keepCodeContent?: boolean;
+}
+
+/**
+ * 剥离 Markdown 格式语法标记，提取纯文本 (stripMarkdownFormatting)
+ */
+export function stripMarkdownFormatting(text: string, options: StripMarkdownOptions = {}): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const keepLinksText = options.keepLinksText !== false;
+    const keepCodeContent = options.keepCodeContent !== false;
+
+    let res = text.replace(/\r\n?/g, "\n");
+
+    // 1. 代码围栏 ```lang\ncode\n```
+    res = res.replace(/```[a-zA-Z0-9_-]*\n([\s\S]*?)\n```/g, (_, code) => (keepCodeContent ? code : ""));
+
+    // 2. 行内代码 `code`
+    res = res.replace(/`([^`]+)`/g, (_, code) => (keepCodeContent ? code : ""));
+
+    // 3. 图片与超链接
+    res = res.replace(/!\[([^\]]*)\]\([^)]+\)/g, (_, alt) => (alt ? `[图片: ${alt}]` : ""));
+    res = res.replace(/\[([^\]]+)\]\([^)]+\)/g, (_, label) => (keepLinksText ? label : ""));
+
+    // 4. 标题符号 # H1 -> H1
+    res = res.replace(/^#{1,6}\s+/gm, "");
+
+    // 5. 引用符号 > quote -> quote
+    res = res.replace(/^>\s*/gm, "");
+
+    // 6. 粗体、斜体与删除线
+    res = res.replace(/[*_]{2}([^*_]+)[*_]{2}/g, "$1");
+    res = res.replace(/[*_]([^*_]+)[*_]/g, "$1");
+    res = res.replace(/~~([^~]+)~~/g, "$1");
+
+    // 7. 水平分割线
+    res = res.replace(/^[-*_]{3,}\s*$/gm, "");
+
+    return res.trim();
+}
+
+/**
+ * 将字节数值格式化为人类可读的容量单位 (formatByteSize)
+ * 如 1048576 -> 1.00 MB, 1024 -> 1.00 KB
+ */
+export function formatByteSize(bytes: number | string, decimals = 2): string {
+    if (bytes === undefined || bytes === null || bytes === "") return "";
+    const num = Number(bytes);
+    if (!Number.isFinite(num)) return String(bytes);
+    if (num === 0) return "0 B";
+
+    const k = 1024;
+    const dm = Math.max(0, decimals);
+    const sizes = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
+
+    const isNegative = num < 0;
+    const absVal = Math.abs(num);
+
+    const i = Math.floor(Math.log(absVal) / Math.log(k));
+    const unitIndex = Math.min(i, sizes.length - 1);
+    const val = absVal / Math.pow(k, unitIndex);
+
+    const formatted = parseFloat(val.toFixed(dm));
+    return `${isNegative ? "-" : ""}${formatted} ${sizes[unitIndex]}`;
+}
+
+export interface ShuffleLinesOptions {
+    /** 是否忽略空行（默认 true，空行不参与洗牌） */
+    ignoreEmpty?: boolean;
+}
+
+/**
+ * 多行文本公平随机洗牌打乱 (shuffleLines)
+ * 基于标准 Fisher-Yates 算法
+ */
+export function shuffleLines(text: string, options: ShuffleLinesOptions = {}): string {
+    if (!text || !text.includes("\n")) return text ?? "";
+    const ignoreEmpty = options.ignoreEmpty !== false;
+
+    const rawLines = text.replace(/\r\n?/g, "\n").split("\n");
+    const linesToShuffle = ignoreEmpty ? rawLines.filter((l) => l.trim().length > 0) : rawLines.slice();
+
+    // Fisher-Yates 洗牌
+    for (let i = linesToShuffle.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = linesToShuffle[i]!;
+        linesToShuffle[i] = linesToShuffle[j]!;
+        linesToShuffle[j] = temp;
+    }
+
+    return linesToShuffle.join("\n");
+}
