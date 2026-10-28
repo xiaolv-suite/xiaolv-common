@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.46] — 2026-10-29 (Latest)
+### [v0.10.47] — 2026-10-29 (Latest)
 
-Markdown table column alignment batch conversion, fixed-width pad/truncate macro, and trailing whitespace/NBSP sanitization:
-- **Markdown Table Column Alignment Engine (`alignMarkdownTableColumns`)**: Pure function updating table delimiter row alignments (center `:---:`, right `---:`, left `:---`), supporting global setting or per-column array while preserving headers and cells; wired to action menu and variable form.
-- **Fixed-width Field Pad & Truncate (`padOrTruncate`) & `{{xlc:pad}}` Macro**: Pure function supporting fixed width, alignment direction (`left`, `right`, `center`), custom pad characters (e.g. leading zeros `0`), and ellipsis truncation with CJK double-width character calculation; expanded dynamic macro `{{xlc:pad|10|hello}}` and `{{xlc:pad:right|8|123|0}}`; wired to action menu and variable form.
-- **Line Endings & NBSP Sanitization Engine (`sanitizeLineEndingsAndSpaces`)**: Pure function deeply cleaning invisible non-breaking spaces (`\u00A0`), stripping line-trailing whitespace and tabs, and standardizing line endings to `\n`; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 936/936 passing tests with verified negative tests.
+Identifier naming style conversion, numeric sequence generation macro, and Markdown table to CSV data export:
+- **Identifier Naming Style Conversion (`convertIdentifierNamingStyle`)**: Pure function converting between `camelCase`, `PascalCase`, `snake_case`, `UPPER_SNAKE_CASE` (constant), and `kebab-case`, preserving indentation and leading/trailing affixes (`_`, `$`, `-`) to protect private variables and magic methods; wired to action menu and variable form.
+- **Numeric Sequence Generation (`generateNumericSequence`) & `{{xlc:seq}}` Macro**: Pure function supporting ascending/descending ranges, custom steps, zero-padding (`001, 002`), and custom delimiters (newlines, commas); expanded dynamic macro `{{xlc:seq|1|10}}`, `{{xlc:seq|1|10|2}}`, `{{xlc:seq:line|1|5}}`, `{{xlc:seq:pad|1|5|3}}`; wired to action menu and variable form.
+- **Markdown Table to CSV/TSV Export (`markdownTableToDelimited`)**: Pure function stripping table delimiter rows, parsing cells, and applying RFC 4180 double-quote escaping for cells containing commas or quotes; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 940/940 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.45)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.46)</b></summary>
+
+#### [v0.10.46] — 2026-10-29
+- Markdown table column alignment batch conversion (`alignMarkdownTableColumns`).
+- Fixed-width field pad & truncate (`padOrTruncate`) & `{{xlc:pad}}` macro.
+- Line endings & NBSP sanitization engine (`sanitizeLineEndingsAndSpaces`).
 
 #### [v0.10.45] — 2026-10-29
 - Safe code comments stripping (`stripCodeComments`) while protecting string literals.

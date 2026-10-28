@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -589,6 +589,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "thousands", text: "{{xlc:thousands|1234567.89}}"},
         {id: "checksum", text: "{{xlc:checksum|hello}}"},
         {id: "pad", text: "{{xlc:pad|10|hello}}"},
+        {id: "seq", text: "{{xlc:seq|1|10}}"},
         {id: "regex.mreplace", text: "{{xlc:regex:mreplace|^(\\s*)|// |文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
@@ -3055,6 +3056,154 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(hrulesBtn);
+
+    const tableCenterBtn = document.createElement("button");
+    tableCenterBtn.type = "button";
+    tableCenterBtn.className = "xlc-varbtn xlc-btn-ghost";
+    tableCenterBtn.dataset.xlcControl = "capture.format.table-center";
+    tableCenterBtn.textContent = "✦ 表格居中";
+    tableCenterBtn.title = "批量将 Markdown 表格各列对齐方式修改为居中对齐";
+    tableCenterBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = alignMarkdownTableColumns(targetText, "center");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(tableCenterBtn);
+
+    const tableCsvBtn = document.createElement("button");
+    tableCsvBtn.type = "button";
+    tableCsvBtn.className = "xlc-varbtn xlc-btn-ghost";
+    tableCsvBtn.dataset.xlcControl = "capture.format.table-to-csv";
+    tableCsvBtn.textContent = "✦ 表格转CSV";
+    tableCsvBtn.title = "将选中的 Markdown 表格转换为标准 RFC 4180 CSV 格式";
+    tableCsvBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = markdownTableToDelimited(targetText, "csv");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(tableCsvBtn);
+
+    const sanitizeSpacesBtn = document.createElement("button");
+    sanitizeSpacesBtn.type = "button";
+    sanitizeSpacesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    sanitizeSpacesBtn.dataset.xlcControl = "capture.format.sanitize-spaces";
+    sanitizeSpacesBtn.textContent = "✦ 清洗空格";
+    sanitizeSpacesBtn.title = "清理多行文本中的行尾多余空格与 NBSP 不换行隐形空格";
+    sanitizeSpacesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = sanitizeLineEndingsAndSpaces(targetText);
+        if (res.fixedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(sanitizeSpacesBtn);
+
+    const camelCaseBtn = document.createElement("button");
+    camelCaseBtn.type = "button";
+    camelCaseBtn.className = "xlc-varbtn xlc-btn-ghost";
+    camelCaseBtn.dataset.xlcControl = "capture.format.camel-case";
+    camelCaseBtn.textContent = "✦ 驼峰转换";
+    camelCaseBtn.title = "将选中的变量标识符智能转换为小驼峰命名 (camelCase)";
+    camelCaseBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertIdentifierNamingStyle(targetText, "camel");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(camelCaseBtn);
+
+    const padTruncBtn = document.createElement("button");
+    padTruncBtn.type = "button";
+    padTruncBtn.className = "xlc-varbtn xlc-btn-ghost";
+    padTruncBtn.dataset.xlcControl = "capture.format.pad-truncate";
+    padTruncBtn.textContent = "✦ 定长补齐";
+    padTruncBtn.title = "将每行或选中文本定长补齐至 10 个字符宽度（不足补空格）";
+    padTruncBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = padOrTruncate(targetText, 10);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(padTruncBtn);
+
+    const seqGenBtn = document.createElement("button");
+    seqGenBtn.type = "button";
+    seqGenBtn.className = "xlc-varbtn xlc-btn-ghost";
+    seqGenBtn.dataset.xlcControl = "capture.format.seq-gen";
+    seqGenBtn.textContent = "✦ 序号序列";
+    seqGenBtn.title = "在选区或光标处快速生成 1~10 的序号序列";
+    seqGenBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const seq = generateNumericSequence(1, 10);
+        el.value = el.value.slice(0, start) + seq + el.value.slice(end);
+        el.setSelectionRange(start, start + seq.length);
+        el.focus();
+        el.dispatchEvent(new Event("input", {bubbles: true}));
+    });
+    bar.appendChild(seqGenBtn);
 
     return bar;
 }

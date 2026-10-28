@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -4041,6 +4041,67 @@ export class CommonSearchDialog {
                         const res = normalizeHorizontalRules(raw, "---");
                         await this.deps.copyProviderPayload(res.result);
                         this.deps.notify?.("info", `已规范化 ${res.normalizedCount} 处水平分割线并复制`);
+                    });
+                }
+                if (entry.content && entry.content.includes("|") && /\|?\s*[-:]+\s*\|/.test(entry.content)) {
+                    addSilent("📊", "批量转换表格列居中对齐并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const aligned = alignMarkdownTableColumns(raw, "center");
+                        await this.deps.copyProviderPayload(aligned);
+                        this.deps.notify?.("info", "已批量设置表格列居中对齐并复制");
+                    });
+                    addSilent("📊", "批量转换表格列靠右对齐并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const aligned = alignMarkdownTableColumns(raw, "right");
+                        await this.deps.copyProviderPayload(aligned);
+                        this.deps.notify?.("info", "已批量设置表格列靠右对齐并复制");
+                    });
+                    addSilent("📊", "转换 Markdown 表格为 CSV 格式并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const csv = markdownTableToDelimited(raw, "csv");
+                        await this.deps.copyProviderPayload(csv);
+                        this.deps.notify?.("info", "已将表格导出为标准 CSV 格式并复制");
+                    });
+                }
+                if (entry.content && (entry.content.includes("\u00A0") || /[ \t]+$/m.test(entry.content) || entry.content.includes("\r"))) {
+                    addSilent("🧼", "清理行尾空格与 NBSP 隐形空格并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = sanitizeLineEndingsAndSpaces(raw);
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已清洗 ${res.fixedCount} 处隐形与多余空白并复制`);
+                    });
+                }
+                if (entry.content && (entry.content.includes("_") || /[a-z][A-Z]/.test(entry.content))) {
+                    addSilent("🐫", "变量命名法转驼峰 (camelCase) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const converted = convertIdentifierNamingStyle(raw, "camel");
+                        await this.deps.copyProviderPayload(converted);
+                        this.deps.notify?.("info", "已将变量名转换为驼峰式并复制");
+                    });
+                    addSilent("🐍", "变量命名法转下划线 (snake_case) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const converted = convertIdentifierNamingStyle(raw, "snake");
+                        await this.deps.copyProviderPayload(converted);
+                        this.deps.notify?.("info", "已将变量名转换为下划线并复制");
+                    });
+                }
+                if (entry.content && entry.content.length > 0 && entry.content.length < 50 && !entry.content.includes("\n")) {
+                    addSilent("📏", "定长宽度补齐至 20 字符并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const padded = padOrTruncate(raw, 20);
+                        await this.deps.copyProviderPayload(padded);
+                        this.deps.notify?.("info", "已定长补齐并复制");
+                    });
+                }
+                if (entry.content && /^\s*(\d+)\s*(?:[~-]|至|\.\.)\s*(\d+)\s*$/m.test(entry.content)) {
+                    addSilent("🔢", "根据数字区间生成序列清单并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const match = raw.match(/^\s*(\d+)\s*(?:[~-]|至|\.\.)\s*(\d+)\s*$/m);
+                        if (match) {
+                            const seq = generateNumericSequence(parseInt(match[1]!, 10), parseInt(match[2]!, 10));
+                            await this.deps.copyProviderPayload(seq);
+                            this.deps.notify?.("info", "已生成数字区间序列并复制");
+                        }
                     });
                 }
                 if (entry.content && entry.content.length > 80) {

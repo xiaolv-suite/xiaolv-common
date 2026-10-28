@@ -5846,3 +5846,191 @@ export function sanitizeLineEndingsAndSpaces(text: string): SanitizeLineResult {
         fixedCount: count,
     };
 }
+
+export type IdentifierCaseStyle = "camel" | "pascal" | "snake" | "constant" | "kebab";
+
+/**
+ * 变量与标识符命名法智能互转与规整引擎 (convertIdentifierNamingStyle)
+ */
+export function convertIdentifierNamingStyle(
+    text: string,
+    targetStyle: IdentifierCaseStyle = "camel",
+    options: {preserveAffixes?: boolean} = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+
+    const transformSingle = (token: string): string => {
+        if (!token.trim()) return token;
+        let prefix = "";
+        let suffix = "";
+        let core = token;
+
+        if (options.preserveAffixes !== false) {
+            const leadingMatch = core.match(/^([_$-]+)/);
+            if (leadingMatch) {
+                prefix = leadingMatch[1]!;
+                core = core.slice(prefix.length);
+            }
+            const trailingMatch = core.match(/([_$-]+)$/);
+            if (trailingMatch) {
+                suffix = trailingMatch[1]!;
+                core = core.slice(0, -suffix.length);
+            }
+        }
+
+        if (!core) return token;
+
+        const words = core
+            .replace(/[-_]+/g, " ")
+            .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+            .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+            .split(/\s+/)
+            .filter(Boolean);
+
+        if (words.length === 0) return token;
+
+        let result = "";
+        switch (targetStyle) {
+            case "snake":
+                result = words.map((w) => w.toLowerCase()).join("_");
+                break;
+            case "constant":
+                result = words.map((w) => w.toUpperCase()).join("_");
+                break;
+            case "kebab":
+                result = words.map((w) => w.toLowerCase()).join("-");
+                break;
+            case "pascal":
+                result = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join("");
+                break;
+            case "camel":
+            default:
+                result = words.map((w, idx) => {
+                    const lower = w.toLowerCase();
+                    if (idx === 0) return lower;
+                    return lower.charAt(0).toUpperCase() + lower.slice(1);
+                }).join("");
+                break;
+        }
+
+        return prefix + result + suffix;
+    };
+
+    return lines.map((line) => {
+        const indentMatch = line.match(/^(\s*)(.*)$/);
+        if (!indentMatch) return transformSingle(line);
+        const [, indent, rest] = indentMatch;
+        if (!rest) return line;
+        return indent! + transformSingle(rest!);
+    }).join("\n");
+}
+
+export interface NumericSequenceOptions {
+    step?: number;
+    delimiter?: string;
+    padWidth?: number;
+    padChar?: string;
+    prefix?: string;
+    suffix?: string;
+    limit?: number;
+}
+
+/**
+ * 数字区间序列快速生成引擎 (generateNumericSequence)
+ */
+export function generateNumericSequence(
+    start: number,
+    end: number,
+    options: NumericSequenceOptions = {},
+): string {
+    const s = Math.trunc(start);
+    const e = Math.trunc(end);
+    let step = options.step !== undefined ? Math.trunc(options.step) : (s <= e ? 1 : -1);
+    if (step === 0) step = s <= e ? 1 : -1;
+    if ((s < e && step < 0) || (s > e && step > 0)) {
+        step = -step;
+    }
+
+    const delimiter = options.delimiter !== undefined ? options.delimiter : ", ";
+    const padWidth = options.padWidth || 0;
+    const padChar = options.padChar && options.padChar.length > 0 ? options.padChar.charAt(0) : "0";
+    const prefix = options.prefix || "";
+    const suffix = options.suffix || "";
+    const limit = Math.min(Math.max(1, options.limit || 500), 2000);
+
+    const items: string[] = [];
+    let cur = s;
+    let count = 0;
+
+    if (step > 0) {
+        while (cur <= e && count < limit) {
+            let numStr = String(cur);
+            if (padWidth > 0 && numStr.length < padWidth) {
+                numStr = padChar.repeat(padWidth - numStr.length) + numStr;
+            }
+            items.push(prefix + numStr + suffix);
+            cur += step;
+            count++;
+        }
+    } else {
+        while (cur >= e && count < limit) {
+            let numStr = String(cur);
+            if (padWidth > 0 && numStr.length < padWidth) {
+                numStr = padChar.repeat(padWidth - numStr.length) + numStr;
+            }
+            items.push(prefix + numStr + suffix);
+            cur += step;
+            count++;
+        }
+    }
+
+    return items.join(delimiter);
+}
+
+/**
+ * Markdown 表格转 CSV / TSV 格式数据导出转换引擎 (markdownTableToDelimited)
+ */
+export function markdownTableToDelimited(
+    markdownTable: string,
+    format: "csv" | "tsv" = "csv",
+): string {
+    if (!markdownTable || typeof markdownTable !== "string") return markdownTable ?? "";
+    const lines = markdownTable.split("\n");
+    const resultRows: string[] = [];
+    const isTsv = format === "tsv";
+
+    const escapeCsvCell = (val: string): string => {
+        let cell = val.trim();
+        cell = cell.replace(/\\\|/g, "|");
+        if (isTsv) {
+            return cell.replace(/\t/g, " ");
+        }
+        if (cell.includes(",") || cell.includes('"') || cell.includes("\n")) {
+            return `"${cell.replace(/"/g, '""')}"`;
+        }
+        return cell;
+    };
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.startsWith("|") && !line.includes("|")) continue;
+
+        // 跳过分隔线行（如 | --- | :---: | ---: |）
+        if (/^\|?\s*[-:]+\s*\|/.test(line) && /^[\s|:-]+$/.test(line)) {
+            continue;
+        }
+
+        let content = line;
+        if (content.startsWith("|")) content = content.slice(1);
+        if (content.endsWith("|")) content = content.slice(0, -1);
+
+        const cells = content.split(/(?<!\\)\|/).map(escapeCsvCell);
+        if (cells.length > 0) {
+            resultRows.push(cells.join(isTsv ? "\t" : ","));
+        }
+    }
+
+    if (resultRows.length === 0) return markdownTable;
+    return resultRows.join("\n");
+}
