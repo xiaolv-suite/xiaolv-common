@@ -119,16 +119,26 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.29] — 2026-10-28 (Latest)
+### [v0.10.30] — 2026-10-28 (Latest)
 
-Multi-line column extraction, weighted random choice, and English noun pluralization:
-- **Multi-line Column Extraction (`extractColumnFromLines`)**: Pure function to extract specified column (1-based) across multi-line text separated by tabs, commas, or spaces.
-- **Weighted Random Choice (`pickWeightedOption`) & `{{xlc:choose}}` Macro**: Supports relative weight syntax (e.g. `VIP:70, Standard:30`) with weighted roulette selection. Dynamic macro `{{xlc:choose|...}}` added.
-- **English Noun Pluralization (`pluralizeText`)**: Bidirectional conversion between singular and plural forms supporting irregular nouns and standard suffix rules.
-- **Quality Gates**: Unit test suite expanded to 870/870 passing tests with verified negative tests.
+Multi-line table transposition, number to English words, and contraction expansion:
+- **Table Matrix Transposition (`transposeMatrixText`)**: Pure function to transpose table rows and columns across multi-line text separated by tabs, commas, or pipes.
+- **Number to English Words (`numberToEnglishWords`) & `{{xlc:words:en}}` Macro**: Converts integer numbers into natural English words (e.g. `42` -> `forty-two`, `100` -> `one hundred`). Dynamic macro `{{xlc:words:en|...}}` added.
+- **English Contractions Expansion (`expandEnglishContractions`)**: Expands informal spoken contractions into formal written word forms (e.g. `don't` -> `do not`, `can't` -> `cannot`, `I'm` -> `I am`).
+- **Quality Gates**: Unit test suite expanded to 874/874 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.28)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.29)</b></summary>
+
+#### [v0.10.29] — 2026-10-28
+- Multi-line column extraction (`extractColumnFromLines`).
+- Weighted random choice (`pickWeightedOption`) & `{{xlc:choose}}` macro.
+- English noun pluralization (`pluralizeText`).
+
+#### [v0.10.28] — 2026-10-28
+- Multi-line numeric lines summary (`sumNumericLines`).
+- Chinese lunar year & zodiac calculator (`getChineseZodiacAndStemBranch`) and `{{xlc:lunar:year}}` macro.
+- Repeated phrases extraction (`extractRepeatedPhrases`).
 
 #### [v0.10.28] — 2026-10-28
 - Multi-line numeric lines summary (`sumNumericLines`).

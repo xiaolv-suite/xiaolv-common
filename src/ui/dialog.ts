@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3696,7 +3696,33 @@ export class CommonSearchDialog {
                             await this.deps.copyProviderPayload(col1);
                             this.deps.notify?.("info", "已提取多行第 1 列数据并复制");
                         });
+                        addSilent("🔄", "多行多列表格行列转置并复制", async () => {
+                            const raw = entry.content || await this.deps.preview(entry.id) || "";
+                            const transposed = transposeMatrixText(raw);
+                            await this.deps.copyProviderPayload(transposed);
+                            this.deps.notify?.("info", "已行列转置并复制");
+                        });
                     }
+                }
+                if (entry.content && /^[+-]?\d{1,12}$/.test(entry.content.trim())) {
+                    addSilent("🔤", "数字转英文拼写单词并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const words = numberToEnglishWords(raw.trim());
+                        if (words) {
+                            await this.deps.copyProviderPayload(words);
+                            this.deps.notify?.("info", `英文拼写：${words}`);
+                        }
+                    });
+                }
+                if (entry.content && /['’]/.test(entry.content) && /[a-zA-Z]/.test(entry.content)) {
+                    addSilent("📝", "英文日常缩写展开为正式词态并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = expandEnglishContractions(raw);
+                        if (res.expandedCount > 0) {
+                            await this.deps.copyProviderPayload(res.result);
+                            this.deps.notify?.("info", `已展开 ${res.expandedCount} 处英文缩写并复制`);
+                        }
+                    });
                 }
                 if (entry.content && !entry.content.includes("\n") && /^[a-zA-Z]+$/.test(entry.content.trim())) {
                     addSilent("🔤", "单词转复数 (Plural) 并复制", async () => {

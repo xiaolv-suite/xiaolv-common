@@ -3057,3 +3057,176 @@ export function pluralizeText(word: string, mode: "plural" | "singular" = "plura
     }
     return result;
 }
+
+/**
+ * 多行多列表格行列转置 (transposeMatrixText)
+ * 将横向行转为纵向列，纵向转为横向
+ */
+export function transposeMatrixText(
+    text: string,
+    delimiter?: string | RegExp,
+    joinDelimiter = "\t",
+): string {
+    if (!text || typeof text !== "string") return "";
+    const delim = delimiter !== undefined ? delimiter : /[\t,，|；;]+/;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return "";
+
+    const matrix = lines.map((l) => l.split(delim).map((c) => c.trim()));
+    const maxCols = Math.max(...matrix.map((r) => r.length));
+    if (maxCols === 0) return "";
+
+    const transposed: string[][] = [];
+    for (let c = 0; c < maxCols; c++) {
+        const row: string[] = [];
+        for (let r = 0; r < matrix.length; r++) {
+            row.push(matrix[r]![c] ?? "");
+        }
+        transposed.push(row);
+    }
+
+    return transposed.map((r) => r.join(joinDelimiter)).join("\n");
+}
+
+const ONES = [
+    "", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+];
+
+const TENS = [
+    "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+];
+
+function helperThreeDigits(num: number): string {
+    let res = "";
+    const hundred = Math.floor(num / 100);
+    const rest = num % 100;
+
+    if (hundred > 0) {
+        res += `${ONES[hundred]} hundred`;
+        if (rest > 0) res += " ";
+    }
+
+    if (rest > 0) {
+        if (rest < 20) {
+            res += ONES[rest];
+        } else {
+            const ten = Math.floor(rest / 10);
+            const one = rest % 10;
+            res += TENS[ten];
+            if (one > 0) res += `-${ONES[one]}`;
+        }
+    }
+
+    return res;
+}
+
+/**
+ * 将整数或数字字符串转换为英文单词拼写 (numberToEnglishWords)
+ * 如 42 -> "forty-two", 1024 -> "one thousand twenty-four"
+ */
+export function numberToEnglishWords(numOrStr: number | string): string {
+    if (numOrStr === undefined || numOrStr === null || numOrStr === "") return "";
+    const parsed = typeof numOrStr === "number" ? Math.floor(numOrStr) : parseInt(String(numOrStr).trim(), 10);
+    if (!Number.isFinite(parsed)) return String(numOrStr);
+
+    if (parsed === 0) return "zero";
+
+    let n = Math.abs(parsed);
+    const isNegative = parsed < 0;
+
+    const scales = ["", "thousand", "million", "billion"];
+    const chunks: string[] = [];
+    let scaleIdx = 0;
+
+    while (n > 0) {
+        const chunk = n % 1000;
+        if (chunk > 0) {
+            const chunkStr = helperThreeDigits(chunk);
+            const scaleStr = scales[scaleIdx] ? ` ${scales[scaleIdx]}` : "";
+            chunks.unshift(`${chunkStr}${scaleStr}`);
+        }
+        n = Math.floor(n / 1000);
+        scaleIdx++;
+    }
+
+    const words = chunks.join(" ");
+    return isNegative ? `negative ${words}` : words;
+}
+
+export interface ExpandContractionsResult {
+    result: string;
+    expandedCount: number;
+}
+
+const CONTRACTIONS_MAP: Array<[RegExp, string]> = [
+    [/\b([Cc])an['’]t\b/g, "$1annot"],
+    [/\b([Ww])on['’]t\b/g, "$1ill not"],
+    [/\b([Ss])han['’]t\b/g, "$1hall not"],
+    [/\b([Aa])in['’]t\b/g, "$1m not"],
+    [/\b([Ii])['’]m\b/g, "$1 am"],
+    [/\b([Yy])ou['’]re\b/g, "$1ou are"],
+    [/\b([Ww])e['’]re\b/g, "$1e are"],
+    [/\b([Tt])hey['’]re\b/g, "$1hey are"],
+    [/\b([Ii])['’]ve\b/g, "$1 have"],
+    [/\b([Yy])ou['’]ve\b/g, "$1ou have"],
+    [/\b([Ww])e['’]ve\b/g, "$1e have"],
+    [/\b([Tt])hey['’]ve\b/g, "$1hey have"],
+    [/\b([Ii])['’]ll\b/g, "$1 will"],
+    [/\b([Yy])ou['’]ll\b/g, "$1ou will"],
+    [/\b([Hh])e['’]ll\b/g, "$1e will"],
+    [/\b([Ss])he['’]ll\b/g, "$1he will"],
+    [/\b([Ww])e['’]ll\b/g, "$1e will"],
+    [/\b([Tt])hey['’]ll\b/g, "$1hey will"],
+    [/\b([Ii])['’]d\b/g, "$1 would"],
+    [/\b([Yy])ou['’]d\b/g, "$1ou would"],
+    [/\b([Hh])e['’]d\b/g, "$1e would"],
+    [/\b([Ss])he['’]d\b/g, "$1he would"],
+    [/\b([Ww])e['’]d\b/g, "$1e would"],
+    [/\b([Tt])hey['’]d\b/g, "$1hey would"],
+    [/\b([Ii])sn['’]t\b/g, "$1s not"],
+    [/\b([Aa])ren['’]t\b/g, "$1re not"],
+    [/\b([Ww])asn['’]t\b/g, "$1as not"],
+    [/\b([Ww])eren['’]t\b/g, "$1ere not"],
+    [/\b([Hh])asn['’]t\b/g, "$1as not"],
+    [/\b([Hh])aven['’]t\b/g, "$1ave not"],
+    [/\b([Hh])adn['’]t\b/g, "$1ad not"],
+    [/\b([Dd])oesn['’]t\b/g, "$1oes not"],
+    [/\b([Dd])on['’]t\b/g, "$1o not"],
+    [/\b([Dd])idn['’]t\b/g, "$1id not"],
+    [/\b([Ss])houldn['’]t\b/g, "$1hould not"],
+    [/\b([Ww])ouldn['’]t\b/g, "$1ould not"],
+    [/\b([Cc])ouldn['’]t\b/g, "$1ould not"],
+    [/\b([Ii])t['’]s\b/g, "$1t is"],
+    [/\b([Tt])hat['’]s\b/g, "$1hat is"],
+    [/\b([Ww])hat['’]s\b/g, "$1hat is"],
+    [/\b([Tt])here['’]s\b/g, "$1here is"],
+    [/\b([Ll])et['’]s\b/g, "$1et us"],
+];
+
+/**
+ * 展开英文日常缩写为正式公文单词形态 (expandEnglishContractions)
+ * 如 don't -> do not, can't -> cannot, I'm -> I am
+ */
+export function expandEnglishContractions(text: string): ExpandContractionsResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", expandedCount: 0};
+    }
+
+    let res = text;
+    let expandedCount = 0;
+
+    for (const [pattern, replacement] of CONTRACTIONS_MAP) {
+        const matches = res.match(pattern);
+        if (matches && matches.length > 0) {
+            expandedCount += matches.length;
+            res = res.replace(pattern, replacement);
+        }
+    }
+
+    return {
+        result: res,
+        expandedCount,
+    };
+}
