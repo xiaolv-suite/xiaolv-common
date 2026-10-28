@@ -532,3 +532,67 @@ export function cleanClipboardText(text: string, options: ClipboardCleanOptions 
         changeDetails: details,
     };
 }
+
+/**
+ * 多行文本顺序去重 (deduplicateLines)
+ * 保留首个出现项的相对顺序，过滤后续完全相同的行
+ */
+export function deduplicateLines(
+    text: string,
+    options: {caseSensitive?: boolean; trimLines?: boolean; ignoreEmpty?: boolean} = {},
+): {result: string; removedCount: number; originalCount: number; uniqueCount: number} {
+    if (!text || !text.includes("\n")) {
+        return {result: text ?? "", removedCount: 0, originalCount: text ? 1 : 0, uniqueCount: text ? 1 : 0};
+    }
+
+    const caseSensitive = options.caseSensitive !== false;
+    const trimLines = options.trimLines !== false;
+    const ignoreEmpty = options.ignoreEmpty !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const seen = new Set<string>();
+    const uniqueLines: string[] = [];
+    let removedCount = 0;
+
+    for (const rawLine of lines) {
+        const line = trimLines ? rawLine.trim() : rawLine;
+        if (ignoreEmpty && !line) continue;
+
+        const compareKey = caseSensitive ? line : line.toLowerCase();
+        if (seen.has(compareKey)) {
+            removedCount++;
+            continue;
+        }
+
+        seen.add(compareKey);
+        uniqueLines.push(trimLines ? line : rawLine);
+    }
+
+    return {
+        result: uniqueLines.join("\n"),
+        removedCount,
+        originalCount: lines.length,
+        uniqueCount: uniqueLines.length,
+    };
+}
+
+/**
+ * 多行文本自然排序 (sortLines)
+ * 支持拼音/字母升序或降序
+ */
+export function sortLines(
+    text: string,
+    options: {descending?: boolean; locale?: string} = {},
+): {result: string; lineCount: number} {
+    if (!text || !text.includes("\n")) return {result: text ?? "", lineCount: text ? 1 : 0};
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const locale = options.locale || "zh-Hans-CN";
+    const sorted = [...lines].sort((a, b) => {
+        const cmp = a.localeCompare(b, locale, {numeric: true, sensitivity: "base"});
+        return options.descending ? -cmp : cmp;
+    });
+    return {
+        result: sorted.join("\n"),
+        lineCount: lines.length,
+    };
+}

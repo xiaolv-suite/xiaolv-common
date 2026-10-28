@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.8 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Variable fill-in presets (💾 Save as Preset), selection surround mode banner & badge, and 792 passing automated tests.
+> **Released: v0.10.9 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Multi-line order-preserving deduplication (✦ Dedupe Lines), line sorting, and 795 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,15 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.8)
+## This release (v0.10.9)
+
+Multi-Line Deduplication & Natural Line Sorting:
+
+- **Order-Preserving Multi-Line Deduplication (`deduplicateLines`)**: Removes repeated lines while strictly maintaining the original order of the first occurrence. Added "✦ Dedupe Lines" button to forms and action menus.
+- **Natural Line Sorting (`sortLines`)**: Alphanumeric and pinyin natural sorting in ascending and descending order.
+- **Quality Gates**: All 795 unit tests pass.
+
+## Previous release (v0.10.8)
 
 Variable Form Presets & Selection Surround Mode:
 

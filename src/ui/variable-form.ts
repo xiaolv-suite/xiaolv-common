@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
@@ -670,6 +670,22 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(paramBtn);
+
+    const dedupeBtn = document.createElement("button");
+    dedupeBtn.type = "button";
+    dedupeBtn.className = "xlc-varbtn xlc-btn-ghost";
+    dedupeBtn.dataset.xlcControl = "capture.format.dedupe-lines";
+    dedupeBtn.textContent = "✦ 行去重";
+    dedupeBtn.title = "对多行文本顺序去重，剔除重复行并保留首次出现的相对顺序";
+    dedupeBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const res = deduplicateLines(el.value);
+        if (res.removedCount > 0) {
+            el.value = res.result;
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(dedupeBtn);
 
     return bar;
 }
