@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Current: v0.10.12 (2026-10-28 Local Ready)** · Casing conversion tools (camelCase/snake_case), form formatting tools, and 802 passing automated tests.
+> **Current: v0.10.13 (2026-10-28 Local Ready)** · Instant math expression evaluation, calculator sniffer, and 805 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,16 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.12)
+## This release (v0.10.13)
+
+Instant Calculator & Expression Evaluation:
+
+- **Instant Calculator Sniffer**: Typing math expressions in search bar (e.g. `=100*1.13` or `500 * 0.85`) instantly highlights calculated result on top; Enter to insert, Ctrl+Enter to copy.
+- **Action Menu Math Evaluation**: Compute math expressions from snippet text directly.
+- **Snippet Math Macro**: Added `{{xlc:calc:100*1.13}}` to form tools.
+- **Quality Gates**: All 805 unit tests pass.
+
+## Previous release (v0.10.12)
 
 Casing Conversion Engine & Form Tools:
 

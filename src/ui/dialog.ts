@@ -27,6 +27,7 @@ import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
 import {renderWechatArticleHtml, writeRichClipboard} from "../model/clipboard";
 import {transformCase} from "../model/placeholders";
+import {evaluateMathExpression} from "../model/calculator";
 
 import {AdjacentBlocksContext} from "../service/omni-search";
 
@@ -1484,6 +1485,32 @@ export class CommonSearchDialog {
                         }
                     } catch {
                         // 级联失败安全静默，绝不破坏常用库主结果
+                    }
+                }
+
+                // 算式求值嗅探：若输入包含明确等号或数学运算符，置顶呈现即时计算结果行
+                const isExplicitCalc = trimmedQuery.startsWith("=") || /^(?:calc|计算)[:：]\s*/i.test(trimmedQuery);
+                const hasMathOp = /[+\-*/%^]/.test(trimmedQuery) && /\d/.test(trimmedQuery);
+                if (isExplicitCalc || hasMathOp) {
+                    const mathVal = evaluateMathExpression(trimmedQuery);
+                    if (mathVal !== null && mathVal !== trimmedQuery) {
+                        const calcEntry: SearchEntry = {
+                            id: "xlc-virtual-calc",
+                            blockId: "",
+                            libraryDocId: "",
+                            title: `🧮 算式求值: ${mathVal}`,
+                            content: mathVal,
+                            summary: `${trimmedQuery.replace(/^=/, "")} = ${mathVal}`,
+                            itemType: "text",
+                            category: "计算器",
+                            tags: ["计算器", "算式求值"],
+                            alias: "",
+                            varCount: 0,
+                            createdAt: Date.now(),
+                            updatedAt: Date.now(),
+                        };
+                        this.results.unshift(calcEntry);
+                        total++;
                     }
                 }
             }
@@ -3427,6 +3454,15 @@ export class CommonSearchDialog {
                         addSilent("🔤", `转下划线 (snake_case) 并复制: ${snake}`, async () => {
                             await this.deps.copyProviderPayload(snake);
                             this.deps.notify?.("info", `已转下划线并复制: ${snake}`);
+                        });
+                    }
+                }
+                if (contentText && !contentText.includes("\n") && /[+\-*/%^]/.test(contentText) && /\d/.test(contentText)) {
+                    const calcVal = evaluateMathExpression(contentText);
+                    if (calcVal !== null && calcVal !== contentText) {
+                        addSilent("🧮", `算式求值并复制 (= ${calcVal})`, async () => {
+                            await this.deps.copyProviderPayload(calcVal);
+                            this.deps.notify?.("info", `已计算并复制结果: ${calcVal}`);
                         });
                     }
                 }

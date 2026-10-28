@@ -242,12 +242,20 @@ export function formatCalculationResult(num: number): string {
 
 /**
  * 纯函数安全求值数学表达式
- * @param expr 表达式，如 "100 * 1.13"、"round(50 / 3, 2)"
+ * @param expr 表达式，如 "=100 * 1.13"、"round(50 / 3, 2)"、"1,000 * 2.5"
  * @returns 格式化后的计算结果字符串；非法或除以零返回 null（保持原文）
  */
 export function evaluateMathExpression(expr: string): string | null {
     if (!expr || !expr.trim()) return null;
-    const tokens = tokenize(expr);
+    let clean = expr.trim();
+    if (clean.startsWith("=")) clean = clean.slice(1).trim();
+    else if (/^(?:calc|计算)[:：]\s*/i.test(clean)) clean = clean.replace(/^(?:calc|计算)[:：]\s*/i, "");
+    if (!clean) return null;
+
+    // 清洗千分位数字逗号（如 1,000 -> 1000），避免干扰参数逗号
+    clean = clean.replace(/(\d),(\d{3})(?=\D|$)/g, "$1$2");
+
+    const tokens = tokenize(clean);
     if (!tokens || tokens.length <= 1) return null;
 
     const parser = new MathParser(tokens);
