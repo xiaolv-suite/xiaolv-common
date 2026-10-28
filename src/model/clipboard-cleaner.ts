@@ -6962,3 +6962,122 @@ export function sortLinesByVisualWidth(
 
     return mapped.map((m) => m.line).join("\n");
 }
+
+export type TaskInvertMode = "invert" | "check_all" | "uncheck_all";
+
+/**
+ * Markdown 任务复选框状态智能反转引擎 (invertTaskStatus)
+ */
+export function invertTaskStatus(
+    text: string,
+    mode: TaskInvertMode = "invert",
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const taskRegex = /^(\s*(?:[-*+]|\d+[.)]))\s+\[([ xX])\](\s+.*)$/;
+
+    return lines.map((line) => {
+        const match = line.match(taskRegex);
+        if (!match) return line;
+
+        const [, prefix, state, rest] = match;
+        const isDone = state!.toLowerCase() === "x";
+
+        let nextState = " ";
+        if (mode === "check_all") {
+            nextState = "x";
+        } else if (mode === "uncheck_all") {
+            nextState = " ";
+        } else {
+            nextState = isDone ? " " : "x";
+        }
+
+        return `${prefix} [${nextState}]${rest}`;
+    }).join("\n");
+}
+
+export interface CenterTextOptions {
+    padChar?: string;
+    clipIfExceed?: boolean;
+}
+
+/**
+ * 纯文本字宽居中对齐与填充引擎 (centerText)
+ * 精准支持 CJK 中文字符双倍字宽计算与自定义填充符
+ */
+export function centerText(
+    text: string,
+    width = 20,
+    options: CenterTextOptions = {},
+): string {
+    if (text === undefined || text === null) return "";
+    const str = String(text);
+    const targetWidth = Math.max(1, width);
+    const padChar = options.padChar && options.padChar.length > 0 ? options.padChar.charAt(0) : " ";
+
+    const getCharWidth = (ch: string) => {
+        const code = ch.charCodeAt(0);
+        return (code >= 0x4e00 && code <= 0x9fa5) || code > 0xff ? 2 : 1;
+    };
+
+    const getStrWidth = (s: string) => {
+        let w = 0;
+        for (const c of s) w += getCharWidth(c);
+        return w;
+    };
+
+    const curWidth = getStrWidth(str);
+    if (curWidth >= targetWidth) {
+        return str;
+    }
+
+    const diff = targetWidth - curWidth;
+    const leftPad = Math.floor(diff / 2);
+    const rightPad = diff - leftPad;
+
+    return padChar.repeat(leftPad) + str + padChar.repeat(rightPad);
+}
+
+export interface ConvertDelimiterOptions {
+    sourceDelimiter?: string;
+    trimItems?: boolean;
+}
+
+/**
+ * 列表分隔符智能嗅探与批量互转引擎 (convertListDelimiter)
+ */
+export function convertListDelimiter(
+    text: string,
+    targetDelimiter = "\n",
+    options: ConvertDelimiterOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const trim = options.trimItems !== false;
+
+    let srcDelim = options.sourceDelimiter;
+    if (!srcDelim) {
+        const commaCount = (text.match(/,/g) || []).length;
+        const zhCommaCount = (text.match(/，/g) || []).length;
+        const semicolonCount = (text.match(/;/g) || []).length;
+        const zhSemicolonCount = (text.match(/；/g) || []).length;
+        const pipeCount = (text.match(/\|/g) || []).length;
+        const newlineCount = (text.match(/\n/g) || []).length;
+
+        const counts = [
+            {delim: "\n", c: newlineCount},
+            {delim: ",", c: commaCount},
+            {delim: "，", c: zhCommaCount},
+            {delim: ";", c: semicolonCount},
+            {delim: "；", c: zhSemicolonCount},
+            {delim: "|", c: pipeCount},
+        ];
+
+        counts.sort((a, b) => b.c - a.c);
+        srcDelim = counts[0]!.c > 0 ? counts[0]!.delim : "\n";
+    }
+
+    const items = text.split(srcDelim);
+    const processed = items.map((item) => trim ? item.trim() : item).filter((item) => item.length > 0);
+
+    return processed.join(targetDelimiter);
+}

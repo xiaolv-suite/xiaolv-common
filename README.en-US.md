@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.54] — 2026-10-29 (Latest)
+### [v0.10.55] — 2026-10-29 (Latest)
 
-Markdown list pinyin/alphabetical sorting, character sequence repeat macro, and visual width sorting:
-- **Markdown List Sorting (`sortMarkdownList`)**: Pure function sorting unordered or ordered list items by Chinese Pinyin or alphabetical order, carrying nested sub-lists and renumbering ordered items; wired to action menu and variable form.
-- **Character Sequence Repeat (`repeatText`) & `{{xlc:repeat}}` Macro**: Pure function repeating characters/words for dividers or ASCII borders with delimiters and a 2000-character safety guard; expanded dynamic macro `{{xlc:repeat|=|20}}`, `{{xlc:repeat|*|5}}`, `{{xlc:repeat|8|#}}`; wired to action menu and variable form.
-- **Visual Width Sorting (`sortLinesByVisualWidth`)**: Pure function accurately measuring CJK double-width visual length and sorting lines in ascending or descending order; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 966/966 passing tests with verified negative tests.
+Markdown task status inversion, visual width centering macro, and delimiter conversion:
+- **Markdown Task Status Inversion (`invertTaskStatus`)**: Pure function inverting checkbox states (`[ ]` <-> `[x]`), checking all, or unchecking all across multi-line lists while preserving non-task text; wired to action menu and variable form.
+- **Visual Width Centering (`centerText`) & `{{xlc:center}}` Macro**: Pure function centering text within specified visual width with CJK double-width calculation and custom padding characters; expanded dynamic macro `{{xlc:center|15|TITLE}}`, `{{xlc:center|15|TITLE|=}}`; wired to action menu and variable form.
+- **List Delimiter Conversion (`convertListDelimiter`)**: Pure function automatically detecting dominant delimiters (newlines, commas, semicolons, pipes) and converting lists between inline and multi-line formats; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 969/969 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.53)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.54)</b></summary>
+
+#### [v0.10.54] — 2026-10-29
+- Markdown list pinyin/alphabetical sorting (`sortMarkdownList`).
+- Character sequence repeat (`repeatText`) & `{{xlc:repeat}}` macro.
+- Visual width sorting (`sortLinesByVisualWidth`).
 
 #### [v0.10.53] — 2026-10-29
 - Code fence language tagging (`setMarkdownCodeFenceLang`).
