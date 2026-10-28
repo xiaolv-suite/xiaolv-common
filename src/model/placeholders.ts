@@ -39,11 +39,11 @@ import {evaluateMathExpression} from "./calculator";
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|title|path|doc|random|uuid|id|calc|selection|timestamp|week|greeting|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|calc|selection|timestamp|week|greeting|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -570,6 +570,15 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "time": return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
         case "datetime": return `${renderDate(now)} ${renderPlaceholder("time", now)}`;
         case "weekday": return WEEKDAYS_ZH[now.getDay()] ?? "";
+        case "year": return String(now.getFullYear());
+        case "quarter": {
+            const q = Math.floor(now.getMonth() / 3) + 1;
+            return `Q${q}`;
+        }
+        case "month": return pad(now.getMonth() + 1);
+        case "day": return pad(now.getDate());
+        case "hour": return pad(now.getHours());
+        case "minute": return pad(now.getMinutes());
         case "title":
         case "doc": return doc?.title ?? "";
         case "path": return doc?.path ?? "";
@@ -645,6 +654,32 @@ export function resolvePlaceholder(
     if (kind === "time") return arg ? resolveTimeArg(now, arg) : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
     if (kind === "datetime") return arg ? resolveDatetimeArg(now, arg) : `${renderDate(now)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
     if (kind === "weekday") return arg ? resolveWeekdayArg(now, arg) : (WEEKDAYS_ZH[now.getDay()] ?? "");
+    if (kind === "year") {
+        if (arg?.trim().toLowerCase() === "short" || arg?.trim() === "2") return String(now.getFullYear()).slice(-2);
+        return String(now.getFullYear());
+    }
+    if (kind === "quarter") {
+        const q = Math.floor(now.getMonth() / 3) + 1;
+        const cleanArg = arg?.trim().toLowerCase();
+        if (cleanArg === "zh" || cleanArg === "cn") {
+            const zhNum = ["一", "二", "三", "四"][q - 1];
+            return `第${zhNum}季度`;
+        }
+        if (cleanArg === "full") return `${now.getFullYear()}Q${q}`;
+        return `Q${q}`;
+    }
+    if (kind === "month") {
+        const cleanArg = arg?.trim().toLowerCase();
+        if (cleanArg === "zh" || cleanArg === "cn") return `${now.getMonth() + 1}月`;
+        return pad(now.getMonth() + 1);
+    }
+    if (kind === "day") {
+        const cleanArg = arg?.trim().toLowerCase();
+        if (cleanArg === "zh" || cleanArg === "cn") return `${now.getDate()}日`;
+        return pad(now.getDate());
+    }
+    if (kind === "hour") return pad(now.getHours());
+    if (kind === "minute") return pad(now.getMinutes());
     if (kind === "uuid") return arg ? resolveUuidArg(arg) : generateUuidV4();
     if (kind === "id") return arg ? resolveIdArg(arg) : generateShortId(8, false);
     if (kind === "case") return arg ? resolveCaseArg(arg, subStyle) : null;

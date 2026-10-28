@@ -3353,6 +3353,20 @@ export class CommonSearchDialog {
                 addSilent("↗", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
                 addSilent("✎", this.deps.t("edit"), () => this.deps.editItem(entry.id));
                 addSilent("⧉", this.deps.t("duplicateItem"), () => this.deps.duplicateItem(entry.id));
+                const rawContent = (entry.content || "").trim();
+                const targetUrl = entry.url || (/^https?:\/\/\S+$/i.test(rawContent) ? rawContent : "");
+                if (targetUrl) {
+                    addSilent("🌐", "打开网页外链", async () => {
+                        window.open(targetUrl, "_blank");
+                        this.deps.notify?.("info", "已打开网页外链");
+                    });
+                    const mdLinkTitle = (entry.title || "链接").replace(/[[\]]/g, "");
+                    const mdLink = `[${mdLinkTitle}](${targetUrl})`;
+                    addSilent("🔗", `复制为 Markdown 链接: ${mdLinkTitle}`, async () => {
+                        await this.deps.copyProviderPayload(mdLink);
+                        this.deps.notify?.("info", `已复制 Markdown 链接: ${mdLink}`);
+                    });
+                }
                 addSilent("📦", this.deps.t("copyCompactBundle"), async () => {
                     const raw = entry.content || await this.deps.preview(entry.id) || "";
                     const kramdowns = new Map([[entry.id, raw]]);

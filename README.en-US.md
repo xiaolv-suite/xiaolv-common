@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Current: v0.10.13 (2026-10-28 Local Ready)** · Instant math expression evaluation, calculator sniffer, and 805 passing automated tests.
+> **Current: v0.10.14 (2026-10-28 Local Ready)** · Shorthand date/quarter macros, URL Markdown link copy, and 808 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,16 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.13)
+## This release (v0.10.14)
+
+Shorthand Time Macros & URL Markdown Link Actions:
+
+- **Shorthand Time Macros**: Added `{{xlc:year}}`, `{{xlc:quarter}}`, `{{xlc:month}}`, `{{xlc:day}}`, `{{xlc:hour}}`, `{{xlc:minute}}`.
+- **URL Markdown Link Copying**: Action menu supports copying URL entries directly as `[Title](URL)` Markdown links or opening in browser.
+- **Form Tool Macro Buttons**: Added `{{xlc:year}}` and `{{xlc:quarter}}` buttons to form toolbars.
+- **Quality Gates**: All 808 unit tests pass.
+
+## Previous release (v0.10.13)
 
 Instant Calculator & Expression Evaluation:
 
