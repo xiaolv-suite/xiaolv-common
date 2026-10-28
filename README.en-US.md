@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Released: v0.10.5 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Single-item share code generation, search-box share bundle detection & import, and 785 passing automated tests.
+> **Released: v0.10.6 (2026-10-28)** · [Download the latest release](https://github.com/ai68298100/xiaolv-common/releases/latest) · Independent notebook library mode fix (mode: notebook), multi-doc indexing, and 787 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,14 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.5)
+## This release (v0.10.6)
+
+Independent Notebook Library Mode Alignment (Issue #1 Experience Loop):
+
+- **Independent Notebook Mode Correction (`mode: notebook`)**: Fixed legacy issue where creating an independent notebook incorrectly saved the library mode as `doc`. Now properly persists `mode: "notebook"` and `notebookIds`, ensuring all sub-documents created under the notebook are automatically scanned and indexed.
+- **Quality Gates**: All 787 unit tests pass.
+
+## Previous release (v0.10.5)
 
 Single-Item Compact Share Code & Search Ingestion:
 

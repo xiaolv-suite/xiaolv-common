@@ -1234,8 +1234,8 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
                     : "";
                 ctx.applyConfig({
                     configVersion: CONFIG_VERSION,
-                    mode: "doc",
-                    notebookIds: [],
+                    mode: mode === "new-notebook" ? "notebook" : "doc",
+                    notebookIds: mode === "new-notebook" && createdNotebookId ? [createdNotebookId] : [],
                     containerDocIds: [docId],
                     createdDocIds: [docId],
                     ...(createdNotebookId ? {createdNotebookIds: [createdNotebookId]} : {}),
