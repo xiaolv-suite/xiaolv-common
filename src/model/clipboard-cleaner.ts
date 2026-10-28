@@ -1412,3 +1412,168 @@ export function affixLines(text: string, options: AffixLinesOptions = {}): Affix
         changedCount,
     };
 }
+
+const MINOR_WORDS = new Set([
+    "a", "an", "the", "in", "on", "of", "for", "and", "or", "but", "to", "with", "at", "by", "from", "as",
+]);
+
+export interface TitleCaseOptions {
+    /** 转换样式：title (标准英文标题), sentence (句首首字母大写) */
+    style?: "title" | "sentence";
+    /** 是否保护冠词与短介词在非首尾词时小写（默认 true） */
+    protectMinorWords?: boolean;
+}
+
+/**
+ * 多行文本英文标题化与首字母大小写规整 (titleCaseLines)
+ */
+export function titleCaseLines(text: string, options: TitleCaseOptions = {}): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const style = options.style || "title";
+    const protect = options.protectMinorWords !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const converted = lines.map((line) => {
+        if (!line.trim()) return line;
+
+        if (style === "sentence") {
+            // 句首大写：找到第一个英文字母大写
+            let found = false;
+            return line.replace(/[a-zA-Z]/, (ch) => {
+                if (!found) {
+                    found = true;
+                    return ch.toUpperCase();
+                }
+                return ch;
+            });
+        }
+
+        // title 模式：按单词边界切分
+        const parts = line.split(/(\s+|[-_/])/);
+        const wordIndices: number[] = [];
+        for (let i = 0; i < parts.length; i++) {
+            if (/[a-zA-Z0-9]/.test(parts[i]!)) {
+                wordIndices.push(i);
+            }
+        }
+
+        if (wordIndices.length === 0) return line;
+
+        const firstIdx = wordIndices[0]!;
+        const lastIdx = wordIndices[wordIndices.length - 1]!;
+
+        for (const idx of wordIndices) {
+            const rawWord = parts[idx]!;
+            const lower = rawWord.toLowerCase();
+
+            // 若首尾词或非小词，首字母大写
+            if (idx === firstIdx || idx === lastIdx || !protect || !MINOR_WORDS.has(lower)) {
+                parts[idx] = lower.charAt(0).toUpperCase() + lower.slice(1);
+            } else {
+                parts[idx] = lower;
+            }
+        }
+
+        return parts.join("");
+    });
+
+    return converted.join("\n");
+}
+
+/**
+ * 多行文本行顺序倒序反转 (reverseLines)
+ */
+export function reverseLines(text: string): string {
+    if (!text || !text.includes("\n")) return text ?? "";
+    return text.replace(/\r\n?/g, "\n").split("\n").reverse().join("\n");
+}
+
+export interface SortLinesByLengthOptions {
+    /** 是否降序（默认 false，升序从短到长；true 为从长到短） */
+    descending?: boolean;
+    /** 是否在计算长度时剔除首尾空白（默认 false） */
+    trim?: boolean;
+}
+
+/**
+ * 多行文本按行字符长度排序 (sortLinesByLength)
+ */
+export function sortLinesByLength(text: string, options: SortLinesByLengthOptions = {}): string {
+    if (!text || !text.includes("\n")) return text ?? "";
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const desc = options.descending === true;
+    const trim = options.trim === true;
+
+    return lines.slice().sort((a, b) => {
+        const lenA = (trim ? a.trim() : a).length;
+        const lenB = (trim ? b.trim() : b).length;
+        return desc ? lenB - lenA : lenA - lenB;
+    }).join("\n");
+}
+
+export type NumberLineFormat = "decimal" | "padded" | "bracket" | "circled";
+
+export interface NumberLinesOptions {
+    /** 起始序号（默认 1） */
+    startFrom?: number;
+    /** 编号格式：decimal (1. ), padded (01. ), bracket ([1] ), circled (① ) */
+    format?: NumberLineFormat;
+    /** 分隔符（默认 ". "，bracket/circled 时有专属格式） */
+    separator?: string;
+    /** 是否忽略空行（默认 true，空行不加序号且不计数） */
+    ignoreEmpty?: boolean;
+}
+
+export interface NumberLinesResult {
+    result: string;
+    lineCount: number;
+    numberedCount: number;
+}
+
+/**
+ * 批量为多行文本添加行编号 (numberLines)
+ */
+export function numberLines(text: string, options: NumberLinesOptions = {}): NumberLinesResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", lineCount: 0, numberedCount: 0};
+    }
+
+    const startFrom = Math.max(0, options.startFrom ?? 1);
+    const format = options.format || "decimal";
+    const sep = options.separator !== undefined ? options.separator : ". ";
+    const ignoreEmpty = options.ignoreEmpty !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let currentNum = startFrom;
+    let numberedCount = 0;
+
+    const processed = lines.map((line) => {
+        if (ignoreEmpty && line.trim().length === 0) {
+            return line;
+        }
+
+        let prefix = "";
+        if (format === "padded") {
+            const padStr = String(currentNum).padStart(2, "0");
+            prefix = `${padStr}${sep}`;
+        } else if (format === "bracket") {
+            prefix = `[${currentNum}] `;
+        } else if (format === "circled") {
+            const digit = CIRCLED_DIGITS[currentNum - 1] || `(${currentNum})`;
+            prefix = `${digit} `;
+        } else {
+            // decimal
+            prefix = `${currentNum}${sep}`;
+        }
+
+        currentNum++;
+        numberedCount++;
+        return `${prefix}${line}`;
+    });
+
+    return {
+        result: processed.join("\n"),
+        lineCount: lines.length,
+        numberedCount,
+    };
+}

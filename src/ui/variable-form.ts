@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -560,6 +560,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "calc", text: "{{xlc:calc:100*1.13}}"},
         {id: "count", text: "{{xlc:count:chars|文本}}"},
         {id: "hash", text: "{{xlc:hash|文本}}"},
+        {id: "number", text: "{{xlc:number:lines|文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1042,6 +1043,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(affixLinesBtn);
+
+    const titleCaseBtn = document.createElement("button");
+    titleCaseBtn.type = "button";
+    titleCaseBtn.className = "xlc-varbtn xlc-btn-ghost";
+    titleCaseBtn.dataset.xlcControl = "capture.format.title-case";
+    titleCaseBtn.textContent = "✦ 英文标题";
+    titleCaseBtn.title = "将选中文本或全文转换为英文标题大小写规范 (Title Case)";
+    titleCaseBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = titleCaseLines(targetText, {style: "title"});
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(titleCaseBtn);
+
+    const reverseLinesBtn = document.createElement("button");
+    reverseLinesBtn.type = "button";
+    reverseLinesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    reverseLinesBtn.dataset.xlcControl = "capture.format.reverse-lines";
+    reverseLinesBtn.textContent = "✦ 多行倒序";
+    reverseLinesBtn.title = "将选中文本或全文的多行行顺序完全反转倒序";
+    reverseLinesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = reverseLines(targetText);
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(reverseLinesBtn);
+
+    const numberLinesBtn = document.createElement("button");
+    numberLinesBtn.type = "button";
+    numberLinesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    numberLinesBtn.dataset.xlcControl = "capture.format.number-lines";
+    numberLinesBtn.textContent = "✦ 批量编号";
+    numberLinesBtn.title = "为选中文本或全文的多行文本批量添加数字序号 (1. 2. )";
+    numberLinesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = numberLines(targetText, {format: "decimal", ignoreEmpty: true});
+        if (res.numberedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(numberLinesBtn);
 
     return bar;
 }

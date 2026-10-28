@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3596,6 +3596,32 @@ export class CommonSearchDialog {
                             await this.deps.copyProviderPayload(hash);
                             this.deps.notify?.("info", `已计算散列指纹 ${hash} 并复制`);
                         }
+                    });
+                }
+                if (entry.content && entry.content.includes("\n")) {
+                    addSilent("🔤", "英文标题大小写规整 (Title Case) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const formatted = titleCaseLines(raw, {style: "title"});
+                        await this.deps.copyProviderPayload(formatted);
+                        this.deps.notify?.("info", "已规整英文标题大小写并复制");
+                    });
+                    addSilent("↕", "多行倒序 (Reverse Lines) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const reversed = reverseLines(raw);
+                        await this.deps.copyProviderPayload(reversed);
+                        this.deps.notify?.("info", "已反转多行文本顺序并复制");
+                    });
+                    addSilent("🔢", "批量编号多行文本 (1. 2. ) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const numbered = numberLines(raw, {format: "decimal"});
+                        await this.deps.copyProviderPayload(numbered.result);
+                        this.deps.notify?.("info", `已为 ${numbered.numberedCount} 行添加编号并复制`);
+                    });
+                    addSilent("📏", "按行长度升序排列并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const sorted = sortLinesByLength(raw, {descending: false});
+                        await this.deps.copyProviderPayload(sorted);
+                        this.deps.notify?.("info", "已按行长度升序排列并复制");
                     });
                 }
                 const hasVariables = (entry.varCount ?? 0) > 0 || (entry.content || "").includes("{{xlc:");
