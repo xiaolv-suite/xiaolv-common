@@ -4092,3 +4092,190 @@ export function filterMarkdownTable(
 
     return [header, separator, ...passedDataLines].join("\n");
 }
+
+export interface SwapPartsOptions {
+    /** 分隔符（默认自动切分冒号、等号、逗号、分号或短横线箭头 -> ） */
+    delimiter?: string | RegExp;
+    /** 输出连接符（默认同匹配到的分隔符） */
+    outputSeparator?: string;
+    /** 是否修剪前后空白（默认 true） */
+    trimParts?: boolean;
+}
+
+/**
+ * 多行文本两部分位置互换对调引擎 (swapLineParts)
+ * 例如 "key: value" -> "value: key" 或 "A, B" -> "B, A"
+ */
+export function swapLineParts(
+    text: string,
+    delimiterOrOptions?: string | RegExp | SwapPartsOptions,
+    options?: SwapPartsOptions,
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    let opts: SwapPartsOptions = {};
+    if (typeof delimiterOrOptions === "string" || delimiterOrOptions instanceof RegExp) {
+        opts = {...(options || {}), delimiter: delimiterOrOptions};
+    } else if (delimiterOrOptions && typeof delimiterOrOptions === "object") {
+        opts = delimiterOrOptions;
+    }
+
+    const trimParts = opts.trimParts !== false;
+    const delim = opts.delimiter !== undefined ? opts.delimiter : /(:|：|=|->|=>|,|，|;)/;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const swapped = lines.map((line) => {
+        if (!line.trim()) return line;
+
+        let sep = "";
+        let part1 = "";
+        let part2 = "";
+
+        if (typeof delim === "string") {
+            const idx = line.indexOf(delim);
+            if (idx === -1) return line;
+            sep = delim;
+            part1 = line.slice(0, idx);
+            part2 = line.slice(idx + delim.length);
+        } else {
+            const m = line.match(delim);
+            if (!m || m.index === undefined) return line;
+            sep = m[0];
+            part1 = line.slice(0, m.index);
+            part2 = line.slice(m.index + m[0].length);
+        }
+
+        if (trimParts) {
+            part1 = part1.trim();
+            part2 = part2.trim();
+        }
+
+        let outSep = opts.outputSeparator;
+        if (outSep === undefined) {
+            if (sep === ":" || sep === "：") {
+                outSep = sep === "：" ? "：" : ": ";
+            } else if (sep === "=") {
+                outSep = " = ";
+            } else if (sep === "->" || sep === "=>") {
+                outSep = ` ${sep} `;
+            } else if (sep === "," || sep === "，" || sep === ";") {
+                outSep = `${sep} `;
+            } else {
+                outSep = sep.endsWith(" ") ? sep : `${sep} `;
+            }
+        }
+
+        return `${part2}${outSep}${part1}`;
+    });
+
+    return swapped.join("\n");
+}
+
+export interface PathParts {
+    /** 原始完整路径 */
+    raw: string;
+    /** 父目录路径 (不包含尾随斜杠) */
+    dir: string;
+    /** 包含扩展名的完整文件名 (如 auth.service.ts) */
+    filename: string;
+    /** 不带扩展名的基本名 (如 auth.service) */
+    stem: string;
+    /** 扩展名 (不含点号，如 ts) */
+    ext: string;
+}
+
+/**
+ * 文件路径或 URL 组成部分结构化解析引擎 (parsePathParts)
+ */
+export function parsePathParts(pathStr: string): PathParts {
+    if (!pathStr || typeof pathStr !== "string") {
+        return {raw: "", dir: "", filename: "", stem: "", ext: ""};
+    }
+
+    const clean = pathStr.trim().replace(/\\/g, "/");
+    let cleanPath = clean;
+    const queryIdx = cleanPath.indexOf("?");
+    if (queryIdx !== -1) cleanPath = cleanPath.slice(0, queryIdx);
+    const hashIdx = cleanPath.indexOf("#");
+    if (hashIdx !== -1) cleanPath = cleanPath.slice(0, hashIdx);
+
+    const lastSlash = cleanPath.lastIndexOf("/");
+    let dir = "";
+    let filename = cleanPath;
+
+    if (lastSlash !== -1) {
+        dir = cleanPath.slice(0, lastSlash);
+        filename = cleanPath.slice(lastSlash + 1);
+    }
+
+    const lastDot = filename.lastIndexOf(".");
+    let stem = filename;
+    let ext = "";
+
+    if (lastDot > 0) {
+        stem = filename.slice(0, lastDot);
+        ext = filename.slice(lastDot + 1);
+    }
+
+    return {
+        raw: pathStr,
+        dir,
+        filename,
+        stem,
+        ext,
+    };
+}
+
+export interface DedupeCountOptions {
+    /** 是否按出现频次降序排列（默认 true） */
+    sortByCount?: boolean;
+    /** 输出格式模板，支持 {count} 与 {line}（默认 "{line} ({count})"） */
+    formatTemplate?: string;
+    /** 是否修剪行首尾空格（默认 true） */
+    trimLines?: boolean;
+    /** 是否忽略空行（默认 true） */
+    ignoreEmpty?: boolean;
+}
+
+/**
+ * 多行文本去重并输出行出现频次统计引擎 (deduplicateWithCount)
+ */
+export function deduplicateWithCount(text: string, options: DedupeCountOptions = {}): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const sortByCount = options.sortByCount !== false;
+    const tpl = options.formatTemplate || "{line} ({count})";
+    const trimLines = options.trimLines !== false;
+    const ignoreEmpty = options.ignoreEmpty !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const counts = new Map<string, number>();
+    const order: string[] = [];
+
+    for (const rawLine of lines) {
+        const line = trimLines ? rawLine.trim() : rawLine;
+        if (ignoreEmpty && line.length === 0) continue;
+
+        if (!counts.has(line)) {
+            counts.set(line, 1);
+            order.push(line);
+        } else {
+            counts.set(line, (counts.get(line) ?? 1) + 1);
+        }
+    }
+
+    const items = order.map((line) => ({
+        line,
+        count: counts.get(line) ?? 1,
+    }));
+
+    if (sortByCount) {
+        items.sort((a, b) => b.count - a.count);
+    }
+
+    const formatted = items.map((it) => {
+        return tpl
+            .replace(/\{count\}/g, String(it.count))
+            .replace(/\{line\}/g, it.line);
+    });
+
+    return formatted.join("\n");
+}

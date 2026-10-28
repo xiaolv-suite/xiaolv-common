@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -580,6 +580,8 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "match", text: "{{xlc:match|(\\d+)|[$1]|123}}"},
         {id: "valid.email", text: "{{xlc:valid:email|test@example.com}}"},
         {id: "valid.phone", text: "{{xlc:valid:phone|13800000000}}"},
+        {id: "path.name", text: "{{xlc:path:filename}}"},
+        {id: "path.ext", text: "{{xlc:path:ext}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -2196,6 +2198,87 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(verifyFormatBtn);
+
+    const swapPartsBtn = document.createElement("button");
+    swapPartsBtn.type = "button";
+    swapPartsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    swapPartsBtn.dataset.xlcControl = "capture.format.swap-parts";
+    swapPartsBtn.textContent = "✦ 对调前后";
+    swapPartsBtn.title = "将多行按冒号/等号/逗号对调前后位置 (如 A: B -> B: A)";
+    swapPartsBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = swapLineParts(targetText);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(swapPartsBtn);
+
+    const dedupeCountBtn = document.createElement("button");
+    dedupeCountBtn.type = "button";
+    dedupeCountBtn.className = "xlc-varbtn xlc-btn-ghost";
+    dedupeCountBtn.dataset.xlcControl = "capture.format.dedupe-count";
+    dedupeCountBtn.textContent = "✦ 频次去重";
+    dedupeCountBtn.title = "多行文本去重并标注出现频次 (按频次降序)";
+    dedupeCountBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = deduplicateWithCount(targetText);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(dedupeCountBtn);
+
+    const pathPartBtn = document.createElement("button");
+    pathPartBtn.type = "button";
+    pathPartBtn.className = "xlc-varbtn xlc-btn-ghost";
+    pathPartBtn.dataset.xlcControl = "capture.format.path-part";
+    pathPartBtn.textContent = "✦ 提取文件名";
+    pathPartBtn.title = "从选中路径中提取文件名 (包含扩展名)";
+    pathPartBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = (hasSel ? el.value.slice(start, end) : el.value).trim();
+        if (targetText) {
+            const parts = parsePathParts(targetText);
+            const res = parts.filename;
+            if (res && res !== targetText) {
+                if (hasSel) {
+                    el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                    el.setSelectionRange(start, start + res.length);
+                } else {
+                    el.value = res;
+                }
+                el.focus();
+                el.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+        }
+    });
+    bar.appendChild(pathPartBtn);
 
     return bar;
 }

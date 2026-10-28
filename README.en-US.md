@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.35] — 2026-10-29 (Latest)
+### [v0.10.36] — 2026-10-29 (Latest)
 
-Multi-line custom indentation/outdentation, data format validation, and Markdown table column filtering:
-- **Multi-line Indentation/Outdentation Engine (`indentLines`/`outdentLines`)**: Pure function to adjust line indentation (spaces or tabs), skip blank lines, and preserving outline hierarchies; wired to action menu and variable form.
-- **Data Format Validation Engine (`validateFormat`) & `{{xlc:valid}}` Macro**: Pure function supporting email, phone, idcard, ipv4, url, and number format checks; expanded dynamic macro `{{xlc:valid:email|...}}` and `{{xlc:valid|type|val|trueTxt|falseTxt}}`; wired to action menu and variable form.
-- **Markdown Table Column Filter (`filterMarkdownTable`)**: Pure function to filter table rows by column values (keywords, regexes, or custom predicates) while preserving headers and alignment separators; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 894/894 passing tests with verified negative tests.
+Line parts swapping, file path & URL component parsing, and deduplication with frequency counting:
+- **Line Parts Swapping Engine (`swapLineParts`)**: Pure function to swap two parts of delimited lines (e.g., `key: value` -> `value: key` or `A -> B` -> `B -> A`) with custom delimiter handling and trim options; wired to action menu and variable form.
+- **Path & URL Parser (`parsePathParts`) & `{{xlc:path}}` Macro**: Pure function to parse file paths and URLs into `dir`, `filename`, `stem`, and `ext`; expanded macro syntax `{{xlc:path:filename|...}}`, `{{xlc:path:ext|...}}`, `{{xlc:path:stem|...}}` and automatic current document fallback `{{xlc:path:filename}}`; wired to action menu and variable form.
+- **Deduplication with Counts (`deduplicateWithCount`)**: Pure function to deduplicate lines, calculate occurrence counts, and sort descending by frequency; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 898/898 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.34)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.35)</b></summary>
+
+#### [v0.10.35] — 2026-10-29
+- Multi-line custom indentation/outdentation (`indentLines`/`outdentLines`).
+- Data format validation (`validateFormat`) & `{{xlc:valid}}` macro.
+- Markdown table column filter (`filterMarkdownTable`).
 
 #### [v0.10.34] — 2026-10-28
 - Key-value pair extraction (`parseKeyValuePairs`) & `{{xlc:kv}}` macro.
