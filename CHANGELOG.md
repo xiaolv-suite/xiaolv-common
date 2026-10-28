@@ -2,6 +2,16 @@
 
 本文件记录「小驴常用（内测版）」的面向用户的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.10.52] — 2026-10-29
+
+键值对转Markdown表格、英文单复数智能切换宏与多级标题大纲TOC生成。
+
+### 新增与优化
+- **键值对或 JSON 转 Markdown 表格转换引擎 (`keyValueToMarkdownTable`)**：纯函数支持自动解析 YAML、Properties、冒号/等号分隔行或 JSON 对象，自动生成标准 Markdown 表头与分隔行，并严格执行管道符转义（`\|`）；动作菜单接线「📊 转换键值对为 Markdown 表格并复制」，表单格式栏接入「✦ 键值转表格」。
+- **英文单复数智能切换引擎 (`pluralizeText`) 与 `{{xlc:plural}}` 动态宏**：纯函数支持根据传入动态数字数量或单复数模式智能转换英文单词词形（`item` -> `items`, `category` -> `categories`, `person` -> `people`）；扩展动态宏体系 `{{xlc:plural|item}}`、`{{xlc:plural|item|1}}`、`{{xlc:plural|category|2}}`、`{{xlc:plural:singular|people}}`；表单变量栏补充 `{{xlc:plural|item|2}}`。
+- **Markdown 各级标题大纲目录（TOC）纯函数提取引擎 (`generateMarkdownToc`)**：纯函数严格过滤代码块内部干扰，自动提取 H1~H6 标题级别并计算缩进空格，生成与 GitHub/思源规范一致的锚点 Slug，支持无序圆点与递增有序列表双重风格；动作菜单接线「📑 提取多级标题目录 (TOC) 并复制」，表单格式栏接入「✦ 提取目录TOC」。
+- **全套质量门禁**：单元测试通过数增至 959/959 项全绿通过，双向严格负向注入验证通过。
+
 ## [0.10.51] — 2026-10-29
 
 Markdown表格转键值对与YAML、中文拼音缩写提取宏与多行空行严格归一化。

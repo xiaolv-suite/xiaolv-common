@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.51] — 2026-10-29 (Latest)
+### [v0.10.52] — 2026-10-29 (Latest)
 
-Markdown table to key-value/YAML, Chinese Pinyin initials extraction macro, and strict blank lines normalization:
-- **Markdown Table to Key-Value & YAML (`markdownTableToKeyValue`)**: Pure function extracting table columns into clean YAML, Properties, or JSON objects while preserving special characters with quotes; wired to action menu and variable form.
-- **Chinese Pinyin Initials Extraction (`extractChinesePinyinInitials`) & `{{xlc:initials}}` Macro**: Pure function extracting uppercase/lowercase Pinyin and acronym initials from mixed Chinese and English text, supporting custom separators; expanded dynamic macro `{{xlc:initials|思源笔记}}`, `{{xlc:initials:lower|思源笔记}}`, `{{xlc:initials|思源笔记|-}}`; wired to action menu and variable form.
-- **Strict Blank Lines Normalization (`normalizeBlankLinesStrict`)**: Pure function turning whitespace-only fake blank lines into empty lines, collapsing consecutive blank lines to at most $N$, and trimming leading/trailing blank lines; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 956/956 passing tests with verified negative tests.
+Key-value to Markdown table, English plural/singular toggle macro, and Markdown outline TOC generation:
+- **Key-Value & JSON to Markdown Table (`keyValueToMarkdownTable`)**: Pure function converting YAML, Properties, delimited lines, or JSON objects into clean Markdown tables with escaped pipe `\|` characters; wired to action menu and variable form.
+- **English Plural/Singular Toggle (`pluralizeText`) & `{{xlc:plural}}` Macro**: Pure function dynamically determining singular or plural forms (rules and irregular nouns) based on count or mode; expanded dynamic macro `{{xlc:plural|item}}`, `{{xlc:plural|item|1}}`, `{{xlc:plural|category|2}}`, `{{xlc:plural:singular|people}}`; wired to variable form.
+- **Markdown Outline TOC Generator (`generateMarkdownToc`)**: Pure function extracting H1~H6 headings, calculating indentation, generating clean anchor slugs, and filtering out code fences; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 959/959 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.50)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.51)</b></summary>
+
+#### [v0.10.51] — 2026-10-29
+- Markdown table to key-value & YAML (`markdownTableToKeyValue`).
+- Chinese Pinyin initials extraction (`extractChinesePinyinInitials`) & `{{xlc:initials}}` macro.
+- Strict blank lines normalization (`normalizeBlankLinesStrict`).
 
 #### [v0.10.50] — 2026-10-29
 - Markdown links conversion & extraction (`convertMarkdownLinks`).

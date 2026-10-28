@@ -6537,3 +6537,134 @@ export function normalizeBlankLinesStrict(
         cleanedLines: strippedCount,
     };
 }
+
+export interface KeyValueToTableOptions {
+    keyHeader?: string;
+    valueHeader?: string;
+    delimiter?: string;
+}
+
+/**
+ * 键值对文本或 JSON 转 Markdown 表格转换引擎 (keyValueToMarkdownTable)
+ */
+export function keyValueToMarkdownTable(
+    text: string,
+    options: KeyValueToTableOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const clean = text.trim();
+    const keyH = options.keyHeader || "键名";
+    const valH = options.valueHeader || "取值";
+
+    const rows: Array<{key: string; val: string}> = [];
+
+    if ((clean.startsWith("{") && clean.endsWith("}")) || (clean.startsWith("[") && clean.endsWith("]"))) {
+        try {
+            const parsed = JSON.parse(clean);
+            if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+                for (const [k, v] of Object.entries(parsed)) {
+                    rows.push({
+                        key: String(k).replace(/\|/g, "\\|"),
+                        val: typeof v === "object" ? JSON.stringify(v).replace(/\|/g, "\\|") : String(v).replace(/\|/g, "\\|"),
+                    });
+                }
+            }
+        } catch {
+            // 继续尝试普通键值对行解析
+        }
+    }
+
+    if (rows.length === 0) {
+        const lines = clean.split("\n");
+        const customDelim = options.delimiter;
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
+
+            let k = "";
+            let v = "";
+
+            if (customDelim && trimmed.includes(customDelim)) {
+                const idx = trimmed.indexOf(customDelim);
+                k = trimmed.slice(0, idx).trim();
+                v = trimmed.slice(idx + customDelim.length).trim();
+            } else {
+                const delimMatch = trimmed.match(/^([^:=->]+)\s*([:=]|->)\s*(.*)$/);
+                if (delimMatch) {
+                    k = delimMatch[1]!.trim();
+                    v = delimMatch[3]!.trim();
+                }
+            }
+
+            if (k) {
+                if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+                    v = v.slice(1, -1);
+                }
+                rows.push({
+                    key: k.replace(/\|/g, "\\|"),
+                    val: v.replace(/\|/g, "\\|"),
+                });
+            }
+        }
+    }
+
+    if (rows.length === 0) return text;
+
+    const headerLine = `| ${keyH} | ${valH} |`;
+    const sepLine = "| :--- | :--- |";
+    const bodyLines = rows.map((r) => `| ${r.key} | ${r.val} |`);
+
+    return [headerLine, sepLine, ...bodyLines].join("\n");
+}
+
+export interface MarkdownTocOptions {
+    minLevel?: number;
+    maxLevel?: number;
+    style?: "unordered" | "ordered";
+}
+
+/**
+ * Markdown 文本各级标题大纲目录（TOC）纯函数提取引擎 (generateMarkdownToc)
+ */
+export function generateMarkdownToc(
+    text: string,
+    options: MarkdownTocOptions = {},
+): string {
+    if (!text || typeof text !== "string") return "";
+    const lines = text.split("\n");
+    const minLvl = options.minLevel !== undefined ? Math.max(1, Math.min(6, options.minLevel)) : 1;
+    const maxLvl = options.maxLevel !== undefined ? Math.max(minLvl, Math.min(6, options.maxLevel)) : 6;
+    const isOrdered = options.style === "ordered";
+
+    const tocItems: string[] = [];
+    let inCodeBlock = false;
+
+    for (const line of lines) {
+        if (/^```/.test(line.trim())) {
+            inCodeBlock = !inCodeBlock;
+            continue;
+        }
+        if (inCodeBlock) continue;
+
+        const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+        if (!headingMatch) continue;
+
+        const level = headingMatch[1]!.length;
+        if (level < minLvl || level > maxLvl) continue;
+
+        const title = headingMatch[2]!.trim().replace(/#+$/, "").trim();
+        if (!title) continue;
+
+        const slug = title
+            .toLowerCase()
+            .replace(/[^\w\u4e00-\u9fa5-]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+
+        const indentSpaces = "  ".repeat(level - minLvl);
+        const bullet = isOrdered ? "1. " : "- ";
+        tocItems.push(`${indentSpaces}${bullet}[${title}](#${slug})`);
+    }
+
+    return tocItems.join("\n");
+}
