@@ -6799,3 +6799,166 @@ export function formatTextColumnsGrid(
 
     return resultRows.join("\n");
 }
+
+export interface SortListOptions {
+    descending?: boolean;
+    natural?: boolean;
+}
+
+/**
+ * Markdown 列表项按字母或拼音自然排序引擎 (sortMarkdownList)
+ * 支持平级列表排序并携带各自嵌套子列表，有序列表自动重新自增编号
+ */
+export function sortMarkdownList(
+    text: string,
+    options: SortListOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    if (lines.length <= 1) return text;
+
+    interface ListItemBlock {
+        indent: string;
+        marker: string;
+        content: string;
+        rawHead: string;
+        children: string[];
+    }
+
+    const blocks: ListItemBlock[] = [];
+    const itemRegex = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+
+    for (const line of lines) {
+        const match = line.match(itemRegex);
+        if (match) {
+            const [, indent, marker, content] = match;
+            if (blocks.length === 0 || indent!.length <= blocks[0]!.indent.length) {
+                blocks.push({
+                    indent: indent!,
+                    marker: marker!,
+                    content: content!.trim(),
+                    rawHead: line,
+                    children: [],
+                });
+            } else {
+                blocks[blocks.length - 1]!.children.push(line);
+            }
+        } else {
+            if (blocks.length > 0) {
+                blocks[blocks.length - 1]!.children.push(line);
+            }
+        }
+    }
+
+    if (blocks.length === 0) return text;
+
+    const desc = options.descending === true;
+    const collator = new Intl.Collator("zh-CN", {numeric: true, sensitivity: "base"});
+
+    blocks.sort((a, b) => {
+        const cmp = collator.compare(a.content, b.content);
+        return desc ? -cmp : cmp;
+    });
+
+    const isOrdered = /^\d+[.)]$/.test(blocks[0]!.marker);
+    const delim = blocks[0]!.marker.endsWith(")") ? ")" : ".";
+
+    const resultLines: string[] = [];
+    for (let idx = 0; idx < blocks.length; idx++) {
+        const block = blocks[idx]!;
+        if (isOrdered) {
+            resultLines.push(`${block.indent}${idx + 1}${delim} ${block.content}`);
+        } else {
+            resultLines.push(`${block.indent}${block.marker} ${block.content}`);
+        }
+        if (block.children.length > 0) {
+            const childText = block.children.join("\n");
+            resultLines.push(sortMarkdownList(childText, options));
+        }
+    }
+
+    return resultLines.join("\n");
+}
+
+export interface RepeatTextOptions {
+    delimiter?: string;
+    maxTotalLength?: number;
+}
+
+/**
+ * 字符与文本序列重复生成引擎 (repeatText)
+ */
+export function repeatText(
+    text: string,
+    count = 1,
+    options: RepeatTextOptions = {},
+): string {
+    if (text === undefined || text === null) return "";
+    const str = String(text);
+    const times = Math.max(0, Math.min(500, Math.trunc(count)));
+    if (times === 0) return "";
+    const delim = options.delimiter !== undefined ? options.delimiter : "";
+    const maxLen = Math.min(2000, options.maxTotalLength || 2000);
+
+    const parts: string[] = [];
+    let currentLen = 0;
+
+    for (let i = 0; i < times; i++) {
+        const addLen = str.length + (i > 0 ? delim.length : 0);
+        if (currentLen + addLen > maxLen) {
+            break;
+        }
+        parts.push(str);
+        currentLen += addLen;
+    }
+
+    return parts.join(delim);
+}
+
+export interface SortByVisualWidthOptions {
+    descending?: boolean;
+    trimBeforeMeasure?: boolean;
+}
+
+/**
+ * 文本行视觉宽度智能排序引擎 (sortLinesByVisualWidth)
+ * 支持精准计算 CJK 中文字符双倍字宽，按视觉宽度升序或降序排列
+ */
+export function sortLinesByVisualWidth(
+    text: string,
+    options: SortByVisualWidthOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    if (lines.length <= 1) return text;
+
+    const desc = options.descending === true;
+    const trim = options.trimBeforeMeasure !== false;
+
+    const getCharWidth = (ch: string) => {
+        const code = ch.charCodeAt(0);
+        return (code >= 0x4e00 && code <= 0x9fa5) || code > 0xff ? 2 : 1;
+    };
+
+    const getLineWidth = (line: string): number => {
+        const str = trim ? line.trim() : line;
+        let w = 0;
+        for (const c of str) w += getCharWidth(c);
+        return w;
+    };
+
+    const mapped = lines.map((line, idx) => ({
+        line,
+        width: getLineWidth(line),
+        originalIndex: idx,
+    }));
+
+    mapped.sort((a, b) => {
+        if (a.width !== b.width) {
+            return desc ? b.width - a.width : a.width - b.width;
+        }
+        return a.originalIndex - b.originalIndex;
+    });
+
+    return mapped.map((m) => m.line).join("\n");
+}
