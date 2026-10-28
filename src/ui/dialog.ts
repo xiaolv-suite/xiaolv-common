@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3996,6 +3996,37 @@ export class CommonSearchDialog {
                         const wrapped = wrapTextLines(raw, 80);
                         await this.deps.copyProviderPayload(wrapped);
                         this.deps.notify?.("info", "已按 80 列宽度折行并复制");
+                    });
+                }
+                if (entry.content && /^\s*(?:[-*+]|\d+\.)\s+\[[ xX]\]/m.test(entry.content)) {
+                    addSilent("📊", "统计任务列表进度条并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const progress = calculateTaskProgress(raw);
+                        await this.deps.copyProviderPayload(`${progress.summary}\n${progress.progressBar}`);
+                        this.deps.notify?.("info", `任务进度：${progress.percent}% (${progress.completed}/${progress.total})`);
+                    });
+                }
+                if (entry.content && entry.content.includes("START_LOG") && entry.content.includes("END_LOG")) {
+                    addSilent("📑", "截取 START_LOG 至 END_LOG 区间并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const sliced = sliceLinesByPattern(raw, "START_LOG", "END_LOG");
+                        await this.deps.copyProviderPayload(sliced);
+                        this.deps.notify?.("info", "已截取指定区间日志并复制");
+                    });
+                }
+                if (entry.content && /^[+-]?\d{4,}(\.\d+)?$/.test(entry.content.trim())) {
+                    addSilent("￥", "数值添加千分位逗号并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const formatted = formatNumberGrouping(raw.trim(), "add");
+                        await this.deps.copyProviderPayload(formatted);
+                        this.deps.notify?.("info", `已格式化千分位数值：${formatted}`);
+                    });
+                } else if (entry.content && /^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(entry.content.trim())) {
+                    addSilent("￥", "剥离千分位逗号为纯数字并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const cleaned = formatNumberGrouping(raw.trim(), "remove");
+                        await this.deps.copyProviderPayload(cleaned);
+                        this.deps.notify?.("info", `已剥离千分位逗号：${cleaned}`);
                     });
                 }
                 if (entry.content && /\d+(?:MB|GB|KB|TB|kg|g|km|cm|mm|GHz|MHz|kHz|Hz|Mbps|Gbps|ms|kW|MW)\b/.test(entry.content)) {

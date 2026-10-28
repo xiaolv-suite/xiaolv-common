@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.42] — 2026-10-29 (Latest)
+### [v0.10.43] — 2026-10-29 (Latest)
 
-Code language detection, word/character scrambling macro, and repetitive punctuation compacting:
-- **Code Language Detection Engine (`detectCodeLanguage`)**: Pure function analyzing syntax features to identify `json`, `sql`, `python`, `typescript`, `javascript`, `html`, `css`, `bash`, `rust`, `go`, and `markdown`, wrapping into fenced code blocks; wired to action menu and variable form.
-- **Word & Character Scrambling Engine (`scrambleText`) & `{{xlc:scramble}}` Macro**: Pure function using Fisher-Yates shuffle to scramble words or characters with Unicode/Emoji safety; expanded dynamic macro `{{xlc:scramble|words|...}}` and `{{xlc:scramble:chars|...}}`; wired to action menu and variable form.
-- **Repetitive Punctuation Compacter (`compactRepeatedCharacters`)**: Pure function compressing multiple redundant punctuation marks (`太棒了！！！！` -> `太棒了！`, `????` -> `?`, `~~~~` -> `~`) to clean thresholds; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 921/921 passing tests with verified negative tests.
+Markdown task progress calculation, line slicing by pattern, and thousands grouping macro:
+- **Task List Progress Engine (`calculateTaskProgress`)**: Pure function automatically calculating completed/pending tasks and percentage, and generating visual progress bars (e.g. `[██████░░░░] 60%`); wired to action menu and variable form.
+- **Line Slicing by Pattern (`sliceLinesByPattern`)**: Pure function extracting lines between start and end delimiter patterns, configurable with delimiter inclusion; wired to action menu and variable form.
+- **Thousands Number Grouping (`formatNumberGrouping`) & `{{xlc:thousands}}` Macro**: Pure function formatting numbers with thousands commas (`1234567.89` -> `1,234,567.89`) and stripping commas; expanded dynamic macro `{{xlc:thousands|...}}`; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 925/925 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.41)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.42)</b></summary>
+
+#### [v0.10.42] — 2026-10-29
+- Code language detection (`detectCodeLanguage`).
+- Word/character scrambling (`scrambleText`) & `{{xlc:scramble}}` macro.
+- Repetitive punctuation compacting (`compactRepeatedCharacters`).
 
 #### [v0.10.41] — 2026-10-29
 - Markdown heading level shifting (`shiftMarkdownHeadings`).

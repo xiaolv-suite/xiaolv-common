@@ -5176,3 +5176,156 @@ export function compactRepeatedCharacters(
 
     return {result, compressedCount: count};
 }
+
+export interface TaskProgressResult {
+    total: number;
+    completed: number;
+    pending: number;
+    percent: number;
+    progressBar: string;
+    summary: string;
+}
+
+export interface TaskProgressOptions {
+    /** 进度条长度（默认 10） */
+    barLength?: number;
+    /** 完成符号（默认 "█"） */
+    completedChar?: string;
+    /** 未完成符号（默认 "░"） */
+    pendingChar?: string;
+}
+
+/**
+ * Markdown 任务列表项进度计算与统计引擎 (calculateTaskProgress)
+ */
+export function calculateTaskProgress(
+    text: string,
+    options: TaskProgressOptions = {},
+): TaskProgressResult {
+    if (!text || typeof text !== "string") {
+        return {total: 0, completed: 0, pending: 0, percent: 0, progressBar: "", summary: ""};
+    }
+
+    const barLength = Math.max(5, options.barLength || 10);
+    const filledChar = options.completedChar || "█";
+    const emptyChar = options.pendingChar || "░";
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let completed = 0;
+    let pending = 0;
+
+    const taskRegex = /^\s*(?:[-*+]|\d+\.)\s+\[([ xX])\]/;
+
+    for (const line of lines) {
+        const match = line.match(taskRegex);
+        if (match) {
+            const mark = match[1]!.toLowerCase();
+            if (mark === "x") {
+                completed++;
+            } else {
+                pending++;
+            }
+        }
+    }
+
+    const total = completed + pending;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    const filledCount = total > 0 ? Math.round((completed / total) * barLength) : 0;
+    const emptyCount = barLength - filledCount;
+    const progressBar = `[${filledChar.repeat(filledCount)}${emptyChar.repeat(emptyCount)}] ${percent}%`;
+
+    const summary = `任务进度: ${completed}/${total} 已完成 (${percent}%)`;
+
+    return {
+        total,
+        completed,
+        pending,
+        percent,
+        progressBar,
+        summary,
+    };
+}
+
+export interface SliceLinesOptions {
+    /** 是否包含起始标记行（默认 true） */
+    includeStart?: boolean;
+    /** 是否包含结束标记行（默认 true） */
+    includeEnd?: boolean;
+    /** 是否对行做 trim 后再做正则/关键词匹配（默认 true） */
+    trimBeforeMatch?: boolean;
+}
+
+/**
+ * 文本行按起止标记条件截取引擎 (sliceLinesByPattern)
+ */
+export function sliceLinesByPattern(
+    text: string,
+    startPattern: string | RegExp,
+    endPattern?: string | RegExp,
+    options: SliceLinesOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const includeStart = options.includeStart !== false;
+    const includeEnd = options.includeEnd !== false;
+    const trimMatch = options.trimBeforeMatch !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let capturing = false;
+    const matchedLines: string[] = [];
+
+    const isMatch = (line: string, pat?: string | RegExp): boolean => {
+        if (!pat) return false;
+        const target = trimMatch ? line.trim() : line;
+        if (pat instanceof RegExp) {
+            return pat.test(target);
+        }
+        return target.includes(pat);
+    };
+
+    for (const line of lines) {
+        if (!capturing) {
+            if (isMatch(line, startPattern)) {
+                capturing = true;
+                if (includeStart) {
+                    matchedLines.push(line);
+                }
+                continue;
+            }
+        } else {
+            if (endPattern && isMatch(line, endPattern)) {
+                if (includeEnd) {
+                    matchedLines.push(line);
+                }
+                break;
+            }
+            matchedLines.push(line);
+        }
+    }
+
+    return matchedLines.join("\n");
+}
+
+/**
+ * 千分位数值格式化与反格式化引擎 (formatNumberGrouping)
+ */
+export function formatNumberGrouping(
+    numOrStr: number | string,
+    mode: "add" | "remove" = "add",
+): string {
+    if (numOrStr === undefined || numOrStr === null || numOrStr === "") return "";
+    const str = String(numOrStr).trim();
+
+    if (mode === "remove") {
+        return str.replace(/(\d),(\d)/g, "$1$2");
+    }
+
+    const match = str.match(/^([+-]?\d+)(\.\d+)?$/);
+    if (!match) return str;
+
+    const integerPart = match[1]!;
+    const decimalPart = match[2] || "";
+
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return `${formattedInteger}${decimalPart}`;
+}

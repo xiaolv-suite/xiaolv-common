@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -586,6 +586,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "template", text: "{{xlc:template|你好 {name}|name=张三}}"},
         {id: "obfuscate", text: "{{xlc:obfuscate|rot13|Hello}}"},
         {id: "scramble", text: "{{xlc:scramble|words|one two three}}"},
+        {id: "thousands", text: "{{xlc:thousands|1234567.89}}"},
         {id: "regex.mreplace", text: "{{xlc:regex:mreplace|^(\\s*)|// |文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
@@ -2794,6 +2795,87 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(compactRepeatedBtn);
+
+    const taskProgressBtn = document.createElement("button");
+    taskProgressBtn.type = "button";
+    taskProgressBtn.className = "xlc-varbtn xlc-btn-ghost";
+    taskProgressBtn.dataset.xlcControl = "capture.format.task-progress";
+    taskProgressBtn.textContent = "✦ 任务进度";
+    taskProgressBtn.title = "统计 Markdown 待办列表 (- [ ]) 的完成进度百分比并追加进度条";
+    taskProgressBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = calculateTaskProgress(targetText);
+        if (res.total > 0) {
+            const output = `${targetText}\n\n${res.summary}\n${res.progressBar}`;
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + output + el.value.slice(end);
+                el.setSelectionRange(start, start + output.length);
+            } else {
+                el.value = output;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(taskProgressBtn);
+
+    const thousandsBtn = document.createElement("button");
+    thousandsBtn.type = "button";
+    thousandsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    thousandsBtn.dataset.xlcControl = "capture.format.thousands-group";
+    thousandsBtn.textContent = "✦ 加千分位";
+    thousandsBtn.title = "将选中的纯数值转换为带逗号的千分位格式 (如 1234567.89 -> 1,234,567.89)";
+    thousandsBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = (hasSel ? el.value.slice(start, end) : el.value).trim();
+        const res = formatNumberGrouping(targetText, "add");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(thousandsBtn);
+
+    const sliceLinesBtn = document.createElement("button");
+    sliceLinesBtn.type = "button";
+    sliceLinesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    sliceLinesBtn.dataset.xlcControl = "capture.format.slice-lines";
+    sliceLinesBtn.textContent = "✦ 截取区间";
+    sliceLinesBtn.title = "按 --- 标记截取多行文本的首个片段";
+    sliceLinesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        if (targetText.includes("---")) {
+            const res = sliceLinesByPattern(targetText, /^[^\s]/, "---", {includeEnd: false});
+            if (res && res !== targetText) {
+                if (hasSel) {
+                    el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                    el.setSelectionRange(start, start + res.length);
+                } else {
+                    el.value = res;
+                }
+                el.focus();
+                el.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+        }
+    });
+    bar.appendChild(sliceLinesBtn);
 
     return bar;
 }
