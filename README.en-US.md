@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.44] — 2026-10-29 (Latest)
+### [v0.10.45] — 2026-10-29 (Latest)
 
-Markdown blockquote nesting level shifting, lightweight checksum calculation, and equal-width column alignment:
-- **Blockquote Shifting Engine (`shiftMarkdownBlockquotes`)**: Pure function raising (delta +1, `> ` -> `>> `) or lowering (delta -1, `>> ` -> `> `) Markdown blockquote nesting levels; wired to action menu and variable form.
-- **Lightweight Checksum Engine (`calculateChecksum`) & `{{xlc:checksum}}` Macro**: Pure function computing standard CRC32 (`cbf43926`) and Adler32 checksums; expanded dynamic macro `{{xlc:checksum|...}}`; wired to action menu and variable form.
-- **Equal-width Column Alignment (`alignDelimitedColumns`)**: Pure function aligning multi-column delimited lines to equal visual widths with CJK double-width character support; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 929/929 passing tests with verified negative tests.
+Safe code comments stripping, line grouping by pattern, and Markdown HRules normalization:
+- **Code Comments Stripping Engine (`stripCodeComments`)**: Pure function stripping single-line (`//`, `#`, `--`) and block (`/* ... */`) comments while protecting string literals (e.g. URLs and hex codes); wired to action menu and variable form.
+- **Line Grouping by Pattern (`groupLinesByPattern`)**: Pure function aggregating multi-line logs or tasks by prefixes (`[ERROR]`, `[INFO]`) into structured H3 outline sections; wired to action menu and variable form.
+- **Markdown HRules Normalization (`normalizeHorizontalRules`)**: Pure function standardizing horizontal rules (`***`, `___`, `---`) into uniform style (`---`) with blank lines to prevent Setext H2 heading traps; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 932/932 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.43)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.44)</b></summary>
+
+#### [v0.10.44] — 2026-10-29
+- Markdown blockquote nesting level shifting (`shiftMarkdownBlockquotes`).
+- Lightweight checksum engine (`calculateChecksum`) & `{{xlc:checksum}}` macro.
+- Equal-width column alignment (`alignDelimitedColumns`).
 
 #### [v0.10.43] — 2026-10-29
 - Markdown task list progress (`calculateTaskProgress`).

@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -2976,6 +2976,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(checksumBtn);
+
+    const stripCommentsBtn = document.createElement("button");
+    stripCommentsBtn.type = "button";
+    stripCommentsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    stripCommentsBtn.dataset.xlcControl = "capture.format.strip-comments";
+    stripCommentsBtn.textContent = "✦ 剥离注释";
+    stripCommentsBtn.title = "批量安全剥离代码中的单行与块级注释 (保护字符串字面量)";
+    stripCommentsBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = stripCodeComments(targetText);
+        if (res.removedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(stripCommentsBtn);
+
+    const groupLinesBtn = document.createElement("button");
+    groupLinesBtn.type = "button";
+    groupLinesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    groupLinesBtn.dataset.xlcControl = "capture.format.group-lines";
+    groupLinesBtn.textContent = "✦ 分组聚合";
+    groupLinesBtn.title = "按行首日志级别或前缀将多行文本分类聚合为二级标题大纲";
+    groupLinesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = groupLinesByPattern(targetText);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(groupLinesBtn);
+
+    const hrulesBtn = document.createElement("button");
+    hrulesBtn.type = "button";
+    hrulesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    hrulesBtn.dataset.xlcControl = "capture.format.hrules-norm";
+    hrulesBtn.textContent = "✦ 规整分割线";
+    hrulesBtn.title = "将各类水平分割线 (***, ___, ---) 规整为统一规范形态并确保空行防误伤";
+    hrulesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = normalizeHorizontalRules(targetText, "---");
+        if (res.normalizedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(hrulesBtn);
 
     return bar;
 }

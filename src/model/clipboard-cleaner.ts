@@ -5481,3 +5481,209 @@ export function alignDelimitedColumns(
 
     return alignedLines.join("\n");
 }
+
+export interface StripCommentsResult {
+    result: string;
+    removedCount: number;
+}
+
+/**
+ * 代码文本注释批量安全剥离引擎 (stripCodeComments)
+ */
+export function stripCodeComments(code: string, language?: string): StripCommentsResult {
+    if (!code || typeof code !== "string") return {result: code ?? "", removedCount: 0};
+
+    let removed = 0;
+    const clean = code.replace(/\r\n?/g, "\n");
+
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let inBacktick = false;
+    let isEscaped = false;
+
+    let out = "";
+    let i = 0;
+
+    const lang = (language || "").toLowerCase();
+    const isPythonOrBash = lang === "python" || lang === "py" || lang === "bash" || lang === "sh" || lang === "shell";
+    const isSql = lang === "sql";
+
+    while (i < clean.length) {
+        const ch = clean[i]!;
+        const next = clean[i + 1] || "";
+
+        if (isEscaped) {
+            out += ch;
+            isEscaped = false;
+            i++;
+            continue;
+        }
+
+        if (ch === "\\") {
+            out += ch;
+            isEscaped = true;
+            i++;
+            continue;
+        }
+
+        if (ch === "'" && !inDoubleQuote && !inBacktick) {
+            inSingleQuote = !inSingleQuote;
+            out += ch;
+            i++;
+            continue;
+        }
+        if (ch === '"' && !inSingleQuote && !inBacktick) {
+            inDoubleQuote = !inDoubleQuote;
+            out += ch;
+            i++;
+            continue;
+        }
+        if (ch === "`" && !inSingleQuote && !inDoubleQuote) {
+            inBacktick = !inBacktick;
+            out += ch;
+            i++;
+            continue;
+        }
+
+        if (!inSingleQuote && !inDoubleQuote && !inBacktick) {
+            if (ch === "/" && next === "*") {
+                removed++;
+                i += 2;
+                while (i < clean.length && !(clean[i] === "*" && clean[i + 1] === "/")) {
+                    i++;
+                }
+                i += 2;
+                continue;
+            }
+
+            if (ch === "/" && next === "/") {
+                removed++;
+                i += 2;
+                while (i < clean.length && clean[i] !== "\n") {
+                    i++;
+                }
+                continue;
+            }
+
+            if ((isPythonOrBash || ch === "#") && ch === "#") {
+                removed++;
+                i++;
+                while (i < clean.length && clean[i] !== "\n") {
+                    i++;
+                }
+                continue;
+            }
+
+            if (isSql && ch === "-" && next === "-") {
+                removed++;
+                i += 2;
+                while (i < clean.length && clean[i] !== "\n") {
+                    i++;
+                }
+                continue;
+            }
+        }
+
+        out += ch;
+        i++;
+    }
+
+    const cleanedLines = out
+        .split("\n")
+        .map((l) => l.trimEnd())
+        .join("\n");
+
+    return {
+        result: cleanedLines,
+        removedCount: removed,
+    };
+}
+
+/**
+ * 文本行按指定模式分组聚合统计引擎 (groupLinesByPattern)
+ */
+export function groupLinesByPattern(text: string, pattern?: string | RegExp): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return text;
+
+    const delimPattern = pattern || /^\[([A-Z0-9_-]+)\]|^([A-Za-z0-9_\u4e00-\u9fa5]+)\s*[:：]/;
+    const groups = new Map<string, string[]>();
+    const uncategorized: string[] = [];
+
+    for (const line of lines) {
+        let key = "";
+        if (typeof delimPattern === "string") {
+            if (line.includes(delimPattern)) {
+                key = delimPattern;
+            }
+        } else {
+            const m = line.match(delimPattern);
+            if (m) {
+                key = (m[1] || m[2] || m[0]).trim();
+            }
+        }
+
+        if (key) {
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(line);
+        } else {
+            uncategorized.push(line);
+        }
+    }
+
+    const outputSections: string[] = [];
+    for (const [key, groupLines] of groups.entries()) {
+        outputSections.push(`### ${key} (${groupLines.length})\n${groupLines.join("\n")}`);
+    }
+
+    if (uncategorized.length > 0) {
+        outputSections.push(`### 未分类 (${uncategorized.length})\n${uncategorized.join("\n")}`);
+    }
+
+    return outputSections.join("\n\n");
+}
+
+export interface NormalizeHRulesResult {
+    result: string;
+    normalizedCount: number;
+}
+
+/**
+ * Markdown 分割线与水平标尺标准化格式化引擎 (normalizeHorizontalRules)
+ */
+export function normalizeHorizontalRules(
+    text: string,
+    targetStyle = "---",
+): NormalizeHRulesResult {
+    if (!text || typeof text !== "string") return {result: text ?? "", normalizedCount: 0};
+
+    const hrRegex = /^\s*(?:(?:\*[\s]*){3,}|(?:-[\s]*){3,}|(?:_[\s]*){3,})\s*$/;
+    let count = 0;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const resultLines: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]!;
+
+        if (hrRegex.test(line)) {
+            count++;
+            if (resultLines.length > 0 && resultLines[resultLines.length - 1]!.trim().length > 0) {
+                resultLines.push("");
+            }
+            resultLines.push(targetStyle);
+            if (i + 1 < lines.length && lines[i + 1]!.trim().length > 0 && !hrRegex.test(lines[i + 1]!)) {
+                resultLines.push("");
+            }
+        } else {
+            resultLines.push(line);
+        }
+    }
+
+    return {
+        result: resultLines.join("\n"),
+        normalizedCount: count,
+    };
+}
