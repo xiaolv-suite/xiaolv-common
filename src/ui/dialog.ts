@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3622,6 +3622,28 @@ export class CommonSearchDialog {
                         const sorted = sortLinesByLength(raw, {descending: false});
                         await this.deps.copyProviderPayload(sorted);
                         this.deps.notify?.("info", "已按行长度升序排列并复制");
+                    });
+                    addSilent("🧹", "行首尾空白修剪并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = trimLinesAdvanced(raw);
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已修剪行首尾空白并复制`);
+                    });
+                }
+                if (entry.content && (entry.content.includes(":") && (entry.content.includes("{") || entry.content.includes(",")))) {
+                    addSilent("🔣", "属性名转双引号规范 (JSON) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = normalizeObjectQuotes(raw, "to-json");
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已转换 ${res.convertedCount} 处属性引号并复制`);
+                    });
+                }
+                if (entry.content && entry.content.length > 50) {
+                    addSilent("✂", "截断前 50 字并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const truncated = truncateText(raw, 50);
+                        await this.deps.copyProviderPayload(truncated);
+                        this.deps.notify?.("info", "已截断前 50 字并复制");
                     });
                 }
                 const hasVariables = (entry.varCount ?? 0) > 0 || (entry.content || "").includes("{{xlc:");

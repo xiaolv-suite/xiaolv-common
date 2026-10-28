@@ -1577,3 +1577,147 @@ export function numberLines(text: string, options: NumberLinesOptions = {}): Num
         numberedCount,
     };
 }
+
+export interface TrimLinesAdvancedOptions {
+    /** 是否去除每行行尾空格与制表符 (默认 true) */
+    trimTrailing?: boolean;
+    /** 是否去除每行统一的最小公共前置缩进 (默认 false) */
+    trimCommonIndent?: boolean;
+    /** 是否去除整篇文本首尾的连续空行 (默认 true) */
+    trimDocumentEnds?: boolean;
+}
+
+export interface TrimLinesAdvancedResult {
+    result: string;
+    hasChanges: boolean;
+    trimmedCount: number;
+}
+
+/**
+ * 多行文本高级修剪与行首尾空白清洗 (trimLinesAdvanced)
+ */
+export function trimLinesAdvanced(text: string, options: TrimLinesAdvancedOptions = {}): TrimLinesAdvancedResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", hasChanges: false, trimmedCount: 0};
+    }
+
+    const trimTrailing = options.trimTrailing !== false;
+    const trimCommonIndent = options.trimCommonIndent === true;
+    const trimEnds = options.trimDocumentEnds !== false;
+
+    let lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let trimmedCount = 0;
+
+    // 1. 去除首尾连续空行
+    if (trimEnds) {
+        while (lines.length > 0 && lines[0]!.trim().length === 0) {
+            lines.shift();
+            trimmedCount++;
+        }
+        while (lines.length > 0 && lines[lines.length - 1]!.trim().length === 0) {
+            lines.pop();
+            trimmedCount++;
+        }
+    }
+
+    // 2. 去除统一的最小公共缩进
+    if (trimCommonIndent && lines.length > 0) {
+        let minIndent = Infinity;
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            const match = line.match(/^[ \t]+/);
+            const indentLen = match ? match[0].length : 0;
+            if (indentLen < minIndent) minIndent = indentLen;
+        }
+        if (minIndent > 0 && Number.isFinite(minIndent)) {
+            lines = lines.map((l) => (l.trim().length > 0 ? l.slice(minIndent) : l));
+            trimmedCount++;
+        }
+    }
+
+    // 3. 去除每行行尾空格
+    if (trimTrailing) {
+        lines = lines.map((l) => {
+            const trimmed = l.replace(/[ \t]+$/, "");
+            if (trimmed.length !== l.length) trimmedCount++;
+            return trimmed;
+        });
+    }
+
+    const resStr = lines.join("\n");
+    return {
+        result: resStr,
+        hasChanges: resStr !== text,
+        trimmedCount,
+    };
+}
+
+export type ObjectQuotesMode = "to-json" | "to-js";
+
+export interface NormalizeObjectQuotesResult {
+    result: string;
+    convertedCount: number;
+}
+
+/**
+ * JSON/JS 对象属性键名与字符串引号规范化 (normalizeObjectQuotes)
+ */
+export function normalizeObjectQuotes(text: string, mode: ObjectQuotesMode = "to-json"): NormalizeObjectQuotesResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", convertedCount: 0};
+    }
+
+    let convertedCount = 0;
+    let res = text;
+
+    if (mode === "to-json") {
+        // 1. 单引号属性名转双引号: 'key': -> "key":
+        res = res.replace(/'([a-zA-Z0-9_$-]+)'\s*:/g, (_, key) => {
+            convertedCount++;
+            return `"${key}":`;
+        });
+        // 2. 无引号属性名转双引号: ([{,]\s*)([a-zA-Z0-9_$-]+)\s*:
+        res = res.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_$-]*)\s*:/g, (_match, prefix, key) => {
+            convertedCount++;
+            return `${prefix}"${key}":`;
+        });
+        // 3. 单引号字符串值转双引号: : 'value' -> : "value"
+        res = res.replace(/:\s*'([^'\\]*(?:\\.[^'\\]*)*)'/g, (_, val) => {
+            convertedCount++;
+            return `: "${val.replace(/"/g, '\\"')}"`;
+        });
+    } else {
+        // to-js: 标准标识符双引号键名转无引号: "key": -> key:
+        res = res.replace(/"([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g, (_, key) => {
+            convertedCount++;
+            return `${key}:`;
+        });
+    }
+
+    return {
+        result: res,
+        convertedCount,
+    };
+}
+
+export interface TruncateOptions {
+    maxLength: number;
+    ellipsis?: string;
+}
+
+/**
+ * 文本定长截断与省略号追加 (truncateText)
+ */
+export function truncateText(text: string, options: number | TruncateOptions): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const opts: TruncateOptions = typeof options === "number" ? {maxLength: options} : options;
+    const maxLen = Math.max(1, opts.maxLength);
+    const ellipsis = opts.ellipsis !== undefined ? opts.ellipsis : "...";
+
+    if (text.length <= maxLen) {
+        return text;
+    }
+
+    const truncated = text.slice(0, maxLen);
+    return `${truncated}${ellipsis}`;
+}

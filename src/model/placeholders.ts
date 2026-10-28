@@ -30,7 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
-import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines} from "./clipboard-cleaner";
+import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText} from "./clipboard-cleaner";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
 // 带参语法分隔符必须是 | 而非 :（R161 真机验收发现）：Lute 把 :date: 当 emoji 短代码转换，
 // {{xlc:date:+3d}} 落库即损坏成 {{xlc📅+3d}}；ask 冒号语法无此问题（:ask: 非短代码，真机已验证）。
@@ -40,11 +40,11 @@ import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEnti
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|number(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -801,6 +801,28 @@ export function resolveNumberArg(rawArg: string, subFormat?: string): string | n
     return null;
 }
 
+/** 解析 truncate 语法参数 (截断长度，默认 30) */
+export function resolveTruncateArg(rawArg: string, subLen?: string): string | null {
+    const trimmed = rawArg.trim();
+    let lenStr = subLen?.trim();
+    let content = trimmed;
+
+    if (!lenStr) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe === -1) {
+            lenStr = "30";
+            content = trimmed;
+        } else {
+            lenStr = trimmed.slice(0, firstPipe).trim();
+            content = trimmed.slice(firstPipe + 1);
+        }
+    }
+
+    const maxLen = parseInt(lenStr, 10);
+    if (!Number.isFinite(maxLen) || maxLen <= 0) return null;
+    return truncateText(content, maxLen);
+}
+
 export function getIsoWeekNumber(d: Date): number {
     const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNr = (target.getUTCDay() + 6) % 7;
@@ -847,6 +869,7 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "count": return "0";
         case "hash": return "";
         case "number": return "";
+        case "truncate": return "";
         case "password": return generateSecurePassword(14, "complex");
     }
 }
@@ -934,6 +957,11 @@ export function resolvePlaceholder(
         if (rawKind.includes(":")) {
             subAction = rawKind.split(":")[1];
         }
+    } else if (rawKind.startsWith("truncate")) {
+        kind = "truncate";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -993,6 +1021,7 @@ export function resolvePlaceholder(
     if (kind === "count") return arg ? resolveCountArg(arg, subAction) : null;
     if (kind === "hash") return arg ? resolveHashArg(arg, subAction) : null;
     if (kind === "number") return arg ? resolveNumberArg(arg, subAction) : null;
+    if (kind === "truncate") return arg ? resolveTruncateArg(arg, subAction) : null;
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
 }

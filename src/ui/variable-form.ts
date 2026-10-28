@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -561,6 +561,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "count", text: "{{xlc:count:chars|文本}}"},
         {id: "hash", text: "{{xlc:hash|文本}}"},
         {id: "number", text: "{{xlc:number:lines|文本}}"},
+        {id: "truncate", text: "{{xlc:truncate|30|文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1121,6 +1122,58 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(numberLinesBtn);
+
+    const trimAdvBtn = document.createElement("button");
+    trimAdvBtn.type = "button";
+    trimAdvBtn.className = "xlc-varbtn xlc-btn-ghost";
+    trimAdvBtn.dataset.xlcControl = "capture.format.trim-advanced";
+    trimAdvBtn.textContent = "✦ 净首尾";
+    trimAdvBtn.title = "修剪整篇文本首尾多余空行并清理每行行尾空格";
+    trimAdvBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = trimLinesAdvanced(targetText);
+        if (res.hasChanges) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(trimAdvBtn);
+
+    const quoteJsonBtn = document.createElement("button");
+    quoteJsonBtn.type = "button";
+    quoteJsonBtn.className = "xlc-varbtn xlc-btn-ghost";
+    quoteJsonBtn.dataset.xlcControl = "capture.format.quote-json";
+    quoteJsonBtn.textContent = "✦ 转JSON键";
+    quoteJsonBtn.title = "将 JS/Python 对象属性名与单引号字符串标准化为标准 JSON 双引号";
+    quoteJsonBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = normalizeObjectQuotes(targetText, "to-json");
+        if (res.convertedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(quoteJsonBtn);
 
     return bar;
 }
