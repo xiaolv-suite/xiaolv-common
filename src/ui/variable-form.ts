@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -559,6 +559,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "timestamp", text: "{{xlc:timestamp}}"},
         {id: "calc", text: "{{xlc:calc:100*1.13}}"},
         {id: "count", text: "{{xlc:count:chars|文本}}"},
+        {id: "hash", text: "{{xlc:hash|文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -989,6 +990,58 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(resetTasksBtn);
+
+    const extractLinksBtn = document.createElement("button");
+    extractLinksBtn.type = "button";
+    extractLinksBtn.className = "xlc-varbtn xlc-btn-ghost";
+    extractLinksBtn.dataset.xlcControl = "capture.format.extract-links";
+    extractLinksBtn.textContent = "✦ 提链接";
+    extractLinksBtn.title = "提取选中文本或全文中的全部 Markdown 链接与 URL 为列表";
+    extractLinksBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = extractMarkdownLinks(targetText, {outputFormat: "list"});
+        if (res.count > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(extractLinksBtn);
+
+    const affixLinesBtn = document.createElement("button");
+    affixLinesBtn.type = "button";
+    affixLinesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    affixLinesBtn.dataset.xlcControl = "capture.format.affix-lines";
+    affixLinesBtn.textContent = "✦ 加列表行";
+    affixLinesBtn.title = "为选中文本或全文的多行批量添加列表项前缀 (- )";
+    affixLinesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = affixLines(targetText, {prefix: "- ", ignoreEmpty: true});
+        if (res.changedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(affixLinesBtn);
 
     return bar;
 }

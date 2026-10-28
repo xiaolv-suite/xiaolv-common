@@ -1143,9 +1143,272 @@ export function toggleMarkdownTaskStatus(text: string, action: TaskToggleAction 
         }
     });
 
+        return {
+            result: converted.join("\n"),
+            changedCount,
+            totalTasks,
+        };
+    }
+
+export interface ExtractedLink {
+    text: string;
+    url: string;
+    isImage: boolean;
+}
+
+export interface ExtractLinksOptions {
+    /** 仅提取图片 (默认 false) */
+    imagesOnly?: boolean;
+    /** 排除图片 (默认 false) */
+    excludeImages?: boolean;
+    /** 是否包含正文中的纯裸 URL (默认 true) */
+    includeRawUrls?: boolean;
+    /** 是否按 URL 去重 (默认 true) */
+    dedupe?: boolean;
+    /** 格式化输出形式：list (Markdown 列表), urls (纯 URL 换行), json (JSON) */
+    outputFormat?: "list" | "urls" | "json";
+}
+
+export interface ExtractLinksResult {
+    links: ExtractedLink[];
+    result: string;
+    count: number;
+}
+
+/**
+ * 从 Markdown 文本中提取超链接与图片 URL 资产 (extractMarkdownLinks)
+ */
+export function extractMarkdownLinks(text: string, options: ExtractLinksOptions = {}): ExtractLinksResult {
+    if (!text || typeof text !== "string") {
+        return {links: [], result: "", count: 0};
+    }
+
+    const imagesOnly = options.imagesOnly === true;
+    const excludeImages = options.excludeImages === true;
+    const includeRaw = options.includeRawUrls !== false;
+    const dedupe = options.dedupe !== false;
+    const outputFormat = options.outputFormat || "list";
+
+    const extracted: ExtractedLink[] = [];
+    const seenUrls = new Set<string>();
+
+    // 1. 扫描并替换 Markdown 格式链接与图片：(!)?\[(.*?)\]\((.*?)\)
+    const mdPattern = /(!)?\[([^\]]*)\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+    let placeholderCounter = 0;
+    const placeholders: string[] = [];
+
+    const textWithoutMdLinks = text.replace(mdPattern, (_match, isImg, label, rawUrl) => {
+        const isImage = Boolean(isImg);
+        const url = (rawUrl || "").trim();
+        const linkText = (label || "").trim() || url;
+
+        if (url) {
+            let keep = true;
+            if (imagesOnly && !isImage) keep = false;
+            if (excludeImages && isImage) keep = false;
+
+            if (keep) {
+                if (!dedupe || !seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    extracted.push({
+                        text: linkText,
+                        url,
+                        isImage,
+                    });
+                }
+            }
+        }
+
+        placeholders.push(_match);
+        return `__XLC_EXTRACT_LINK_${placeholderCounter++}__`;
+    });
+
+    // 2. 扫描剩余文本中的裸 URL (如果启用)
+    if (includeRaw && !imagesOnly) {
+        const rawUrlPattern = /https?:\/\/[^\s)）\]"'>]+/g;
+        let m: RegExpExecArray | null = null;
+        while ((m = rawUrlPattern.exec(textWithoutMdLinks)) !== null) {
+            const rawUrl = m[0].trim();
+            // 清理末尾可能的标点符号（如逗号、句号）
+            const cleanUrl = rawUrl.replace(/[.,;!?:，。！？；：]+$/, "");
+            if (cleanUrl) {
+                if (!dedupe || !seenUrls.has(cleanUrl)) {
+                    seenUrls.add(cleanUrl);
+                    extracted.push({
+                        text: cleanUrl,
+                        url: cleanUrl,
+                        isImage: false,
+                    });
+                }
+            }
+        }
+    }
+
+    let outputResult = "";
+    if (outputFormat === "urls") {
+        outputResult = extracted.map((l) => l.url).join("\n");
+    } else if (outputFormat === "json") {
+        outputResult = JSON.stringify(extracted, null, 2);
+    } else {
+        // list
+        outputResult = extracted.map((l) => {
+            const prefix = l.isImage ? "![" : "[";
+            return `- ${prefix}${l.text}](${l.url})`;
+        }).join("\n");
+    }
+
     return {
-        result: converted.join("\n"),
+        links: extracted,
+        result: outputResult,
+        count: extracted.length,
+    };
+}
+
+export type HashAlgorithm = "fnv1a" | "djb2" | "crc32";
+
+export interface HashOptions {
+    algorithm?: HashAlgorithm;
+    format?: "hex" | "base36";
+    length?: number;
+}
+
+// CRC-32 查找表
+const CRC32_TABLE = new Uint32Array(256);
+for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    CRC32_TABLE[i] = c;
+}
+
+/**
+ * 字符串转 UTF-8 字节序列
+ */
+function stringToUtf8Bytes(str: string): number[] {
+    const bytes: number[] = [];
+    for (let i = 0; i < str.length; i++) {
+        let code = str.charCodeAt(i);
+        if (code >= 0xd800 && code <= 0xdbff) {
+            i++;
+            const next = str.charCodeAt(i);
+            code = ((code - 0xd800) << 10) + (next - 0xdc00) + 0x10000;
+        }
+        if (code <= 0x7f) {
+            bytes.push(code);
+        } else if (code <= 0x7ff) {
+            bytes.push(0xc0 | (code >> 6));
+            bytes.push(0x80 | (code & 0x3f));
+        } else if (code <= 0xffff) {
+            bytes.push(0xe0 | (code >> 12));
+            bytes.push(0x80 | ((code >> 6) & 0x3f));
+            bytes.push(0x80 | (code & 0x3f));
+        } else {
+            bytes.push(0xf0 | (code >> 18));
+            bytes.push(0x80 | ((code >> 12) & 0x3f));
+            bytes.push(0x80 | ((code >> 6) & 0x3f));
+            bytes.push(0x80 | (code & 0x3f));
+        }
+    }
+    return bytes;
+}
+
+/**
+ * 跨平台安全文本哈希/指纹计算引擎 (generateTextHash)
+ */
+export function generateTextHash(text: string, options: HashOptions | HashAlgorithm = "fnv1a"): string {
+    if (!text) return "";
+    const opts: HashOptions = typeof options === "string" ? {algorithm: options} : options;
+    const algo = opts.algorithm || "fnv1a";
+    const format = opts.format || "hex";
+    const bytes = stringToUtf8Bytes(text);
+
+    let numVal = 0;
+    if (algo === "fnv1a") {
+        let hash = 2166136261;
+        for (let i = 0; i < bytes.length; i++) {
+            hash ^= bytes[i]!;
+            hash = Math.imul(hash, 16777619);
+        }
+        numVal = hash >>> 0;
+    } else if (algo === "djb2") {
+        let hash = 5381;
+        for (let i = 0; i < bytes.length; i++) {
+            hash = ((hash << 5) + hash) + bytes[i]!;
+            hash |= 0;
+        }
+        numVal = hash >>> 0;
+    } else if (algo === "crc32") {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) {
+            crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]!) & 0xFF]!;
+        }
+        numVal = (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    let result = "";
+    if (format === "base36") {
+        result = numVal.toString(36);
+    } else {
+        result = numVal.toString(16).padStart(8, "0");
+    }
+
+    if (opts.length && opts.length > 0) {
+        result = result.slice(0, opts.length);
+    }
+    return result;
+}
+
+export interface AffixLinesOptions {
+    /** 每行前缀 */
+    prefix?: string;
+    /** 每行后缀 */
+    suffix?: string;
+    /** 是否忽略空行（默认 true，空行不加前后缀） */
+    ignoreEmpty?: boolean;
+    /** 是否清理行首行尾空白（默认 false） */
+    trimLines?: boolean;
+}
+
+export interface AffixLinesResult {
+    result: string;
+    lineCount: number;
+    changedCount: number;
+}
+
+/**
+ * 多行文本批量添加行前后缀引擎 (affixLines)
+ */
+export function affixLines(text: string, options: AffixLinesOptions = {}): AffixLinesResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", lineCount: 0, changedCount: 0};
+    }
+
+    const prefix = options.prefix || "";
+    const suffix = options.suffix || "";
+    const ignoreEmpty = options.ignoreEmpty !== false;
+    const trimLines = options.trimLines === true;
+
+    if (!prefix && !suffix && !trimLines) {
+        const total = text.split("\n").length;
+        return {result: text, lineCount: total, changedCount: 0};
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let changedCount = 0;
+
+    const processed = lines.map((line) => {
+        const curLine = trimLines ? line.trim() : line;
+        if (ignoreEmpty && curLine.length === 0) {
+            return curLine;
+        }
+        changedCount++;
+        return `${prefix}${curLine}${suffix}`;
+    });
+
+    return {
+        result: processed.join("\n"),
+        lineCount: lines.length,
         changedCount,
-        totalTasks,
     };
 }

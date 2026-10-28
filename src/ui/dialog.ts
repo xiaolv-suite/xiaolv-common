@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3575,6 +3575,28 @@ export class CommonSearchDialog {
                             this.deps.notify?.("info", `已转换 ${csvCheck.count} 条表格记录为 JSON 数组并复制`);
                         });
                     }
+                }
+                if (entry.content && (/\]\([a-zA-Z0-9+.-]+:[^)]+\)/.test(entry.content) || /https?:\/\//.test(entry.content))) {
+                    addSilent("🔗", "提取链接清单并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const linksRes = extractMarkdownLinks(raw, {outputFormat: "list"});
+                        if (linksRes.count > 0) {
+                            await this.deps.copyProviderPayload(linksRes.result);
+                            this.deps.notify?.("info", `已提取 ${linksRes.count} 个链接清单并复制`);
+                        } else {
+                            this.deps.notify?.("info", "未检测到有效链接");
+                        }
+                    });
+                }
+                if (entry.content && entry.content.trim()) {
+                    addSilent("#", "计算散列指纹 (FNV-1a) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const hash = generateTextHash(raw, "fnv1a");
+                        if (hash) {
+                            await this.deps.copyProviderPayload(hash);
+                            this.deps.notify?.("info", `已计算散列指纹 ${hash} 并复制`);
+                        }
+                    });
                 }
                 const hasVariables = (entry.varCount ?? 0) > 0 || (entry.content || "").includes("{{xlc:");
                 if (hasVariables) {
