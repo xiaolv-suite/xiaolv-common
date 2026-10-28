@@ -1721,3 +1721,201 @@ export function truncateText(text: string, options: number | TruncateOptions): s
     const truncated = text.slice(0, maxLen);
     return `${truncated}${ellipsis}`;
 }
+
+export interface StripAffixesOptions {
+    /** 要剥离的前缀字符串、正则或预设 ("list" | "quote") */
+    prefix?: string | RegExp | "list" | "quote";
+    /** 要剥离的后缀字符串或正则 */
+    suffix?: string | RegExp;
+    /** 是否忽略空行 (默认 true) */
+    ignoreEmpty?: boolean;
+}
+
+export interface StripAffixesResult {
+    result: string;
+    strippedCount: number;
+    lineCount: number;
+}
+
+/**
+ * 多行文本批量剥离前缀与后缀 (stripAffixes)
+ */
+export function stripAffixes(text: string, options: StripAffixesOptions = {}): StripAffixesResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", strippedCount: 0, lineCount: 0};
+    }
+
+    const ignoreEmpty = options.ignoreEmpty !== false;
+    let prefixMatcher: RegExp | null = null;
+
+    if (options.prefix === "list") {
+        prefixMatcher = /^\s*(?:[-*+]\s+|\d+[.、)]\s*|[①-⑳]\s*)/;
+    } else if (options.prefix === "quote") {
+        prefixMatcher = /^\s*>\s*/;
+    } else if (options.prefix instanceof RegExp) {
+        prefixMatcher = options.prefix;
+    } else if (typeof options.prefix === "string" && options.prefix.length > 0) {
+        const escaped = options.prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        prefixMatcher = new RegExp(`^${escaped}`);
+    }
+
+    let suffixMatcher: RegExp | null = null;
+    if (options.suffix instanceof RegExp) {
+        suffixMatcher = options.suffix;
+    } else if (typeof options.suffix === "string" && options.suffix.length > 0) {
+        const escaped = options.suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        suffixMatcher = new RegExp(`${escaped}$`);
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let strippedCount = 0;
+
+    const processed = lines.map((line) => {
+        if (ignoreEmpty && line.trim().length === 0) return line;
+
+        let cur = line;
+        let modified = false;
+
+        if (prefixMatcher && prefixMatcher.test(cur)) {
+            cur = cur.replace(prefixMatcher, "");
+            modified = true;
+        }
+
+        if (suffixMatcher && suffixMatcher.test(cur)) {
+            cur = cur.replace(suffixMatcher, "");
+            modified = true;
+        }
+
+        if (modified) strippedCount++;
+        return cur;
+    });
+
+    return {
+        result: processed.join("\n"),
+        strippedCount,
+        lineCount: lines.length,
+    };
+}
+
+export interface PropertiesConvertResult {
+    result: string;
+    count: number;
+    ok: boolean;
+}
+
+/**
+ * Key-Value / Properties 文本转换为标准 JSON 字符串
+ */
+export function propertiesToJson(text: string): PropertiesConvertResult {
+    if (!text || typeof text !== "string") {
+        return {result: "{}", count: 0, ok: false};
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const record: Record<string, string> = {};
+    let count = 0;
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith("#") || line.startsWith("!")) {
+            continue;
+        }
+
+        const eqIdx = line.indexOf("=");
+        const colonIdx = line.indexOf(":");
+        let splitIdx = -1;
+
+        if (eqIdx !== -1 && colonIdx !== -1) {
+            splitIdx = Math.min(eqIdx, colonIdx);
+        } else if (eqIdx !== -1) {
+            splitIdx = eqIdx;
+        } else if (colonIdx !== -1) {
+            splitIdx = colonIdx;
+        }
+
+        if (splitIdx === -1) continue;
+
+        const key = line.slice(0, splitIdx).trim();
+        const value = line.slice(splitIdx + 1).trim();
+
+        if (key) {
+            record[key] = value;
+            count++;
+        }
+    }
+
+    if (count === 0) {
+        return {result: text, count: 0, ok: false};
+    }
+
+    return {
+        result: JSON.stringify(record, null, 2),
+        count,
+        ok: true,
+    };
+}
+
+/**
+ * JSON 对象转换为 Key-Value / Properties 文本
+ */
+export function jsonToProperties(text: string): PropertiesConvertResult {
+    if (!text || typeof text !== "string") {
+        return {result: "", count: 0, ok: false};
+    }
+
+    try {
+        const parsed = JSON.parse(text.trim());
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            return {result: text, count: 0, ok: false};
+        }
+
+        const lines: string[] = [];
+        let count = 0;
+
+        for (const [key, val] of Object.entries(parsed)) {
+            lines.push(`${key}=${val !== null && val !== undefined ? String(val) : ""}`);
+            count++;
+        }
+
+        return {
+            result: lines.join("\n"),
+            count,
+            ok: true,
+        };
+    } catch {
+        return {result: text, count: 0, ok: false};
+    }
+}
+
+export type MaskType = "phone" | "email" | "idcard" | "auto";
+
+export interface MaskOptions {
+    type?: MaskType;
+}
+
+/**
+ * 文本敏感信息智能掩码脱敏 (maskSensitiveText)
+ */
+export function maskSensitiveText(text: string, options: MaskOptions | MaskType = "auto"): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const type = typeof options === "string" ? options : (options.type || "auto");
+
+    let res = text;
+
+    if (type === "idcard" || type === "auto") {
+        // 身份证 18 位脱敏：保留前 6 后 4，中间 8 位用 ******** 替换
+        res = res.replace(/(?<!\d)([1-9]\d{5})\d{8}(\w{4})(?!\w)/g, "$1********$2");
+    }
+
+    if (type === "phone" || type === "auto") {
+        // 手机号 11 位脱敏：保留前 3 后 4，中间 4 位用 **** 替换
+        res = res.replace(/(?<!\d)(1[3-9]\d)\d{4}(\d{4})(?!\d)/g, "$1****$2");
+    }
+
+    if (type === "email" || type === "auto") {
+        // 邮箱脱敏：保留首字母，其余到 @ 前用 *** 替换
+        res = res.replace(/([a-zA-Z0-9_.+-])[a-zA-Z0-9_.+-]*(@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)/g, "$1***$2");
+    }
+
+    return res;
+}

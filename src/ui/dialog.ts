@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3628,6 +3628,29 @@ export class CommonSearchDialog {
                         const res = trimLinesAdvanced(raw);
                         await this.deps.copyProviderPayload(res.result);
                         this.deps.notify?.("info", `已修剪行首尾空白并复制`);
+                    });
+                    addSilent("✂", "剥离列表/引用前缀并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = stripAffixes(raw, {prefix: "list"});
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已剥离 ${res.strippedCount} 处列表前缀并复制`);
+                    });
+                }
+                if (entry.content && (entry.content.includes("=") || (entry.content.includes(":") && entry.content.includes("\n")))) {
+                    const propRes = propertiesToJson(entry.content);
+                    if (propRes.ok && propRes.count > 0) {
+                        addSilent("🌐", `键值对转 JSON 并复制 (${propRes.count}项)`, async () => {
+                            await this.deps.copyProviderPayload(propRes.result);
+                            this.deps.notify?.("info", `已转换 ${propRes.count} 项键值对为 JSON 并复制`);
+                        });
+                    }
+                }
+                if (entry.content && (/\d{11}/.test(entry.content) || /@/.test(entry.content))) {
+                    addSilent("🔒", "敏感信息掩码脱敏并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const masked = maskSensitiveText(raw, "auto");
+                        await this.deps.copyProviderPayload(masked);
+                        this.deps.notify?.("info", "已脱敏手机/邮箱敏感信息并复制");
                     });
                 }
                 if (entry.content && (entry.content.includes(":") && (entry.content.includes("{") || entry.content.includes(",")))) {

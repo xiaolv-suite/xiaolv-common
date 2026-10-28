@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -562,6 +562,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "hash", text: "{{xlc:hash|文本}}"},
         {id: "number", text: "{{xlc:number:lines|文本}}"},
         {id: "truncate", text: "{{xlc:truncate|30|文本}}"},
+        {id: "mask", text: "{{xlc:mask|phone|手机号}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1174,6 +1175,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(quoteJsonBtn);
+
+    const stripAffixesBtn = document.createElement("button");
+    stripAffixesBtn.type = "button";
+    stripAffixesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    stripAffixesBtn.dataset.xlcControl = "capture.format.strip-affixes";
+    stripAffixesBtn.textContent = "✦ 剥前后缀";
+    stripAffixesBtn.title = "剥离选中文本或全文多行的列表项 (- / * / 1. ) 与引用标记 (>)";
+    stripAffixesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = stripAffixes(targetText, {prefix: "list"});
+        if (res.strippedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(stripAffixesBtn);
+
+    const propsJsonBtn = document.createElement("button");
+    propsJsonBtn.type = "button";
+    propsJsonBtn.className = "xlc-varbtn xlc-btn-ghost";
+    propsJsonBtn.dataset.xlcControl = "capture.format.props-json";
+    propsJsonBtn.textContent = "✦ 键值转JSON";
+    propsJsonBtn.title = "将 Properties 键值对文本 (key=value 或 key: value) 转换为标准 JSON";
+    propsJsonBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = propertiesToJson(targetText);
+        if (res.ok && res.count > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(propsJsonBtn);
+
+    const maskTextBtn = document.createElement("button");
+    maskTextBtn.type = "button";
+    maskTextBtn.className = "xlc-varbtn xlc-btn-ghost";
+    maskTextBtn.dataset.xlcControl = "capture.format.mask-text";
+    maskTextBtn.textContent = "✦ 敏感脱敏";
+    maskTextBtn.title = "自动对选中文本或全文中的手机号、身份证、邮箱进行掩码脱敏";
+    maskTextBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = maskSensitiveText(targetText, "auto");
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(maskTextBtn);
 
     return bar;
 }
