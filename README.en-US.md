@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.49] — 2026-10-29 (Latest)
+### [v0.10.50] — 2026-10-29 (Latest)
 
-Prefix/suffix line filtering, random color generator macro, and Markdown ordered list renumbering:
-- **Prefix/Suffix Line Filtering Engine (`filterLinesByAffix`)**: Pure function filtering multi-line text by prefix (e.g. `import `, `// `) or suffix (e.g. `.ts`, `;`), supporting case sensitivity toggle, inverse matching, and indentation trimming; wired to action menu and variable form.
-- **Random Color Generator (`generateRandomColor`) & `{{xlc:randomcolor}}` Macro**: Pure function generating uppercase HEX, RGB, or HSL color codes with `vibrant`, `pastel`, `dark`, and `light` tone presets; expanded dynamic macro `{{xlc:randomcolor}}`, `{{xlc:randomcolor:rgb}}`, `{{xlc:randomcolor:hsl}}`, `{{xlc:randomcolor|pastel}}`; wired to action menu and variable form.
-- **Markdown Ordered List Renumbering (`renumberOrderedList`)**: Pure function automatically repairing broken numbering sequences into continuous incremental indices per indentation level while preserving parenthesis/dot styles; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 948/948 passing tests with verified negative tests.
+Markdown links conversion/extraction, UTF-8 byte boundary truncation macro, and punctuation spacing formatting:
+- **Markdown Links Conversion & Extraction (`convertMarkdownLinks`)**: Pure function parsing and converting Markdown links (`[title](url)`) to stripped titles, bare URLs, text with URLs, or wrapping bare URLs into Markdown format; wired to action menu and variable form.
+- **UTF-8 Byte-Safe Truncation (`truncateByBytes`) & `{{xlc:btruncate}}` Macro**: Pure function strictly stopping at UTF-8 code point boundaries to prevent corrupted characters in byte-constrained fields (e.g. 255 bytes limit), supporting ellipsis; expanded dynamic macro `{{xlc:btruncate|10|你好世界}}`, `{{xlc:btruncate:10|...|你好世界}}`; wired to action menu and variable form.
+- **Punctuation Spacing Formatter (`formatPunctuationSpacing`)**: Pure function stripping redundant spaces around Chinese full-width punctuation while ensuring single standard spaces after English punctuation marks; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 952/952 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.48)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.49)</b></summary>
+
+#### [v0.10.49] — 2026-10-29
+- Prefix/suffix line filtering (`filterLinesByAffix`).
+- Random color code generator (`generateRandomColor`) & `{{xlc:randomcolor}}` macro.
+- Markdown ordered list renumbering (`renumberOrderedList`).
 
 #### [v0.10.48] — 2026-10-29
 - Markdown list style bidirectional conversion (`convertListStyle`).

@@ -6291,3 +6291,85 @@ export function renumberOrderedList(
         return `${indent}${count}${delim}${rest}`;
     }).join("\n");
 }
+
+export type LinkConvertMode = "strip" | "text_and_url" | "bare_url" | "auto_markdown";
+
+/**
+ * Markdown 超链接批量转换与提取引擎 (convertMarkdownLinks)
+ */
+export function convertMarkdownLinks(
+    text: string,
+    mode: LinkConvertMode = "strip",
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    if (mode === "auto_markdown") {
+        return text.replace(/(?<!\[[^\]]*)(https?:\/\/[^\s<>)\]]+)/g, "[$1]($1)");
+    }
+
+    return text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, title, url) => {
+        if (mode === "strip") return title;
+        if (mode === "text_and_url") return `${title} (${url})`;
+        if (mode === "bare_url") return url;
+        return match;
+    });
+}
+
+/**
+ * 文本字符与 UTF-8 字节长度安全截断引擎 (truncateByBytes)
+ * 严格按照 UTF-8 编码边界安全截断，彻底避免多字节乱码
+ */
+export function truncateByBytes(
+    text: string,
+    maxBytes = 255,
+    options: {ellipsis?: boolean} = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const limit = Math.max(1, maxBytes);
+    const ellipsis = options.ellipsis === true;
+    const ellipsisBytes = ellipsis && limit > 3 ? 3 : 0;
+    const targetBytes = limit - ellipsisBytes;
+
+    const codePointByteLen = (codePoint: number): number => {
+        if (codePoint <= 0x7f) return 1;
+        if (codePoint <= 0x7ff) return 2;
+        if (codePoint <= 0xffff) return 3;
+        return 4;
+    };
+
+    let totalBytes = 0;
+    const chars = Array.from(text);
+    for (const ch of chars) {
+        totalBytes += codePointByteLen(ch.codePointAt(0)!);
+    }
+
+    if (totalBytes <= limit) return text;
+
+    let curBytes = 0;
+    let result = "";
+    for (const ch of chars) {
+        const b = codePointByteLen(ch.codePointAt(0)!);
+        if (curBytes + b > targetBytes) break;
+        curBytes += b;
+        result += ch;
+    }
+
+    return ellipsis && ellipsisBytes > 0 ? result + "..." : result;
+}
+
+/**
+ * 中英混排标点间距与中英空隙智能规整引擎 (formatPunctuationSpacing)
+ */
+export function formatPunctuationSpacing(text: string): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    let cur = text;
+
+    cur = cur.replace(/([\u4e00-\u9fa5])\s+([，。！？；：、“”‘’《》（）【】])/g, "$1$2");
+    cur = cur.replace(/([，。！？；：、“”‘’《》（）【】])\s+([\u4e00-\u9fa5])/g, "$1$2");
+
+    cur = cur.replace(/([a-zA-Z0-9])([,;:?!])([a-zA-Z])/g, "$1$2 $3");
+    cur = cur.replace(/\s+([,;:?!])/g, "$1");
+
+    return cur;
+}

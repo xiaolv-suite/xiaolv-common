@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -4161,6 +4161,36 @@ export class CommonSearchDialog {
                         const color = generateRandomColor("hex", {tone: "vibrant"});
                         await this.deps.copyProviderPayload(color);
                         this.deps.notify?.("info", `随机颜色：${color} (已复制)`);
+                    });
+                }
+                if (entry.content && /\[([^\]]+)\]\(([^)]+)\)/.test(entry.content)) {
+                    addSilent("🔗", "提取所有 Markdown 链接 URL 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const urls = convertMarkdownLinks(raw, "bare_url");
+                        await this.deps.copyProviderPayload(urls);
+                        this.deps.notify?.("info", "已提取链接目标 URL 并复制");
+                    });
+                    addSilent("🔗", "剥离链接保留纯文本标题并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const stripped = convertMarkdownLinks(raw, "strip");
+                        await this.deps.copyProviderPayload(stripped);
+                        this.deps.notify?.("info", "已剥离链接标记并复制");
+                    });
+                }
+                if (entry.content && entry.content.length > 200) {
+                    addSilent("✂", "截断至 255 字节上限 (防超长截断) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const truncated = truncateByBytes(raw, 255, {ellipsis: true});
+                        await this.deps.copyProviderPayload(truncated);
+                        this.deps.notify?.("info", "已按 255 字节安全截断并复制");
+                    });
+                }
+                if (entry.content && (entry.content.includes("，") || entry.content.includes("。") || entry.content.includes(","))) {
+                    addSilent("🔤", "规整中英标点空格排版并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const formatted = formatPunctuationSpacing(raw);
+                        await this.deps.copyProviderPayload(formatted);
+                        this.deps.notify?.("info", "已规整中英标点空格排版并复制");
                     });
                 }
                 if (entry.content && entry.content.length > 80) {

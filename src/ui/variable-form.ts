@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -592,6 +592,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "seq", text: "{{xlc:seq|1|10}}"},
         {id: "fingerprint", text: "{{xlc:fingerprint|hello}}"},
         {id: "randomcolor", text: "{{xlc:randomcolor}}"},
+        {id: "btruncate", text: "{{xlc:btruncate|100|长文本}}"},
         {id: "regex.mreplace", text: "{{xlc:regex:mreplace|^(\\s*)|// |文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
@@ -3380,6 +3381,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         el.dispatchEvent(new Event("input", {bubbles: true}));
     });
     bar.appendChild(randColorBtn);
+
+    const stripLinkBtn = document.createElement("button");
+    stripLinkBtn.type = "button";
+    stripLinkBtn.className = "xlc-varbtn xlc-btn-ghost";
+    stripLinkBtn.dataset.xlcControl = "capture.format.strip-links";
+    stripLinkBtn.textContent = "✦ 剥离超链接";
+    stripLinkBtn.title = "将选中的 Markdown 超链接 [标题](URL) 剥离转换为纯文本标题";
+    stripLinkBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertMarkdownLinks(targetText, "strip");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(stripLinkBtn);
+
+    const btruncBtn = document.createElement("button");
+    btruncBtn.type = "button";
+    btruncBtn.className = "xlc-varbtn xlc-btn-ghost";
+    btruncBtn.dataset.xlcControl = "capture.format.byte-truncate";
+    btruncBtn.textContent = "✦ 255字节截断";
+    btruncBtn.title = "严格按照 UTF-8 边界安全截断至 255 字节（防多字节乱码）";
+    btruncBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = truncateByBytes(targetText, 255, {ellipsis: true});
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(btruncBtn);
+
+    const punctSpaceBtn = document.createElement("button");
+    punctSpaceBtn.type = "button";
+    punctSpaceBtn.className = "xlc-varbtn xlc-btn-ghost";
+    punctSpaceBtn.dataset.xlcControl = "capture.format.punct-spacing";
+    punctSpaceBtn.textContent = "✦ 标点空格规整";
+    punctSpaceBtn.title = "规整中英标点与文字间的空格间距（清理中文标点空格，规范英文标点空格）";
+    punctSpaceBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = formatPunctuationSpacing(targetText);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(punctSpaceBtn);
 
     return bar;
 }
