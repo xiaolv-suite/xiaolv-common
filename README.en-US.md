@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.39] — 2026-10-29 (Latest)
+### [v0.10.40] — 2026-10-29 (Latest)
 
-Multi-line code comments toggle, simple template variable interpolation, and brackets balance check:
-- **Line Comments Toggling Engine (`toggleLineComments`)**: Pure function automatically detecting line comment states to batch toggle line comment prefixes (`// `, `# `, `-- `), preserving leading indentation; wired to action menu and variable form.
-- **Simple Template Interpolator (`renderSimpleTemplate`) & `{{xlc:template}}` Macro**: Pure function supporting `{key}` and `{{key}}` parameter interpolation with plain objects, JSON strings, or URL query/YAML strings; expanded dynamic macro `{{xlc:template|...}}`; wired to action menu and variable form.
-- **Brackets Balance Checker (`checkBracketsBalance`)**: Pure function verifying paired balance of `()`, `[]`, `{}`, `《》`, `【】`, `「」`, `『』`, and `“”`, pinpointing unclosed brackets; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 909/909 passing tests with verified negative tests.
+Adaptive punctuation correction, text obfuscation macro, and fixed column width line wrapping:
+- **Adaptive Punctuation Engine (`normalizePunctuationAdaptive`)**: Pure function automatically adapting punctuation to Chinese or English context, protecting decimals, thousands commas, and URLs; wired to action menu and variable form.
+- **Text Obfuscation Engine (`obfuscateText`) & `{{xlc:obfuscate}}` Macro**: Pure function supporting symmetric ROT13 cipher and Leet character substitutions; expanded dynamic macro `{{xlc:obfuscate|rot13|...}}`; wired to action menu and variable form.
+- **Fixed Width Text Wrapping (`wrapTextLines`)**: Pure function wrapping lines by column limit (default 80) preserving word boundaries and double-width CJK characters; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 913/913 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.38)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.39)</b></summary>
+
+#### [v0.10.39] — 2026-10-29
+- Multi-line code comments toggle (`toggleLineComments`).
+- Simple template variable interpolation (`renderSimpleTemplate`) & `{{xlc:template}}` macro.
+- Brackets balance checker (`checkBracketsBalance`).
 
 #### [v0.10.38] — 2026-10-29
 - Unit spacing formatting (`formatUnitSpacing`).

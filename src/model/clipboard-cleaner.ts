@@ -4739,3 +4739,183 @@ export function checkBracketsBalance(text: string): BracketsBalanceResult {
         errorSummary,
     };
 }
+
+export interface AdaptivePunctuationResult {
+    result: string;
+    convertedCount: number;
+}
+
+/**
+ * 中英混排数字与全半角标点智能自适应纠错引擎 (normalizePunctuationAdaptive)
+ */
+export function normalizePunctuationAdaptive(text: string): AdaptivePunctuationResult {
+    if (!text || typeof text !== "string") return {result: text ?? "", convertedCount: 0};
+
+    let count = 0;
+    let cur = text;
+
+    cur = cur.replace(/([\u4e00-\u9fa5])\s*,\s*(?=[\u4e00-\u9fa5]|$)/g, (_, c) => {
+        count++;
+        return `${c}，`;
+    });
+    cur = cur.replace(/([\u4e00-\u9fa5])\s*\.\s*(?=[\u4e00-\u9fa5]|$)/g, (_, c) => {
+        count++;
+        return `${c}。`;
+    });
+    cur = cur.replace(/([\u4e00-\u9fa5])\s*!\s*(?=[\u4e00-\u9fa5]|$)/g, (_, c) => {
+        count++;
+        return `${c}！`;
+    });
+    cur = cur.replace(/([\u4e00-\u9fa5])\s*\?\s*(?=[\u4e00-\u9fa5]|$)/g, (_, c) => {
+        count++;
+        return `${c}？`;
+    });
+    cur = cur.replace(/([\u4e00-\u9fa5])\s*:\s*(?=[\u4e00-\u9fa5]|$)/g, (_, c) => {
+        count++;
+        return `${c}：`;
+    });
+    cur = cur.replace(/([\u4e00-\u9fa5])\s*;\s*(?=[\u4e00-\u9fa5]|$)/g, (_, c) => {
+        count++;
+        return `${c}；`;
+    });
+
+    cur = cur.replace(/([a-zA-Z])，(?=[a-zA-Z\s]|$)/g, (_, c) => {
+        count++;
+        return `${c}, `;
+    });
+    cur = cur.replace(/([a-zA-Z])。(?:(?=[a-zA-Z\s])|$)/g, (_, c) => {
+        count++;
+        return `${c}. `;
+    });
+    cur = cur.replace(/([a-zA-Z])！(?=[a-zA-Z\s]|$)/g, (_, c) => {
+        count++;
+        return `${c}! `;
+    });
+    cur = cur.replace(/([a-zA-Z])？(?=[a-zA-Z\s]|$)/g, (_, c) => {
+        count++;
+        return `${c}? `;
+    });
+
+    return {
+        result: cur,
+        convertedCount: count,
+    };
+}
+
+export type ObfuscateMode = "rot13" | "leet";
+
+/**
+ * 文本轻量安全混淆与加解密引擎 (obfuscateText)
+ */
+export function obfuscateText(text: string, mode: ObfuscateMode = "rot13"): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    if (mode === "leet") {
+        const leetMap: Record<string, string> = {
+            a: "4", A: "4",
+            e: "3", E: "3",
+            i: "1", I: "1",
+            o: "0", O: "0",
+            s: "5", S: "5",
+            t: "7", T: "7",
+        };
+        return text.replace(/[aeiost]/gi, (c) => leetMap[c] ?? c);
+    }
+
+    return text.replace(/[a-zA-Z]/g, (char) => {
+        const code = char.charCodeAt(0);
+        if (code >= 65 && code <= 90) {
+            return String.fromCharCode(((code - 65 + 13) % 26) + 65);
+        }
+        if (code >= 97 && code <= 122) {
+            return String.fromCharCode(((code - 97 + 13) % 26) + 97);
+        }
+        return char;
+    });
+}
+
+export interface WrapTextOptions {
+    /** 换行符（默认 "\n"） */
+    newLine?: string;
+    /** 缩进字符（对后续折行前添加的缩进，默认 ""） */
+    indent?: string;
+    /** 是否对西文在空格边界折行（默认 true） */
+    wordBreak?: boolean;
+}
+
+/**
+ * 多行文本固定列宽格式化与智能折行引擎 (wrapTextLines)
+ */
+export function wrapTextLines(
+    text: string,
+    maxWidth = 80,
+    options: WrapTextOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const limit = Math.max(10, maxWidth);
+    const nl = options.newLine || "\n";
+    const indent = options.indent || "";
+    const wordBreak = options.wordBreak !== false;
+
+    const rawLines = text.replace(/\r\n?/g, "\n").split("\n");
+    const resultLines: string[] = [];
+
+    const getCharWidth = (ch: string) => {
+        const code = ch.charCodeAt(0);
+        return (code >= 0x4e00 && code <= 0x9fa5) || code > 0xff ? 2 : 1;
+    };
+
+    const getStrWidth = (str: string) => {
+        let w = 0;
+        for (const c of str) w += getCharWidth(c);
+        return w;
+    };
+
+    for (const rawLine of rawLines) {
+        if (getStrWidth(rawLine) <= limit) {
+            resultLines.push(rawLine);
+            continue;
+        }
+
+        let currentLine = "";
+        let currentWidth = 0;
+        let isFirstSubLine = true;
+
+        const tokens: string[] = [];
+        if (wordBreak) {
+            const parts = rawLine.split(/([\u4e00-\u9fa5\u3400-\u4dbf]|\s+)/).filter(Boolean);
+            for (const p of parts) {
+                if (getStrWidth(p) > limit) {
+                    tokens.push(...p.split(""));
+                } else {
+                    tokens.push(p);
+                }
+            }
+        } else {
+            tokens.push(...rawLine.split(""));
+        }
+
+        for (const token of tokens) {
+            const tokenWidth = getStrWidth(token);
+            const lineIndentWidth = isFirstSubLine ? 0 : getStrWidth(indent);
+
+            if (currentWidth + tokenWidth + lineIndentWidth <= limit) {
+                currentLine += token;
+                currentWidth += tokenWidth;
+            } else {
+                if (currentLine.length > 0) {
+                    resultLines.push(isFirstSubLine ? currentLine : indent + currentLine);
+                    isFirstSubLine = false;
+                }
+                currentLine = token.trimStart();
+                currentWidth = getStrWidth(currentLine);
+            }
+        }
+
+        if (currentLine.length > 0) {
+            resultLines.push(isFirstSubLine ? currentLine : indent + currentLine);
+        }
+    }
+
+    return resultLines.join(nl);
+}
