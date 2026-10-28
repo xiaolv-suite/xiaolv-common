@@ -7081,3 +7081,134 @@ export function convertListDelimiter(
 
     return processed.join(targetDelimiter);
 }
+
+/**
+ * Markdown 脚注编号重整与底端归集引擎 (normalizeMarkdownFootnotes)
+ */
+export function normalizeMarkdownFootnotes(text: string): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    if (!text.includes("[^")) return text;
+
+    const lines = text.split("\n");
+    const defMap = new Map<string, string>();
+    const bodyLines: string[] = [];
+
+    const defRegex = /^\[\^([^\]]+)\]:\s*(.*)$/;
+    for (const line of lines) {
+        const match = line.match(defRegex);
+        if (match) {
+            const [, id, content] = match;
+            defMap.set(id!.trim(), content!.trim());
+        } else {
+            bodyLines.push(line);
+        }
+    }
+
+    if (defMap.size === 0 && !/\[\^([^\]]+)\]/.test(text)) return text;
+
+    let body = bodyLines.join("\n").trimEnd();
+    const idMap = new Map<string, number>();
+    let counter = 1;
+
+    const refRegex = /\[\^([^\]]+)\](?!\:)/g;
+    body = body.replace(refRegex, (_, id: string) => {
+        const trimmedId = id.trim();
+        let newNum = idMap.get(trimmedId);
+        if (!newNum) {
+            newNum = counter++;
+            idMap.set(trimmedId, newNum);
+        }
+        return `[^${newNum}]`;
+    });
+
+    const defOutput: string[] = [];
+    const emittedOldIds = new Set<string>();
+
+    for (const [oldId, newNum] of Array.from(idMap.entries())) {
+        emittedOldIds.add(oldId);
+        const content = defMap.get(oldId) || "";
+        defOutput.push(`[^${newNum}]: ${content}`);
+    }
+
+    for (const [oldId, content] of Array.from(defMap.entries())) {
+        if (!emittedOldIds.has(oldId)) {
+            const newNum = counter++;
+            defOutput.push(`[^${newNum}]: ${content}`);
+        }
+    }
+
+    if (defOutput.length === 0) return body;
+    return `${body}\n\n${defOutput.join("\n")}`;
+}
+
+/**
+ * 字符串反斜杠安全转义与还原引擎 (escapeBackslash)
+ */
+export function escapeBackslash(
+    text: string,
+    mode: "escape" | "unescape" = "escape",
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    if (mode === "unescape") {
+        return text
+            .replace(/\\\\/g, "\\")
+            .replace(/\\n/g, "\n")
+            .replace(/\\r/g, "\r")
+            .replace(/\\t/g, "\t")
+            .replace(/\\"/g, '"');
+    }
+    return text
+        .replace(/\\/g, "\\\\")
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "\\r")
+        .replace(/\t/g, "\\t")
+        .replace(/"/g, '\\"');
+}
+
+export interface ChunkLinesOptions {
+    titlePrefix?: string;
+}
+
+/**
+ * 多行文本按标记分块归集引擎 (chunkLinesByDelimiter)
+ */
+export function chunkLinesByDelimiter(
+    text: string,
+    delimiterPattern = "^---+$|^===+$",
+    options: ChunkLinesOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const prefix = options.titlePrefix || "### 分段";
+
+    let regex: RegExp;
+    try {
+        regex = new RegExp(delimiterPattern);
+    } catch {
+        regex = /^---+$|^===+$/;
+    }
+
+    const chunks: string[] = [];
+    let currentChunk: string[] = [];
+
+    for (const line of lines) {
+        if (regex.test(line.trim())) {
+            if (currentChunk.length > 0) {
+                const chunkContent = currentChunk.join("\n").trim();
+                if (chunkContent) chunks.push(chunkContent);
+                currentChunk = [];
+            }
+        } else {
+            currentChunk.push(line);
+        }
+    }
+
+    if (currentChunk.length > 0) {
+        const chunkContent = currentChunk.join("\n").trim();
+        if (chunkContent) chunks.push(chunkContent);
+    }
+
+    if (chunks.length <= 1) return text;
+
+    return chunks.map((c, idx) => `${prefix} ${idx + 1}\n${c}`).join("\n\n");
+}

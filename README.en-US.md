@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.55] — 2026-10-29 (Latest)
+### [v0.10.56] — 2026-10-29 (Latest)
 
-Markdown task status inversion, visual width centering macro, and delimiter conversion:
-- **Markdown Task Status Inversion (`invertTaskStatus`)**: Pure function inverting checkbox states (`[ ]` <-> `[x]`), checking all, or unchecking all across multi-line lists while preserving non-task text; wired to action menu and variable form.
-- **Visual Width Centering (`centerText`) & `{{xlc:center}}` Macro**: Pure function centering text within specified visual width with CJK double-width calculation and custom padding characters; expanded dynamic macro `{{xlc:center|15|TITLE}}`, `{{xlc:center|15|TITLE|=}}`; wired to action menu and variable form.
-- **List Delimiter Conversion (`convertListDelimiter`)**: Pure function automatically detecting dominant delimiters (newlines, commas, semicolons, pipes) and converting lists between inline and multi-line formats; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 969/969 passing tests with verified negative tests.
+Markdown footnote re-indexing/grouping, backslash escaping macro, and delimiter chunking:
+- **Markdown Footnotes Normalization (`normalizeMarkdownFootnotes`)**: Pure function sequentially re-numbering footnote references (`[^1]`, `[^2]`), stripping embedded definitions from the body, and neatly grouping them at the document bottom; wired to action menu and variable form.
+- **Backslash Escaping (`escapeBackslash`) & `{{xlc:slash}}` Macro**: Pure function escaping backslashes (`\` -> `\\`) in Windows file paths, newlines, and regexes with reversible unescaping; expanded dynamic macro `{{xlc:slash|C:\Users}}` and `{{xlc:slash:unescape|C:\\Users}}`; wired to action menu and variable form.
+- **Delimiter Line Chunking (`chunkLinesByDelimiter`)**: Pure function splitting multi-line notes by dividers (`---` or `===`) into structured chunks with generated section headers; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 972/972 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.54)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.55)</b></summary>
+
+#### [v0.10.55] — 2026-10-29
+- Markdown task status inversion (`invertTaskStatus`).
+- Visual width centering (`centerText`) & `{{xlc:center}}` macro.
+- List delimiter conversion (`convertListDelimiter`).
 
 #### [v0.10.54] — 2026-10-29
 - Markdown list pinyin/alphabetical sorting (`sortMarkdownList`).
