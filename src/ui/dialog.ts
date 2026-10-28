@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3478,6 +3478,51 @@ export class CommonSearchDialog {
                             await this.deps.copyProviderPayload(calcVal);
                             this.deps.notify?.("info", `已计算并复制结果: ${calcVal}`);
                         });
+                    }
+                }
+                const halfRes = convertWidth(entry.content || "", "to-half");
+                if (halfRes.convertedCount > 0) {
+                    addSilent("🔤", `全角转半角并复制 (规整 ${halfRes.convertedCount} 处)`, async () => {
+                        await this.deps.copyProviderPayload(halfRes.result);
+                        this.deps.notify?.("info", `已转换 ${halfRes.convertedCount} 处全角字符为半角并复制`);
+                    });
+                }
+                if (entry.content && entry.content.trim()) {
+                    addSilent(">", "切换 Markdown 引用 (>) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const toggled = toggleMarkdownBlockquote(raw);
+                        await this.deps.copyProviderPayload(toggled.result);
+                        this.deps.notify?.("info", toggled.isWrapped ? "已添加 Markdown 引用语法并复制" : "已解开 Markdown 引用语法并复制");
+                    });
+                }
+                if (contentText && contentText.length <= 500 && !contentText.includes("\n")) {
+                    addSilent("🔒", "Base64 编码并复制", async () => {
+                        const b64 = encodeBase64(contentText);
+                        await this.deps.copyProviderPayload(b64);
+                        this.deps.notify?.("info", "已生成 Base64 编码并复制到剪贴板");
+                    });
+                    const b64Dec = decodeBase64(contentText);
+                    if (b64Dec.ok && b64Dec.result !== contentText && b64Dec.result.length > 0) {
+                        addSilent("🔓", `Base64 解码并复制: ${b64Dec.result.slice(0, 30)}`, async () => {
+                            await this.deps.copyProviderPayload(b64Dec.result);
+                            this.deps.notify?.("info", "已解码 Base64 文本并复制");
+                        });
+                    }
+                    const urlEnc = encodeUrlText(contentText, true);
+                    if (urlEnc !== contentText) {
+                        addSilent("🔗", "URL 组件编码并复制", async () => {
+                            await this.deps.copyProviderPayload(urlEnc);
+                            this.deps.notify?.("info", "已进行 URL 编码并复制");
+                        });
+                    }
+                    if (contentText.includes("%")) {
+                        const urlDec = decodeUrlText(contentText, true);
+                        if (urlDec.ok && urlDec.result !== contentText) {
+                            addSilent("🔗", `URL 解码并复制: ${urlDec.result.slice(0, 30)}`, async () => {
+                                await this.deps.copyProviderPayload(urlDec.result);
+                                this.deps.notify?.("info", "已进行 URL 解码并复制");
+                            });
+                        }
                     }
                 }
                 const hasVariables = (entry.varCount ?? 0) > 0 || (entry.content || "").includes("{{xlc:");

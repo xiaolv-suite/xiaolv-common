@@ -30,6 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
+import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText} from "./clipboard-cleaner";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
 // 带参语法分隔符必须是 | 而非 :（R161 真机验收发现）：Lute 把 :date: 当 emoji 短代码转换，
 // {{xlc:date:+3d}} 落库即损坏成 {{xlc📅+3d}}；ask 冒号语法无此问题（:ask: 非短代码，真机已验证）。
@@ -39,11 +40,11 @@ import {evaluateMathExpression} from "./calculator";
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|calc|selection|timestamp|week|greeting|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|calc|selection|timestamp|week|greeting|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -552,6 +553,62 @@ export function resolveRegexArg(rawArg: string, subAction?: string): string | nu
     return null;
 }
 
+/** 解析 url 语法参数 */
+export function resolveUrlArg(rawArg: string, subAction?: string): string | null {
+    const trimmed = rawArg.trim();
+    let action = subAction?.trim().toLowerCase();
+    let content = trimmed;
+
+    if (!action) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe === -1) {
+            // 默认编码
+            action = "encode";
+            content = trimmed;
+        } else {
+            action = trimmed.slice(0, firstPipe).trim().toLowerCase();
+            content = trimmed.slice(firstPipe + 1);
+        }
+    }
+
+    if (action === "encode" || action === "enc") {
+        return encodeUrlText(content, true);
+    }
+    if (action === "decode" || action === "dec") {
+        const decoded = decodeUrlText(content, true);
+        return decoded.ok ? decoded.result : null;
+    }
+    return null;
+}
+
+/** 解析 base64 语法参数 */
+export function resolveBase64Arg(rawArg: string, subAction?: string): string | null {
+    const trimmed = rawArg.trim();
+    let action = subAction?.trim().toLowerCase();
+    let content = trimmed;
+
+    if (!action) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe === -1) {
+            // 默认编码
+            action = "encode";
+            content = trimmed;
+        } else {
+            action = trimmed.slice(0, firstPipe).trim().toLowerCase();
+            content = trimmed.slice(firstPipe + 1);
+        }
+    }
+
+    if (action === "encode" || action === "enc") {
+        return encodeBase64(content);
+    }
+    if (action === "decode" || action === "dec") {
+        const decoded = decodeBase64(content);
+        return decoded.ok ? decoded.result : null;
+    }
+    return null;
+}
+
 export function getIsoWeekNumber(d: Date): number {
     const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNr = (target.getUTCDay() + 6) % 7;
@@ -592,6 +649,8 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "timestamp": return String(Math.floor(now.getTime() / 1000));
         case "week": return `第${getIsoWeekNumber(now)}周`;
         case "greeting": return resolveGreeting(now);
+        case "url": return "";
+        case "base64": return "";
     }
 }
 
@@ -648,6 +707,16 @@ export function resolvePlaceholder(
         if (rawKind.includes(":")) {
             subAction = rawKind.split(":")[1];
         }
+    } else if (rawKind.startsWith("url")) {
+        kind = "url";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
+    } else if (rawKind.startsWith("base64")) {
+        kind = "base64";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -700,6 +769,8 @@ export function resolvePlaceholder(
         return `第${weekNum}周`;
     }
     if (kind === "greeting") return resolveGreeting(now, arg);
+    if (kind === "url") return arg ? resolveUrlArg(arg, subAction) : null;
+    if (kind === "base64") return arg ? resolveBase64Arg(arg, subAction) : null;
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
 }
@@ -721,7 +792,11 @@ export function listPlaceholders(text: string): PlaceholderKind[] {
             ? "case"
             : rawKind.startsWith("regex")
                 ? "regex"
-                : rawKind) as PlaceholderKind;
+                : rawKind.startsWith("url")
+                    ? "url"
+                    : rawKind.startsWith("base64")
+                        ? "base64"
+                        : rawKind) as PlaceholderKind;
         if (!kinds.includes(kind)) kinds.push(kind);
     }
     return kinds;

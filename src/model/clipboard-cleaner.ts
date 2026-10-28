@@ -596,3 +596,217 @@ export function sortLines(
         lineCount: lines.length,
     };
 }
+
+export interface WidthConvertOptions {
+    /** 仅转换字母数字（A-Z, a-z, 0-9），不转标点 */
+    alphanumericOnly?: boolean;
+    /** 转换标点符号（默认 true） */
+    punctuation?: boolean;
+    /** 转换全半角空格（\u3000 <-> \u0020，默认 true） */
+    spaces?: boolean;
+}
+
+export interface WidthConvertResult {
+    result: string;
+    convertedCount: number;
+}
+
+/**
+ * 全角/半角字符双向智能转换与规范化引擎 (convertWidth)
+ * to-half: 全角转半角 (如 １２３ -> 123, ａｂｃ -> abc, 　 -> 空格, ！ -> !)
+ * to-full: 半角转全角 (如 123 -> １２３, abc -> ａｂｃ, ! -> ！)
+ */
+export function convertWidth(
+    text: string,
+    mode: "to-half" | "to-full",
+    options: WidthConvertOptions = {},
+): WidthConvertResult {
+    if (!text) return {result: text ?? "", convertedCount: 0};
+
+    const alphanumericOnly = options.alphanumericOnly === true;
+    const punctuation = options.punctuation !== false;
+    const spaces = options.spaces !== false;
+
+    let count = 0;
+    const chars = Array.from(text);
+
+    const converted = chars.map((char) => {
+        const code = char.charCodeAt(0);
+
+        if (mode === "to-half") {
+            // 全角空格 \u3000 (12288) -> 半角空格 \u0020 (32)
+            if (code === 12288) {
+                if (spaces && !alphanumericOnly) {
+                    count++;
+                    return " ";
+                }
+                return char;
+            }
+
+            // 全角 ASCII 范围: 65281 (\uFF01 '！') ~ 65374 (\uFF5E '～')
+            if (code >= 65281 && code <= 65374) {
+                const isFullNum = code >= 65296 && code <= 65305; // ０-９
+                const isFullUpper = code >= 65313 && code <= 65338; // Ａ-Ｚ
+                const isFullLower = code >= 65345 && code <= 65370; // ａ-ｚ
+                const isAlphaNum = isFullNum || isFullUpper || isFullLower;
+
+                if (alphanumericOnly) {
+                    if (isAlphaNum) {
+                        count++;
+                        return String.fromCharCode(code - 65248);
+                    }
+                    return char;
+                }
+
+                if (!punctuation && !isAlphaNum) {
+                    return char;
+                }
+
+                count++;
+                return String.fromCharCode(code - 65248);
+            }
+
+            return char;
+        } else {
+            // to-full (半角转全角)
+            if (code === 32) {
+                if (spaces && !alphanumericOnly) {
+                    count++;
+                    return "\u3000";
+                }
+                return char;
+            }
+
+            // 半角 ASCII 范围: 33 ('!') ~ 126 ('~')
+            if (code >= 33 && code <= 126) {
+                const isNum = code >= 48 && code <= 57; // 0-9
+                const isUpper = code >= 65 && code <= 90; // A-Z
+                const isLower = code >= 97 && code <= 122; // a-z
+                const isAlphaNum = isNum || isUpper || isLower;
+
+                if (alphanumericOnly) {
+                    if (isAlphaNum) {
+                        count++;
+                        return String.fromCharCode(code + 65248);
+                    }
+                    return char;
+                }
+
+                if (!punctuation && !isAlphaNum) {
+                    return char;
+                }
+
+                count++;
+                return String.fromCharCode(code + 65248);
+            }
+
+            return char;
+        }
+    });
+
+    return {
+        result: converted.join(""),
+        convertedCount: count,
+    };
+}
+
+/**
+ * UTF-8 安全 Base64 编码（支持多字节中文字符无损转换）
+ */
+export function encodeBase64(text: string): string {
+    if (!text) return "";
+    try {
+        const g = typeof globalThis !== "undefined" ? (globalThis as unknown as {Buffer?: {from: (s: string, enc: string) => {toString: (enc: string) => string}}}) : undefined;
+        if (g?.Buffer) {
+            return g.Buffer.from(text, "utf-8").toString("base64");
+        }
+        const utf8Bytes = encodeURIComponent(text).replace(/%([0-9A-F]{2})/g, (_, p1) => {
+            return String.fromCharCode(parseInt(p1, 16));
+        });
+        return btoa(utf8Bytes);
+    } catch {
+        return "";
+    }
+}
+
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+/**
+ * UTF-8 安全 Base64 解码（支持多字节中文字符，出错时安全返回 ok: false 与原文）
+ */
+export function decodeBase64(encoded: string): {result: string; ok: boolean} {
+    if (!encoded) return {result: "", ok: true};
+    const clean = encoded.trim();
+    if (!BASE64_PATTERN.test(clean) || clean.length % 4 !== 0) {
+        return {result: encoded, ok: false};
+    }
+    try {
+        const g = typeof globalThis !== "undefined" ? (globalThis as unknown as {Buffer?: {from: (s: string, enc: string) => {toString: (enc: string) => string}}}) : undefined;
+        if (g?.Buffer) {
+            const decoded = g.Buffer.from(clean, "base64").toString("utf-8");
+            return {result: decoded, ok: true};
+        }
+        const binaryStr = atob(clean);
+        const bytes = Array.from(binaryStr).map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("");
+        const result = decodeURIComponent(bytes);
+        return {result, ok: true};
+    } catch {
+        return {result: encoded, ok: false};
+    }
+}
+
+/**
+ * URL 文本编码纯函数
+ */
+export function encodeUrlText(text: string, component = true): string {
+    if (!text) return "";
+    try {
+        return component ? encodeURIComponent(text) : encodeURI(text);
+    } catch {
+        return text;
+    }
+}
+
+/**
+ * URL 文本解码纯函数
+ */
+export function decodeUrlText(encoded: string, component = true): {result: string; ok: boolean} {
+    if (!encoded) return {result: "", ok: true};
+    try {
+        const result = component ? decodeURIComponent(encoded) : decodeURI(encoded);
+        return {result, ok: true};
+    } catch {
+        return {result: encoded, ok: false};
+    }
+}
+
+/**
+ * Markdown 引用语法包裹/解开 (toggleMarkdownBlockquote)
+ * forceAction: "wrap" 强制加引用前缀；"unwrap" 强制去除引用前缀；不传则根据当前状态反转
+ */
+export function toggleMarkdownBlockquote(text: string, forceAction?: "wrap" | "unwrap"): {result: string; isWrapped: boolean} {
+    if (!text) return {result: "", isWrapped: false};
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const allQuoted = lines.every((l) => l.trim().length === 0 || l.startsWith("> ") || l === ">");
+    const shouldUnwrap = forceAction === "unwrap" || (forceAction !== "wrap" && allQuoted);
+
+    if (shouldUnwrap) {
+        const unquoted = lines.map((l) => {
+            if (l.startsWith("> ")) return l.slice(2);
+            if (l.startsWith(">")) return l.slice(1);
+            return l;
+        });
+        return {result: unquoted.join("\n"), isWrapped: false};
+    } else {
+        const quoted = lines.map((l) => (l.length > 0 ? `> ${l}` : ">"));
+        return {result: quoted.join("\n"), isWrapped: true};
+    }
+}
+
+/**
+ * Markdown 代码围栏语法包裹 (wrapMarkdownCodefence)
+ */
+export function wrapMarkdownCodefence(text: string, lang = ""): string {
+    const cleanLang = lang.trim();
+    return "```" + cleanLang + "\n" + (text ?? "") + "\n```";
+}

@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -558,6 +558,8 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "week", text: "{{xlc:week}}"},
         {id: "timestamp", text: "{{xlc:timestamp}}"},
         {id: "calc", text: "{{xlc:calc:100*1.13}}"},
+        {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
+        {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
         {id: "random", text: "{{xlc:random|选项A,选项B}}"},
         {id: "greeting", text: "{{xlc:greeting}}"},
         {id: "doc", text: "{{xlc:doc}}"},
@@ -748,6 +750,113 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
     snakeBtn.title = "将选中文本或全文转换为下划线命名 (snake_case)";
     snakeBtn.addEventListener("click", () => applyCaseTransform("snake"));
     bar.appendChild(snakeBtn);
+
+    const halfWidthBtn = document.createElement("button");
+    halfWidthBtn.type = "button";
+    halfWidthBtn.className = "xlc-varbtn xlc-btn-ghost";
+    halfWidthBtn.dataset.xlcControl = "capture.format.to-half-width";
+    halfWidthBtn.textContent = "✦ 全角转半角";
+    halfWidthBtn.title = "将全角字母数字与标点一键转为标准半角字符 (如 １２３→123)";
+    halfWidthBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertWidth(targetText, "to-half");
+        if (res.convertedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(halfWidthBtn);
+
+    const urlEncBtn = document.createElement("button");
+    urlEncBtn.type = "button";
+    urlEncBtn.className = "xlc-varbtn xlc-btn-ghost";
+    urlEncBtn.dataset.xlcControl = "capture.format.url-encode";
+    urlEncBtn.textContent = "✦ URL编码";
+    urlEncBtn.title = "对选中文本或全文执行 URL 组件编码 (encodeURIComponent)";
+    urlEncBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        if (!targetText) return;
+        const encoded = encodeUrlText(targetText, true);
+        if (encoded !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + encoded + el.value.slice(end);
+                el.setSelectionRange(start, start + encoded.length);
+            } else {
+                el.value = encoded;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(urlEncBtn);
+
+    const base64Btn = document.createElement("button");
+    base64Btn.type = "button";
+    base64Btn.className = "xlc-varbtn xlc-btn-ghost";
+    base64Btn.dataset.xlcControl = "capture.format.base64-encode";
+    base64Btn.textContent = "✦ Base64";
+    base64Btn.title = "对选中文本或全文执行 UTF-8 安全 Base64 编码";
+    base64Btn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        if (!targetText) return;
+        const encoded = encodeBase64(targetText);
+        if (encoded) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + encoded + el.value.slice(end);
+                el.setSelectionRange(start, start + encoded.length);
+            } else {
+                el.value = encoded;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(base64Btn);
+
+    const quoteWrapBtn = document.createElement("button");
+    quoteWrapBtn.type = "button";
+    quoteWrapBtn.className = "xlc-varbtn xlc-btn-ghost";
+    quoteWrapBtn.dataset.xlcControl = "capture.format.quote-wrap";
+    quoteWrapBtn.textContent = "✦ 引用包裹";
+    quoteWrapBtn.title = "在选中文本或每行前切换 Markdown 引用前缀 (>)";
+    quoteWrapBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        if (!targetText) return;
+        const toggled = toggleMarkdownBlockquote(targetText);
+        if (toggled.result !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + toggled.result + el.value.slice(end);
+                el.setSelectionRange(start, start + toggled.result.length);
+            } else {
+                el.value = toggled.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(quoteWrapBtn);
 
     return bar;
 }
