@@ -327,6 +327,8 @@ export function parseSearchGrammar(raw: string): ParsedSearchGrammar {
         } else if (/^(?:cat|category):(.+)$/i.test(t)) {
             const idx = t.indexOf(":");
             category = t.slice(idx + 1).trim();
+        } else if (/^@([^\s@]+)$/.test(t) && t.length > 1) {
+            category = t.slice(1).trim();
         } else if (/^-(.+)$/.test(t) && t.length > 1) {
             excludeTokens.push(t.slice(1).trim().toLowerCase());
         } else {

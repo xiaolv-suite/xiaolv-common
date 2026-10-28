@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
@@ -689,6 +689,22 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(dedupeBtn);
+
+    const compactBtn = document.createElement("button");
+    compactBtn.type = "button";
+    compactBtn.className = "xlc-varbtn xlc-btn-ghost";
+    compactBtn.dataset.xlcControl = "capture.format.compact-lines";
+    compactBtn.textContent = "✦ 净空行";
+    compactBtn.title = "清除每行行首行尾多余空白，并将多重连续空行压缩为一个空行";
+    compactBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const res = compactWhitespaceAndLines(el.value, true);
+        if (res.trimmedLines > 0 || res.result !== el.value) {
+            el.value = res.result;
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(compactBtn);
 
     return bar;
 }

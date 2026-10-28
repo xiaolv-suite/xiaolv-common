@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3403,6 +3403,13 @@ export class CommonSearchDialog {
                     addSilent("✂", `消除重复行并复制 (剔除 ${dedupeRes.removedCount} 处重复)`, async () => {
                         await this.deps.copyProviderPayload(dedupeRes.result);
                         this.deps.notify?.("info", `已消除 ${dedupeRes.removedCount} 处重复行并复制`);
+                    });
+                }
+                const compactRes = compactWhitespaceAndLines(entry.content || "", true);
+                if (compactRes.trimmedLines > 0 || (entry.content && compactRes.result !== entry.content.trim())) {
+                    addSilent("🧹", "压缩空行与缩进并复制", async () => {
+                        await this.deps.copyProviderPayload(compactRes.result);
+                        this.deps.notify?.("info", "已压缩多余空行与缩进并复制");
                     });
                 }
                 const hasVariables = (entry.varCount ?? 0) > 0 || (entry.content || "").includes("{{xlc:");
