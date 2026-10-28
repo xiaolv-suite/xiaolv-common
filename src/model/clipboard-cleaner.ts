@@ -3407,3 +3407,148 @@ export function humanizeIdentifier(text: string, options: HumanizeOptions = {}):
 
     return formatted.join(sep);
 }
+
+export interface ZipLinesOptions {
+    /** 拼接两行之间的分隔符（默认 ": "） */
+    separator?: string;
+    /** 合并模式：inline (A1: B1 同行拼接), alternate (A1, B1 交叉换行拼接) */
+    mode?: "inline" | "alternate";
+}
+
+/**
+ * 多行文本两两配对与交替合并引擎 (zipLines)
+ */
+export function zipLines(textA: string, textB: string, options: ZipLinesOptions = {}): string {
+    const linesA = (textA ?? "").replace(/\r\n?/g, "\n").split("\n");
+    const linesB = (textB ?? "").replace(/\r\n?/g, "\n").split("\n");
+
+    const sep = options.separator !== undefined ? options.separator : ": ";
+    const mode = options.mode || "inline";
+    const maxLen = Math.max(linesA.length, linesB.length);
+
+    if (maxLen === 0) return "";
+
+    const result: string[] = [];
+
+    if (mode === "alternate") {
+        for (let i = 0; i < maxLen; i++) {
+            if (i < linesA.length) result.push(linesA[i]!);
+            if (i < linesB.length) result.push(linesB[i]!);
+        }
+    } else {
+        // inline
+        for (let i = 0; i < maxLen; i++) {
+            const a = linesA[i] ?? "";
+            const b = linesB[i] ?? "";
+            result.push(`${a}${sep}${b}`);
+        }
+    }
+
+    return result.join("\n");
+}
+
+export interface StatsResult {
+    sum: number;
+    average: number;
+    median: number;
+    variance: number;
+    stdDev: number;
+    count: number;
+    result: string;
+}
+
+/**
+ * 统计指标（求和、平均、中位数、方差、标准差）分析计算 (calculateStats)
+ */
+export function calculateStats(input: number[] | string): StatsResult {
+    const numbers: number[] = [];
+
+    if (Array.isArray(input)) {
+        for (const item of input) {
+            if (Number.isFinite(item)) numbers.push(item);
+        }
+    } else if (typeof input === "string") {
+        const matches = input.match(/[-+]?\d+(?:\.\d+)?/g);
+        if (matches) {
+            for (const m of matches) {
+                const n = parseFloat(m);
+                if (Number.isFinite(n)) numbers.push(n);
+            }
+        }
+    }
+
+    if (numbers.length === 0) {
+        return {
+            sum: 0,
+            average: 0,
+            median: 0,
+            variance: 0,
+            stdDev: 0,
+            count: 0,
+            result: "无有效数值",
+        };
+    }
+
+    const count = numbers.length;
+    let sum = 0;
+    for (const n of numbers) sum += n;
+    const average = parseFloat((sum / count).toFixed(2));
+
+    // 计算中位数
+    const sorted = numbers.slice().sort((a, b) => a - b);
+    let median = 0;
+    const mid = Math.floor(count / 2);
+    if (count % 2 === 0) {
+        median = parseFloat(((sorted[mid - 1]! + sorted[mid]!) / 2).toFixed(2));
+    } else {
+        median = sorted[mid]!;
+    }
+
+    // 计算方差与标准差
+    let varianceSum = 0;
+    for (const n of numbers) {
+        varianceSum += Math.pow(n - average, 2);
+    }
+    const variance = parseFloat((varianceSum / count).toFixed(2));
+    const stdDev = parseFloat(Math.sqrt(variance).toFixed(2));
+    const roundSum = parseFloat(sum.toFixed(2));
+
+    const result = `合计: ${roundSum} | 均值: ${average} | 中位数: ${median} | 标准差: ${stdDev} | 笔数: ${count}`;
+
+    return {
+        sum: roundSum,
+        average,
+        median,
+        variance,
+        stdDev,
+        count,
+        result,
+    };
+}
+
+export interface SlugifyOptions {
+    /** 是否强制小写（默认 true） */
+    lowercase?: boolean;
+    /** 单词间连接符（默认 "-"） */
+    separator?: string;
+}
+
+/**
+ * 文本标题转 URL/Git 连字符别名 Slug (slugifyText)
+ * 如 "10 Tips for Better Code!" -> "10-tips-for-better-code"
+ */
+export function slugifyText(text: string, options: SlugifyOptions = {}): string {
+    if (!text || typeof text !== "string") return "";
+    const lower = options.lowercase !== false;
+    const sep = options.separator !== undefined ? options.separator : "-";
+
+    let clean = text
+        .trim()
+        .replace(/[^\w\u4e00-\u9fa5\s-]+/g, "") // 移除特殊标点，保留字母数字、汉字与空格
+        .replace(/[\s_-]+/g, sep);              // 连续空白下划线换为分隔符
+
+    if (clean.startsWith(sep)) clean = clean.slice(sep.length);
+    if (clean.endsWith(sep)) clean = clean.slice(0, -sep.length);
+
+    return lower ? clean.toLowerCase() : clean;
+}

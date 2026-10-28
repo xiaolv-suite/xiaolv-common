@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.31] — 2026-10-28 (Latest)
+### [v0.10.32] — 2026-10-28 (Latest)
 
-Line-level diff comparison, HEX/RGB/HSL color conversion, and identifier humanization:
-- **Lightweight Line-level Diff (`diffLinesQuick`)**: Pure function based on LCS algorithm comparing two multi-line texts and outputting unified diff (+/-).
-- **Color Format Conversion (`convertColorFormat`) & `{{xlc:color}}` Macro**: Seamlessly converts between 3/6-digit HEX, RGB, and HSL. Dynamic macro `{{xlc:color:rgb|...}}` added.
-- **Identifier Humanization (`humanizeIdentifier`)**: Transforms camelCase, snake_case, and kebab-case identifiers into readable natural word phrases.
-- **Quality Gates**: Unit test suite expanded to 878/878 passing tests with verified negative tests.
+Pairwise line merging, advanced statistics (median/variance/stdDev), and slug conversion:
+- **Pairwise Line Merging (`zipLines`)**: Pure function to merge two multi-line texts pairwise (inline `A: B` or alternate line interleaved).
+- **Advanced Numeric Statistics (`calculateStats`) & `{{xlc:stats}}` Macro**: Computes count, sum, average, median, variance, and standard deviation. Dynamic macro `{{xlc:stats|...}}` added.
+- **Title to Slug Converter (`slugifyText`)**: Converts text and titles into URL/Git friendly hyphenated slugs.
+- **Quality Gates**: Unit test suite expanded to 882/882 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.30)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.31)</b></summary>
+
+#### [v0.10.31] — 2026-10-28
+- Lightweight line-level diff (`diffLinesQuick`).
+- Color format conversion (`convertColorFormat`) & `{{xlc:color}}` macro.
+- Identifier humanization (`humanizeIdentifier`).
 
 #### [v0.10.30] — 2026-10-28
 - Table matrix transposition (`transposeMatrixText`).
@@ -139,11 +144,6 @@ Line-level diff comparison, HEX/RGB/HSL color conversion, and identifier humaniz
 - Multi-line column extraction (`extractColumnFromLines`).
 - Weighted random choice (`pickWeightedOption`) & `{{xlc:choose}}` macro.
 - English noun pluralization (`pluralizeText`).
-
-#### [v0.10.28] — 2026-10-28
-- Multi-line numeric lines summary (`sumNumericLines`).
-- Chinese lunar year & zodiac calculator (`getChineseZodiacAndStemBranch`) and `{{xlc:lunar:year}}` macro.
-- Repeated phrases extraction (`extractRepeatedPhrases`).
 
 #### [v0.10.28] — 2026-10-28
 - Multi-line numeric lines summary (`sumNumericLines`).

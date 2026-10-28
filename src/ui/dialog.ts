@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3709,6 +3709,18 @@ export class CommonSearchDialog {
                         await this.deps.copyProviderPayload(diff.diffResult);
                         this.deps.notify?.("info", `已生成行级比对结果 (${diff.unchangedCount}行一致)`);
                     });
+                    if (entry.content.split("\n").filter(Boolean).length >= 2) {
+                        addSilent("🔗", "前半段与后半段多行两两配对并复制", async () => {
+                            const raw = entry.content || await this.deps.preview(entry.id) || "";
+                            const lines = raw.split("\n").filter(Boolean);
+                            const half = Math.ceil(lines.length / 2);
+                            const firstHalf = lines.slice(0, half).join("\n");
+                            const secondHalf = lines.slice(half).join("\n");
+                            const zipped = zipLines(firstHalf, secondHalf, {separator: ": "});
+                            await this.deps.copyProviderPayload(zipped);
+                            this.deps.notify?.("info", "已配对合并两段列表并复制");
+                        });
+                    }
                 }
                 if (entry.content && /^[+-]?\d{1,12}$/.test(entry.content.trim())) {
                     addSilent("🔤", "数字转英文拼写单词并复制", async () => {
@@ -3770,6 +3782,26 @@ export class CommonSearchDialog {
                         const phrase = humanizeIdentifier(raw);
                         await this.deps.copyProviderPayload(phrase);
                         this.deps.notify?.("info", `自然短语：${phrase}`);
+                    });
+                }
+                if (entry.content && !entry.content.includes("\n") && /[a-zA-Z0-9\s_-]{4,}/.test(entry.content.trim())) {
+                    addSilent("🔗", "转为 URL/Git 连字符别名 (Slug) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const slug = slugifyText(raw);
+                        if (slug) {
+                            await this.deps.copyProviderPayload(slug);
+                            this.deps.notify?.("info", `已生成 Slug 别名：${slug}`);
+                        }
+                    });
+                }
+                if (entry.content && /\d+.*[,，\s].*\d+/.test(entry.content.trim())) {
+                    addSilent("🧮", "高级统计分析 (中位数/方差) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const stats = calculateStats(raw);
+                        if (stats.count > 0) {
+                            await this.deps.copyProviderPayload(stats.result);
+                            this.deps.notify?.("info", `统计分析：${stats.result}`);
+                        }
                     });
                 }
                 if (entry.content && /^(19\d\d|20\d\d)$/.test(entry.content.trim())) {

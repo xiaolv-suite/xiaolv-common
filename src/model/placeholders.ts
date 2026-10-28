@@ -30,7 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
-import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat} from "./clipboard-cleaner";
+import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat, calculateStats} from "./clipboard-cleaner";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
 // 带参语法分隔符必须是 | 而非 :（R161 真机验收发现）：Lute 把 :date: 当 emoji 短代码转换，
 // {{xlc:date:+3d}} 落库即损坏成 {{xlc📅+3d}}；ask 冒号语法无此问题（:ask: 非短代码，真机已验证）。
@@ -40,11 +40,11 @@ import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEnti
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -991,6 +991,34 @@ export function resolveColorArg(rawArg: string, subFormat?: string): string | nu
     return convertColorFormat(colorStr, format || "rgb");
 }
 
+/** 解析 stats 语法参数（高级统计指标：中位数、方差、标准差等） */
+export function resolveStatsArg(rawArg: string, subMetric?: string): string | null {
+    const trimmed = rawArg.trim();
+    if (!trimmed) return null;
+    let metric = subMetric?.trim().toLowerCase();
+    let numsStr = trimmed;
+
+    if (!metric) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe !== -1) {
+            metric = trimmed.slice(0, firstPipe).trim().toLowerCase();
+            numsStr = trimmed.slice(firstPipe + 1);
+        }
+    }
+
+    const res = calculateStats(numsStr);
+    if (res.count === 0) return null;
+
+    if (metric === "median") return String(res.median);
+    if (metric === "stddev" || metric === "sd") return String(res.stdDev);
+    if (metric === "variance" || metric === "var") return String(res.variance);
+    if (metric === "avg" || metric === "average") return String(res.average);
+    if (metric === "sum") return String(res.sum);
+    if (metric === "count") return String(res.count);
+
+    return res.result;
+}
+
 export function getIsoWeekNumber(d: Date): number {
     const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNr = (target.getUTCDay() + 6) % 7;
@@ -1049,6 +1077,7 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "choose": return "";
         case "words": return "";
         case "color": return "";
+        case "stats": return "";
         case "password": return generateSecurePassword(14, "complex");
     }
 }
@@ -1196,6 +1225,11 @@ export function resolvePlaceholder(
         if (rawKind.includes(":")) {
             subAction = rawKind.split(":")[1];
         }
+    } else if (rawKind.startsWith("stats")) {
+        kind = "stats";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -1267,6 +1301,7 @@ export function resolvePlaceholder(
     if (kind === "choose") return arg ? resolveChooseArg(arg) : null;
     if (kind === "words") return arg ? resolveWordsArg(arg, subAction) : null;
     if (kind === "color") return arg ? resolveColorArg(arg, subAction) : null;
+    if (kind === "stats") return arg ? resolveStatsArg(arg, subAction) : null;
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
 }
