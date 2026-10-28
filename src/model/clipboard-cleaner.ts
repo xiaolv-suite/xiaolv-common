@@ -4456,3 +4456,89 @@ export function convertObjectKeysCase(text: string, targetCase: KeyCaseStyle = "
 
     return converted.join("\n");
 }
+
+export interface UnitSpacingResult {
+    result: string;
+    spacedCount: number;
+}
+
+const COMMON_UNITS = [
+    "B", "KB", "MB", "GB", "TB", "PB", "Kbps", "Mbps", "Gbps", "bps",
+    "m", "km", "cm", "mm", "kg", "g", "mg", "s", "ms", "h", "min", "Hz", "kHz", "MHz", "GHz", "V", "A", "W", "kW", "MW", "J", "N", "Pa", "kPa", "MPa", "dpi", "px", "em", "rem",
+];
+
+const UNIT_REGEX = /(\d+(?:\.\d+)?)(?:\s*)([a-zA-Z]+)\b/g;
+
+/**
+ * 中英混排数字与度量单位规范间距格式化 (formatUnitSpacing)
+ * 例如 "100MB" -> "100 MB", "3.5GHz" -> "3.5 GHz", "50kg" -> "50 kg"
+ */
+export function formatUnitSpacing(text: string): UnitSpacingResult {
+    if (!text || typeof text !== "string") return {result: text ?? "", spacedCount: 0};
+
+    let count = 0;
+    const unitSet = new Set(COMMON_UNITS);
+
+    const result = text.replace(UNIT_REGEX, (match, num, unit) => {
+        if (unitSet.has(unit)) {
+            const expected = `${num} ${unit}`;
+            if (expected !== match) {
+                count++;
+                return expected;
+            }
+        }
+        return match;
+    });
+
+    return {result, spacedCount: count};
+}
+
+export type CharsetFilterMode =
+    | "chinese-only"
+    | "alphanumeric-only"
+    | "ascii-only"
+    | "strip-punctuation"
+    | "strip-emoji";
+
+/**
+ * 文本字符集提取与特定字符清洗过滤引擎 (filterCharacterSet)
+ */
+export function filterCharacterSet(text: string, mode: CharsetFilterMode = "alphanumeric-only"): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    switch (mode) {
+        case "chinese-only":
+            return text.replace(/[^\u4e00-\u9fa5\u3400-\u4dbf]/g, "");
+
+        case "alphanumeric-only":
+            return text.replace(/[^a-zA-Z0-9]/g, "");
+
+        case "ascii-only":
+            return text.replace(/[^\x20-\x7E\r\n\t]/g, "");
+
+        case "strip-punctuation":
+            return text.replace(/[\p{P}\p{S}]/gu, "");
+
+        case "strip-emoji":
+            return text.replace(/\p{Extended_Pictographic}/gu, "");
+
+        default:
+            return text;
+    }
+}
+
+const NANO_DEFAULT_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+/**
+ * 紧凑 URL 安全唯一随机标识生成引擎 (generateNanoId)
+ */
+export function generateNanoId(size = 10, alphabet: string = NANO_DEFAULT_ALPHABET): string {
+    const len = Math.max(1, size);
+    const chars = alphabet && alphabet.length > 0 ? alphabet : NANO_DEFAULT_ALPHABET;
+    let id = "";
+    for (let i = 0; i < len; i++) {
+        const randIndex = Math.floor(Math.random() * chars.length);
+        id += chars[randIndex];
+    }
+    return id;
+}

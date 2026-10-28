@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.37] — 2026-10-29 (Latest)
+### [v0.10.38] — 2026-10-29 (Latest)
 
-Smart quotes normalization, multi-line interleaving, and JSON/Properties keys case conversion:
-- **Smart Quotes Normalization Engine (`normalizeSmartQuotes`)**: Pure function to convert quotes between straight (`"..."`), curly (`“...”`), and corner brackets (`「...」`); wired to action menu and variable form.
-- **Multi-line Interleaving Engine (`interleaveLines`)**: Pure function to merge two multi-line texts alternately line-by-line (`A1\nB1\nA2\nB2`), ideal for bilingual notes, Q&A pairs, and text diffs; wired to action menu and variable form.
-- **Object Keys Case Converter (`convertObjectKeysCase`)**: Pure function supporting batch conversion of JSON and Properties keys into camelCase, snake_case, kebab-case, or PascalCase; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite passed milestone of 900+ tests, reaching 901/901 passing tests with verified negative tests.
+Unit spacing formatting, character set filtering, and compact unique NanoID dynamic macro:
+- **Unit Spacing Engine (`formatUnitSpacing`)**: Pure function inserting standard spaces between numbers and measurement/data units (`100MB` -> `100 MB`, `3.5GHz` -> `3.5 GHz`, `50kg` -> `50 kg`), preserving temperatures and percentages; wired to action menu and variable form.
+- **Character Set Filter (`filterCharacterSet`)**: Pure function supporting chinese-only, alphanumeric-only, ascii-only, punctuation stripping, and emoji stripping; wired to action menu and variable form.
+- **Compact NanoID Generator (`generateNanoId`) & `{{xlc:nanoid}}` Macro**: Pure function generating URL-safe compact unique identifiers; expanded dynamic macro `{{xlc:nanoid}}` (default 10) and `{{xlc:nanoid|16}}`; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 905/905 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.36)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.37)</b></summary>
+
+#### [v0.10.37] — 2026-10-29
+- Smart quotes normalization (`normalizeSmartQuotes`).
+- Multi-line interleaving (`interleaveLines`).
+- Object keys case converter (`convertObjectKeysCase`).
 
 #### [v0.10.36] — 2026-10-29
 - Line parts swapping (`swapLineParts`).

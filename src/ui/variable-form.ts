@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -582,6 +582,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "valid.phone", text: "{{xlc:valid:phone|13800000000}}"},
         {id: "path.name", text: "{{xlc:path:filename}}"},
         {id: "path.ext", text: "{{xlc:path:ext}}"},
+        {id: "nanoid", text: "{{xlc:nanoid|12}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -2360,6 +2361,102 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(interleaveBtn);
+
+    const unitSpacingBtn = document.createElement("button");
+    unitSpacingBtn.type = "button";
+    unitSpacingBtn.className = "xlc-varbtn xlc-btn-ghost";
+    unitSpacingBtn.dataset.xlcControl = "capture.format.unit-spacing";
+    unitSpacingBtn.textContent = "✦ 单位间距";
+    unitSpacingBtn.title = "规范数字与常见度量单位 (MB/GB/kg/km/GHz) 之间的规范半角间距";
+    unitSpacingBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = formatUnitSpacing(targetText);
+        if (res.spacedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(unitSpacingBtn);
+
+    const alnumBtn = document.createElement("button");
+    alnumBtn.type = "button";
+    alnumBtn.className = "xlc-varbtn xlc-btn-ghost";
+    alnumBtn.dataset.xlcControl = "capture.format.alnum-only";
+    alnumBtn.textContent = "✦ 纯字母数字";
+    alnumBtn.title = "剔除选中文本中的标点、特殊符号与汉字，仅保留字母与数字";
+    alnumBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = filterCharacterSet(targetText, "alphanumeric-only");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(alnumBtn);
+
+    const chineseBtn = document.createElement("button");
+    chineseBtn.type = "button";
+    chineseBtn.className = "xlc-varbtn xlc-btn-ghost";
+    chineseBtn.dataset.xlcControl = "capture.format.chinese-only";
+    chineseBtn.textContent = "✦ 仅留汉字";
+    chineseBtn.title = "仅提取选中文本中的纯中文字符";
+    chineseBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = filterCharacterSet(targetText, "chinese-only");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(chineseBtn);
+
+    const nanoBtn = document.createElement("button");
+    nanoBtn.type = "button";
+    nanoBtn.className = "xlc-varbtn xlc-btn-ghost";
+    nanoBtn.dataset.xlcControl = "capture.format.gen-nanoid";
+    nanoBtn.textContent = "✦ 插入NanoID";
+    nanoBtn.title = "在当前光标处生成并插入 10 位随机紧凑 NanoID";
+    nanoBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? start;
+        const id = generateNanoId(10);
+        el.value = el.value.slice(0, start) + id + el.value.slice(end);
+        el.setSelectionRange(start + id.length, start + id.length);
+        el.focus();
+        el.dispatchEvent(new Event("input", {bubbles: true}));
+    });
+    bar.appendChild(nanoBtn);
 
     return bar;
 }
