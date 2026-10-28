@@ -8,6 +8,7 @@ import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/vari
 import {ItemType} from "../model/item";
 import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
+import {transformCase} from "../model/placeholders";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
     text: "TXT", markdown: "MD", url: "URL", code: "CODE",
@@ -543,6 +544,8 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "ask.textarea", text: "{{xlc:ask:字段|textarea}}"},
         {id: "ask.multi", text: "{{xlc:ask:字段|选项A,选项B,选项C|multi}}"},
         {id: "ask.toggle", text: "{{xlc:ask:字段=默认内容|toggle}}"},
+        {id: "case.camel", text: "{{xlc:case:camel|字段}}"},
+        {id: "case.snake", text: "{{xlc:case:snake|字段}}"},
         {id: "selection", text: "{{xlc:selection}}"},
         {id: "snippet", text: "{{xlc:snippet:标题}}"},
         {id: "cursor", text: "{{xlc:cursor}}"},
@@ -705,6 +708,43 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(compactBtn);
+
+    const applyCaseTransform = (style: "camel" | "snake") => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const transformed = transformCase(targetText, style);
+        if (transformed && transformed !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + transformed + el.value.slice(end);
+                el.setSelectionRange(start, start + transformed.length);
+            } else {
+                el.value = transformed;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    };
+
+    const camelBtn = document.createElement("button");
+    camelBtn.type = "button";
+    camelBtn.className = "xlc-varbtn xlc-btn-ghost";
+    camelBtn.dataset.xlcControl = "capture.format.camel-case";
+    camelBtn.textContent = "✦ 转驼峰";
+    camelBtn.title = "将选中文本或全文转换为驼峰命名 (camelCase)";
+    camelBtn.addEventListener("click", () => applyCaseTransform("camel"));
+    bar.appendChild(camelBtn);
+
+    const snakeBtn = document.createElement("button");
+    snakeBtn.type = "button";
+    snakeBtn.className = "xlc-varbtn xlc-btn-ghost";
+    snakeBtn.dataset.xlcControl = "capture.format.snake-case";
+    snakeBtn.textContent = "✦ 转下划线";
+    snakeBtn.title = "将选中文本或全文转换为下划线命名 (snake_case)";
+    snakeBtn.addEventListener("click", () => applyCaseTransform("snake"));
+    bar.appendChild(snakeBtn);
 
     return bar;
 }

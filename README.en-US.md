@@ -12,7 +12,7 @@ A quick-recall content launcher for SiYuan Notes: turn frequently used content �
 
 > Runs fully standalone (no dependency on other Lv plugins), and exposes the `xiaolv-common/v1` protocol for sibling plugins.
 
-> **Current: v0.10.11 (2026-10-28 Local Ready)** · @category search syntax, compact whitespace tool, and 799 passing automated tests.
+> **Current: v0.10.12 (2026-10-28 Local Ready)** · Casing conversion tools (camelCase/snake_case), form formatting tools, and 802 passing automated tests.
 
 ## Latest Capabilities (Omni-Search Terminal, Headless Integration & Sync Merge · R273~R292)
 
@@ -45,7 +45,16 @@ Advanced Templates & Security Suite:
 - **Computation & Formatting**: Pure recursive-descent math parser (`{{xlc:calc:...}}`), UUID generator, case converters (camel/snake/kebab/pascal), and cross-application rich-text clipboard payload.
 - **Security & Privacy**: Batch tag and category governance, export privacy sanitizer (phone/email/token masking and placeholder replacement).
 
-## This release (v0.10.11)
+## This release (v0.10.12)
+
+Casing Conversion Engine & Form Tools:
+
+- **Casing Transformation Actions**: Action menu supports copying as `camelCase` or `snake_case`.
+- **Form Casing Tools**: Added "✦ 转驼峰" and "✦ 转下划线" tools supporting selection or full text.
+- **Case Snippet Buttons**: Added `{{xlc:case:camel|...}}` and `{{xlc:case:snake|...}}` to snippets.
+- **Quality Gates**: All 802 unit tests pass.
+
+## Previous release (v0.10.11)
 
 @category Search Syntax & Whitespace Line Compacting:
 

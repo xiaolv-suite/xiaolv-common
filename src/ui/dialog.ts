@@ -26,6 +26,7 @@ import {renderSafePreview} from "./preview-renderer";
 import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
 import {renderWechatArticleHtml, writeRichClipboard} from "../model/clipboard";
+import {transformCase} from "../model/placeholders";
 
 import {AdjacentBlocksContext} from "../service/omni-search";
 
@@ -3411,6 +3412,23 @@ export class CommonSearchDialog {
                         await this.deps.copyProviderPayload(compactRes.result);
                         this.deps.notify?.("info", "已压缩多余空行与缩进并复制");
                     });
+                }
+                const contentText = (entry.content || "").trim();
+                if (contentText && !contentText.includes("\n") && /[a-zA-Z]/.test(contentText) && contentText.length <= 120) {
+                    const camel = transformCase(contentText, "camel");
+                    if (camel && camel !== contentText) {
+                        addSilent("🔤", `转驼峰 (camelCase) 并复制: ${camel}`, async () => {
+                            await this.deps.copyProviderPayload(camel);
+                            this.deps.notify?.("info", `已转驼峰并复制: ${camel}`);
+                        });
+                    }
+                    const snake = transformCase(contentText, "snake");
+                    if (snake && snake !== contentText) {
+                        addSilent("🔤", `转下划线 (snake_case) 并复制: ${snake}`, async () => {
+                            await this.deps.copyProviderPayload(snake);
+                            this.deps.notify?.("info", `已转下划线并复制: ${snake}`);
+                        });
+                    }
                 }
                 const hasVariables = (entry.varCount ?? 0) > 0 || (entry.content || "").includes("{{xlc:");
                 if (hasVariables) {
