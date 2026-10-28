@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.50] — 2026-10-29 (Latest)
+### [v0.10.51] — 2026-10-29 (Latest)
 
-Markdown links conversion/extraction, UTF-8 byte boundary truncation macro, and punctuation spacing formatting:
-- **Markdown Links Conversion & Extraction (`convertMarkdownLinks`)**: Pure function parsing and converting Markdown links (`[title](url)`) to stripped titles, bare URLs, text with URLs, or wrapping bare URLs into Markdown format; wired to action menu and variable form.
-- **UTF-8 Byte-Safe Truncation (`truncateByBytes`) & `{{xlc:btruncate}}` Macro**: Pure function strictly stopping at UTF-8 code point boundaries to prevent corrupted characters in byte-constrained fields (e.g. 255 bytes limit), supporting ellipsis; expanded dynamic macro `{{xlc:btruncate|10|你好世界}}`, `{{xlc:btruncate:10|...|你好世界}}`; wired to action menu and variable form.
-- **Punctuation Spacing Formatter (`formatPunctuationSpacing`)**: Pure function stripping redundant spaces around Chinese full-width punctuation while ensuring single standard spaces after English punctuation marks; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 952/952 passing tests with verified negative tests.
+Markdown table to key-value/YAML, Chinese Pinyin initials extraction macro, and strict blank lines normalization:
+- **Markdown Table to Key-Value & YAML (`markdownTableToKeyValue`)**: Pure function extracting table columns into clean YAML, Properties, or JSON objects while preserving special characters with quotes; wired to action menu and variable form.
+- **Chinese Pinyin Initials Extraction (`extractChinesePinyinInitials`) & `{{xlc:initials}}` Macro**: Pure function extracting uppercase/lowercase Pinyin and acronym initials from mixed Chinese and English text, supporting custom separators; expanded dynamic macro `{{xlc:initials|思源笔记}}`, `{{xlc:initials:lower|思源笔记}}`, `{{xlc:initials|思源笔记|-}}`; wired to action menu and variable form.
+- **Strict Blank Lines Normalization (`normalizeBlankLinesStrict`)**: Pure function turning whitespace-only fake blank lines into empty lines, collapsing consecutive blank lines to at most $N$, and trimming leading/trailing blank lines; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 956/956 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.49)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.50)</b></summary>
+
+#### [v0.10.50] — 2026-10-29
+- Markdown links conversion & extraction (`convertMarkdownLinks`).
+- UTF-8 byte boundary truncation (`truncateByBytes`) & `{{xlc:btruncate}}` macro.
+- Punctuation spacing formatting (`formatPunctuationSpacing`).
 
 #### [v0.10.49] — 2026-10-29
 - Prefix/suffix line filtering (`filterLinesByAffix`).

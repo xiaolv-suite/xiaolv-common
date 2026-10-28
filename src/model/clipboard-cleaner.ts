@@ -1,5 +1,6 @@
 // 剪贴板文本高级清洗引擎（ADR 0098 / G53）
 // 针对从 PDF、网页、微信、聊天窗口复制时附带的不可见乱码、硬断行、多余空行进行高保真清洗
+import {extractCharPinyins} from "./pinyin-tiny";
 
 export interface ClipboardCleanOptions {
     /** 是否剔除不可见的零宽字符与 BOM (默认 true) */
@@ -6372,4 +6373,167 @@ export function formatPunctuationSpacing(text: string): string {
     cur = cur.replace(/\s+([,;:?!])/g, "$1");
 
     return cur;
+}
+
+export interface TableToKvOptions {
+    keyColumn?: number;
+    valueColumn?: number;
+    format?: "yaml" | "properties" | "json";
+}
+
+/**
+ * Markdown 表格转键值对与 YAML 格式导出转换引擎 (markdownTableToKeyValue)
+ */
+export function markdownTableToKeyValue(
+    tableMarkdown: string,
+    options: TableToKvOptions = {},
+): string {
+    if (!tableMarkdown || typeof tableMarkdown !== "string") return tableMarkdown ?? "";
+    const lines = tableMarkdown.split("\n");
+    const keyCol = options.keyColumn !== undefined ? Math.max(0, options.keyColumn) : 0;
+    const valCol = options.valueColumn !== undefined ? Math.max(0, options.valueColumn) : 1;
+    const fmt = options.format || "yaml";
+
+    const pairs: Array<{key: string; value: string}> = [];
+    let isHeader = true;
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.includes("|")) continue;
+
+        if (/^\|?\s*[-:]+\s*\|/.test(line) && /^[\s|:-]+$/.test(line)) {
+            isHeader = false;
+            continue;
+        }
+
+        let content = line;
+        if (content.startsWith("|")) content = content.slice(1);
+        if (content.endsWith("|")) content = content.slice(0, -1);
+
+        const cells = content.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
+        if (isHeader) {
+            continue;
+        }
+
+        const k = cells[keyCol] ?? "";
+        const v = cells[valCol] ?? "";
+        if (k) {
+            pairs.push({key: k, value: v});
+        }
+    }
+
+    if (pairs.length === 0) return tableMarkdown;
+
+    if (fmt === "json") {
+        const obj: Record<string, string> = {};
+        for (const p of pairs) obj[p.key] = p.value;
+        return JSON.stringify(obj, null, 2);
+    }
+
+    if (fmt === "properties") {
+        return pairs.map((p) => `${p.key}=${p.value}`).join("\n");
+    }
+
+    return pairs.map((p) => {
+        let v = p.value;
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+            return `${p.key}: ${v}`;
+        }
+        if (v.includes("\n") || v.includes(":") || v.includes("#")) {
+            v = JSON.stringify(v);
+        }
+        return `${p.key}: ${v}`;
+    }).join("\n");
+}
+
+export interface PinyinInitialsOptions {
+    uppercase?: boolean;
+    separator?: string;
+}
+
+/**
+ * 汉字转拼音首字母缩写提取引擎 (extractChinesePinyinInitials)
+ * 支持中英文混排，汉字转拼音首字母，英文保留词首字母
+ * 如 "思源笔记" -> "SYBJ", "小驴常用" -> "XLCY", "Vue 框架" -> "VKJ"
+ */
+export function extractChinesePinyinInitials(
+    text: string,
+    options: PinyinInitialsOptions = {},
+): string {
+    if (!text || typeof text !== "string") return "";
+    const uppercase = options.uppercase !== false;
+    const sep = options.separator || "";
+
+    const pinyinList = extractCharPinyins(text, 200, {cjkOnly: false});
+    const initials: string[] = [];
+
+    let i = 0;
+    while (i < pinyinList.length) {
+        const item = pinyinList[i]!;
+        const code = item.char.codePointAt(0) ?? 0;
+        const isCjk = code >= 0x4e00 && code <= 0x9fff;
+
+        if (isCjk) {
+            const init = item.initial || item.char;
+            initials.push(uppercase ? init.toUpperCase() : init.toLowerCase());
+            i++;
+        } else if (/[a-zA-Z0-9]/.test(item.char)) {
+            const first = item.char;
+            initials.push(uppercase ? first.toUpperCase() : first.toLowerCase());
+            i++;
+            while (i < pinyinList.length && /[a-zA-Z0-9]/.test(pinyinList[i]!.char)) {
+                i++;
+            }
+        } else {
+            i++;
+        }
+    }
+
+    return initials.join(sep);
+}
+
+/**
+ * 多行文本空行严格归一化压缩引擎 (normalizeBlankLinesStrict)
+ * 清除空白字符构成的假空行，将多余连续空行压缩为最多 N 个（默认 1），并修剪首尾空行
+ */
+export function normalizeBlankLinesStrict(
+    text: string,
+    maxConsecutive = 1,
+): {result: string; cleanedLines: number} {
+    if (!text || typeof text !== "string") return {result: text ?? "", cleanedLines: 0};
+
+    const maxEmpty = Math.max(0, maxConsecutive);
+    const rawLines = text.split(/\r\n?|\n/);
+    const cleanedLines: string[] = [];
+    let consecutiveEmpty = 0;
+    let strippedCount = 0;
+
+    for (const rawLine of rawLines) {
+        const isBlank = rawLine.trim().length === 0;
+        if (isBlank) {
+            consecutiveEmpty++;
+            if (consecutiveEmpty <= maxEmpty) {
+                cleanedLines.push("");
+            } else {
+                strippedCount++;
+            }
+        } else {
+            consecutiveEmpty = 0;
+            cleanedLines.push(rawLine);
+        }
+    }
+
+    while (cleanedLines.length > 0 && cleanedLines[0] === "") {
+        cleanedLines.shift();
+        strippedCount++;
+    }
+    while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] === "") {
+        cleanedLines.pop();
+        strippedCount++;
+    }
+
+    return {
+        result: cleanedLines.join("\n"),
+        cleanedLines: strippedCount,
+    };
 }
