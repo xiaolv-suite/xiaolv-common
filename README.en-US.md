@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.40] — 2026-10-29 (Latest)
+### [v0.10.41] — 2026-10-29 (Latest)
 
-Adaptive punctuation correction, text obfuscation macro, and fixed column width line wrapping:
-- **Adaptive Punctuation Engine (`normalizePunctuationAdaptive`)**: Pure function automatically adapting punctuation to Chinese or English context, protecting decimals, thousands commas, and URLs; wired to action menu and variable form.
-- **Text Obfuscation Engine (`obfuscateText`) & `{{xlc:obfuscate}}` Macro**: Pure function supporting symmetric ROT13 cipher and Leet character substitutions; expanded dynamic macro `{{xlc:obfuscate|rot13|...}}`; wired to action menu and variable form.
-- **Fixed Width Text Wrapping (`wrapTextLines`)**: Pure function wrapping lines by column limit (default 80) preserving word boundaries and double-width CJK characters; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 913/913 passing tests with verified negative tests.
+Markdown heading level shifting, idempotent line affixes, and multiline regex anchor macro:
+- **Heading Level Shifting Engine (`shiftMarkdownHeadings`)**: Pure function raising (delta -1, H2->H1) or lowering (delta +1, H1->H2) Markdown heading levels within H1~H6 limits while preserving ordinary lines and indentations; wired to action menu and variable form.
+- **Idempotent Line Affixes Engine (`ensureLineAffixes`)**: Pure function idempotently ensuring prefix and suffix on each line (e.g. SQL list `'val',` or task list `- [ ] `) without duplication; wired to action menu and variable form.
+- **Multiline Regex Anchors (`regexReplaceMultiline`) & `{{xlc:regex}}` Macro**: Pure function supporting multiline regex replacement with `^` and `$` line anchors; expanded dynamic macro `{{xlc:regex:mreplace|^|* |...}}`; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 917/917 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.39)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.40)</b></summary>
+
+#### [v0.10.40] — 2026-10-29
+- Adaptive punctuation correction (`normalizePunctuationAdaptive`).
+- Text obfuscation (`obfuscateText`) & `{{xlc:obfuscate}}` macro.
+- Fixed width text wrapping (`wrapTextLines`).
 
 #### [v0.10.39] — 2026-10-29
 - Multi-line code comments toggle (`toggleLineComments`).

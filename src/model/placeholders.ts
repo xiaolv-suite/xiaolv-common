@@ -30,7 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
-import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat, calculateStats, convertRadix, extractKvValue, formatByRegexGroups, validateFormat, DataFormatType, parsePathParts, generateNanoId, renderSimpleTemplate, obfuscateText, ObfuscateMode} from "./clipboard-cleaner";
+import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat, calculateStats, convertRadix, extractKvValue, formatByRegexGroups, validateFormat, DataFormatType, parsePathParts, generateNanoId, renderSimpleTemplate, obfuscateText, ObfuscateMode, regexReplaceMultiline} from "./clipboard-cleaner";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
 // 带参语法分隔符必须是 | 而非 :（R161 真机验收发现）：Lute 把 :date: 当 emoji 短代码转换，
 // {{xlc:date:+3d}} 落库即损坏成 {{xlc📅+3d}}；ask 冒号语法无此问题（:ask: 非短代码，真机已验证）。
@@ -610,7 +610,7 @@ export function resolveRegexArg(rawArg: string, subAction?: string): string | nu
         return applyRegexFilter("extract", pattern, text);
     }
 
-    if (action === "replace") {
+    if (action === "replace" || action === "mreplace" || action === "multiline") {
         const firstPipe = rest.indexOf("|");
         if (firstPipe === -1) return null;
         const pattern = rest.slice(0, firstPipe).trim();
@@ -619,6 +619,9 @@ export function resolveRegexArg(rawArg: string, subAction?: string): string | nu
         if (secondPipe === -1) return null;
         const replacement = afterPattern.slice(0, secondPipe);
         const text = afterPattern.slice(secondPipe + 1);
+        if (action === "mreplace" || action === "multiline") {
+            return regexReplaceMultiline(text, pattern, replacement);
+        }
         return applyRegexFilter("replace", pattern, text, replacement);
     }
 

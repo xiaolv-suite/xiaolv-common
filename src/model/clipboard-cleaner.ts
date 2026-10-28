@@ -4919,3 +4919,123 @@ export function wrapTextLines(
 
     return resultLines.join(nl);
 }
+
+export interface ShiftHeadingsResult {
+    result: string;
+    shiftedCount: number;
+}
+
+export interface ShiftHeadingsOptions {
+    /** 最小层级（默认 1，即 #） */
+    minLevel?: number;
+    /** 最大层级（默认 6，即 ######） */
+    maxLevel?: number;
+}
+
+/**
+ * Markdown 标题层级批量升高/降低引擎 (shiftMarkdownHeadings)
+ * delta > 0: 降级 (例如 H1->H2, # -> ##)
+ * delta < 0: 升级 (例如 H2->H1, ## -> #)
+ */
+export function shiftMarkdownHeadings(
+    text: string,
+    delta: number,
+    options: ShiftHeadingsOptions = {},
+): ShiftHeadingsResult {
+    if (!text || typeof text !== "string") return {result: text ?? "", shiftedCount: 0};
+    if (delta === 0) return {result: text, shiftedCount: 0};
+
+    const minLevel = Math.max(1, options.minLevel !== undefined ? options.minLevel : 1);
+    const maxLevel = Math.min(6, options.maxLevel !== undefined ? options.maxLevel : 6);
+
+    let count = 0;
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+
+    const processed = lines.map((line) => {
+        const match = line.match(/^(\s*)(#{1,6})(\s+.*)$/);
+        if (!match) return line;
+
+        const indent = match[1]!;
+        const currentLevel = match[2]!.length;
+        const rest = match[3]!;
+
+        let newLevel = currentLevel + delta;
+        newLevel = Math.max(minLevel, Math.min(maxLevel, newLevel));
+
+        if (newLevel !== currentLevel) {
+            count++;
+            return `${indent}${"#".repeat(newLevel)}${rest}`;
+        }
+        return line;
+    });
+
+    return {
+        result: processed.join("\n"),
+        shiftedCount: count,
+    };
+}
+
+export interface EnsureAffixesOptions {
+    /** 确保存在的前缀（若已有则不重复添加） */
+    prefix?: string;
+    /** 确保存在的后缀（若已有则不重复添加） */
+    suffix?: string;
+    /** 是否跳过纯空行（默认 true） */
+    skipEmpty?: boolean;
+    /** 是否对行内容做 trim（默认 true） */
+    trimLine?: boolean;
+}
+
+/**
+ * 文本行幂等前后缀补齐引擎 (ensureLineAffixes)
+ */
+export function ensureLineAffixes(text: string, options: EnsureAffixesOptions = {}): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const prefix = options.prefix || "";
+    const suffix = options.suffix || "";
+    const skipEmpty = options.skipEmpty !== false;
+    const trimLine = options.trimLine !== false;
+
+    if (!prefix && !suffix) return text;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const processed = lines.map((line) => {
+        if (skipEmpty && line.trim().length === 0) return line;
+
+        let content = trimLine ? line.trim() : line;
+
+        if (prefix && !content.startsWith(prefix)) {
+            content = prefix + content;
+        }
+        if (suffix && !content.endsWith(suffix)) {
+            content = content + suffix;
+        }
+        return content;
+    });
+
+    return processed.join("\n");
+}
+
+/**
+ * 多行正则跨行锚点替换引擎 (regexReplaceMultiline)
+ */
+export function regexReplaceMultiline(
+    text: string,
+    pattern: string,
+    replacement: string,
+    flags = "gm",
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    if (!pattern) return text;
+
+    try {
+        let f = flags;
+        if (!f.includes("g")) f += "g";
+        if (!f.includes("m")) f += "m";
+
+        const reg = new RegExp(pattern, f);
+        return text.replace(reg, replacement);
+    } catch {
+        return text;
+    }
+}
