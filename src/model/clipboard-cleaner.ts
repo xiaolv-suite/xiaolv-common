@@ -5329,3 +5329,155 @@ export function formatNumberGrouping(
     const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     return `${formattedInteger}${decimalPart}`;
 }
+
+export interface ShiftBlockquotesResult {
+    result: string;
+    shiftedCount: number;
+}
+
+/**
+ * Markdown 引用块嵌套层级提升与降低引擎 (shiftMarkdownBlockquotes)
+ * delta > 0: 增加引用层级 (每行加 "> ")
+ * delta < 0: 减少引用层级 (每行移除一层 "> ")
+ */
+export function shiftMarkdownBlockquotes(text: string, delta: number): ShiftBlockquotesResult {
+    if (!text || typeof text !== "string") return {result: text ?? "", shiftedCount: 0};
+    if (delta === 0) return {result: text, shiftedCount: 0};
+
+    let count = 0;
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+
+    const processed = lines.map((line) => {
+        if (delta > 0) {
+            count++;
+            return `${"> ".repeat(delta)}${line}`;
+        } else {
+            let current = line;
+            let removed = 0;
+            const targetRemove = Math.abs(delta);
+
+            while (removed < targetRemove) {
+                const match = current.match(/^(\s*)>(?:\s(.*)|$)/);
+                if (match) {
+                    removed++;
+                    current = (match[1] || "") + (match[2] !== undefined ? match[2] : "");
+                } else {
+                    break;
+                }
+            }
+
+            if (removed > 0) {
+                count++;
+                return current;
+            }
+            return line;
+        }
+    });
+
+    return {
+        result: processed.join("\n"),
+        shiftedCount: count,
+    };
+}
+
+/**
+ * 字符串轻量校验和计算引擎 (calculateChecksum)
+ * 支持 crc32 与 adler32，输出标准十六进制字符串
+ */
+export function calculateChecksum(text: string, algorithm: "crc32" | "adler32" = "crc32"): string {
+    if (!text || typeof text !== "string") return "00000000";
+
+    const bytes = stringToUtf8Bytes(text);
+
+    if (algorithm === "adler32") {
+        let a = 1;
+        let b = 0;
+        const MOD_ADLER = 65521;
+        for (let i = 0; i < bytes.length; i++) {
+            a = (a + bytes[i]!) % MOD_ADLER;
+            b = (b + a) % MOD_ADLER;
+        }
+        const adler = ((b << 16) | a) >>> 0;
+        return adler.toString(16).padStart(8, "0");
+    }
+
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) {
+        const byte = bytes[i]!;
+        crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xFF]!;
+    }
+    crc = (crc ^ 0xFFFFFFFF) >>> 0;
+    return crc.toString(16).padStart(8, "0");
+}
+
+export interface AlignColumnsOptions {
+    /** 列间填充留白数量（默认 1 个空格） */
+    padding?: number;
+    /** 是否对单元格去除首尾空白（默认 true） */
+    trimCell?: boolean;
+}
+
+/**
+ * 文本行按分隔符等宽对齐填充引擎 (alignDelimitedColumns)
+ */
+export function alignDelimitedColumns(
+    text: string,
+    delimiter: string | RegExp = ",",
+    options: AlignColumnsOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const padding = Math.max(0, options.padding !== undefined ? options.padding : 1);
+    const trimCell = options.trimCell !== false;
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    if (lines.length <= 1) return text;
+
+    const getCharWidth = (ch: string) => {
+        const code = ch.charCodeAt(0);
+        return (code >= 0x4e00 && code <= 0x9fa5) || code > 0xff ? 2 : 1;
+    };
+
+    const getStrWidth = (str: string) => {
+        let w = 0;
+        for (const c of str) w += getCharWidth(c);
+        return w;
+    };
+
+    const padEndWidth = (str: string, targetWidth: number): string => {
+        const curW = getStrWidth(str);
+        if (curW >= targetWidth) return str;
+        return str + " ".repeat(targetWidth - curW);
+    };
+
+    const rowCells: string[][] = [];
+    const colMaxWidths: number[] = [];
+
+    for (const line of lines) {
+        if (!line.trim()) {
+            rowCells.push([]);
+            continue;
+        }
+
+        const cells = line.split(delimiter).map((c) => (trimCell ? c.trim() : c));
+        rowCells.push(cells);
+
+        for (let col = 0; col < cells.length; col++) {
+            const w = getStrWidth(cells[col]!);
+            colMaxWidths[col] = Math.max(colMaxWidths[col] || 0, w);
+        }
+    }
+
+    const delimStr = typeof delimiter === "string" ? delimiter : " ";
+    const padStr = " ".repeat(padding);
+
+    const alignedLines = rowCells.map((cells) => {
+        if (cells.length === 0) return "";
+        return cells.map((cell, col) => {
+            if (col === cells.length - 1) return cell;
+            const targetW = colMaxWidths[col] || 0;
+            return padEndWidth(cell, targetW);
+        }).join(`${delimStr}${padStr}`);
+    });
+
+    return alignedLines.join("\n");
+}

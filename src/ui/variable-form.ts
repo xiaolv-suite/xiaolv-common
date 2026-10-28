@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -587,6 +587,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "obfuscate", text: "{{xlc:obfuscate|rot13|Hello}}"},
         {id: "scramble", text: "{{xlc:scramble|words|one two three}}"},
         {id: "thousands", text: "{{xlc:thousands|1234567.89}}"},
+        {id: "checksum", text: "{{xlc:checksum|hello}}"},
         {id: "regex.mreplace", text: "{{xlc:regex:mreplace|^(\\s*)|// |文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
@@ -2876,6 +2877,105 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(sliceLinesBtn);
+
+    const shiftQuoteUpBtn = document.createElement("button");
+    shiftQuoteUpBtn.type = "button";
+    shiftQuoteUpBtn.className = "xlc-varbtn xlc-btn-ghost";
+    shiftQuoteUpBtn.dataset.xlcControl = "capture.format.shift-quote-up";
+    shiftQuoteUpBtn.textContent = "✦ 引用升层";
+    shiftQuoteUpBtn.title = "对多行选中文本整体增加一层 Markdown 引用 (> )";
+    shiftQuoteUpBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = shiftMarkdownBlockquotes(targetText, 1);
+        if (res.shiftedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(shiftQuoteUpBtn);
+
+    const shiftQuoteDownBtn = document.createElement("button");
+    shiftQuoteDownBtn.type = "button";
+    shiftQuoteDownBtn.className = "xlc-varbtn xlc-btn-ghost";
+    shiftQuoteDownBtn.dataset.xlcControl = "capture.format.shift-quote-down";
+    shiftQuoteDownBtn.textContent = "✦ 引用降层";
+    shiftQuoteDownBtn.title = "对多行选中文本整体减少一层 Markdown 引用前缀";
+    shiftQuoteDownBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = shiftMarkdownBlockquotes(targetText, -1);
+        if (res.shiftedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(shiftQuoteDownBtn);
+
+    const alignColBtn = document.createElement("button");
+    alignColBtn.type = "button";
+    alignColBtn.className = "xlc-varbtn xlc-btn-ghost";
+    alignColBtn.dataset.xlcControl = "capture.format.align-columns";
+    alignColBtn.textContent = "✦ 列对齐";
+    alignColBtn.title = "按逗号或分号等宽填充对齐多行多列文本";
+    alignColBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const delim = targetText.includes(",") ? "," : (targetText.includes(":") ? ":" : ";");
+        const res = alignDelimitedColumns(targetText, delim);
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(alignColBtn);
+
+    const checksumBtn = document.createElement("button");
+    checksumBtn.type = "button";
+    checksumBtn.className = "xlc-varbtn xlc-btn-ghost";
+    checksumBtn.dataset.xlcControl = "capture.format.checksum-crc32";
+    checksumBtn.textContent = "✦ 校验和";
+    checksumBtn.title = "计算选中文本的 CRC32 校验和短码";
+    checksumBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = (hasSel ? el.value.slice(start, end) : el.value).trim();
+        if (targetText) {
+            const cs = calculateChecksum(targetText, "crc32");
+            el.setAttribute("data-xlc-crc32", cs);
+            el.title = `CRC32: ${cs}`;
+        }
+    });
+    bar.appendChild(checksumBtn);
 
     return bar;
 }

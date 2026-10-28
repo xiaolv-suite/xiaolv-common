@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3884,6 +3884,27 @@ export class CommonSearchDialog {
                         await this.deps.copyProviderPayload(res);
                         this.deps.notify?.("info", "已为每行行首补齐项目符号并复制");
                     });
+                    addSilent("💬", "引用层级批量升一级 (> -> >>) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = shiftMarkdownBlockquotes(raw, 1);
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已升高 ${res.shiftedCount} 行引用层级并复制`);
+                    });
+                    addSilent("💬", "引用层级批量降一级 (>> -> >) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = shiftMarkdownBlockquotes(raw, -1);
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已降低 ${res.shiftedCount} 行引用层级并复制`);
+                    });
+                    if (entry.content.includes(",") || entry.content.includes(":") || entry.content.includes(";")) {
+                        addSilent("📐", "按分隔符等宽对齐多列并复制", async () => {
+                            const raw = entry.content || await this.deps.preview(entry.id) || "";
+                            const delim = raw.includes(",") ? "," : (raw.includes(":") ? ":" : ";");
+                            const aligned = alignDelimitedColumns(raw, delim);
+                            await this.deps.copyProviderPayload(aligned);
+                            this.deps.notify?.("info", "已等宽对齐各列并复制");
+                        });
+                    }
                 }
                 if (entry.content && entry.content.includes("|") && entry.content.includes("\n") && (entry.content.includes("-|-") || entry.content.includes("---|---"))) {
                     addSilent("⊞", "Markdown 表格按第 1 列排除空值行并复制", async () => {
@@ -3988,6 +4009,14 @@ export class CommonSearchDialog {
                         const res = compactRepeatedCharacters(raw, 1);
                         await this.deps.copyProviderPayload(res.result);
                         this.deps.notify?.("info", `已压缩 ${res.compressedCount} 处冗余重复标点并复制`);
+                    });
+                }
+                if (entry.content && !entry.content.includes("\n") && entry.content.length > 0) {
+                    addSilent("🔏", "计算 CRC32 校验和并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const checksum = calculateChecksum(raw.trim(), "crc32");
+                        await this.deps.copyProviderPayload(checksum);
+                        this.deps.notify?.("info", `CRC32 校验和：${checksum}`);
                     });
                 }
                 if (entry.content && entry.content.length > 80) {
