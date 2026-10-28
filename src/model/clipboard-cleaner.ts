@@ -7288,3 +7288,185 @@ export function stripInlineMarkdownFormatting(text: string): string {
 
     return cur;
 }
+
+export interface KpiCardOptions {
+    title?: string;
+    asBlockquote?: boolean;
+}
+
+/**
+ * 多行数据转 Markdown KPI 统计汇总卡片引擎 (formatKpiSummaryCard)
+ */
+export function formatKpiSummaryCard(
+    text: string,
+    options: KpiCardOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const title = options.title || "📊 核心数据看板";
+    const asBq = options.asBlockquote !== false;
+    const lines = text.split("\n");
+
+    const items: Array<{label: string; value: string}> = [];
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith("#") || line.startsWith(">")) continue;
+
+        if (line.includes("|")) {
+            if (/^\|?\s*[-:]+\s*\|/.test(line)) continue;
+            let content = line;
+            if (content.startsWith("|")) content = content.slice(1);
+            if (content.endsWith("|")) content = content.slice(0, -1);
+            const cells = content.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
+            if (cells.length >= 2 && cells[0]) {
+                items.push({label: cells[0]!, value: cells[1]!});
+            }
+            continue;
+        }
+
+        const match = line.match(/^([^:=->]+)\s*([:=]|->)\s*(.*)$/);
+        if (match) {
+            items.push({label: match[1]!.trim(), value: match[3]!.trim()});
+        }
+    }
+
+    if (items.length === 0) return text;
+
+    const tableLines: string[] = [
+        `### ${title}`,
+        "",
+        "| 指标名称 | 核心数值 |",
+        "| :--- | :--- |",
+    ];
+
+    for (const item of items) {
+        tableLines.push(`| **${item.label}** | \`${item.value}\` |`);
+    }
+
+    if (asBq) {
+        return tableLines.map((l) => (l.length > 0 ? `> ${l}` : ">")).join("\n");
+    }
+    return tableLines.join("\n");
+}
+
+const ZH_SURNAMES = [
+    "李", "王", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴",
+    "徐", "孙", "胡", "朱", "高", "林", "何", "郭", "马", "罗",
+    "梁", "宋", "郑", "谢", "韩", "唐", "冯", "于", "董", "萧"
+];
+
+const ZH_GIVEN_MALE = [
+    "伟", "强", "磊", "军", "勇", "杰", "涛", "彬", "刚", "平",
+    "峰", "健", "明", "辉", "宇", "浩", "轩", "晨", "瑞", "鹏"
+];
+
+const ZH_GIVEN_FEMALE = [
+    "娜", "静", "芳", "敏", "娟", "秀", "英", "华", "燕", "婷",
+    "丹", "萍", "琳", "莉", "洁", "雅", "琪", "欣", "楠", "萱"
+];
+
+const EN_FIRST_NAMES = [
+    "James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph",
+    "Thomas", "Charles", "Mary", "Patricia", "Jennifer", "Linda", "Elizabeth",
+    "Barbara", "Susan", "Jessica", "Sarah", "Karen"
+];
+
+const EN_LAST_NAMES = [
+    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis",
+    "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson"
+];
+
+/**
+ * 拟人类随机姓名生成引擎 (generateRandomName)
+ */
+export function generateRandomName(
+    lang: "zh" | "en" = "zh",
+    options: {gender?: "any" | "male" | "female"} = {},
+): string {
+    const gender = options.gender || "any";
+
+    if (lang === "en") {
+        const first = EN_FIRST_NAMES[Math.floor(Math.random() * EN_FIRST_NAMES.length)]!;
+        const last = EN_LAST_NAMES[Math.floor(Math.random() * EN_LAST_NAMES.length)]!;
+        return `${first} ${last}`;
+    }
+
+    const surname = ZH_SURNAMES[Math.floor(Math.random() * ZH_SURNAMES.length)]!;
+    let givenPool = gender === "male"
+        ? ZH_GIVEN_MALE
+        : gender === "female"
+            ? ZH_GIVEN_FEMALE
+            : [...ZH_GIVEN_MALE, ...ZH_GIVEN_FEMALE];
+
+    const isDouble = Math.random() > 0.4;
+    const c1 = givenPool[Math.floor(Math.random() * givenPool.length)]!;
+    if (isDouble) {
+        const c2 = givenPool[Math.floor(Math.random() * givenPool.length)]!;
+        return `${surname}${c1}${c2}`;
+    }
+    return `${surname}${c1}`;
+}
+
+export interface GroupAlphabetOptions {
+    headingLevel?: number;
+}
+
+/**
+ * 多行文本基于拼音/字母首字分节大纲引擎 (groupLinesByAlphabet)
+ */
+export function groupLinesByAlphabet(
+    text: string,
+    options: GroupAlphabetOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+    if (lines.length <= 1) return text;
+
+    const level = options.headingLevel !== undefined ? Math.max(1, Math.min(6, options.headingLevel)) : 2;
+    const hPrefix = "#".repeat(level);
+
+    const groups = new Map<string, string[]>();
+
+    for (const rawLine of lines) {
+        let content = rawLine;
+        const listMatch = content.match(/^[-*+]\s+(.*)$|^\d+[.)]\s+(.*)$/);
+        if (listMatch) {
+            content = (listMatch[1] || listMatch[2] || "").trim();
+        }
+        if (!content) continue;
+
+        const pinyins = extractCharPinyins(content, 1, {cjkOnly: false});
+        let initial = "#";
+        if (pinyins.length > 0 && pinyins[0]!.initial) {
+            const ch = pinyins[0]!.initial.toUpperCase();
+            if (/^[A-Z]$/.test(ch)) {
+                initial = ch;
+            }
+        }
+
+        if (!groups.has(initial)) {
+            groups.set(initial, []);
+        }
+        groups.get(initial)!.push(content);
+    }
+
+    if (groups.size === 0) return text;
+
+    const sortedLetters = Array.from(groups.keys()).sort((a, b) => {
+        if (a === "#") return 1;
+        if (b === "#") return -1;
+        return a.localeCompare(b);
+    });
+
+    const collator = new Intl.Collator("zh-CN", {numeric: true, sensitivity: "base"});
+    const sections: string[] = [];
+
+    for (const letter of sortedLetters) {
+        const items = groups.get(letter)!;
+        items.sort((a, b) => collator.compare(a, b));
+        const itemLines = items.map((it) => `- ${it}`).join("\n");
+        sections.push(`${hPrefix} ${letter}\n${itemLines}`);
+    }
+
+    return sections.join("\n\n");
+}

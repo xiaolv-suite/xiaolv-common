@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.57] — 2026-10-29 (Latest)
+### [v0.10.58] — 2026-10-29 (Latest)
 
-Markdown blockquote flattening/stripping, word-level reversal macro, and inline formatting stripping:
-- **Blockquote Flattening & Stripping (`flattenMarkdownBlockquotes`)**: Pure function stripping all `>` blockquote angle brackets into clean paragraphs or flattening multi-level quotes into a single clean level; wired to action menu and variable form.
-- **Word-Level Reversal (`reverseWords`) & `{{xlc:revwords}}` Macro**: Pure function reversing word order while preserving line structure and indentation, distinct from character-level reversal; expanded dynamic macro `{{xlc:revwords|the quick brown fox}}`; wired to action menu and variable form.
-- **Inline Markdown Formatting Stripping (`stripInlineMarkdownFormatting`)**: Pure function stripping bold (`**`), italic (`*`), strikethrough (`~~`), highlight (`==`), and inline code (`` ` ``) marks while protecting variable underscores; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 975/975 passing tests with verified negative tests.
+Markdown KPI summary card, realistic random name generator macro, and alphabetical list grouping:
+- **Markdown KPI Summary Card (`formatKpiSummaryCard`)**: Pure function compiling key-value and table data into an executive blockquote KPI summary board with bold metrics and formatted figures; wired to action menu and variable form.
+- **Realistic Random Name Generator (`generateRandomName`) & `{{xlc:randomname}}` Macro**: Pure function generating realistic Chinese names (single/double character given names with gender bias) and English full names; expanded dynamic macro `{{xlc:randomname}}`, `{{xlc:randomname:en}}`, `{{xlc:randomname:female}}`; wired to action menu and variable form.
+- **Alphabetical List Grouping (`groupLinesByAlphabet`)**: Pure function categorizing multi-line lists under A~Z headers based on Chinese Pinyin or Latin initial letters; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 978/978 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.56)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.57)</b></summary>
+
+#### [v0.10.57] — 2026-10-29
+- Markdown blockquote flattening & stripping (`flattenMarkdownBlockquotes`).
+- Word-level reversal (`reverseWords`) & `{{xlc:revwords}}` macro.
+- Inline Markdown formatting stripping (`stripInlineMarkdownFormatting`).
 
 #### [v0.10.56] — 2026-10-29
 - Markdown footnote re-indexing/grouping (`normalizeMarkdownFootnotes`).
