@@ -2,6 +2,16 @@
 
 本文件记录「小驴常用（内测版）」的面向用户的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.10.16] — 2026-10-28
+
+高安全随机密码与口令生成宏、HTML 实体安全转义引擎与 Markdown 表格列对齐规整。
+
+### 新增与优化
+- **高安全随机密码与凭据生成宏 (`generateSecurePassword`)**：支持 `{{xlc:password}}`、`{{xlc:password|16}}`、`{{xlc:password|6|pin}}`（纯数字口令）、`{{xlc:password|hex}}` 与 `{{xlc:password|simple}}`（排除易混淆字符）；表单快捷变量栏补充 `{{xlc:password|16}}`。
+- **HTML 实体安全转义与反转义引擎 (`escapeHtmlEntities`/`unescapeHtmlEntities`)**：纯函数支持 `<, >, &, ", '` 标准转义与反向还原；扩展动态宏 `{{xlc:html:escape|...}}` 与 `{{xlc:html:unescape|...}}`；动作菜单接线「✦ 转义 HTML 实体并复制」与「✦ 还原 HTML 实体并复制」，表单格式栏接入「✦ 转义HTML」与「✦ 还原HTML」。
+- **Markdown 表格规范化与列宽自适应对齐引擎 (`formatMarkdownTable`)**：根据每列字符显示宽度（含 CJK 双字符宽度度量）自适应美化各列空格与对齐指示符，动作菜单接线「⊞ 规整对齐 Markdown 表格并复制」，表单格式栏接入「✦ 表格对齐」。
+- **全套质量门禁**：单元测试增至 819/819 项全绿通过，双向严格负向注入验证通过。
+
 ## [0.10.15] — 2026-10-28
 
 全角半角双向规范化引擎、UTF-8 Base64 与 URL 编解码实用宏及 Markdown 引用/围栏工具。

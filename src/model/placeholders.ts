@@ -30,7 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
-import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText} from "./clipboard-cleaner";
+import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities} from "./clipboard-cleaner";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
 // 带参语法分隔符必须是 | 而非 :（R161 真机验收发现）：Lute 把 :date: 当 emoji 短代码转换，
 // {{xlc:date:+3d}} 落库即损坏成 {{xlc📅+3d}}；ask 冒号语法无此问题（:ask: 非短代码，真机已验证）。
@@ -40,11 +40,11 @@ import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText} from "./clipbo
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|calc|selection|timestamp|week|greeting|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -395,6 +395,78 @@ export function resolveIdArg(rawArg: string): string | null {
     return generateShortId(length, isUpper);
 }
 
+const PWD_LOWER = "abcdefghjkmnpqrstuvwxyz";
+const PWD_UPPER = "ABCDEFGHJKMNPQRSTUVWXYZ";
+const PWD_DIGITS = "23456789";
+const PWD_SYMBOLS = "!@#$%^&*()_+~=";
+const PWD_HEX = "0123456789abcdef";
+
+export type PasswordStrength = "simple" | "complex" | "pin" | "hex";
+
+/**
+ * 高安全随机密码/凭据生成器
+ */
+export function generateSecurePassword(length = 14, strength: PasswordStrength = "complex"): string {
+    const len = Math.max(4, Math.min(64, length || 14));
+    let pool = "";
+    const mandatoryChars: string[] = [];
+    const pick = (set: string) => set[Math.floor(Math.random() * set.length)]!;
+
+    if (strength === "pin") {
+        pool = "0123456789";
+    } else if (strength === "hex") {
+        pool = PWD_HEX;
+    } else if (strength === "simple") {
+        pool = PWD_LOWER + PWD_UPPER + PWD_DIGITS;
+        mandatoryChars.push(pick(PWD_LOWER), pick(PWD_UPPER), pick(PWD_DIGITS));
+    } else {
+        pool = PWD_LOWER + PWD_UPPER + PWD_DIGITS + PWD_SYMBOLS;
+        mandatoryChars.push(pick(PWD_LOWER), pick(PWD_UPPER), pick(PWD_DIGITS), pick(PWD_SYMBOLS));
+    }
+
+    const resultChars: string[] = [...mandatoryChars];
+    while (resultChars.length < len) {
+        resultChars.push(pick(pool));
+    }
+
+    // Fisher-Yates 洗牌
+    for (let i = resultChars.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = resultChars[i]!;
+        resultChars[i] = resultChars[j]!;
+        resultChars[j] = temp;
+    }
+
+    return resultChars.slice(0, len).join("");
+}
+
+/** 解析 password 宏参数：支持长度 [4..64] 及 simple, complex, pin, hex */
+export function resolvePasswordArg(rawArg: string): string | null {
+    const tokens = rawArg.split(/[,，|]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+    let len = 14;
+    let strength: PasswordStrength = "complex";
+
+    for (const tok of tokens) {
+        if (/^\d+$/.test(tok)) {
+            const parsed = parseInt(tok, 10);
+            if (parsed >= 4 && parsed <= 64) len = parsed;
+            else return null;
+        } else if (tok === "simple" || tok === "alphanumeric") {
+            strength = "simple";
+        } else if (tok === "complex" || tok === "strong" || tok === "symbol") {
+            strength = "complex";
+        } else if (tok === "pin" || tok === "digits" || tok === "number") {
+            strength = "pin";
+        } else if (tok === "hex") {
+            strength = "hex";
+        } else {
+            return null;
+        }
+    }
+
+    return generateSecurePassword(len, strength);
+}
+
 /** 分词提取单词：支持下划线、短横线、空白、标点以及驼峰边界切分 */
 export function splitWords(text: string): string[] {
     if (!text || !text.trim()) return [];
@@ -609,6 +681,32 @@ export function resolveBase64Arg(rawArg: string, subAction?: string): string | n
     return null;
 }
 
+/** 解析 html 语法参数 */
+export function resolveHtmlArg(rawArg: string, subAction?: string): string | null {
+    const trimmed = rawArg.trim();
+    let action = subAction?.trim().toLowerCase();
+    let content = trimmed;
+
+    if (!action) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe === -1) {
+            action = "escape";
+            content = trimmed;
+        } else {
+            action = trimmed.slice(0, firstPipe).trim().toLowerCase();
+            content = trimmed.slice(firstPipe + 1);
+        }
+    }
+
+    if (action === "escape" || action === "enc") {
+        return escapeHtmlEntities(content);
+    }
+    if (action === "unescape" || action === "dec") {
+        return unescapeHtmlEntities(content);
+    }
+    return null;
+}
+
 export function getIsoWeekNumber(d: Date): number {
     const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNr = (target.getUTCDay() + 6) % 7;
@@ -651,6 +749,8 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "greeting": return resolveGreeting(now);
         case "url": return "";
         case "base64": return "";
+        case "html": return "";
+        case "password": return generateSecurePassword(14, "complex");
     }
 }
 
@@ -717,6 +817,11 @@ export function resolvePlaceholder(
         if (rawKind.includes(":")) {
             subAction = rawKind.split(":")[1];
         }
+    } else if (rawKind.startsWith("html")) {
+        kind = "html";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -751,6 +856,7 @@ export function resolvePlaceholder(
     if (kind === "minute") return pad(now.getMinutes());
     if (kind === "uuid") return arg ? resolveUuidArg(arg) : generateUuidV4();
     if (kind === "id") return arg ? resolveIdArg(arg) : generateShortId(8, false);
+    if (kind === "password") return arg ? resolvePasswordArg(arg) : generateSecurePassword(14, "complex");
     if (kind === "case") return arg ? resolveCaseArg(arg, subStyle) : null;
     if (kind === "calc") return arg ? evaluateMathExpression(arg) : null;
     if (kind === "selection") return (doc?.selection && doc.selection.length > 0) ? doc.selection : (arg ?? "");
@@ -771,6 +877,7 @@ export function resolvePlaceholder(
     if (kind === "greeting") return resolveGreeting(now, arg);
     if (kind === "url") return arg ? resolveUrlArg(arg, subAction) : null;
     if (kind === "base64") return arg ? resolveBase64Arg(arg, subAction) : null;
+    if (kind === "html") return arg ? resolveHtmlArg(arg, subAction) : null;
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
 }
@@ -796,7 +903,9 @@ export function listPlaceholders(text: string): PlaceholderKind[] {
                     ? "url"
                     : rawKind.startsWith("base64")
                         ? "base64"
-                        : rawKind) as PlaceholderKind;
+                        : rawKind.startsWith("html")
+                            ? "html"
+                            : rawKind) as PlaceholderKind;
         if (!kinds.includes(kind)) kinds.push(kind);
     }
     return kinds;

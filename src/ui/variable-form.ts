@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -558,6 +558,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "week", text: "{{xlc:week}}"},
         {id: "timestamp", text: "{{xlc:timestamp}}"},
         {id: "calc", text: "{{xlc:calc:100*1.13}}"},
+        {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
         {id: "random", text: "{{xlc:random|选项A,选项B}}"},
@@ -857,6 +858,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(quoteWrapBtn);
+
+    const fmtTableBtn = document.createElement("button");
+    fmtTableBtn.type = "button";
+    fmtTableBtn.className = "xlc-varbtn xlc-btn-ghost";
+    fmtTableBtn.dataset.xlcControl = "capture.format.fmt-table";
+    fmtTableBtn.textContent = "✦ 表格对齐";
+    fmtTableBtn.title = "规整 Markdown 表格，自适应对齐各列宽度与分隔线";
+    fmtTableBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = formatMarkdownTable(targetText);
+        if (res.isTable) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(fmtTableBtn);
+
+    const escapeHtmlBtn = document.createElement("button");
+    escapeHtmlBtn.type = "button";
+    escapeHtmlBtn.className = "xlc-varbtn xlc-btn-ghost";
+    escapeHtmlBtn.dataset.xlcControl = "capture.format.escape-html";
+    escapeHtmlBtn.textContent = "✦ 转义HTML";
+    escapeHtmlBtn.title = "将选中文本或全文中的 <, >, &, \", ' 转义为标准 HTML 实体";
+    escapeHtmlBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = escapeHtmlEntities(targetText);
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(escapeHtmlBtn);
+
+    const unescapeHtmlBtn = document.createElement("button");
+    unescapeHtmlBtn.type = "button";
+    unescapeHtmlBtn.className = "xlc-varbtn xlc-btn-ghost";
+    unescapeHtmlBtn.dataset.xlcControl = "capture.format.unescape-html";
+    unescapeHtmlBtn.textContent = "✦ 还原HTML";
+    unescapeHtmlBtn.title = "将 &lt;, &gt;, &amp;, &quot; 等 HTML 实体还原为可读字符";
+    unescapeHtmlBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = unescapeHtmlEntities(targetText);
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(unescapeHtmlBtn);
 
     return bar;
 }

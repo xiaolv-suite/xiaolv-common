@@ -810,3 +810,184 @@ export function wrapMarkdownCodefence(text: string, lang = ""): string {
     const cleanLang = lang.trim();
     return "```" + cleanLang + "\n" + (text ?? "") + "\n```";
 }
+
+const HTML_ESCAPE_MAP: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+};
+
+const HTML_UNESCAPE_MAP: Record<string, string> = {
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&apos;": "'",
+    "&nbsp;": " ",
+};
+
+/**
+ * HTML 实体安全转义
+ */
+export function escapeHtmlEntities(text: string): string {
+    if (!text) return "";
+    return text.replace(/[&<>"']/g, (m) => HTML_ESCAPE_MAP[m] || m);
+}
+
+/**
+ * HTML 实体安全还原（反转义）
+ */
+export function unescapeHtmlEntities(text: string): string {
+    if (!text) return "";
+    return text.replace(/&(?:amp|lt|gt|quot|#39|apos|nbsp);/gi, (m) => {
+        const lower = m.toLowerCase();
+        return HTML_UNESCAPE_MAP[lower] ?? m;
+    });
+}
+
+/**
+ * 计算字符显示宽度（CJK 字符按 2 计算，ASCII 按 1 计算）
+ */
+function getDisplayWidth(str: string): number {
+    let width = 0;
+    for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        if (
+            (code >= 0x4e00 && code <= 0x9fff) ||
+            (code >= 0x3400 && code <= 0x4dbf) ||
+            (code >= 0x3000 && code <= 0x303f) ||
+            (code >= 0xff01 && code <= 0xff60)
+        ) {
+            width += 2;
+        } else {
+            width += 1;
+        }
+    }
+    return width;
+}
+
+/**
+ * 填充空格至指定显示宽度
+ */
+function padDisplayWidth(str: string, targetWidth: number, align: "left" | "center" | "right" = "left"): string {
+    const curWidth = getDisplayWidth(str);
+    const diff = Math.max(0, targetWidth - curWidth);
+    if (diff === 0) return str;
+    if (align === "right") {
+        return " ".repeat(diff) + str;
+    } else if (align === "center") {
+        const left = Math.floor(diff / 2);
+        const right = diff - left;
+        return " ".repeat(left) + str + " ".repeat(right);
+    } else {
+        return str + " ".repeat(diff);
+    }
+}
+
+export interface MarkdownTableFormatResult {
+    result: string;
+    isTable: boolean;
+    rowCount: number;
+    colCount: number;
+}
+
+/**
+ * Markdown 表格排版规范化与列宽自适应对齐 (formatMarkdownTable)
+ */
+export function formatMarkdownTable(text: string): MarkdownTableFormatResult {
+    if (!text || !text.includes("|")) {
+        return {result: text ?? "", isTable: false, rowCount: 0, colCount: 0};
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) {
+        return {result: text, isTable: false, rowCount: 0, colCount: 0};
+    }
+
+    // 寻找分隔行（通常第 2 行形如 |---|:---:|---:|）
+    const isDividerLine = (line: string) => /^\|?(?:\s*:?-+:?\s*\|?)+$/.test(line);
+    const dividerIdx = lines.findIndex((l, idx) => idx > 0 && isDividerLine(l));
+    if (dividerIdx === -1) {
+        return {result: text, isTable: false, rowCount: 0, colCount: 0};
+    }
+
+    // 解析各行单元格
+    const splitRow = (line: string): string[] => {
+        let clean = line;
+        if (clean.startsWith("|")) clean = clean.slice(1);
+        if (clean.endsWith("|")) clean = clean.slice(0, -1);
+        return clean.split("|").map((cell) => cell.trim());
+    };
+
+    const tableRows = lines.map(splitRow);
+    const maxCols = Math.max(...tableRows.map((r) => r.length));
+    if (maxCols === 0) {
+        return {result: text, isTable: false, rowCount: 0, colCount: 0};
+    }
+
+    // 补齐各行缺失的单元格
+    for (const row of tableRows) {
+        while (row.length < maxCols) {
+            row.push("");
+        }
+    }
+
+    // 解析分隔行的对齐定义
+    const dividerRow = tableRows[dividerIdx]!;
+    const alignments: Array<"left" | "center" | "right"> = dividerRow.map((cell) => {
+        const leftColon = cell.startsWith(":");
+        const rightColon = cell.endsWith(":");
+        if (leftColon && rightColon) return "center";
+        if (rightColon) return "right";
+        return "left";
+    });
+
+    // 计算各列最大显示宽度（至少为 3）
+    const colWidths: number[] = new Array(maxCols).fill(3);
+    for (let r = 0; r < tableRows.length; r++) {
+        if (r === dividerIdx) continue;
+        const row = tableRows[r]!;
+        for (let c = 0; c < maxCols; c++) {
+            const w = getDisplayWidth(row[c] || "");
+            if (w > colWidths[c]!) {
+                colWidths[c] = w;
+            }
+        }
+    }
+
+    // 格式化输出各行
+    const formattedLines: string[] = [];
+    for (let r = 0; r < tableRows.length; r++) {
+        if (r === dividerIdx) {
+            // 生成规范分隔行
+            const dividerCells = colWidths.map((width, c) => {
+                const align = alignments[c] ?? "left";
+                if (align === "center") {
+                    return ":" + "-".repeat(Math.max(1, width - 2)) + ":";
+                } else if (align === "right") {
+                    return "-".repeat(Math.max(2, width - 1)) + ":";
+                } else {
+                    return ":" + "-".repeat(Math.max(2, width - 1));
+                }
+            });
+            formattedLines.push(`| ${dividerCells.join(" | ")} |`);
+        } else {
+            const row = tableRows[r]!;
+            const paddedCells = row.map((cell, c) => {
+                const align = alignments[c] ?? "left";
+                return padDisplayWidth(cell, colWidths[c]!, align);
+            });
+            formattedLines.push(`| ${paddedCells.join(" | ")} |`);
+        }
+    }
+
+    return {
+        result: formattedLines.join("\n"),
+        isTable: true,
+        rowCount: tableRows.length,
+        colCount: maxCols,
+    };
+}

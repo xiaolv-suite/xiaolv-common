@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3521,6 +3521,34 @@ export class CommonSearchDialog {
                             addSilent("🔗", `URL 解码并复制: ${urlDec.result.slice(0, 30)}`, async () => {
                                 await this.deps.copyProviderPayload(urlDec.result);
                                 this.deps.notify?.("info", "已进行 URL 解码并复制");
+                            });
+                        }
+                    }
+                }
+                if (entry.content && entry.content.includes("|") && entry.content.includes("\n")) {
+                    const tableCheck = formatMarkdownTable(entry.content);
+                    if (tableCheck.isTable && tableCheck.result !== entry.content.trim()) {
+                        addSilent("⊞", `规整对齐 Markdown 表格 (${tableCheck.rowCount}行${tableCheck.colCount}列)`, async () => {
+                            await this.deps.copyProviderPayload(tableCheck.result);
+                            this.deps.notify?.("info", `已规整对齐 ${tableCheck.rowCount} 行 Markdown 表格并复制`);
+                        });
+                    }
+                }
+                if (contentText && (contentText.includes("<") || contentText.includes(">") || contentText.includes("&"))) {
+                    if (/&(?:amp|lt|gt|quot|#39);/i.test(contentText)) {
+                        const unescaped = unescapeHtmlEntities(contentText);
+                        if (unescaped !== contentText) {
+                            addSilent("✦", "还原 HTML 实体并复制", async () => {
+                                await this.deps.copyProviderPayload(unescaped);
+                                this.deps.notify?.("info", "已还原 HTML 实体并复制");
+                            });
+                        }
+                    } else {
+                        const escaped = escapeHtmlEntities(contentText);
+                        if (escaped !== contentText) {
+                            addSilent("✦", "转义 HTML 实体并复制", async () => {
+                                await this.deps.copyProviderPayload(escaped);
+                                this.deps.notify?.("info", "已转义 HTML 实体并复制");
                             });
                         }
                     }
