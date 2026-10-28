@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3667,6 +3667,30 @@ export class CommonSearchDialog {
                             this.deps.notify?.("info", `已压缩 ${res.collapsedCount} 个多余空行并复制`);
                         });
                     }
+                    addSilent("🔄", "多行双边双引号包裹并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const surrounded = surroundEachLine(raw, '"');
+                        await this.deps.copyProviderPayload(surrounded);
+                        this.deps.notify?.("info", "已双边包裹多行并复制");
+                    });
+                    if (entry.content.startsWith("  ") || entry.content.includes("\n  ")) {
+                        addSilent("⇥", "缩进转换 (空格转Tab) 并复制", async () => {
+                            const raw = entry.content || await this.deps.preview(entry.id) || "";
+                            const converted = convertIndentation(raw, "spaces-to-tabs", 4);
+                            await this.deps.copyProviderPayload(converted);
+                            this.deps.notify?.("info", "已将空格缩进转换为制表符并复制");
+                        });
+                    }
+                }
+                if (entry.content && entry.content.trim().length > 40) {
+                    addSilent("📑", "提取精要摘要 (120字) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const summary = extractExecutiveSummary(raw, 120);
+                        if (summary) {
+                            await this.deps.copyProviderPayload(summary);
+                            this.deps.notify?.("info", "已提取精要摘要并复制");
+                        }
+                    });
                 }
                 if (entry.content && /^\d{10,13}$/.test(entry.content.trim())) {
                     addSilent("⏱", "时间戳转相对时间并复制", async () => {

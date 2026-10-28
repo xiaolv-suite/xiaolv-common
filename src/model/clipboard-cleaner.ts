@@ -2620,3 +2620,132 @@ export function countWordFrequency(
         result: formattedLines.join("\n"),
     };
 }
+
+const BRACKET_PAIRS: Record<string, [string, string]> = {
+    "(": ["(", ")"],
+    ")": ["(", ")"],
+    "()": ["(", ")"],
+    "[": ["[", "]"],
+    "]": ["[", "]"],
+    "[]": ["[", "]"],
+    "{": ["{", "}"],
+    "}": ["{", "}"],
+    "{}": ["{", "}"],
+    "<": ["<", ">"],
+    ">": ["<", ">"],
+    "<>": ["<", ">"],
+    "《": ["《", "》"],
+    "》": ["《", "》"],
+    "《》": ["《", "》"],
+    "【": ["【", "】"],
+    "】": ["【", "】"],
+    "【】": ["【", "】"],
+    "“": ["“", "”"],
+    "”": ["“", "”"],
+    "“”": ["“", "”"],
+};
+
+export interface SurroundEachLineOptions {
+    /** 是否忽略空行（默认 true） */
+    ignoreEmpty?: boolean;
+    /** 是否预修剪行首尾空白（默认 false） */
+    trimLines?: boolean;
+}
+
+/**
+ * 为多行文本的每一行进行双边对称包裹 (surroundEachLine)
+ */
+export function surroundEachLine(
+    text: string,
+    wrapper: [string, string] | string = '"',
+    options: SurroundEachLineOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const ignoreEmpty = options.ignoreEmpty !== false;
+    const trimLines = options.trimLines === true;
+
+    let left = "";
+    let right = "";
+
+    if (Array.isArray(wrapper)) {
+        left = wrapper[0] ?? "";
+        right = wrapper[1] ?? "";
+    } else if (typeof wrapper === "string") {
+        if (BRACKET_PAIRS[wrapper]) {
+            [left, right] = BRACKET_PAIRS[wrapper]!;
+        } else {
+            left = wrapper;
+            right = wrapper;
+        }
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const processed = lines.map((rawLine) => {
+        const line = trimLines ? rawLine.trim() : rawLine;
+        if (ignoreEmpty && line.length === 0) return line;
+        return `${left}${line}${right}`;
+    });
+
+    return processed.join("\n");
+}
+
+/**
+ * 自然语言文本精要摘要提炼与首段提取 (extractExecutiveSummary)
+ */
+export function extractExecutiveSummary(text: string, maxLength = 120): string {
+    if (!text || typeof text !== "string") return "";
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+
+    // 寻找第一个有效段落（非大标题、非水平线、非空行）
+    let firstParagraph = "";
+    for (const l of lines) {
+        const trimmed = l.trim();
+        if (!trimmed) continue;
+        if (trimmed.startsWith("#") || /^[-*_]{3,}$/.test(trimmed)) continue;
+        firstParagraph = trimmed;
+        break;
+    }
+
+    if (!firstParagraph) {
+        firstParagraph = text.replace(/\r\n?/g, " ").trim();
+    }
+
+    const clean = stripMarkdownFormatting(firstParagraph);
+    return truncateText(clean, maxLength);
+}
+
+/**
+ * 代码与文本前置缩进转换器 (convertIndentation)
+ * 支持 spaces-to-tabs 与 tabs-to-spaces
+ */
+export function convertIndentation(
+    text: string,
+    mode: "spaces-to-tabs" | "tabs-to-spaces" = "spaces-to-tabs",
+    indentSize = 4,
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const size = Math.max(1, indentSize);
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+
+    const converted = lines.map((line) => {
+        if (!line.trim()) return line;
+        const indentMatch = line.match(/^[ \t]+/);
+        if (!indentMatch) return line;
+
+        const indentStr = indentMatch[0];
+        const content = line.slice(indentStr.length);
+
+        if (mode === "spaces-to-tabs") {
+            // 每 size 个空格替换为 1 个制表符
+            const spaceRegex = new RegExp(" ".repeat(size), "g");
+            const newIndent = indentStr.replace(spaceRegex, "\t");
+            return `${newIndent}${content}`;
+        } else {
+            // 每个制表符替换为 size 个空格
+            const newIndent = indentStr.replace(/\t/g, " ".repeat(size));
+            return `${newIndent}${content}`;
+        }
+    });
+
+    return converted.join("\n");
+}

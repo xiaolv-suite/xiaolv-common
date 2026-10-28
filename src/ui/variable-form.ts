@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -568,6 +568,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "reverse", text: "{{xlc:reverse|文本}}"},
         {id: "cron", text: "{{xlc:cron|0 30 9 * * 1-5}}"},
         {id: "timeago", text: "{{xlc:timeago|1761624000}}"},
+        {id: "summary", text: "{{xlc:summary|100|文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1578,6 +1579,84 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(wordFreqBtn);
+
+    const surroundBtn = document.createElement("button");
+    surroundBtn.type = "button";
+    surroundBtn.className = "xlc-varbtn xlc-btn-ghost";
+    surroundBtn.dataset.xlcControl = "capture.format.surround-lines";
+    surroundBtn.textContent = "✦ 双边包裹";
+    surroundBtn.title = "为选中文本或全文多行的每一行双边添加引号包裹";
+    surroundBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = surroundEachLine(targetText, '"');
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(surroundBtn);
+
+    const summaryBtn = document.createElement("button");
+    summaryBtn.type = "button";
+    summaryBtn.className = "xlc-varbtn xlc-btn-ghost";
+    summaryBtn.dataset.xlcControl = "capture.format.extract-summary";
+    summaryBtn.textContent = "✦ 提精要";
+    summaryBtn.title = "提炼文本首个有效核心段落并生成精简摘要 (100字)";
+    summaryBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = extractExecutiveSummary(targetText, 100);
+        if (res) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(summaryBtn);
+
+    const indentTabsBtn = document.createElement("button");
+    indentTabsBtn.type = "button";
+    indentTabsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    indentTabsBtn.dataset.xlcControl = "capture.format.indent-tabs";
+    indentTabsBtn.textContent = "✦ 空格转Tab";
+    indentTabsBtn.title = "将选中文本或全文行首的 4 空格缩进转换为制表符 Tab";
+    indentTabsBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertIndentation(targetText, "spaces-to-tabs", 4);
+        if (res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(indentTabsBtn);
 
     return bar;
 }
