@@ -40,11 +40,11 @@ import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEnti
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -707,6 +707,42 @@ export function resolveHtmlArg(rawArg: string, subAction?: string): string | nul
     return null;
 }
 
+/** 解析 count 语法参数 (chars, words, lines, cjk) */
+export function resolveCountArg(rawArg: string, subAction?: string): string | null {
+    const trimmed = rawArg.trim();
+    let action = subAction?.trim().toLowerCase();
+    let content = trimmed;
+
+    if (!action) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe === -1) {
+            action = "chars";
+            content = trimmed;
+        } else {
+            action = trimmed.slice(0, firstPipe).trim().toLowerCase();
+            content = trimmed.slice(firstPipe + 1);
+        }
+    }
+
+    if (action === "chars" || action === "len" || action === "length") {
+        return String(content.length);
+    }
+    if (action === "lines" || action === "line") {
+        if (!content) return "0";
+        return String(content.replace(/\r\n?/g, "\n").split("\n").length);
+    }
+    if (action === "cjk" || action === "chinese") {
+        const m = content.match(/[\u4e00-\u9fa5]/g);
+        return String(m ? m.length : 0);
+    }
+    if (action === "words" || action === "word") {
+        const cjk = (content.match(/[\u4e00-\u9fa5]/g) || []).length;
+        const latinWords = (content.replace(/[\u4e00-\u9fa5]/g, " ").match(/[a-zA-Z0-9_-]+/g) || []).length;
+        return String(cjk + latinWords);
+    }
+    return null;
+}
+
 export function getIsoWeekNumber(d: Date): number {
     const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNr = (target.getUTCDay() + 6) % 7;
@@ -750,6 +786,7 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "url": return "";
         case "base64": return "";
         case "html": return "";
+        case "count": return "0";
         case "password": return generateSecurePassword(14, "complex");
     }
 }
@@ -822,6 +859,11 @@ export function resolvePlaceholder(
         if (rawKind.includes(":")) {
             subAction = rawKind.split(":")[1];
         }
+    } else if (rawKind.startsWith("count")) {
+        kind = "count";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -878,6 +920,7 @@ export function resolvePlaceholder(
     if (kind === "url") return arg ? resolveUrlArg(arg, subAction) : null;
     if (kind === "base64") return arg ? resolveBase64Arg(arg, subAction) : null;
     if (kind === "html") return arg ? resolveHtmlArg(arg, subAction) : null;
+    if (kind === "count") return arg ? resolveCountArg(arg, subAction) : null;
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
 }
@@ -905,7 +948,9 @@ export function listPlaceholders(text: string): PlaceholderKind[] {
                         ? "base64"
                         : rawKind.startsWith("html")
                             ? "html"
-                            : rawKind) as PlaceholderKind;
+                            : rawKind.startsWith("count")
+                                ? "count"
+                                : rawKind) as PlaceholderKind;
         if (!kinds.includes(kind)) kinds.push(kind);
     }
     return kinds;

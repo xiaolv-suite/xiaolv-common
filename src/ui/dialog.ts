@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3551,6 +3551,29 @@ export class CommonSearchDialog {
                                 this.deps.notify?.("info", "已转义 HTML 实体并复制");
                             });
                         }
+                    }
+                }
+                if (entry.content && /[-*+]\s+\[[ xX]\]/.test(entry.content)) {
+                    addSilent("☐", "全部重置待办状态 (- [ ]) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = toggleMarkdownTaskStatus(raw, "uncheck-all");
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已重置 ${res.changedCount} 项待办状态并复制`);
+                    });
+                    addSilent("☑", "全部完成待办状态 (- [x]) 并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const res = toggleMarkdownTaskStatus(raw, "check-all");
+                        await this.deps.copyProviderPayload(res.result);
+                        this.deps.notify?.("info", `已完成 ${res.changedCount} 项待办状态并复制`);
+                    });
+                }
+                if (entry.content && entry.content.includes("\n") && (entry.content.includes(",") || entry.content.includes("\t") || entry.content.includes(";"))) {
+                    const csvCheck = csvToJson(entry.content);
+                    if (csvCheck.ok && csvCheck.count > 0) {
+                        addSilent("{}", `转为 JSON 数组并复制 (${csvCheck.count}条记录)`, async () => {
+                            await this.deps.copyProviderPayload(csvCheck.result);
+                            this.deps.notify?.("info", `已转换 ${csvCheck.count} 条表格记录为 JSON 数组并复制`);
+                        });
                     }
                 }
                 const hasVariables = (entry.varCount ?? 0) > 0 || (entry.content || "").includes("{{xlc:");

@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -558,6 +558,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "week", text: "{{xlc:week}}"},
         {id: "timestamp", text: "{{xlc:timestamp}}"},
         {id: "calc", text: "{{xlc:calc:100*1.13}}"},
+        {id: "count", text: "{{xlc:count:chars|文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -936,6 +937,58 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(unescapeHtmlBtn);
+
+    const csvJsonBtn = document.createElement("button");
+    csvJsonBtn.type = "button";
+    csvJsonBtn.className = "xlc-varbtn xlc-btn-ghost";
+    csvJsonBtn.dataset.xlcControl = "capture.format.csv-json";
+    csvJsonBtn.textContent = "✦ 表格转JSON";
+    csvJsonBtn.title = "将 CSV/TSV 表格文本一键转换为标准结构化 JSON 数组";
+    csvJsonBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = csvToJson(targetText);
+        if (res.ok) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(csvJsonBtn);
+
+    const resetTasksBtn = document.createElement("button");
+    resetTasksBtn.type = "button";
+    resetTasksBtn.className = "xlc-varbtn xlc-btn-ghost";
+    resetTasksBtn.dataset.xlcControl = "capture.format.reset-tasks";
+    resetTasksBtn.textContent = "✦ 重置待办";
+    resetTasksBtn.title = "将选中文本或全文中的 Markdown 待办项全部重置为未完成 (- [ ])";
+    resetTasksBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = toggleMarkdownTaskStatus(targetText, "uncheck-all");
+        if (res.changedCount > 0) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+                el.setSelectionRange(start, start + res.result.length);
+            } else {
+                el.value = res.result;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(resetTasksBtn);
 
     return bar;
 }

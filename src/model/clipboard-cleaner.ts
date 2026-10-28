@@ -991,3 +991,161 @@ export function formatMarkdownTable(text: string): MarkdownTableFormatResult {
         colCount: maxCols,
     };
 }
+
+export interface CsvToJsonOptions {
+    /** 自定义分隔符，不传则自动嗅探（支持制表符 \t、逗号 , 与分号 ;） */
+    delimiter?: string;
+    /** 是否美化格式缩进（默认 true） */
+    pretty?: boolean;
+}
+
+export interface CsvToJsonResult {
+    result: string;
+    ok: boolean;
+    count: number;
+    headers: string[];
+}
+
+/**
+ * 将 CSV/TSV 文本解析并转换为结构化 JSON 字符串
+ */
+export function csvToJson(text: string, options: CsvToJsonOptions = {}): CsvToJsonResult {
+    if (!text || typeof text !== "string") {
+        return {result: "", ok: false, count: 0, headers: []};
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length < 2) {
+        return {result: text, ok: false, count: 0, headers: []};
+    }
+
+    // 嗅探分隔符
+    let delim = options.delimiter;
+    if (!delim) {
+        const firstLine = lines[0]!;
+        const tabCount = (firstLine.match(/\t/g) || []).length;
+        const commaCount = (firstLine.match(/,/g) || []).length;
+        const semiCount = (firstLine.match(/;/g) || []).length;
+        if (tabCount >= commaCount && tabCount >= semiCount && tabCount > 0) {
+            delim = "\t";
+        } else if (semiCount > commaCount && semiCount > 0) {
+            delim = ";";
+        } else {
+            delim = ",";
+        }
+    }
+
+    // RFC 4180 简易行解析器（支持双引号包裹字段与转义双引号 ""）
+    const parseLine = (line: string): string[] => {
+        const fields: string[] = [];
+        let cur = "";
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i]!;
+            if (ch === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    cur += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (ch === delim && !inQuotes) {
+                fields.push(cur.trim());
+                cur = "";
+            } else {
+                cur += ch;
+            }
+        }
+        fields.push(cur.trim());
+        return fields;
+    };
+
+    const headerFields = parseLine(lines[0]!);
+    if (headerFields.length === 0 || headerFields.every((h) => !h)) {
+        return {result: text, ok: false, count: 0, headers: []};
+    }
+
+    const records: Array<Record<string, string>> = [];
+    for (let i = 1; i < lines.length; i++) {
+        const row = parseLine(lines[i]!);
+        if (row.length === 0 || (row.length === 1 && !row[0])) continue;
+        const record: Record<string, string> = {};
+        for (let c = 0; c < headerFields.length; c++) {
+            const key = headerFields[c] || `col_${c + 1}`;
+            record[key] = row[c] ?? "";
+        }
+        records.push(record);
+    }
+
+    const pretty = options.pretty !== false;
+    const jsonStr = pretty ? JSON.stringify(records, null, 2) : JSON.stringify(records);
+    return {
+        result: jsonStr,
+        ok: true,
+        count: records.length,
+        headers: headerFields,
+    };
+}
+
+export type TaskToggleAction = "check-all" | "uncheck-all" | "invert";
+
+export interface TaskToggleResult {
+    result: string;
+    changedCount: number;
+    totalTasks: number;
+}
+
+/**
+ * 批量切换 Markdown 待办任务清单状态 (- [ ] 与 - [x])
+ */
+export function toggleMarkdownTaskStatus(text: string, action: TaskToggleAction = "check-all"): TaskToggleResult {
+    if (!text || typeof text !== "string") {
+        return {result: text ?? "", changedCount: 0, totalTasks: 0};
+    }
+
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let changedCount = 0;
+    let totalTasks = 0;
+
+    const uncheckPattern = /^(\s*[-*+]\s+\[) (\]\s+.*)$/;
+    const checkedPattern = /^(\s*[-*+]\s+\[)[xX](\]\s+.*)$/;
+
+    const converted = lines.map((line) => {
+        const isUnchecked = uncheckPattern.test(line);
+        const isChecked = checkedPattern.test(line);
+
+        if (!isUnchecked && !isChecked) {
+            return line;
+        }
+
+        totalTasks++;
+
+        if (action === "check-all") {
+            if (isUnchecked) {
+                changedCount++;
+                return line.replace(uncheckPattern, "$1x$2");
+            }
+            return line;
+        } else if (action === "uncheck-all") {
+            if (isChecked) {
+                changedCount++;
+                return line.replace(checkedPattern, "$1 $2");
+            }
+            return line;
+        } else {
+            // invert
+            changedCount++;
+            if (isUnchecked) {
+                return line.replace(uncheckPattern, "$1x$2");
+            } else {
+                return line.replace(checkedPattern, "$1 $2");
+            }
+        }
+    });
+
+    return {
+        result: converted.join("\n"),
+        changedCount,
+        totalTasks,
+    };
+}
