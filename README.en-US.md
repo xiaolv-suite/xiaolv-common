@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.58] — 2026-10-29 (Latest)
+### [v0.10.59] — 2026-10-29 (Latest)
 
-Markdown KPI summary card, realistic random name generator macro, and alphabetical list grouping:
-- **Markdown KPI Summary Card (`formatKpiSummaryCard`)**: Pure function compiling key-value and table data into an executive blockquote KPI summary board with bold metrics and formatted figures; wired to action menu and variable form.
-- **Realistic Random Name Generator (`generateRandomName`) & `{{xlc:randomname}}` Macro**: Pure function generating realistic Chinese names (single/double character given names with gender bias) and English full names; expanded dynamic macro `{{xlc:randomname}}`, `{{xlc:randomname:en}}`, `{{xlc:randomname:female}}`; wired to action menu and variable form.
-- **Alphabetical List Grouping (`groupLinesByAlphabet`)**: Pure function categorizing multi-line lists under A~Z headers based on Chinese Pinyin or Latin initial letters; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 978/978 passing tests with verified negative tests.
+Visual width metrics, ternary conditional evaluation macro, and list indentation shifting:
+- **Visual Width Metrics (`measureVisualWidth`)**: Pure function accurately calculating CJK double-width visual column length, total character count, and CJK vs ASCII breakdown; wired to action menu and variable form.
+- **Ternary Conditional Evaluator (`evaluateTernaryCondition`) & `{{xlc:if}}` Macro**: Zero-eval safe condition parser supporting numeric comparisons (`>`, `<=`), exact string matching, substring checks (`contains`), and truthiness; expanded dynamic macro `{{xlc:if|10 > 5|大于五|小于等于五}}`, `{{xlc:if|role == 'admin'|管理员|普通用户}}`, `{{xlc:if:not|true|开启|关闭}}`; wired to variable form.
+- **List Indentation Shifting (`shiftListIndentation`)**: Pure function batch-shifting list item indentation (+2 or -2 spaces) while keeping standard paragraphs and blank lines intact; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 981/981 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.57)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.58)</b></summary>
+
+#### [v0.10.58] — 2026-10-29
+- Markdown KPI summary card (`formatKpiSummaryCard`).
+- Realistic random name generator (`generateRandomName`) & `{{xlc:randomname}}` macro.
+- Alphabetical list grouping (`groupLinesByAlphabet`).
 
 #### [v0.10.57] — 2026-10-29
 - Markdown blockquote flattening & stripping (`flattenMarkdownBlockquotes`).

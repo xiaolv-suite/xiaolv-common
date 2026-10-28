@@ -7470,3 +7470,138 @@ export function groupLinesByAlphabet(
 
     return sections.join("\n\n");
 }
+
+export interface VisualWidthMetrics {
+    visualWidth: number;
+    charCount: number;
+    cjkCount: number;
+    asciiCount: number;
+}
+
+/**
+ * 文本字符宽度度量与对齐占位计算引擎 (measureVisualWidth)
+ */
+export function measureVisualWidth(text: string): VisualWidthMetrics {
+    if (!text || typeof text !== "string") {
+        return {visualWidth: 0, charCount: 0, cjkCount: 0, asciiCount: 0};
+    }
+
+    let visualWidth = 0;
+    let charCount = 0;
+    let cjkCount = 0;
+    let asciiCount = 0;
+
+    const chars = Array.from(text);
+    charCount = chars.length;
+
+    for (const ch of chars) {
+        const code = ch.codePointAt(0) ?? 0;
+        const isCjk = (code >= 0x4e00 && code <= 0x9fa5) || code > 0xff;
+        if (isCjk) {
+            visualWidth += 2;
+            cjkCount++;
+        } else {
+            visualWidth += 1;
+            asciiCount++;
+        }
+    }
+
+    return {visualWidth, charCount, cjkCount, asciiCount};
+}
+
+/**
+ * 动态布尔条件求值与三元表达式引擎 (evaluateTernaryCondition)
+ * 零 eval，安全支持数字对比、字符串匹配与真假值判定
+ */
+export function evaluateTernaryCondition(
+    conditionStr: string,
+    thenValue: string,
+    elseValue = "",
+): string {
+    if (!conditionStr || typeof conditionStr !== "string") return elseValue;
+    const cond = conditionStr.trim();
+    if (!cond) return elseValue;
+
+    const evalCondition = (expr: string): boolean => {
+        const containsMatch = expr.match(/^(.+?)\s+(?:contains|includes)\s+(.+)$/i);
+        if (containsMatch) {
+            const rawSubject = containsMatch[1]!.trim().replace(/^['"]|['"]$/g, "");
+            const rawTarget = containsMatch[2]!.trim().replace(/^['"]|['"]$/g, "");
+            return rawSubject.includes(rawTarget);
+        }
+
+        const compMatch = expr.match(/^(.+?)\s*(===|==|!==|!=|>=|<=|>|<)\s*(.+)$/);
+        if (compMatch) {
+            const [, leftRaw, op, rightRaw] = compMatch;
+            const leftStr = leftRaw!.trim().replace(/^['"]|['"]$/g, "");
+            const rightStr = rightRaw!.trim().replace(/^['"]|['"]$/g, "");
+
+            const leftNum = parseFloat(leftStr);
+            const rightNum = parseFloat(rightStr);
+            const bothNumeric = !Number.isNaN(leftNum) && !Number.isNaN(rightNum) && /^[+-]?\d+(?:\.\d+)?$/.test(leftStr) && /^[+-]?\d+(?:\.\d+)?$/.test(rightStr);
+
+            if (bothNumeric) {
+                switch (op) {
+                    case ">": return leftNum > rightNum;
+                    case ">=": return leftNum >= rightNum;
+                    case "<": return leftNum < rightNum;
+                    case "<=": return leftNum <= rightNum;
+                    case "==":
+                    case "===": return leftNum === rightNum;
+                    case "!=":
+                    case "!==": return leftNum !== rightNum;
+                }
+            } else {
+                switch (op) {
+                    case "==":
+                    case "===": return leftStr === rightStr;
+                    case "!=":
+                    case "!==": return leftStr !== rightStr;
+                    case ">": return leftStr > rightStr;
+                    case ">=": return leftStr >= rightStr;
+                    case "<": return leftStr < rightStr;
+                    case "<=": return leftStr <= rightStr;
+                }
+            }
+        }
+
+        const lower = expr.toLowerCase().replace(/^['"]|['"]$/g, "");
+        if (["false", "0", "null", "undefined", "no", "n", "off", "none", ""].includes(lower)) {
+            return false;
+        }
+        return true;
+    };
+
+    const isTrue = evalCondition(cond);
+    return isTrue ? thenValue : elseValue;
+}
+
+/**
+ * 列表项与多行缩进批量升降引擎 (shiftListIndentation)
+ */
+export function shiftListIndentation(
+    text: string,
+    deltaSpaces = 2,
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const delta = Math.trunc(deltaSpaces);
+    if (delta === 0) return text;
+
+    const listRegex = /^(\s*)([-*+]|\d+[.)])(\s+.*)$/;
+
+    return lines.map((line) => {
+        const match = line.match(listRegex);
+        if (!match) return line;
+
+        const [, indent, marker, rest] = match;
+        const currentLen = indent!.length;
+
+        if (delta > 0) {
+            return `${" ".repeat(currentLen + delta)}${marker}${rest}`;
+        } else {
+            const newLen = Math.max(0, currentLen + delta);
+            return `${" ".repeat(newLen)}${marker}${rest}`;
+        }
+    }).join("\n");
+}
