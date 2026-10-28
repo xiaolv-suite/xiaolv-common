@@ -2749,3 +2749,161 @@ export function convertIndentation(
 
     return converted.join("\n");
 }
+
+export interface NumericLinesSummary {
+    sum: number;
+    average: number;
+    count: number;
+    min: number;
+    max: number;
+    result: string;
+}
+
+/**
+ * 多行文本数值提取与汇总求和统计 (sumNumericLines)
+ */
+export function sumNumericLines(text: string, options: {extractNumbers?: boolean} = {}): NumericLinesSummary {
+    if (!text || typeof text !== "string") {
+        return {sum: 0, average: 0, count: 0, min: 0, max: 0, result: ""};
+    }
+
+    const extractNumbers = options.extractNumbers !== false;
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const numbers: number[] = [];
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+
+        if (extractNumbers) {
+            // 提取行内出现的数值（取行中最后一个有效数值，如 "住宿费: 320.5" -> 320.5）
+            const matches = line.match(/[-+]?\d+(?:\.\d+)?/g);
+            if (matches && matches.length > 0) {
+                const lastNum = parseFloat(matches[matches.length - 1]!);
+                if (Number.isFinite(lastNum)) numbers.push(lastNum);
+            }
+        } else {
+            const num = parseFloat(line);
+            if (Number.isFinite(num)) numbers.push(num);
+        }
+    }
+
+    if (numbers.length === 0) {
+        return {sum: 0, average: 0, count: 0, min: 0, max: 0, result: "未检测到有效数值"};
+    }
+
+    let sum = 0;
+    let min = numbers[0]!;
+    let max = numbers[0]!;
+
+    for (const n of numbers) {
+        sum += n;
+        if (n < min) min = n;
+        if (n > max) max = n;
+    }
+
+    const count = numbers.length;
+    const average = parseFloat((sum / count).toFixed(2));
+    const roundSum = parseFloat(sum.toFixed(2));
+
+    const result = `合计: ${roundSum} | 平均: ${average} | 笔数: ${count} | 极值: [${min}, ${max}]`;
+
+    return {
+        sum: roundSum,
+        average,
+        count,
+        min,
+        max,
+        result,
+    };
+}
+
+const HEAVENLY_STEMS = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
+const EARTHLY_BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+const ZODIAC_ANIMALS = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"];
+
+export interface StemBranchZodiacResult {
+    stemBranch: string;
+    zodiac: string;
+    full: string;
+}
+
+/**
+ * 公历年份转中国农历天干地支与生肖 (getChineseZodiacAndStemBranch)
+ * 如 2026 -> 丙午年 (马年)
+ */
+export function getChineseZodiacAndStemBranch(yearOrDate: number | string | Date = new Date()): StemBranchZodiacResult {
+    let year: number;
+    if (yearOrDate instanceof Date) {
+        year = yearOrDate.getFullYear();
+    } else {
+        const parsed = parseInt(String(yearOrDate).trim(), 10);
+        year = Number.isFinite(parsed) ? parsed : new Date().getFullYear();
+    }
+
+    const stemIdx = (((year - 4) % 10) + 10) % 10;
+    const branchIdx = (((year - 4) % 12) + 12) % 12;
+
+    const stem = HEAVENLY_STEMS[stemIdx] || "";
+    const branch = EARTHLY_BRANCHES[branchIdx] || "";
+    const zodiac = ZODIAC_ANIMALS[branchIdx] || "";
+    const stemBranch = `${stem}${branch}`;
+    const full = `${stemBranch}年 (${zodiac}年)`;
+
+    return {
+        stemBranch,
+        zodiac,
+        full,
+    };
+}
+
+export interface RepeatedPhraseItem {
+    phrase: string;
+    count: number;
+}
+
+/**
+ * 常用语文本高频重复词组与短语提取 (extractRepeatedPhrases)
+ */
+export function extractRepeatedPhrases(
+    text: string,
+    options: {minCount?: number; minLength?: number; maxLength?: number; topN?: number} = {},
+): {items: RepeatedPhraseItem[]; result: string} {
+    if (!text || typeof text !== "string") {
+        return {items: [], result: ""};
+    }
+
+    const minCount = Math.max(2, options.minCount ?? 2);
+    const minLen = Math.max(2, options.minLength ?? 2);
+    const maxLen = Math.max(minLen, options.maxLength ?? 4);
+    const topN = Math.max(1, options.topN ?? 10);
+
+    // 清洗无关控制字符与大部分标点，保留连续汉字与字母数字
+    const clean = text.replace(/[\s\r\n\t，。！？、；：""''（）《》【】,.!?;:()\[\]{}]+/g, " ");
+    const phraseCounts = new Map<string, number>();
+
+    const tokens = clean.split(" ").filter((s) => s.length >= minLen);
+
+    for (const token of tokens) {
+        const len = token.length;
+        for (let size = minLen; size <= Math.min(maxLen, len); size++) {
+            for (let i = 0; i <= len - size; i++) {
+                const sub = token.slice(i, i + size);
+                phraseCounts.set(sub, (phraseCounts.get(sub) || 0) + 1);
+            }
+        }
+    }
+
+    const sorted = Array.from(phraseCounts.entries())
+        .filter(([_, count]) => count >= minCount)
+        .map(([phrase, count]) => ({phrase, count}))
+        .sort((a, b) => b.count - a.count || b.phrase.length - a.phrase.length)
+        .slice(0, topN);
+
+    const formattedLines = sorted.map((it, idx) => `${idx + 1}. 「${it.phrase}」: 重复 ${it.count} 次`);
+
+    return {
+        items: sorted,
+        result: formattedLines.join("\n"),
+    };
+}

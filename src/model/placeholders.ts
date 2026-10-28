@@ -30,7 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
-import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary} from "./clipboard-cleaner";
+import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch} from "./clipboard-cleaner";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
 // 带参语法分隔符必须是 | 而非 :（R161 真机验收发现）：Lute 把 :date: 当 emoji 短代码转换，
 // {{xlc:date:+3d}} 落库即损坏成 {{xlc📅+3d}}；ask 冒号语法无此问题（:ask: 非短代码，真机已验证）。
@@ -40,11 +40,11 @@ import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEnti
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path|doc|random|uuid|id|password|calc|selection|timestamp|week|greeting|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -916,6 +916,35 @@ export function resolveSummaryArg(rawArg: string, subLen?: string): string | nul
     return extractExecutiveSummary(content, Number.isFinite(maxLen) ? maxLen : 120);
 }
 
+/** 解析 lunar 语法参数（农历干支与生肖年） */
+export function resolveLunarArg(rawArg: string, now: Date, subType?: string): string | null {
+    const trimmed = rawArg.trim();
+    let mode = subType?.trim().toLowerCase();
+    let yearInput = trimmed;
+
+    if (!mode) {
+        const firstPipe = trimmed.indexOf("|");
+        if (firstPipe !== -1) {
+            mode = trimmed.slice(0, firstPipe).trim().toLowerCase();
+            yearInput = trimmed.slice(firstPipe + 1);
+        }
+    }
+
+    const year = yearInput && /^\d{4}$/.test(yearInput) ? parseInt(yearInput, 10) : now.getFullYear();
+    const res = getChineseZodiacAndStemBranch(year);
+
+    if (!mode || mode === "year" || mode === "full") {
+        return res.full;
+    }
+    if (mode === "stembranch" || mode === "ganzhi") {
+        return res.stemBranch;
+    }
+    if (mode === "zodiac" || mode === "shengxiao") {
+        return res.zodiac;
+    }
+    return res.full;
+}
+
 export function getIsoWeekNumber(d: Date): number {
     const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNr = (target.getUTCDay() + 6) % 7;
@@ -970,6 +999,7 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "cron": return "";
         case "timeago": return "刚刚";
         case "summary": return "";
+        case "lunar": return getChineseZodiacAndStemBranch(now).full;
         case "password": return generateSecurePassword(14, "complex");
     }
 }
@@ -1097,6 +1127,11 @@ export function resolvePlaceholder(
         if (rawKind.includes(":")) {
             subAction = rawKind.split(":")[1];
         }
+    } else if (rawKind.startsWith("lunar")) {
+        kind = "lunar";
+        if (rawKind.includes(":")) {
+            subAction = rawKind.split(":")[1];
+        }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -1164,6 +1199,7 @@ export function resolvePlaceholder(
     if (kind === "cron") return arg ? resolveCronArg(arg) : null;
     if (kind === "timeago") return arg ? resolveTimeagoArg(arg, now) : "刚刚";
     if (kind === "summary") return arg ? resolveSummaryArg(arg, subAction) : null;
+    if (kind === "lunar") return resolveLunarArg(arg || "", now, subAction);
     if (arg) return null;
     return renderPlaceholder(kind, now, doc);
 }

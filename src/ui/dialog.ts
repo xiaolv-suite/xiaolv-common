@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -3681,6 +3681,34 @@ export class CommonSearchDialog {
                             this.deps.notify?.("info", "已将空格缩进转换为制表符并复制");
                         });
                     }
+                    if (/\d+/.test(entry.content)) {
+                        addSilent("🧮", "多行数值求和与统计并复制", async () => {
+                            const raw = entry.content || await this.deps.preview(entry.id) || "";
+                            const summary = sumNumericLines(raw);
+                            await this.deps.copyProviderPayload(summary.result);
+                            this.deps.notify?.("info", `数值汇总：${summary.result}`);
+                        });
+                    }
+                }
+                if (entry.content && /^(19\d\d|20\d\d)$/.test(entry.content.trim())) {
+                    addSilent("🧧", "公历年转干支生肖并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const lunar = getChineseZodiacAndStemBranch(raw.trim());
+                        await this.deps.copyProviderPayload(lunar.full);
+                        this.deps.notify?.("info", `农历年份：${lunar.full}`);
+                    });
+                }
+                if (entry.content && entry.content.trim().length > 30) {
+                    addSilent("🔎", "检测高频重复词组短语并复制", async () => {
+                        const raw = entry.content || await this.deps.preview(entry.id) || "";
+                        const rep = extractRepeatedPhrases(raw, {minCount: 2, minLength: 2, maxLength: 4});
+                        if (rep.items.length > 0) {
+                            await this.deps.copyProviderPayload(rep.result);
+                            this.deps.notify?.("info", `已检出 ${rep.items.length} 个重复短语并复制`);
+                        } else {
+                            this.deps.notify?.("info", "未检测到重复词组短语");
+                        }
+                    });
                 }
                 if (entry.content && entry.content.trim().length > 40) {
                     addSilent("📑", "提取精要摘要 (120字) 并复制", async () => {

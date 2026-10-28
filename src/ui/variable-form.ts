@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -569,6 +569,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "cron", text: "{{xlc:cron|0 30 9 * * 1-5}}"},
         {id: "timeago", text: "{{xlc:timeago|1761624000}}"},
         {id: "summary", text: "{{xlc:summary|100|文本}}"},
+        {id: "lunar", text: "{{xlc:lunar:year}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
         {id: "base64", text: "{{xlc:base64:encode|Hello}}"},
@@ -1657,6 +1658,58 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     bar.appendChild(indentTabsBtn);
+
+    const sumNumericBtn = document.createElement("button");
+    sumNumericBtn.type = "button";
+    sumNumericBtn.className = "xlc-varbtn xlc-btn-ghost";
+    sumNumericBtn.dataset.xlcControl = "capture.format.sum-lines";
+    sumNumericBtn.textContent = "✦ 数值求和";
+    sumNumericBtn.title = "自动提取选中文本或全文多行中的数值并计算求和、平均值与极值";
+    sumNumericBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = sumNumericLines(targetText);
+        if (res.count > 0) {
+            const summaryLine = `\n${res.result}`;
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + targetText + summaryLine + el.value.slice(end);
+            } else {
+                el.value = el.value + summaryLine;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(sumNumericBtn);
+
+    const repPhrasesBtn = document.createElement("button");
+    repPhrasesBtn.type = "button";
+    repPhrasesBtn.className = "xlc-varbtn xlc-btn-ghost";
+    repPhrasesBtn.dataset.xlcControl = "capture.format.repeated-phrases";
+    repPhrasesBtn.textContent = "✦ 查重复词";
+    repPhrasesBtn.title = "检测选中文本或全文中高频重复出现的 2~4 字词组短语";
+    repPhrasesBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = extractRepeatedPhrases(targetText, {minCount: 2, minLength: 2, maxLength: 4});
+        if (res.items.length > 0) {
+            const report = `\n\n【重复词组检测结果】\n${res.result}`;
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + targetText + report + el.value.slice(end);
+            } else {
+                el.value = el.value + report;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(repPhrasesBtn);
 
     return bar;
 }
