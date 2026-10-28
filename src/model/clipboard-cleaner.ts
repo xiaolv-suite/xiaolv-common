@@ -6034,3 +6034,122 @@ export function markdownTableToDelimited(
     if (resultRows.length === 0) return markdownTable;
     return resultRows.join("\n");
 }
+
+export interface ConvertListOptions {
+    bulletChar?: "-" | "*" | "+";
+    startNumber?: number;
+}
+
+/**
+ * Markdown 无序列表与有序列表双向批量互转引擎 (convertListStyle)
+ */
+export function convertListStyle(
+    text: string,
+    targetStyle: "ordered" | "unordered",
+    options: ConvertListOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const bullet = options.bulletChar || "-";
+    const startNum = options.startNumber !== undefined ? Math.max(0, options.startNumber) : 1;
+
+    const counters = new Map<number, number>();
+
+    return lines.map((line) => {
+        const unorderedMatch = line.match(/^(\s*)([-*+])(\s+.*)$/);
+        const orderedMatch = line.match(/^(\s*)(\d+)[.)](\s+.*)$/);
+
+        if (targetStyle === "ordered") {
+            if (unorderedMatch) {
+                const [, indent, , rest] = unorderedMatch;
+                const indentLen = indent!.length;
+
+                for (const k of Array.from(counters.keys())) {
+                    if (k > indentLen) counters.delete(k);
+                }
+
+                const currentCount = (counters.get(indentLen) ?? (startNum - 1)) + 1;
+                counters.set(indentLen, currentCount);
+
+                return `${indent}${currentCount}.${rest}`;
+            }
+        } else if (targetStyle === "unordered") {
+            if (orderedMatch) {
+                const [, indent, , rest] = orderedMatch;
+                return `${indent}${bullet}${rest}`;
+            }
+        }
+
+        return line;
+    }).join("\n");
+}
+
+/**
+ * 字符串轻量级高散列指纹生成引擎 (generateShortHash)
+ * 基于 64 位双轮 FNV-1a 算法，输出短小且分布均匀的十六进制指纹
+ */
+export function generateShortHash(text: string, length = 8): string {
+    if (text === undefined || text === null) return "";
+    const str = String(text);
+    const targetLen = Math.min(Math.max(4, length), 32);
+
+    let h1 = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+        h1 ^= str.charCodeAt(i);
+        h1 = Math.imul(h1, 16777619) >>> 0;
+    }
+
+    let h2 = 1000000007 >>> 0;
+    for (let i = str.length - 1; i >= 0; i--) {
+        h2 ^= str.charCodeAt(i);
+        h2 = Math.imul(h2, 2246822519) >>> 0;
+    }
+
+    const hex1 = h1.toString(16).padStart(8, "0");
+    const hex2 = h2.toString(16).padStart(8, "0");
+    const full = (hex1 + hex2).toLowerCase();
+
+    if (targetLen <= 16) {
+        return full.slice(0, targetLen);
+    }
+    return (full + full).slice(0, targetLen);
+}
+
+export interface FilterTaskOptions {
+    stripCheckbox?: boolean;
+}
+
+/**
+ * Markdown 任务待办项状态筛选提取引擎 (filterTaskItems)
+ */
+export function filterTaskItems(
+    text: string,
+    status: "pending" | "completed" | "all" = "pending",
+    options: FilterTaskOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+    const result: string[] = [];
+    const strip = options.stripCheckbox === true;
+
+    const taskRegex = /^(\s*(?:[-*+]|\d+[.)]))\s+\[([ xX])\]\s+(.*)$/;
+
+    for (const line of lines) {
+        const match = line.match(taskRegex);
+        if (!match) continue;
+
+        const [, prefix, state, content] = match;
+        const isDone = state!.toLowerCase() === "x";
+
+        if (status === "pending" && isDone) continue;
+        if (status === "completed" && !isDone) continue;
+
+        if (strip) {
+            result.push(`${prefix} ${content}`);
+        } else {
+            result.push(line);
+        }
+    }
+
+    return result.join("\n");
+}

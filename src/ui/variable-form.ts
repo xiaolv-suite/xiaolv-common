@@ -6,7 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
-import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited} from "../model/clipboard-cleaner";
+import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 
@@ -590,6 +590,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "checksum", text: "{{xlc:checksum|hello}}"},
         {id: "pad", text: "{{xlc:pad|10|hello}}"},
         {id: "seq", text: "{{xlc:seq|1|10}}"},
+        {id: "fingerprint", text: "{{xlc:fingerprint|hello}}"},
         {id: "regex.mreplace", text: "{{xlc:regex:mreplace|^(\\s*)|// |文本}}"},
         {id: "password", text: "{{xlc:password|16}}"},
         {id: "url-enc", text: "{{xlc:url:encode|https://siyuan-note.com}}"},
@@ -3204,6 +3205,110 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         el.dispatchEvent(new Event("input", {bubbles: true}));
     });
     bar.appendChild(seqGenBtn);
+
+    const listOrderedBtn = document.createElement("button");
+    listOrderedBtn.type = "button";
+    listOrderedBtn.className = "xlc-varbtn xlc-btn-ghost";
+    listOrderedBtn.dataset.xlcControl = "capture.format.list-ordered";
+    listOrderedBtn.textContent = "✦ 有序列表";
+    listOrderedBtn.title = "将无序列表批量转换为编号递增的有序列表 (1. 2. 3.)";
+    listOrderedBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertListStyle(targetText, "ordered");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(listOrderedBtn);
+
+    const listUnorderedBtn = document.createElement("button");
+    listUnorderedBtn.type = "button";
+    listUnorderedBtn.className = "xlc-varbtn xlc-btn-ghost";
+    listUnorderedBtn.dataset.xlcControl = "capture.format.list-unordered";
+    listUnorderedBtn.textContent = "✦ 无序列表";
+    listUnorderedBtn.title = "将有序数字列表批量转换为圆点无序列表 (- )";
+    listUnorderedBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = convertListStyle(targetText, "unordered");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(listUnorderedBtn);
+
+    const filterTasksBtn = document.createElement("button");
+    filterTasksBtn.type = "button";
+    filterTasksBtn.className = "xlc-varbtn xlc-btn-ghost";
+    filterTasksBtn.dataset.xlcControl = "capture.format.filter-tasks-pending";
+    filterTasksBtn.textContent = "✦ 未完成待办";
+    filterTasksBtn.title = "从多行任务列表中仅筛选提取尚未完成的待办事项 (- [ ])";
+    filterTasksBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = filterTaskItems(targetText, "pending");
+        if (res && res !== targetText) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(filterTasksBtn);
+
+    const shortHashBtn = document.createElement("button");
+    shortHashBtn.type = "button";
+    shortHashBtn.className = "xlc-varbtn xlc-btn-ghost";
+    shortHashBtn.dataset.xlcControl = "capture.format.short-hash";
+    shortHashBtn.textContent = "✦ 8位指纹";
+    shortHashBtn.title = "计算选中文本或全文字段的 8 位短哈希指纹";
+    shortHashBtn.addEventListener("click", () => {
+        const el = getTarget();
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? el.value.length;
+        const hasSel = start !== end;
+        const targetText = hasSel ? el.value.slice(start, end) : el.value;
+        const res = generateShortHash(targetText, 8);
+        if (res) {
+            if (hasSel) {
+                el.value = el.value.slice(0, start) + res + el.value.slice(end);
+                el.setSelectionRange(start, start + res.length);
+            } else {
+                el.value = res;
+            }
+            el.focus();
+            el.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+    });
+    bar.appendChild(shortHashBtn);
 
     return bar;
 }
