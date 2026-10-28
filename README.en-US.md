@@ -119,16 +119,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.56] — 2026-10-29 (Latest)
+### [v0.10.57] — 2026-10-29 (Latest)
 
-Markdown footnote re-indexing/grouping, backslash escaping macro, and delimiter chunking:
-- **Markdown Footnotes Normalization (`normalizeMarkdownFootnotes`)**: Pure function sequentially re-numbering footnote references (`[^1]`, `[^2]`), stripping embedded definitions from the body, and neatly grouping them at the document bottom; wired to action menu and variable form.
-- **Backslash Escaping (`escapeBackslash`) & `{{xlc:slash}}` Macro**: Pure function escaping backslashes (`\` -> `\\`) in Windows file paths, newlines, and regexes with reversible unescaping; expanded dynamic macro `{{xlc:slash|C:\Users}}` and `{{xlc:slash:unescape|C:\\Users}}`; wired to action menu and variable form.
-- **Delimiter Line Chunking (`chunkLinesByDelimiter`)**: Pure function splitting multi-line notes by dividers (`---` or `===`) into structured chunks with generated section headers; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 972/972 passing tests with verified negative tests.
+Markdown blockquote flattening/stripping, word-level reversal macro, and inline formatting stripping:
+- **Blockquote Flattening & Stripping (`flattenMarkdownBlockquotes`)**: Pure function stripping all `>` blockquote angle brackets into clean paragraphs or flattening multi-level quotes into a single clean level; wired to action menu and variable form.
+- **Word-Level Reversal (`reverseWords`) & `{{xlc:revwords}}` Macro**: Pure function reversing word order while preserving line structure and indentation, distinct from character-level reversal; expanded dynamic macro `{{xlc:revwords|the quick brown fox}}`; wired to action menu and variable form.
+- **Inline Markdown Formatting Stripping (`stripInlineMarkdownFormatting`)**: Pure function stripping bold (`**`), italic (`*`), strikethrough (`~~`), highlight (`==`), and inline code (`` ` ``) marks while protecting variable underscores; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 975/975 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.55)</b></summary>
+<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.56)</b></summary>
+
+#### [v0.10.56] — 2026-10-29
+- Markdown footnote re-indexing/grouping (`normalizeMarkdownFootnotes`).
+- Backslash escaping (`escapeBackslash`) & `{{xlc:slash}}` macro.
+- Delimiter line chunking (`chunkLinesByDelimiter`).
 
 #### [v0.10.55] — 2026-10-29
 - Markdown task status inversion (`invertTaskStatus`).

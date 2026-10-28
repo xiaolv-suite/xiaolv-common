@@ -7212,3 +7212,79 @@ export function chunkLinesByDelimiter(
 
     return chunks.map((c, idx) => `${prefix} ${idx + 1}\n${c}`).join("\n\n");
 }
+
+export type FlattenQuoteMode = "strip" | "single_level";
+
+/**
+ * Markdown 引用块扁平化与剥离引擎 (flattenMarkdownBlockquotes)
+ */
+export function flattenMarkdownBlockquotes(
+    text: string,
+    mode: FlattenQuoteMode = "strip",
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const lines = text.split("\n");
+
+    return lines.map((line) => {
+        const match = line.match(/^(\s*)(>[\s>]*)(.*)$/);
+        if (!match) return line;
+
+        const [, indent, , content] = match;
+        const cleanContent = content!.trimStart();
+
+        if (mode === "single_level") {
+            return `${indent}> ${cleanContent}`;
+        }
+        return `${indent}${cleanContent}`;
+    }).join("\n");
+}
+
+/**
+ * 单词级别逆序反转引擎 (reverseWords)
+ */
+export function reverseWords(
+    text: string,
+    options: {preserveLines?: boolean} = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const preserveLines = options.preserveLines !== false;
+
+    const reverseLineWords = (line: string): string => {
+        if (!line.trim()) return line;
+        const indentMatch = line.match(/^(\s*)(.*)$/);
+        const indent = indentMatch ? indentMatch[1]! : "";
+        const rest = indentMatch ? indentMatch[2]! : line;
+
+        const words = rest.split(/\s+/).filter(Boolean);
+        words.reverse();
+        return indent + words.join(" ");
+    };
+
+    if (preserveLines) {
+        return text.split("\n").map(reverseLineWords).join("\n");
+    }
+
+    const words = text.split(/\s+/).filter(Boolean);
+    words.reverse();
+    return words.join(" ");
+}
+
+/**
+ * Markdown 行内样式标记批量剥离引擎 (stripInlineMarkdownFormatting)
+ * 剔除 **粗体**、*斜体*、~~删除线~~、==高亮== 及 `行内代码` 标记，保留纯文本内容
+ */
+export function stripInlineMarkdownFormatting(text: string): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    let cur = text;
+
+    cur = cur.replace(/(\*\*\*|___)(.*?)\1/g, "$2");
+    cur = cur.replace(/(\*\*|__)(.*?)\1/g, "$2");
+    cur = cur.replace(/(?<!\w)\*([^*]+)\*(?!\w)/g, "$1");
+    cur = cur.replace(/(?<!\w)_([^_]+)_(?!\w)/g, "$1");
+    cur = cur.replace(/~~(.*?)~~/g, "$1");
+    cur = cur.replace(/==(.*?)==/g, "$1");
+    cur = cur.replace(/`([^`]+)`/g, "$1");
+
+    return cur;
+}
