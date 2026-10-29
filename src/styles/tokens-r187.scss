@@ -157,11 +157,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-line-body: 22px;
   --xlc-line-heading: 26px;
   --xlc-line-display: 30px;
-  --xlc-weight-regular: 400;
-  --xlc-weight-medium: 500;
-  --xlc-weight-semibold: 600;
-  --xlc-weight-strong: 650;
-  --xlc-weight-bold: 700;
+  // 中文字重收敛为三档：常规(400)、中黑(500)、半粗(600)；标题靠字号与字重拉开落差，不随意加粗
+  --xlc-weight-regular: 400; // 常规正文
+  --xlc-weight-medium: 500;  // 控件标签与次标
+  --xlc-weight-semibold: 600;// 标题与重点数字
+  --xlc-weight-strong: 600;  // 兼容别名映射至 600
+  --xlc-weight-bold: 600;    // 兼容别名映射至 600
 
   // Fixed 4px spacing grid; former optical half-steps resolve to these roles.
   --xlc-space-0: 0px;
@@ -277,10 +278,25 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
 
   input[type="checkbox"] { accent-color: var(--xlc-accent); }
 
-  // 统计、计时、序号等宽排版对齐
+  // 骨架屏加载脉冲微动效（替代生硬转圈，进入平滑感知）
+  @keyframes xlc-skeleton-pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 0.85; }
+    100% { opacity: 0.5; }
+  }
+
+  .xlc-skeleton {
+    background: var(--xlc-soft);
+    border-radius: var(--xlc-radius-sm);
+    animation: xlc-skeleton-pulse 1.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  // 统计、计时、序号等宽排版对齐；中文正文不加生硬字距
   :is(.xlc-row-ordinal, .xlc-row-usecount, .xlc-line-num, .xlc-pane-meta-date, .xlc-kbd-key, .xlc-card-value, .xlc-dock-row-usecount, .xlc-batch-count) {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
+    letter-spacing: 0;
   }
 
   .b3-button {

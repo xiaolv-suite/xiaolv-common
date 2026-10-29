@@ -1857,26 +1857,31 @@
   }
 }
 
-// ---------- 设置分区卡片（原型屏5）----------
+// ---------- 设置分区卡片（原型屏5 · 白卡轻浮与低透明发丝边）----------
 .xlc-form .xlc-card {
-  border: 1px solid var(--b3-border-color);
-  background-color: var(--b3-theme-background);
+  border: 1px solid var(--xlc-line);
+  background-color: var(--xlc-surface);
   border-radius: var(--xlc-radius-lg);
-  padding: var(--xlc-space-4) var(--xlc-space-4);
-  box-shadow: var(--xlc-shadow-1);
+  padding: var(--xlc-space-5) var(--xlc-space-5);
+  box-shadow: var(--xlc-shadow-sm);
   transition: border-color var(--xlc-dur-fast) var(--xlc-ease),
               box-shadow var(--xlc-dur-fast) var(--xlc-ease);
 
+  &:hover {
+    border-color: var(--xlc-line-strong);
+    box-shadow: var(--xlc-shadow-md);
+  }
+
   &:focus-within {
-    border-color: var(--b3-theme-primary-light);
-    box-shadow: var(--xlc-shadow-1), 0 0 0 2px var(--xlc-ai-tint);
+    border-color: var(--xlc-accent);
+    box-shadow: var(--xlc-shadow-md), 0 0 0 2px var(--xlc-lavender);
   }
 
   > .xlc-form-label {
-    font-size: var(--xlc-font-sm);
+    font-size: var(--xlc-font-md);
     font-weight: var(--xlc-weight-semibold);
-    letter-spacing: .4px;
-    margin-bottom: var(--xlc-space-1);
+    letter-spacing: 0;
+    margin-bottom: var(--xlc-space-2);
   }
 }
 
