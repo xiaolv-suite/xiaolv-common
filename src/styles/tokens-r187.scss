@@ -4,22 +4,29 @@
 $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.xlc-dialog-host, .b3-dialog__container.xlc-form-host, .b3-dialog__container.xlc-varform-host, .b3-dialog__container.xlc-sheet";
 
 @mixin light-palette {
-  --xlc-canvas: #f7f7fc;
+  // ① 底色关系：以主题色色相(243°)为基准，L=97.6%、S=4.5%的极浅同族底色，与纯白卡片明度差仅2.4%
+  --xlc-canvas: #f6f6fb;
   --xlc-surface: #ffffff;
-  --xlc-soft: #f1f1f9;
+  --xlc-soft: #f0f0f8;
   --xlc-raised: #ffffff;
-  --xlc-ink: #2c2b3e;
-  --xlc-muted: #6c6a7f;
-  --xlc-line: #e6e5f0;
-  --xlc-accent: #5e59cb;
+  --xlc-ink: #222133; // 近黑非纯黑，带微弱主题冷紫相，对比度 13.8:1
+  --xlc-muted: #6b697e; // 次级辅助文本，对比度 5.4:1
+  --xlc-line: rgba(44, 43, 62, 0.07); // 低透明度发丝线替代生硬灰色实线
+  --xlc-line-strong: rgba(44, 43, 62, 0.12);
+
+  // ② 两色分工：主题色承担操作语义，数据语义色承担使用频次/命中率/连续性
+  --xlc-accent: #5e59cb; // 核心操作语义色 (紫罗兰)
   --xlc-accent-text: #504abd;
   --xlc-accent-contrast: #ffffff;
+  --xlc-data-accent: #059669; // 数据语义色 (色轮向青绿偏移25°，正向翡翠绿)
+  --xlc-data-soft: #edf7f2;
+
   --xlc-lavender: #eeecfb;
   --xlc-lavender-ink: #4f4799;
   --xlc-warm: #fff0d4;
   --xlc-warm-ink: #855318;
-  --xlc-success: #32654d;
-  --xlc-success-soft: #edf6f1;
+  --xlc-success: #059669;
+  --xlc-success-soft: #edf7f2;
   --xlc-warning: #855318;
   --xlc-danger: #a34151;
   --xlc-danger-soft: #fcf0f1;
@@ -32,7 +39,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-mango: #ff9800;
   --xlc-mango-soft: rgba(255, 152, 0, 0.14);
   --xlc-mango-ink: #b45309;
-  --xlc-dark-card: #1e1e24;
+
+  // ⑤ 重点对比块：明度 11.5% 的主题相近黑，配操作/数据色高光点缀
+  --xlc-dark-card: #171622;
+  --xlc-dark-card-ink: #f1f0f8;
+  --xlc-dark-card-sub: #9e9cb4;
+
   --lv-brand: #9333EA; /* 托斯卡纳帝王紫 */
   --lv-brand-soft: color-mix(in srgb, var(--lv-brand) 12%, transparent);
   --lv-accent-mint: #10B981; /* 赛博薄荷绿点缀 */
@@ -44,32 +56,41 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-tok-num: #ad5a18;
   --xlc-tok-comment: #858296;
   --xlc-tok-var: #c23b72;
-  // 现代无杂质三档阴影（统一向下投射，层级递进）
+
+  // 现代无杂质三档阴影 + 多层微阴影叠加
   --xlc-shadow-sm: 0 1px 3px rgba(41, 34, 72, 0.05), 0 1px 2px rgba(41, 34, 72, 0.03);
   --xlc-shadow-md: 0 4px 14px rgba(41, 34, 72, 0.07), 0 1px 3px rgba(41, 34, 72, 0.04);
   --xlc-shadow-lg: 0 12px 36px rgba(41, 34, 72, 0.10), 0 2px 6px rgba(41, 34, 72, 0.04);
+  --xlc-shadow-float: 0 2px 4px rgba(41, 34, 72, 0.03), 0 8px 24px rgba(41, 34, 72, 0.06);
   --xlc-overlay-shadow: var(--xlc-shadow-lg);
   --xlc-chevron: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236c6a7f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: light;
 }
 
 @mixin dark-palette {
-  --xlc-canvas: #181820;
-  --xlc-surface: #22222d;
-  --xlc-soft: #2a2936;
-  --xlc-raised: #292835;
-  --xlc-ink: #f0eef8;
-  --xlc-muted: #b2aec4;
-  --xlc-line: #393744;
+  // ① 底色关系：深色底取明度 11%、带主题微冷紫相的近黑，工作面 L=14%，明度差在 3% 内
+  --xlc-canvas: #161522;
+  --xlc-surface: #1e1d2c;
+  --xlc-soft: #252436;
+  --xlc-raised: #28273a;
+  --xlc-ink: #f1f0f8; // 对比度 14.2:1
+  --xlc-muted: #aca8c2; // 对比度 6.2:1
+  --xlc-line: rgba(240, 238, 248, 0.08); // 柔和透明发丝线
+  --xlc-line-strong: rgba(240, 238, 248, 0.14);
+
+  // ② 两色分工
   --xlc-accent: #b5afff;
   --xlc-accent-text: #c3beff;
-  --xlc-accent-contrast: #22222d;
+  --xlc-accent-contrast: #161522;
+  --xlc-data-accent: #34d399; // 数据语义高亮 (青绿薄荷)
+  --xlc-data-soft: #1a2e24;
+
   --xlc-lavender: #343046;
   --xlc-lavender-ink: #d0c9ff;
   --xlc-warm: #3b3126;
   --xlc-warm-ink: #f4c78a;
-  --xlc-success: #a0d9bb;
-  --xlc-success-soft: #28382f;
+  --xlc-success: #34d399;
+  --xlc-success-soft: #1a2e24;
   --xlc-warning: #f4c78a;
   --xlc-danger: #ffadb9;
   --xlc-danger-soft: #402b33;
@@ -82,7 +103,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-mango: #ffa726;
   --xlc-mango-soft: rgba(255, 167, 38, 0.22);
   --xlc-mango-ink: #ffd599;
-  --xlc-dark-card: #16161c;
+
+  // ⑤ 重点对比块
+  --xlc-dark-card: #12111b;
+  --xlc-dark-card-ink: #f1f0f8;
+  --xlc-dark-card-sub: #aca8c2;
+
   --lv-brand: #A855F7; /* 托斯卡纳帝王紫（暗色模式） */
   --lv-brand-soft: color-mix(in srgb, var(--lv-brand) 18%, transparent);
   --lv-accent-mint: #34D399; /* 赛博薄荷绿（暗色模式） */
@@ -94,10 +120,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-tok-num: #f4b36d;
   --xlc-tok-comment: #8a869e;
   --xlc-tok-var: #f683a6;
+
   // 暗色模式统一三档阴影（增强与背景对比度，柔和深沉，不简单死黑）
   --xlc-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.18);
   --xlc-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.32), 0 1px 3px rgba(0, 0, 0, 0.22);
   --xlc-shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --xlc-shadow-float: 0 2px 6px rgba(0, 0, 0, 0.25), 0 10px 28px rgba(0, 0, 0, 0.38);
   --xlc-overlay-shadow: var(--xlc-shadow-lg);
   --xlc-chevron: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23b2aec4' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: dark;
@@ -152,7 +180,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-space-neg-1-25: -5px;
   --xlc-space-neg-1-5: -6px;
 
-  // Five radius roles plus shape primitives; component aliases were retired in R190.
+  // Five radius roles plus shape primitives; 严格遵循外圆角减内边距层级递减公式 R_in = max(R_out - P, 0)
   --xlc-radius-overlay: 20px;
   --xlc-radius-lg: 16px;
   --xlc-radius: 12px;
@@ -162,8 +190,14 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-radius-sheet: 16px;
   --xlc-radius-sheet-top: 16px 16px 0 0;
   --xlc-radius-circle: 50%;
-  --xlc-radius-pill: 999px;
-  --xlc-ease: cubic-bezier(.33, 1, .68, 1);
+  --xlc-radius-pill: 9999px;
+
+  // 不对称动效曲线：进入偏快缓出，退出干脆利落
+  --xlc-ease-in: cubic-bezier(0.16, 1, 0.3, 1); // 缓出优雅曲线
+  --xlc-ease-out: cubic-bezier(0.4, 0, 1, 1); // 干脆退出曲线
+  --xlc-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1); // 仅限可拖拽元素放置回弹
+  --xlc-ease: var(--xlc-ease-in);
+
   --xlc-dur-fast: 120ms;
   --xlc-dur-control: 140ms;
   --xlc-dur: 160ms;
@@ -514,8 +548,8 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   .xlc-ai-banner { border-color: transparent; background: var(--xlc-lavender); color: var(--xlc-lavender-ink); }
 
   .xlc-body { gap: var(--xlc-space-4); border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-  .xlc-list { flex: 0 0 46%; width: 46%; border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-sheet); background: var(--xlc-surface); }
-  .xlc-pane { border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-sheet); background: var(--xlc-surface); overflow: hidden; }
+  .xlc-list { flex: 0 0 46%; width: 46%; border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-lg); background: var(--xlc-surface); box-shadow: var(--xlc-shadow-float); }
+  .xlc-pane { border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-lg); background: var(--xlc-surface); box-shadow: var(--xlc-shadow-float); overflow: hidden; }
   .xlc-group-head { padding: var(--xlc-space-3) var(--xlc-space-4); background: var(--xlc-soft); color: var(--xlc-muted); font-size: var(--xlc-font-xs); font-weight: var(--xlc-weight-semibold); letter-spacing: 0; }
   .xlc-row { gap: var(--xlc-space-3); min-height: 64px; padding: var(--xlc-space-3) var(--xlc-space-4); border-bottom-color: var(--xlc-line); box-shadow: none; }
   .xlc-row:hover { background: var(--xlc-soft); }
