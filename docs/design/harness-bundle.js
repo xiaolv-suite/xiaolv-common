@@ -14181,7 +14181,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
     if (/^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|\*\*/.test(trimmed) || trimmed.includes("\n")) return "markdown";
     return "text";
   }
-  var import_siyuan2, TOAST_TITLE_MAX, shortTitle, newWriteKey, CaptureDialog;
+  var import_siyuan2, TOAST_TITLE_MAX, shortTitle, newWriteKey, _CaptureDialog, CaptureDialog;
   var init_capture = __esm({
     "src/ui/capture.ts"() {
       "use strict";
@@ -14196,7 +14196,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
       TOAST_TITLE_MAX = 48;
       shortTitle = (title) => title.length > TOAST_TITLE_MAX ? `${title.slice(0, TOAST_TITLE_MAX)}\u2026` : title;
       newWriteKey = (scope) => `xlc-${scope}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`.slice(0, 120);
-      CaptureDialog = class {
+      _CaptureDialog = class _CaptureDialog {
         constructor(deps) {
           this.deps = deps;
           /** 命令面板入口没有可禁用的按钮，用操作锁防止重复读取和重复落库。 */
@@ -14495,6 +14495,13 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           const t = this.deps.t;
           let closed = false;
           let saving = false;
+          let savedSuccessfully = false;
+          let contentElRef = null;
+          let titleElRef = null;
+          let aliasElRef = null;
+          let tagsElRef = null;
+          let categoryElRef = null;
+          let typeSelectRef = null;
           const formWriteKey = newWriteKey("form");
           let tidySeq = 0;
           let draftSeq = 0;
@@ -14504,6 +14511,19 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
             width: "min(620px, 92vw)",
             height: "min(860px, 92vh)",
             destroyCallback: () => {
+              if (!savedSuccessfully && contentElRef) {
+                const draftVal = contentElRef.value.trim();
+                if (draftVal.length > 0) {
+                  _CaptureDialog.sessionDraft = {
+                    content: contentElRef.value,
+                    title: titleElRef == null ? void 0 : titleElRef.value,
+                    alias: aliasElRef == null ? void 0 : aliasElRef.value,
+                    tags: tagsElRef == null ? void 0 : tagsElRef.value,
+                    category: categoryElRef == null ? void 0 : categoryElRef.value,
+                    type: typeSelectRef == null ? void 0 : typeSelectRef.value
+                  };
+                }
+              }
               closed = true;
               this.formOpen = false;
               this.currentDialog = null;
@@ -14702,6 +14722,66 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
             categoryEl.parentElement.appendChild(catDatalist);
           }
           form.appendChild(tagRow);
+          contentElRef = contentEl;
+          titleElRef = titleEl;
+          aliasElRef = aliasEl;
+          tagsElRef = tagsEl;
+          categoryElRef = categoryEl;
+          typeSelectRef = typeSelect;
+          if (_CaptureDialog.sessionDraft && !defaultText && _CaptureDialog.sessionDraft.content.trim()) {
+            const draft = _CaptureDialog.sessionDraft;
+            const draftBanner = document.createElement("div");
+            draftBanner.className = "xlc-draft-resume-banner";
+            draftBanner.style.display = "flex";
+            draftBanner.style.alignItems = "center";
+            draftBanner.style.justifyContent = "space-between";
+            draftBanner.style.padding = "6px 12px";
+            draftBanner.style.background = "var(--xlc-warm)";
+            draftBanner.style.color = "var(--xlc-warm-ink)";
+            draftBanner.style.borderRadius = "var(--xlc-radius-sm)";
+            draftBanner.style.fontSize = "var(--xlc-font-sm)";
+            draftBanner.style.marginBottom = "8px";
+            const textSpan = document.createElement("span");
+            textSpan.textContent = `\u{1F4DD} \u68C0\u6D4B\u5230\u4E0A\u6B21\u672A\u4FDD\u5B58\u7684\u5185\u5BB9\u8349\u7A3F\uFF08${draft.content.length} \u5B57\u7B26\uFF09`;
+            draftBanner.appendChild(textSpan);
+            const btnWrap = document.createElement("div");
+            btnWrap.style.display = "flex";
+            btnWrap.style.gap = "6px";
+            const resumeBtn = document.createElement("button");
+            resumeBtn.type = "button";
+            resumeBtn.className = "b3-button b3-button--text";
+            resumeBtn.style.padding = "2px 8px";
+            resumeBtn.textContent = "\u6062\u590D\u8349\u7A3F";
+            resumeBtn.addEventListener("click", () => {
+              if (contentElRef) {
+                contentElRef.value = draft.content;
+                contentElRef.dispatchEvent(new Event("input", { bubbles: true }));
+              }
+              if (draft.title && titleElRef && !titleElRef.value) {
+                titleElRef.value = draft.title;
+              }
+              if (draft.alias && aliasElRef) aliasElRef.value = draft.alias;
+              if (draft.tags && tagsElRef) tagsElRef.value = draft.tags;
+              if (draft.category && categoryElRef) categoryElRef.value = draft.category;
+              if (draft.type && typeSelectRef) typeSelectRef.value = draft.type;
+              _CaptureDialog.sessionDraft = null;
+              draftBanner.remove();
+              this.deps.notify("info", "\u5DF2\u6062\u590D\u672A\u4FDD\u5B58\u8349\u7A3F");
+            });
+            btnWrap.appendChild(resumeBtn);
+            const discardBtn = document.createElement("button");
+            discardBtn.type = "button";
+            discardBtn.className = "b3-button b3-button--text";
+            discardBtn.style.padding = "2px 8px";
+            discardBtn.textContent = "\u653E\u5F03";
+            discardBtn.addEventListener("click", () => {
+              _CaptureDialog.sessionDraft = null;
+              draftBanner.remove();
+            });
+            btnWrap.appendChild(discardBtn);
+            draftBanner.appendChild(btnWrap);
+            form.insertBefore(draftBanner, form.firstChild);
+          }
           const hint = document.createElement("div");
           hint.className = "xlc-form-hint";
           hint.textContent = t("captureHint");
@@ -14981,10 +15061,26 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           };
           [titleEl, aliasEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el));
           form.addEventListener("keydown", (ev) => {
+            var _a2, _b2;
             if (ev.isComposing || ev.keyCode === 229) return;
             if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
               ev.preventDefault();
               saveBtn.click();
+              return;
+            }
+            if (ev.key === "Escape") {
+              const val = (_b2 = (_a2 = contentElRef == null ? void 0 : contentElRef.value) == null ? void 0 : _a2.trim()) != null ? _b2 : "";
+              if (val.length > 0 && !savedSuccessfully) {
+                _CaptureDialog.sessionDraft = {
+                  content: contentElRef.value,
+                  title: titleElRef == null ? void 0 : titleElRef.value,
+                  alias: aliasElRef == null ? void 0 : aliasElRef.value,
+                  tags: tagsElRef == null ? void 0 : tagsElRef.value,
+                  category: categoryElRef == null ? void 0 : categoryElRef.value,
+                  type: typeSelectRef == null ? void 0 : typeSelectRef.value
+                };
+                this.deps.notify("info", "\u5DF2\u81EA\u52A8\u6682\u5B58\u672A\u4FDD\u5B58\u8349\u7A3F\uFF0C\u4E0B\u6B21\u65B0\u5EFA\u53EF\u4E00\u952E\u6062\u590D");
+              }
             }
           });
           saveBtn.addEventListener("click", () => {
@@ -15046,6 +15142,8 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
               }, { idempotencyKey: formWriteKey }).then((result) => {
                 saving = false;
                 if (result.ok) {
+                  savedSuccessfully = true;
+                  _CaptureDialog.sessionDraft = null;
                   closed = true;
                   dialog.destroy();
                 } else {
@@ -15093,6 +15191,9 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           contentEl.focus();
         }
       };
+      /** 会话级未保存草稿暂存（P0 防护：误按 Esc 或遮罩关闭时妥善留存，下次新建一键恢复） */
+      _CaptureDialog.sessionDraft = null;
+      CaptureDialog = _CaptureDialog;
     }
   });
 

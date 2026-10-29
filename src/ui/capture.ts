@@ -67,6 +67,16 @@ export function inferTypeFromText(text: string): ItemType {
 }
 
 export class CaptureDialog {
+    /** 会话级未保存草稿暂存（P0 防护：误按 Esc 或遮罩关闭时妥善留存，下次新建一键恢复） */
+    public static sessionDraft: {
+        content: string;
+        title?: string;
+        alias?: string;
+        tags?: string;
+        category?: string;
+        type?: ItemType;
+    } | null = null;
+
     /** 命令面板入口没有可禁用的按钮，用操作锁防止重复读取和重复落库。 */
     private readonly activeCaptures = new Set<string>();
     private formOpen = false;
@@ -371,6 +381,13 @@ export class CaptureDialog {
         const t = this.deps.t;
         let closed = false;
         let saving = false;
+        let savedSuccessfully = false;
+        let contentElRef: HTMLTextAreaElement | null = null;
+        let titleElRef: HTMLInputElement | null = null;
+        let aliasElRef: HTMLInputElement | null = null;
+        let tagsElRef: HTMLInputElement | null = null;
+        let categoryElRef: HTMLInputElement | null = null;
+        let typeSelectRef: HTMLSelectElement | null = null;
         const formWriteKey = newWriteKey("form");
         let tidySeq = 0;
         let draftSeq = 0;
@@ -380,6 +397,19 @@ export class CaptureDialog {
             width: "min(620px, 92vw)",
             height: "min(860px, 92vh)",
             destroyCallback: () => {
+                if (!savedSuccessfully && contentElRef) {
+                    const draftVal = contentElRef.value.trim();
+                    if (draftVal.length > 0) {
+                        CaptureDialog.sessionDraft = {
+                            content: contentElRef.value,
+                            title: titleElRef?.value,
+                            alias: aliasElRef?.value,
+                            tags: tagsElRef?.value,
+                            category: categoryElRef?.value,
+                            type: typeSelectRef?.value as ItemType,
+                        };
+                    }
+                }
                 closed = true;
                 this.formOpen = false;
                 this.currentDialog = null;
@@ -595,6 +625,74 @@ export class CaptureDialog {
             (categoryEl.parentElement as HTMLElement).appendChild(catDatalist);
         }
         form.appendChild(tagRow);
+
+        contentElRef = contentEl as HTMLTextAreaElement;
+        titleElRef = titleEl as HTMLInputElement;
+        aliasElRef = aliasEl as HTMLInputElement;
+        tagsElRef = tagsEl as HTMLInputElement;
+        categoryElRef = categoryEl as HTMLInputElement;
+        typeSelectRef = typeSelect;
+
+        // 会话草稿一键恢复条（P0 防护：误触关闭后重新进入自动提示恢复）
+        if (CaptureDialog.sessionDraft && !defaultText && CaptureDialog.sessionDraft.content.trim()) {
+            const draft = CaptureDialog.sessionDraft;
+            const draftBanner = document.createElement("div");
+            draftBanner.className = "xlc-draft-resume-banner";
+            draftBanner.style.display = "flex";
+            draftBanner.style.alignItems = "center";
+            draftBanner.style.justifyContent = "space-between";
+            draftBanner.style.padding = "6px 12px";
+            draftBanner.style.background = "var(--xlc-warm)";
+            draftBanner.style.color = "var(--xlc-warm-ink)";
+            draftBanner.style.borderRadius = "var(--xlc-radius-sm)";
+            draftBanner.style.fontSize = "var(--xlc-font-sm)";
+            draftBanner.style.marginBottom = "8px";
+
+            const textSpan = document.createElement("span");
+            textSpan.textContent = `📝 检测到上次未保存的内容草稿（${draft.content.length} 字符）`;
+            draftBanner.appendChild(textSpan);
+
+            const btnWrap = document.createElement("div");
+            btnWrap.style.display = "flex";
+            btnWrap.style.gap = "6px";
+
+            const resumeBtn = document.createElement("button");
+            resumeBtn.type = "button";
+            resumeBtn.className = "b3-button b3-button--text";
+            resumeBtn.style.padding = "2px 8px";
+            resumeBtn.textContent = "恢复草稿";
+            resumeBtn.addEventListener("click", () => {
+                if (contentElRef) {
+                    contentElRef.value = draft.content;
+                    contentElRef.dispatchEvent(new Event("input", {bubbles: true}));
+                }
+                if (draft.title && titleElRef && !titleElRef.value) {
+                    titleElRef.value = draft.title;
+                }
+                if (draft.alias && aliasElRef) aliasElRef.value = draft.alias;
+                if (draft.tags && tagsElRef) tagsElRef.value = draft.tags;
+                if (draft.category && categoryElRef) categoryElRef.value = draft.category;
+                if (draft.type && typeSelectRef) typeSelectRef.value = draft.type;
+                CaptureDialog.sessionDraft = null;
+                draftBanner.remove();
+                this.deps.notify("info", "已恢复未保存草稿");
+            });
+            btnWrap.appendChild(resumeBtn);
+
+            const discardBtn = document.createElement("button");
+            discardBtn.type = "button";
+            discardBtn.className = "b3-button b3-button--text";
+            discardBtn.style.padding = "2px 8px";
+            discardBtn.textContent = "放弃";
+            discardBtn.addEventListener("click", () => {
+                CaptureDialog.sessionDraft = null;
+                draftBanner.remove();
+            });
+            btnWrap.appendChild(discardBtn);
+
+            draftBanner.appendChild(btnWrap);
+            form.insertBefore(draftBanner, form.firstChild);
+        }
 
         // 底部提示行（原型屏 3）：真源声明，紧贴动作区；库名异步补全（回答「存到哪了」）
         const hint = document.createElement("div");
@@ -893,6 +991,21 @@ export class CaptureDialog {
             if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
                 ev.preventDefault();
                 saveBtn.click();
+                return;
+            }
+            if (ev.key === "Escape") {
+                const val = contentElRef?.value?.trim() ?? "";
+                if (val.length > 0 && !savedSuccessfully) {
+                    CaptureDialog.sessionDraft = {
+                        content: contentElRef!.value,
+                        title: titleElRef?.value,
+                        alias: aliasElRef?.value,
+                        tags: tagsElRef?.value,
+                        category: categoryElRef?.value,
+                        type: typeSelectRef?.value as ItemType,
+                    };
+                    this.deps.notify("info", "已自动暂存未保存草稿，下次新建可一键恢复");
+                }
             }
         });
         saveBtn.addEventListener("click", () => {
@@ -964,6 +1077,8 @@ export class CaptureDialog {
                 }, {idempotencyKey: formWriteKey}).then((result) => {
                     saving = false;
                     if (result.ok) {
+                        savedSuccessfully = true;
+                        CaptureDialog.sessionDraft = null;
                         // 回执由 index.ts 的 createItem 包装统一给出（此前双 toast，R138）
                         closed = true;
                         dialog.destroy();
