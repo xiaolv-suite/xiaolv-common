@@ -331,6 +331,44 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
     line-height: var(--xlc-line-body);
   }
 
+  // 设置面板快速导航胶囊条（置顶吸顶，便捷跳转各配置卡片）
+  .xlc-settings-nav-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xlc-space-2);
+    padding: var(--xlc-space-2) var(--xlc-space-0);
+    margin: var(--xlc-space-2) 0;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--xlc-canvas);
+    border-bottom: 1px solid var(--xlc-line);
+  }
+
+  .xlc-settings-nav-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--xlc-space-1) var(--xlc-space-3);
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius-pill);
+    background: var(--xlc-surface);
+    color: var(--xlc-muted);
+    font-size: var(--xlc-font-xs);
+    font-weight: var(--xlc-weight-semibold);
+    cursor: pointer;
+    box-shadow: none;
+    transition: all var(--xlc-dur-fast) ease;
+
+    &:hover {
+      background: var(--xlc-lavender);
+      color: var(--xlc-lavender-ink);
+      border-color: var(--xlc-accent);
+    }
+    &:active {
+      transform: scale(0.97);
+    }
+  }
+
   // R188：sticky 操作区保留触控和键盘到达空间，不盖住表单最后一组字段。
   &.xlc-form { padding-bottom: var(--xlc-space-5); }
 
@@ -465,9 +503,27 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
   .xlc-pane-body { min-height: 0; padding: var(--xlc-space-2) var(--xlc-space-5) var(--xlc-space-5); font-size: var(--xlc-font-lg); line-height: var(--xlc-leading-loose); color: var(--xlc-ink); }
   .xlc-pane-body--muted { color: var(--xlc-muted); }
   .xlc-pane-body--code { font-size: var(--xlc-font-md); line-height: var(--xlc-leading-loose); }
-  // R188：五个动作必须在详情窗格内完整呈现，避免最后一个按钮换行后被裁切。
-  .xlc-pane-foot { gap: var(--xlc-space-2); padding: var(--xlc-space-3) var(--xlc-space-3) var(--xlc-space-4); border-top: 1px solid var(--xlc-line); background: var(--xlc-surface); flex: 0 0 auto; min-height: 52px; box-sizing: border-box; flex-wrap: nowrap; }
-  .xlc-pane-foot .b3-button { flex: 0 0 auto; padding: var(--xlc-space-2) var(--xlc-space-3); white-space: nowrap; }
+  // 预览窗格动作栏：多按钮自适应流动布局，防截断并保持紧凑质感
+  .xlc-pane-foot {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-2);
+    padding: var(--xlc-space-2) var(--xlc-space-4);
+    border-top: 1px solid var(--xlc-line);
+    background: var(--xlc-surface);
+    flex: 0 0 auto;
+    min-height: 48px;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .xlc-pane-foot .b3-button {
+    flex: 0 0 auto;
+    padding: var(--xlc-space-1) var(--xlc-space-3);
+    white-space: nowrap;
+    min-height: 32px;
+  }
   .xlc-footer { gap: var(--xlc-space-2) var(--xlc-space-3); padding-top: var(--xlc-space-3); border-top: 0; font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); }
   :is(.xlc-footer-guide, .xlc-footer-gear) { min-height: 32px; padding: var(--xlc-space-1) var(--xlc-space-2); font-size: var(--xlc-font-sm); }
 
@@ -937,7 +993,8 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
       .xlc-kbd-hint,
       .xlc-doclist-item,
       .xlc-policy,
-      .xlc-md-callout {
+      .xlc-md-callout,
+      .xlc-settings-nav-pill {
         border: 1px solid CanvasText;
       }
 

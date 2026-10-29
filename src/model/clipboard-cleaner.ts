@@ -7972,7 +7972,7 @@ export function numberMarkdownHeadings(
     const maxLevel = Math.max(startLevel, Math.min(6, options.maxLevel || 6));
     const trailingDot = options.trailingDot;
 
-    const lines = text.split("\n");
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
     let inCodeFence = false;
     const counters = [0, 0, 0, 0, 0, 0, 0]; // 1-based index 1..6
 
@@ -8059,11 +8059,12 @@ export function formatTaskProgressBar(
     let showNumbers = false;
 
     if (typeof optionsOrTotal === "number") {
-        total = optionsOrTotal;
+        total = !isNaN(optionsOrTotal) && optionsOrTotal > 0 ? optionsOrTotal : 100;
         showNumbers = true;
     } else if (optionsOrTotal && typeof optionsOrTotal === "object") {
         if (optionsOrTotal.total !== undefined) {
-            total = optionsOrTotal.total;
+            const rawTotal = optionsOrTotal.total;
+            total = typeof rawTotal === "number" && !isNaN(rawTotal) && rawTotal > 0 ? rawTotal : 100;
             showNumbers = true;
         }
         if (optionsOrTotal.width !== undefined) {
@@ -8131,13 +8132,28 @@ export function transposeMarkdownTable(
     if (!tableMarkdown || typeof tableMarkdown !== "string") return tableMarkdown ?? "";
     const lines = tableMarkdown.replace(/\r\n?/g, "\n").split("\n");
 
+    // 寻找表格区块起止行，保护前置与后置正文不丢失
+    let tableStart = -1;
+    let tableEnd = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i]!.includes("|")) {
+            if (tableStart === -1) tableStart = i;
+            tableEnd = i;
+        } else if (tableStart !== -1) {
+            break;
+        }
+    }
+
+    if (tableStart === -1) return tableMarkdown;
+
+    const tableLines = lines.slice(tableStart, tableEnd + 1);
     const parsedRows: string[][] = [];
     const isSeparatorRow = (line: string): boolean => {
         const trimmed = line.trim();
         return /^\|?\s*[-:]+\s*\|/.test(trimmed) && /^[\s|:-]+$/.test(trimmed);
     };
 
-    for (const rawLine of lines) {
+    for (const rawLine of tableLines) {
         const line = rawLine.trim();
         if (!line.includes("|")) continue;
         if (isSeparatorRow(line)) continue;
@@ -8186,7 +8202,12 @@ export function transposeMarkdownTable(
         resultLines.push(`| ${transposed[i]!.join(" | ")} |`);
     }
 
-    return resultLines.join("\n");
+    const finalOutput = [
+        ...lines.slice(0, tableStart),
+        ...resultLines,
+        ...lines.slice(tableEnd + 1),
+    ];
+    return finalOutput.join("\n");
 }
 
 /**

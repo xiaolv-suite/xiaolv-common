@@ -155,8 +155,36 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     intro.textContent = t("settingsIntro");
     root.appendChild(intro);
 
+    // 顶部快速定位胶囊导航条（解决长面板反复滚动的痛点）
+    const navBar = document.createElement("div");
+    navBar.className = "xlc-settings-nav-bar";
+    const navTabs = [
+        {id: "xlc-settings-lib", label: "📦 库配置"},
+        {id: "xlc-settings-prefs", label: "⚙️ 偏好设置"},
+        {id: "xlc-settings-ai", label: "🤖 AI模型"},
+        {id: "xlc-settings-search", label: "🔍 搜索配置"},
+        {id: "xlc-settings-health", label: "🏥 健康体检"},
+        {id: "xlc-settings-ext", label: "⚡ 外部联动"},
+        {id: "xlc-settings-data", label: "💾 数据导入导出"},
+    ];
+    for (const tab of navTabs) {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "xlc-settings-nav-pill";
+        pill.textContent = tab.label;
+        pill.addEventListener("click", () => {
+            const el = root.querySelector<HTMLElement>(`#${tab.id}`);
+            if (el) {
+                el.scrollIntoView({behavior: "smooth", block: "start"});
+            }
+        });
+        navBar.appendChild(pill);
+    }
+    root.appendChild(navBar);
+
     // 库管理：状态行 + 「更改内容库」展开选择器（分区卡片）
     const libSec = document.createElement("div");
+    libSec.id = "xlc-settings-lib";
     libSec.className = "xlc-form-field xlc-card";
     const libLabel = document.createElement("span");
     libLabel.className = "xlc-form-label";
@@ -466,6 +494,7 @@ function formatExportError(ctx: Pick<SettingsUiContext, "t">, err: unknown): str
 function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const t = ctx.t;
     const sec = document.createElement("div");
+    sec.id = "xlc-settings-prefs";
     sec.className = "xlc-form-field xlc-card";
     const label = document.createElement("span");
     label.className = "xlc-form-label";
@@ -1470,6 +1499,7 @@ function buildAiSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const t = ctx.t;
     // AI 设置区（默认关；开启即视为同意元数据出域；正文出域单独开关）
     const aiSec = document.createElement("div");
+    aiSec.id = "xlc-settings-ai";
     aiSec.className = "xlc-form-field xlc-card";
     const aiLabel = document.createElement("span");
     aiLabel.className = "xlc-form-label";
@@ -1595,6 +1625,7 @@ function buildSearchSection(ctx: SettingsUiContext, root: HTMLElement): void {
     let pinyinSeq = 0; // 重索引代次（R138）
     // 搜索设置区（拼音：本地注解，无出域）
     const searchSec = document.createElement("div");
+    searchSec.id = "xlc-settings-search";
     searchSec.className = "xlc-form-field xlc-card";
     const searchLabel = document.createElement("span");
     searchLabel.className = "xlc-form-label";
@@ -1740,6 +1771,7 @@ function buildSavedViewsSection(ctx: SettingsUiContext, root: HTMLElement, befor
 function buildHealthSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const t = ctx.t;
     const sec = document.createElement("div");
+    sec.id = "xlc-settings-health";
     sec.className = "xlc-form-field xlc-card xlc-health-card";
 
     const label = document.createElement("span");
@@ -1880,6 +1912,7 @@ function buildHealthSection(ctx: SettingsUiContext, root: HTMLElement): void {
 function buildExternalIntegrationSection(ctx: SettingsUiContext, root: HTMLElement): void {
     void ctx;
     const sec = document.createElement("div");
+    sec.id = "xlc-settings-ext";
     sec.className = "xlc-form-field xlc-card xlc-external-integration";
     sec.dataset.xlcControl = "settings.external-integration";
 
@@ -2071,6 +2104,7 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const t = ctx.t;
     // 数据区：当前库 + 重建索引 + 清空最近 + 标签体检 + 导出/导入
     const dataSec = document.createElement("div");
+    dataSec.id = "xlc-settings-data";
     dataSec.className = "xlc-form-field xlc-card";
     const dataLabel = document.createElement("span");
     dataLabel.className = "xlc-form-label";

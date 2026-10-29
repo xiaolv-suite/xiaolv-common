@@ -317,8 +317,6 @@ export class CommonSearchDialog {
                 this.currentScope = "all-notes";
             } else if (this.currentScope === "all-notes" && !rawVal) {
                 this.currentScope = "all";
-            } else if (this.currentScope !== "current-doc" && this.currentScope !== "all-notes") {
-                this.currentScope = "all";
             }
             this.syncScopeChips(); // 范围切换后同步 chip 选中态（R138）
             // 真实手动输入时退出历史回退态
@@ -340,7 +338,6 @@ export class CommonSearchDialog {
         input.addEventListener("compositionend", () => {
             this.isComposing = false;
             syncQMark();
-            this.currentScope = "all";
             this.syncScopeChips();
             if (this.inputDebounce) clearTimeout(this.inputDebounce);
             this.inputDebounce = setTimeout(() => void this.refresh(), 50);
