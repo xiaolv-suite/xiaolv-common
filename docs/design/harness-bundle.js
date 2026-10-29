@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.68";
+      PLUGIN_VERSION = "0.10.70";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -7199,6 +7199,80 @@ ${codeText}`;
     }
   });
 
+  // src/service/text-formatting.ts
+  function extractUrlComponent(urlStr, component, paramKey) {
+    if (!urlStr || typeof urlStr !== "string") return null;
+    const trimmed = urlStr.trim();
+    if (!trimmed) return null;
+    let parsedUrl = null;
+    try {
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
+        parsedUrl = new URL(trimmed);
+      } else {
+        parsedUrl = new URL(`https://${trimmed}`);
+      }
+    } catch {
+      parsedUrl = null;
+    }
+    if (component === "param") {
+      if (!paramKey) return null;
+      if (parsedUrl) {
+        const val = parsedUrl.searchParams.get(paramKey);
+        return val !== null ? val : null;
+      }
+      const queryStart = trimmed.indexOf("?");
+      if (queryStart !== -1) {
+        const queryStr = trimmed.slice(queryStart + 1).split("#")[0] || "";
+        const pairs = queryStr.split("&");
+        for (const pair of pairs) {
+          const [k, v] = pair.split("=");
+          if (k && decodeURIComponent(k) === paramKey) {
+            return v !== void 0 ? decodeURIComponent(v.replace(/\+/g, " ")) : "";
+          }
+        }
+      }
+      return null;
+    }
+    if (!parsedUrl) return null;
+    if (component === "host") {
+      return parsedUrl.hostname || null;
+    }
+    if (component === "path") {
+      return parsedUrl.pathname || "/";
+    }
+    if (component === "protocol") {
+      return parsedUrl.protocol || null;
+    }
+    return null;
+  }
+  function prefixLines(text, prefix, options = { skipEmpty: true }) {
+    if (typeof text !== "string") return "";
+    const lines = text.split("\n");
+    const result = lines.map((line) => {
+      if (options.skipEmpty && line.trim().length === 0) {
+        return line;
+      }
+      return `${prefix}${line}`;
+    });
+    return result.join("\n");
+  }
+  function suffixLines(text, suffix, options = { skipEmpty: true }) {
+    if (typeof text !== "string") return "";
+    const lines = text.split("\n");
+    const result = lines.map((line) => {
+      if (options.skipEmpty && line.trim().length === 0) {
+        return line;
+      }
+      return `${line}${suffix}`;
+    });
+    return result.join("\n");
+  }
+  var init_text_formatting = __esm({
+    "src/service/text-formatting.ts"() {
+      "use strict";
+    }
+  });
+
   // src/model/placeholders.ts
   function pad(n) {
     return String(n).padStart(2, "0");
@@ -7691,6 +7765,53 @@ ${codeText}`;
     if (action === "decode" || action === "dec") {
       const decoded = decodeUrlText(content, true);
       return decoded.ok ? decoded.result : null;
+    }
+    if (action === "param" || action === "query") {
+      const firstPipe = content.indexOf("|");
+      if (firstPipe === -1) return null;
+      const key = content.slice(0, firstPipe).trim();
+      const urlStr = content.slice(firstPipe + 1).trim();
+      return extractUrlComponent(urlStr, "param", key);
+    }
+    if (action === "host" || action === "domain") {
+      return extractUrlComponent(content.trim(), "host");
+    }
+    if (action === "path") {
+      return extractUrlComponent(content.trim(), "path");
+    }
+    if (action === "protocol") {
+      return extractUrlComponent(content.trim(), "protocol");
+    }
+    return null;
+  }
+  function resolveLineArg(rawArg, subAction) {
+    const trimmed = rawArg.trim();
+    let action = subAction == null ? void 0 : subAction.trim().toLowerCase();
+    let content = trimmed;
+    if (!action) {
+      const firstPipe = trimmed.indexOf("|");
+      if (firstPipe === -1) {
+        return null;
+      }
+      action = trimmed.slice(0, firstPipe).trim().toLowerCase();
+      content = trimmed.slice(firstPipe + 1);
+    }
+    if (action === "prefix") {
+      const firstPipe = content.indexOf("|");
+      if (firstPipe === -1) return content;
+      const prefix = content.slice(0, firstPipe);
+      const text = content.slice(firstPipe + 1);
+      return prefixLines(text, prefix, { skipEmpty: true });
+    }
+    if (action === "suffix") {
+      const firstPipe = content.indexOf("|");
+      if (firstPipe === -1) return content;
+      const suffix = content.slice(0, firstPipe);
+      const text = content.slice(firstPipe + 1);
+      return suffixLines(text, suffix, { skipEmpty: true });
+    }
+    if (action === "trim") {
+      return content.split("\n").map((line) => line.trim()).join("\n");
     }
     return null;
   }
@@ -8827,6 +8948,8 @@ ${codeText}`;
         return formatTaskProgressBar(100);
       case "json":
         return "";
+      case "line":
+        return "";
       case "nanoid":
         return generateNanoId(10);
       case "password":
@@ -9117,6 +9240,11 @@ ${codeText}`;
       if (rawKind.includes(":")) {
         subAction = rawKind.split(":")[1];
       }
+    } else if (rawKind.startsWith("line")) {
+      kind = "line";
+      if (rawKind.includes(":")) {
+        subAction = rawKind.split(":")[1];
+      }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -9218,6 +9346,7 @@ ${codeText}`;
     if (kind === "shuffle") return arg ? resolveShuffleArg(arg, subAction) : null;
     if (kind === "progress") return arg ? resolveProgressArg(arg, subAction) : formatTaskProgressBar(100);
     if (kind === "json") return arg ? resolveJsonArg(arg, subAction) : null;
+    if (kind === "line") return arg ? resolveLineArg(arg, subAction) : null;
     if (kind === "path") {
       if (!arg && !subAction) return (_b = doc == null ? void 0 : doc.path) != null ? _b : "";
       return resolvePathArg(arg, subAction, (_c = doc == null ? void 0 : doc.path) != null ? _c : "");
@@ -9236,7 +9365,7 @@ ${codeText}`;
     const kinds = [];
     for (const match of text.matchAll(PLACEHOLDER_PATTERN)) {
       const rawKind = match[1];
-      const kind = rawKind.startsWith("case") ? "case" : rawKind.startsWith("regex") ? "regex" : rawKind.startsWith("url") ? "url" : rawKind.startsWith("base64") ? "base64" : rawKind.startsWith("html") ? "html" : rawKind.startsWith("count") ? "count" : rawKind.startsWith("kv") ? "kv" : rawKind.startsWith("match") ? "match" : rawKind.startsWith("valid") ? "valid" : rawKind.startsWith("path") ? "path" : rawKind.startsWith("nanoid") ? "nanoid" : rawKind.startsWith("template") ? "template" : rawKind.startsWith("obfuscate") ? "obfuscate" : rawKind.startsWith("scramble") ? "scramble" : rawKind.startsWith("thousands") ? "thousands" : rawKind.startsWith("checksum") ? "checksum" : rawKind.startsWith("pad") ? "pad" : rawKind.startsWith("seq") ? "seq" : rawKind.startsWith("fingerprint") ? "fingerprint" : rawKind.startsWith("randomcolor") ? "randomcolor" : rawKind.startsWith("btruncate") ? "btruncate" : rawKind.startsWith("initials") ? "initials" : rawKind.startsWith("plural") ? "plural" : rawKind.startsWith("escape") ? "escape" : rawKind.startsWith("repeat") ? "repeat" : rawKind.startsWith("center") ? "center" : rawKind.startsWith("slash") ? "slash" : rawKind.startsWith("revwords") ? "revwords" : rawKind.startsWith("randomname") ? "randomname" : rawKind.startsWith("if") ? "if" : rawKind.startsWith("smask") ? "smask" : rawKind.startsWith("censor") ? "censor" : rawKind.startsWith("shuffle") ? "shuffle" : rawKind.startsWith("progress") ? "progress" : rawKind.startsWith("json") ? "json" : rawKind;
+      const kind = rawKind.startsWith("case") ? "case" : rawKind.startsWith("regex") ? "regex" : rawKind.startsWith("url") ? "url" : rawKind.startsWith("base64") ? "base64" : rawKind.startsWith("html") ? "html" : rawKind.startsWith("count") ? "count" : rawKind.startsWith("kv") ? "kv" : rawKind.startsWith("match") ? "match" : rawKind.startsWith("valid") ? "valid" : rawKind.startsWith("path") ? "path" : rawKind.startsWith("nanoid") ? "nanoid" : rawKind.startsWith("template") ? "template" : rawKind.startsWith("obfuscate") ? "obfuscate" : rawKind.startsWith("scramble") ? "scramble" : rawKind.startsWith("thousands") ? "thousands" : rawKind.startsWith("checksum") ? "checksum" : rawKind.startsWith("pad") ? "pad" : rawKind.startsWith("seq") ? "seq" : rawKind.startsWith("fingerprint") ? "fingerprint" : rawKind.startsWith("randomcolor") ? "randomcolor" : rawKind.startsWith("btruncate") ? "btruncate" : rawKind.startsWith("initials") ? "initials" : rawKind.startsWith("plural") ? "plural" : rawKind.startsWith("escape") ? "escape" : rawKind.startsWith("repeat") ? "repeat" : rawKind.startsWith("center") ? "center" : rawKind.startsWith("slash") ? "slash" : rawKind.startsWith("revwords") ? "revwords" : rawKind.startsWith("randomname") ? "randomname" : rawKind.startsWith("if") ? "if" : rawKind.startsWith("smask") ? "smask" : rawKind.startsWith("censor") ? "censor" : rawKind.startsWith("shuffle") ? "shuffle" : rawKind.startsWith("progress") ? "progress" : rawKind.startsWith("json") ? "json" : rawKind.startsWith("line") ? "line" : rawKind;
       if (!kinds.includes(kind)) kinds.push(kind);
     }
     return kinds;
@@ -9247,7 +9376,8 @@ ${codeText}`;
       "use strict";
       init_calculator();
       init_clipboard_cleaner();
-      PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|json(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
+      init_text_formatting();
+      PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
       WEEKDAYS_ZH = ["\u5468\u65E5", "\u5468\u4E00", "\u5468\u4E8C", "\u5468\u4E09", "\u5468\u56DB", "\u5468\u4E94", "\u5468\u516D"];
       WEEKDAYS_FULL_ZH = ["\u661F\u671F\u65E5", "\u661F\u671F\u4E00", "\u661F\u671F\u4E8C", "\u661F\u671F\u4E09", "\u661F\u671F\u56DB", "\u661F\u671F\u4E94", "\u661F\u671F\u516D"];
       WEEKDAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

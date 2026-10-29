@@ -186,20 +186,20 @@
 
 ## 🆕 最新更新动态
 
-### [v0.10.69] — 2026-10-29（最新）
+### [v0.10.70] — 2026-10-29（最新）
 
-视觉与感知层现代化、系统三档设计令牌收敛与无障碍强化：
-- **统一系统三档设计令牌与层次收敛 (`tokens-r187.scss`)**：以原型规范为基线建立 `--xlc-shadow-sm`、`--xlc-shadow-md`、`--xlc-shadow-lg` 统一向下投影体系，深浅模式对称派生，暗色非死黑反色，主正文对比度达到 14.1:1；定义状态（120ms）、进出（160ms）、空间（200ms）三类平滑动效曲线。
-- **全量清理样式表硬编码与拟物残留 (`index.scss`)**：彻底消灭 59 处十六进制硬编码色值（0 hex 残留）；清除 4 处拟物渐变按钮（`linear-gradient`，0 残留）；清理所有脏感凹陷内阴影（`box-shadow: inset`）；散乱阴影收口至三档统一标准。
-- **控件 8 态规范与三级按钮层级**：全面规范按钮与输入框 8 种交互状态（默认、悬停、按下、聚焦、选中、禁用、忙态、错误），去除弹跳位移，收敛为 `scale(0.98)` 微触感反馈；按钮统一收敛为 Primary、Secondary/Outline、Ghost 三级标准。
-- **排版质感与无障碍强化**：全局注入数字等宽排版，为序号、使用次数、行号、日期等声明 `font-variant-numeric: tabular-nums`；完善 `@media (prefers-reduced-motion: reduce)` 全局零延迟动效阻断。
-- **全套质量门禁突破**：单元测试正式扩增至 **1022/1022 项全绿**，双向严格负向突变注入验证（突变 141）拦截通过，25 张 UI 渲染截图与 77/77 交互审计全部通过。
+Dock 侧栏分类折叠跨刷新记忆保持、URL 结构化提取引擎与多行前缀/后缀装饰宏：
+- **Dock 侧栏分类折叠记忆机制 (`DockView`)**：接入共享分类折叠状态集合，无论侧栏重新创建还是通过差量广播静默刷新，用户折叠分类偏好均精确保持，避免被刷新冲刷展开。
+- **URL 结构化组件提取引擎与动态宏 (`extractUrlComponent`)**：实现 URL 安全解析，支持精准提取 query 参数、主机名、路径与协议；扩展动态宏 `{{xlc:url:param|key|url}}`、`{{xlc:url:host|url}}`、`{{xlc:url:path|url}}`、`{{xlc:url:protocol|url}}`。
+- **多行文本批量前后缀装饰引擎与动态宏 (`prefixLines`, `suffixLines`)**：支持批量为多行文本添加前缀或后缀（自动保护纯空行），并支持首尾空格裁剪；扩展动态宏 `{{xlc:line:prefix|前缀|多行文本}}`、`{{xlc:line:suffix|后缀|多行文本}}`、`{{xlc:line:trim|多行文本}}`。
+- **全套质量门禁突破**：单元测试通过数扩增至 **1026/1026 项全绿**，双向严格负向突变注入验证（突变 142）精准拦截通过，25 张 UI 渲染截图与 77/77 交互审计全部通过。
 
 <details>
-<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.68，已折叠)</b></summary>
+<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.69，已折叠)</b></summary>
 
 | 里程碑版本 | 核心更新亮点摘要 | 架构决策 |
 | :--- | :--- | :--- |
+| **v0.10.69** | 视觉感知层现代化、系统三档设计令牌收敛与无障碍强化（0 hex/0 渐变残留、三档阴影、控件8态） | [ADR 0151](./docs/adr/0151-visual-token-convergence-and-a11y-hierarchy.md) |
 | **v0.10.68** | Dock分类树状折叠大纲、高级拖拽多模态注入、右键上下文菜单与端到端体验深度加固 | [ADR 0150](./docs/adr/0150-dock-tree-folding-and-drag-modes.md) |
 | **v0.10.66** | 质量加固、右键上下文分流、回车自愈新建、表格前后文转置保护、设置胶囊导航 | [ADR 0148](./docs/adr/0148-quality-hardening-callout-preview-and-prototype-defense.md) |
 | **v0.10.65** | 表格等宽美化 (`beautifyMarkdownTable`)、JSON 路径提取宏 (`queryJsonPath` / `{{xlc:json}}`) 与 Callout 转换 | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callout-converter.md) |

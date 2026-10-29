@@ -124,20 +124,20 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.69] — 2026-10-29 (Latest)
+### [v0.10.70] — 2026-10-29 (Latest)
 
-Visual and perceptual layer modernization, unified three-tier design tokens convergence, and accessibility hardening:
-- **Unified 3-Tier Design Tokens (`tokens-r187.scss`)**: Established `--xlc-shadow-sm`, `--xlc-shadow-md`, `--xlc-shadow-lg` downward elevation levels strictly mirrored across light and dark palettes (dark text contrast 14.1:1); standardized state (120ms), elevation (160ms), and spatial (200ms) motion curves.
-- **Complete Elimination of Hardcoded Colors & Skewed Artifacts (`index.scss`)**: Eliminated all 59 hardcoded hexadecimal color values (0 hex violations); eradicated 4 gradient buttons (`linear-gradient`, 0 violations); purged concave inset shadows (`box-shadow: inset`); unified all scattered shadows.
-- **Component 8-State Specification & 3-Tier Buttons**: Formalized default, hover, active (`scale(0.98)` micro-tactile feel), focus-visible, selected, disabled, busy, and error states across buttons and inputs; consolidated into Primary, Secondary/Outline, and Ghost tiers.
-- **Typography & Accessibility Hardening**: Injected global `font-variant-numeric: tabular-nums` for counters, ordinals, line numbers, and dates; added zero-latency motion bypass via `@media (prefers-reduced-motion: reduce)`.
-- **Quality Gates**: Unit test suite expanded to **1022/1022 passing tests** with verified negative mutation gate (mutation 141), with all 25 UI render snapshots and 77/77 interaction audits green.
+Dock category tree state memory, URL component extraction engine, and multi-line prefix/suffix formatting macros:
+- **Dock Category Folding Memory (`DockView`)**: Injected shared category state tracking across refreshes and multiple instances; user-folded categories remain accurately preserved across live delta events.
+- **URL Component Extraction Engine & Macro (`extractUrlComponent`)**: Safe parsing of URLs to extract query parameters, hostname, pathname, or protocol; expanded `{{xlc:url:param|key|url}}`, `{{xlc:url:host|url}}`, `{{xlc:url:path|url}}`, and `{{xlc:url:protocol|url}}`.
+- **Multi-line Text Prefix & Suffix Macros (`prefixLines`, `suffixLines`)**: Batch line decoration with automatic empty-line protection; expanded `{{xlc:line:prefix|prefix|text}}`, `{{xlc:line:suffix|suffix|text}}`, and `{{xlc:line:trim|text}}`.
+- **Quality Gates**: Unit test suite expanded to **1026/1026 passing tests** with verified negative mutation gate (mutation 142), with all 25 UI render snapshots and 77/77 interaction audits green.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.68, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.69, collapsed)</b></summary>
 
-| Milestone | Key Release Highlights Summary | Architecture Decision |
+| Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.69** | Visual and perceptual layer modernization, unified three-tier design tokens convergence, and accessibility hardening | [ADR 0151](./docs/adr/0151-visual-token-convergence-and-a11y-hierarchy.md) |
 | **v0.10.68** | Dock category tree folding, advanced drag-and-drop modalities, context menu, and end-to-end UX hardening | [ADR 0150](./docs/adr/0150-dock-tree-folding-and-drag-modes.md) |
 | **v0.10.66** | Quality hardening, context-aware context menu, enter-to-create empty state self-healing, and interaction reliability | [ADR 0148](./docs/adr/0148-quality-hardening-callout-preview-and-prototype-defense.md) |
 | **v0.10.65** | Table beautification (`beautifyMarkdownTable`), JSON path query macro (`queryJsonPath` / `{{xlc:json}}`), and Callout formatting | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callout-converter.md) |

@@ -43,7 +43,9 @@ export class DockView {
     private searchSeq = 0;
     private debounceTimer: any = null;
     private isDestroyed = false;
-    private collapsedCategories = new Set<string>();
+    // 跨实例与跨重构记忆用户分类折叠偏好
+    private static sharedCollapsedCategories = new Set<string>();
+    private collapsedCategories: Set<string>;
     private activeMenuEl: HTMLElement | null = null;
 
     // DOM 引用
@@ -57,8 +59,22 @@ export class DockView {
     constructor(container: HTMLElement, deps: DockViewDeps) {
         this.container = container;
         this.deps = deps;
+        this.collapsedCategories = DockView.sharedCollapsedCategories;
         this.buildLayout();
         void this.refresh();
+    }
+
+    public getCollapsedCategories(): string[] {
+        return Array.from(this.collapsedCategories);
+    }
+
+    public setCategoryCollapsed(category: string, collapsed: boolean): void {
+        if (collapsed) {
+            this.collapsedCategories.add(category);
+        } else {
+            this.collapsedCategories.delete(category);
+        }
+        this.renderList();
     }
 
     private buildLayout(): void {

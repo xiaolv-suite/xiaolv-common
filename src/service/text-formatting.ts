@@ -61,3 +61,101 @@ export function normalizeSnippetTypography(
     }
     return res;
 }
+
+/**
+ * URL 结构化组件安全提取手术刀（支持 query 参数、主机名、路径、协议）
+ */
+export function extractUrlComponent(
+    urlStr: string,
+    component: "param" | "host" | "path" | "protocol",
+    paramKey?: string
+): string | null {
+    if (!urlStr || typeof urlStr !== "string") return null;
+    const trimmed = urlStr.trim();
+    if (!trimmed) return null;
+
+    let parsedUrl: URL | null = null;
+    try {
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
+            parsedUrl = new URL(trimmed);
+        } else {
+            parsedUrl = new URL(`https://${trimmed}`);
+        }
+    } catch {
+        parsedUrl = null;
+    }
+
+    if (component === "param") {
+        if (!paramKey) return null;
+        if (parsedUrl) {
+            const val = parsedUrl.searchParams.get(paramKey);
+            return val !== null ? val : null;
+        }
+        // 正则降级提取 query
+        const queryStart = trimmed.indexOf("?");
+        if (queryStart !== -1) {
+            const queryStr = trimmed.slice(queryStart + 1).split("#")[0] || "";
+            const pairs = queryStr.split("&");
+            for (const pair of pairs) {
+                const [k, v] = pair.split("=");
+                if (k && decodeURIComponent(k) === paramKey) {
+                    return v !== undefined ? decodeURIComponent(v.replace(/\+/g, " ")) : "";
+                }
+            }
+        }
+        return null;
+    }
+
+    if (!parsedUrl) return null;
+
+    if (component === "host") {
+        return parsedUrl.hostname || null;
+    }
+    if (component === "path") {
+        return parsedUrl.pathname || "/";
+    }
+    if (component === "protocol") {
+        return parsedUrl.protocol || null;
+    }
+
+    return null;
+}
+
+/**
+ * 多行文本批量前缀装饰引擎（代码注释、Markdown引用、列表项批量转换）
+ */
+export function prefixLines(
+    text: string,
+    prefix: string,
+    options: { skipEmpty?: boolean } = { skipEmpty: true }
+): string {
+    if (typeof text !== "string") return "";
+    const lines = text.split("\n");
+    const result = lines.map((line) => {
+        if (options.skipEmpty && line.trim().length === 0) {
+            return line;
+        }
+        return `${prefix}${line}`;
+    });
+    return result.join("\n");
+}
+
+/**
+ * 多行文本批量后缀装饰引擎
+ */
+export function suffixLines(
+    text: string,
+    suffix: string,
+    options: { skipEmpty?: boolean } = { skipEmpty: true }
+): string {
+    if (typeof text !== "string") return "";
+    const lines = text.split("\n");
+    const result = lines.map((line) => {
+        if (options.skipEmpty && line.trim().length === 0) {
+            return line;
+        }
+        return `${line}${suffix}`;
+    });
+    return result.join("\n");
+}
+
