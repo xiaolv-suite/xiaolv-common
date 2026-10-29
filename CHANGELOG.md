@@ -2,6 +2,16 @@
 
 本文件记录「小驴常用（内测版）」的面向用户的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.10.71] — 2026-10-29
+
+Dock 侧栏键盘上下焦点漫游与快捷插入、CSV 转列表宏与 URL Query 构建引擎。
+
+### 新增与优化
+- **Dock 侧栏全键盘无鼠标操作 (`DockView`)**：搜索框支持 `ArrowDown` 与 `ArrowUp` 平滑漫游高亮列表行，视口自动滚动至当前聚焦项；按 `Enter` 快速插入当前选中条目，按 `Ctrl+Enter` / `Meta+Enter` 快捷复制正文。
+- **CSV/TSV 智能解析为 Markdown 列表引擎与动态宏 (`csvToList`)**：支持将逗号、制表符等分隔的多项文本一键转为 Markdown 无序列表（`- item`）或有序编号列表（`1. item`）；扩展动态宏 `{{xlc:csv:list|苹果, 香蕉}}`、`{{xlc:csv:numbered|步骤1, 步骤2}}`、`{{xlc:csv:list|\t|Col1\tCol2}}`。
+- **Key-Value 键值对安全序列化构建 URL Query 引擎与动态宏 (`buildUrlQuery`)**：支持从多行 `k=v` 键值文本安全序列化生成标准 URL Query 串，自动拼接于指定目标地址；扩展动态宏 `{{xlc:url:query|k=v|https://api.io}}` 与 `{{xlc:url:build|from=search}}`。
+- **全套质量门禁**：单元测试通过数扩增至 **1030/1030 项全绿**，双向严格负向突变注入验证（突变 143）精准拦截通过，25 张 UI 渲染截图与 77/77 交互审计全部通过。
+
 ## [0.10.70] — 2026-10-29
 
 Dock 侧栏分类折叠跨刷新记忆保持、URL 结构化提取引擎与多行前缀/后缀装饰宏。

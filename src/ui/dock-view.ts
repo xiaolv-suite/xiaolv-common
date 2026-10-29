@@ -136,13 +136,38 @@ export class DockView {
             this.debounceTimer = setTimeout(() => void this.refresh(), 180);
         });
         this.searchInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+            if (e.key === "ArrowDown") {
                 e.preventDefault();
-                const first = this.results[0];
-                if (first) {
-                    void this.insertEntry(first);
-                } else if (this.searchInput.value.trim()) {
-                    this.deps.newItem(this.searchInput.value.trim());
+                if (this.results.length > 0) {
+                    this.activeIndex = this.activeIndex < this.results.length - 1 ? this.activeIndex + 1 : 0;
+                    this.updateActiveRow();
+                    this.scrollToActiveRow();
+                }
+                return;
+            }
+            if (e.key === "ArrowUp") {
+                e.preventDefault();
+                if (this.results.length > 0) {
+                    this.activeIndex = this.activeIndex > 0 ? this.activeIndex - 1 : this.results.length - 1;
+                    this.updateActiveRow();
+                    this.scrollToActiveRow();
+                }
+                return;
+            }
+            if (e.key === "Enter") {
+                e.preventDefault();
+                const target = (this.activeIndex >= 0 && this.results[this.activeIndex])
+                    ? this.results[this.activeIndex]
+                    : this.results[0];
+
+                if (e.ctrlKey || e.metaKey) {
+                    if (target) void this.copyEntry(target);
+                } else {
+                    if (target) {
+                        void this.insertEntry(target);
+                    } else if (this.searchInput.value.trim()) {
+                        this.deps.newItem(this.searchInput.value.trim());
+                    }
                 }
             }
         });
@@ -495,10 +520,21 @@ export class DockView {
         }
     }
 
+    public getActiveIndex(): number {
+        return this.activeIndex;
+    }
+
     private updateActiveRow(): void {
         this.listContainer.querySelectorAll<HTMLElement>(".xlc-dock-row").forEach((el) => {
             el.classList.toggle("xlc-dock-row--active", el.dataset.index === String(this.activeIndex));
         });
+    }
+
+    private scrollToActiveRow(): void {
+        const activeEl = this.listContainer.querySelector<HTMLElement>(`.xlc-dock-row[data-index="${this.activeIndex}"]`);
+        if (activeEl && typeof activeEl.scrollIntoView === "function") {
+            activeEl.scrollIntoView({ block: "nearest" });
+        }
     }
 
     private async insertEntry(entry: SearchEntry): Promise<void> {

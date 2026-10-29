@@ -159,3 +159,67 @@ export function suffixLines(
     return result.join("\n");
 }
 
+/**
+ * CSV / 分隔文本智能转换为 Markdown 列表引擎
+ */
+export function csvToList(
+    csvText: string,
+    delimiter = ",",
+    listPrefix = "- "
+): string {
+    if (!csvText || typeof csvText !== "string") return "";
+    // 支持按换行或指定分隔符拆分
+    let rawItems: string[] = [];
+    if (delimiter === "\n" || delimiter === "\\n") {
+        rawItems = csvText.split("\n");
+    } else {
+        const d = delimiter === "\\t" ? "\t" : delimiter;
+        // 先按换行，再按指定分隔符拆分
+        rawItems = csvText.split("\n").flatMap((line) => line.split(d));
+    }
+
+    const items = rawItems
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+
+    return items.map((item) => `${listPrefix}${item}`).join("\n");
+}
+
+/**
+ * Key-Value / 键值对安全序列化构建 URL Query 引擎
+ */
+export function buildUrlQuery(
+    pairsInput: string,
+    baseUrl?: string
+): string {
+    if (!pairsInput || typeof pairsInput !== "string") return baseUrl || "";
+
+    const lines = pairsInput.split(/[\n&]/);
+    const searchParams = new URLSearchParams();
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const equalIdx = trimmed.indexOf("=");
+        if (equalIdx !== -1) {
+            const k = trimmed.slice(0, equalIdx).trim();
+            const v = trimmed.slice(equalIdx + 1).trim();
+            if (k) searchParams.append(k, v);
+        } else {
+            searchParams.append(trimmed, "");
+        }
+    }
+
+    const queryString = searchParams.toString();
+    if (!baseUrl || typeof baseUrl !== "string" || !baseUrl.trim()) {
+        return queryString;
+    }
+
+    const baseTrimmed = baseUrl.trim();
+    if (!queryString) return baseTrimmed;
+
+    const separator = baseTrimmed.includes("?") ? "&" : "?";
+    return `${baseTrimmed}${separator}${queryString}`;
+}
+
+

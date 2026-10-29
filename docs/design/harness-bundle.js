@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.70";
+      PLUGIN_VERSION = "0.10.71";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -7267,6 +7267,43 @@ ${codeText}`;
     });
     return result.join("\n");
   }
+  function csvToList(csvText, delimiter = ",", listPrefix = "- ") {
+    if (!csvText || typeof csvText !== "string") return "";
+    let rawItems = [];
+    if (delimiter === "\n" || delimiter === "\\n") {
+      rawItems = csvText.split("\n");
+    } else {
+      const d = delimiter === "\\t" ? "	" : delimiter;
+      rawItems = csvText.split("\n").flatMap((line) => line.split(d));
+    }
+    const items = rawItems.map((item) => item.trim()).filter((item) => item.length > 0);
+    return items.map((item) => `${listPrefix}${item}`).join("\n");
+  }
+  function buildUrlQuery(pairsInput, baseUrl) {
+    if (!pairsInput || typeof pairsInput !== "string") return baseUrl || "";
+    const lines = pairsInput.split(/[\n&]/);
+    const searchParams = new URLSearchParams();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const equalIdx = trimmed.indexOf("=");
+      if (equalIdx !== -1) {
+        const k = trimmed.slice(0, equalIdx).trim();
+        const v = trimmed.slice(equalIdx + 1).trim();
+        if (k) searchParams.append(k, v);
+      } else {
+        searchParams.append(trimmed, "");
+      }
+    }
+    const queryString = searchParams.toString();
+    if (!baseUrl || typeof baseUrl !== "string" || !baseUrl.trim()) {
+      return queryString;
+    }
+    const baseTrimmed = baseUrl.trim();
+    if (!queryString) return baseTrimmed;
+    const separator = baseTrimmed.includes("?") ? "&" : "?";
+    return `${baseTrimmed}${separator}${queryString}`;
+  }
   var init_text_formatting = __esm({
     "src/service/text-formatting.ts"() {
       "use strict";
@@ -7766,12 +7803,21 @@ ${codeText}`;
       const decoded = decodeUrlText(content, true);
       return decoded.ok ? decoded.result : null;
     }
-    if (action === "param" || action === "query") {
+    if (action === "param" || action === "getparam") {
       const firstPipe = content.indexOf("|");
       if (firstPipe === -1) return null;
       const key = content.slice(0, firstPipe).trim();
       const urlStr = content.slice(firstPipe + 1).trim();
       return extractUrlComponent(urlStr, "param", key);
+    }
+    if (action === "query" || action === "build" || action === "buildquery" || action === "querybuild") {
+      const firstPipe = content.indexOf("|");
+      if (firstPipe === -1) {
+        return buildUrlQuery(content);
+      }
+      const pairs = content.slice(0, firstPipe);
+      const baseUrl = content.slice(firstPipe + 1);
+      return buildUrlQuery(pairs, baseUrl);
     }
     if (action === "host" || action === "domain") {
       return extractUrlComponent(content.trim(), "host");
@@ -7781,6 +7827,40 @@ ${codeText}`;
     }
     if (action === "protocol") {
       return extractUrlComponent(content.trim(), "protocol");
+    }
+    return null;
+  }
+  function resolveCsvArg(rawArg, subAction) {
+    const trimmed = rawArg.trim();
+    let action = (subAction == null ? void 0 : subAction.trim().toLowerCase()) || "list";
+    let content = trimmed;
+    if (!subAction && trimmed.includes("|")) {
+      const firstPipe = trimmed.indexOf("|");
+      const potentialAction = trimmed.slice(0, firstPipe).trim().toLowerCase();
+      if (potentialAction === "list" || potentialAction === "numbered" || potentialAction === "num") {
+        action = potentialAction;
+        content = trimmed.slice(firstPipe + 1);
+      }
+    }
+    if (action === "list") {
+      const pipeIdx = content.indexOf("|");
+      if (pipeIdx !== -1 && pipeIdx <= 4) {
+        const delim = content.slice(0, pipeIdx);
+        const text = content.slice(pipeIdx + 1);
+        return csvToList(text, delim, "- ");
+      }
+      return csvToList(content, ",", "- ");
+    }
+    if (action === "numbered" || action === "num") {
+      const pipeIdx = content.indexOf("|");
+      let delim = ",";
+      let text = content;
+      if (pipeIdx !== -1 && pipeIdx <= 4) {
+        delim = content.slice(0, pipeIdx);
+        text = content.slice(pipeIdx + 1);
+      }
+      const items = csvToList(text, delim, "").split("\n").filter((s) => s.length > 0);
+      return items.map((item, idx) => `${idx + 1}. ${item}`).join("\n");
     }
     return null;
   }
@@ -8950,6 +9030,8 @@ ${codeText}`;
         return "";
       case "line":
         return "";
+      case "csv":
+        return "";
       case "nanoid":
         return generateNanoId(10);
       case "password":
@@ -9245,6 +9327,11 @@ ${codeText}`;
       if (rawKind.includes(":")) {
         subAction = rawKind.split(":")[1];
       }
+    } else if (rawKind.startsWith("csv")) {
+      kind = "csv";
+      if (rawKind.includes(":")) {
+        subAction = rawKind.split(":")[1];
+      }
     }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
@@ -9347,6 +9434,7 @@ ${codeText}`;
     if (kind === "progress") return arg ? resolveProgressArg(arg, subAction) : formatTaskProgressBar(100);
     if (kind === "json") return arg ? resolveJsonArg(arg, subAction) : null;
     if (kind === "line") return arg ? resolveLineArg(arg, subAction) : null;
+    if (kind === "csv") return arg ? resolveCsvArg(arg, subAction) : null;
     if (kind === "path") {
       if (!arg && !subAction) return (_b = doc == null ? void 0 : doc.path) != null ? _b : "";
       return resolvePathArg(arg, subAction, (_c = doc == null ? void 0 : doc.path) != null ? _c : "");
@@ -9365,7 +9453,7 @@ ${codeText}`;
     const kinds = [];
     for (const match of text.matchAll(PLACEHOLDER_PATTERN)) {
       const rawKind = match[1];
-      const kind = rawKind.startsWith("case") ? "case" : rawKind.startsWith("regex") ? "regex" : rawKind.startsWith("url") ? "url" : rawKind.startsWith("base64") ? "base64" : rawKind.startsWith("html") ? "html" : rawKind.startsWith("count") ? "count" : rawKind.startsWith("kv") ? "kv" : rawKind.startsWith("match") ? "match" : rawKind.startsWith("valid") ? "valid" : rawKind.startsWith("path") ? "path" : rawKind.startsWith("nanoid") ? "nanoid" : rawKind.startsWith("template") ? "template" : rawKind.startsWith("obfuscate") ? "obfuscate" : rawKind.startsWith("scramble") ? "scramble" : rawKind.startsWith("thousands") ? "thousands" : rawKind.startsWith("checksum") ? "checksum" : rawKind.startsWith("pad") ? "pad" : rawKind.startsWith("seq") ? "seq" : rawKind.startsWith("fingerprint") ? "fingerprint" : rawKind.startsWith("randomcolor") ? "randomcolor" : rawKind.startsWith("btruncate") ? "btruncate" : rawKind.startsWith("initials") ? "initials" : rawKind.startsWith("plural") ? "plural" : rawKind.startsWith("escape") ? "escape" : rawKind.startsWith("repeat") ? "repeat" : rawKind.startsWith("center") ? "center" : rawKind.startsWith("slash") ? "slash" : rawKind.startsWith("revwords") ? "revwords" : rawKind.startsWith("randomname") ? "randomname" : rawKind.startsWith("if") ? "if" : rawKind.startsWith("smask") ? "smask" : rawKind.startsWith("censor") ? "censor" : rawKind.startsWith("shuffle") ? "shuffle" : rawKind.startsWith("progress") ? "progress" : rawKind.startsWith("json") ? "json" : rawKind.startsWith("line") ? "line" : rawKind;
+      const kind = rawKind.startsWith("case") ? "case" : rawKind.startsWith("regex") ? "regex" : rawKind.startsWith("url") ? "url" : rawKind.startsWith("base64") ? "base64" : rawKind.startsWith("html") ? "html" : rawKind.startsWith("count") ? "count" : rawKind.startsWith("kv") ? "kv" : rawKind.startsWith("match") ? "match" : rawKind.startsWith("valid") ? "valid" : rawKind.startsWith("path") ? "path" : rawKind.startsWith("nanoid") ? "nanoid" : rawKind.startsWith("template") ? "template" : rawKind.startsWith("obfuscate") ? "obfuscate" : rawKind.startsWith("scramble") ? "scramble" : rawKind.startsWith("thousands") ? "thousands" : rawKind.startsWith("checksum") ? "checksum" : rawKind.startsWith("pad") ? "pad" : rawKind.startsWith("seq") ? "seq" : rawKind.startsWith("fingerprint") ? "fingerprint" : rawKind.startsWith("randomcolor") ? "randomcolor" : rawKind.startsWith("btruncate") ? "btruncate" : rawKind.startsWith("initials") ? "initials" : rawKind.startsWith("plural") ? "plural" : rawKind.startsWith("escape") ? "escape" : rawKind.startsWith("repeat") ? "repeat" : rawKind.startsWith("center") ? "center" : rawKind.startsWith("slash") ? "slash" : rawKind.startsWith("revwords") ? "revwords" : rawKind.startsWith("randomname") ? "randomname" : rawKind.startsWith("if") ? "if" : rawKind.startsWith("smask") ? "smask" : rawKind.startsWith("censor") ? "censor" : rawKind.startsWith("shuffle") ? "shuffle" : rawKind.startsWith("progress") ? "progress" : rawKind.startsWith("json") ? "json" : rawKind.startsWith("line") ? "line" : rawKind.startsWith("csv") ? "csv" : rawKind;
       if (!kinds.includes(kind)) kinds.push(kind);
     }
     return kinds;
@@ -9377,7 +9465,7 @@ ${codeText}`;
       init_calculator();
       init_clipboard_cleaner();
       init_text_formatting();
-      PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
+      PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
       WEEKDAYS_ZH = ["\u5468\u65E5", "\u5468\u4E00", "\u5468\u4E8C", "\u5468\u4E09", "\u5468\u56DB", "\u5468\u4E94", "\u5468\u516D"];
       WEEKDAYS_FULL_ZH = ["\u661F\u671F\u65E5", "\u661F\u671F\u4E00", "\u661F\u671F\u4E8C", "\u661F\u671F\u4E09", "\u661F\u671F\u56DB", "\u661F\u671F\u4E94", "\u661F\u671F\u516D"];
       WEEKDAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

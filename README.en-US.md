@@ -124,19 +124,20 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.70] — 2026-10-29 (Latest)
+### [v0.10.71] — 2026-10-29 (Latest)
 
-Dock category tree state memory, URL component extraction engine, and multi-line prefix/suffix formatting macros:
-- **Dock Category Folding Memory (`DockView`)**: Injected shared category state tracking across refreshes and multiple instances; user-folded categories remain accurately preserved across live delta events.
-- **URL Component Extraction Engine & Macro (`extractUrlComponent`)**: Safe parsing of URLs to extract query parameters, hostname, pathname, or protocol; expanded `{{xlc:url:param|key|url}}`, `{{xlc:url:host|url}}`, `{{xlc:url:path|url}}`, and `{{xlc:url:protocol|url}}`.
-- **Multi-line Text Prefix & Suffix Macros (`prefixLines`, `suffixLines`)**: Batch line decoration with automatic empty-line protection; expanded `{{xlc:line:prefix|prefix|text}}`, `{{xlc:line:suffix|suffix|text}}`, and `{{xlc:line:trim|text}}`.
-- **Quality Gates**: Unit test suite expanded to **1026/1026 passing tests** with verified negative mutation gate (mutation 142), with all 25 UI render snapshots and 77/77 interaction audits green.
+Dock keyboard roving navigation & quick action, CSV to list macro, and URL Query building engine:
+- **Dock Keyboard Roving & Quick Insert (`DockView`)**: Search input supports `ArrowDown` and `ArrowUp` for smooth list focus navigation with automatic `scrollIntoView`; press `Enter` to insert currently focused item, and `Ctrl+Enter` / `Meta+Enter` to copy text.
+- **CSV / Separated Text to Markdown List (`csvToList`)**: Safely parse comma/tab separated text into structured unordered (`- item`) or numbered (`1. item`) lists; expanded `{{xlc:csv:list|apples, bananas}}` and `{{xlc:csv:numbered|step1, step2}}`.
+- **URL Query Serialization & Construction (`buildUrlQuery`)**: Safely serialize key-value pairs into standard URL query strings with smart `?`/`&` merging; expanded `{{xlc:url:query|k=v|https://api.io}}` and `{{xlc:url:build|from=search}}`.
+- **Quality Gates**: Unit test suite expanded to **1030/1030 passing tests** with verified negative mutation gate (mutation 143), with all 25 UI render snapshots and 77/77 interaction audits green.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.69, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.70, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.70** | Dock category tree state memory, URL component extraction engine, and multi-line prefix/suffix formatting macros | [ADR 0152](./docs/adr/0152-dock-memory-and-formatting-macros.md) |
 | **v0.10.69** | Visual and perceptual layer modernization, unified three-tier design tokens convergence, and accessibility hardening | [ADR 0151](./docs/adr/0151-visual-token-convergence-and-a11y-hierarchy.md) |
 | **v0.10.68** | Dock category tree folding, advanced drag-and-drop modalities, context menu, and end-to-end UX hardening | [ADR 0150](./docs/adr/0150-dock-tree-folding-and-drag-modes.md) |
 | **v0.10.66** | Quality hardening, context-aware context menu, enter-to-create empty state self-healing, and interaction reliability | [ADR 0148](./docs/adr/0148-quality-hardening-callout-preview-and-prototype-defense.md) |

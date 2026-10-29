@@ -186,19 +186,20 @@
 
 ## 🆕 最新更新动态
 
-### [v0.10.70] — 2026-10-29（最新）
+### [v0.10.71] — 2026-10-29（最新）
 
-Dock 侧栏分类折叠跨刷新记忆保持、URL 结构化提取引擎与多行前缀/后缀装饰宏：
-- **Dock 侧栏分类折叠记忆机制 (`DockView`)**：接入共享分类折叠状态集合，无论侧栏重新创建还是通过差量广播静默刷新，用户折叠分类偏好均精确保持，避免被刷新冲刷展开。
-- **URL 结构化组件提取引擎与动态宏 (`extractUrlComponent`)**：实现 URL 安全解析，支持精准提取 query 参数、主机名、路径与协议；扩展动态宏 `{{xlc:url:param|key|url}}`、`{{xlc:url:host|url}}`、`{{xlc:url:path|url}}`、`{{xlc:url:protocol|url}}`。
-- **多行文本批量前后缀装饰引擎与动态宏 (`prefixLines`, `suffixLines`)**：支持批量为多行文本添加前缀或后缀（自动保护纯空行），并支持首尾空格裁剪；扩展动态宏 `{{xlc:line:prefix|前缀|多行文本}}`、`{{xlc:line:suffix|后缀|多行文本}}`、`{{xlc:line:trim|多行文本}}`。
-- **全套质量门禁突破**：单元测试通过数扩增至 **1026/1026 项全绿**，双向严格负向突变注入验证（突变 142）精准拦截通过，25 张 UI 渲染截图与 77/77 交互审计全部通过。
+Dock 侧栏键盘上下焦点漫游与快捷插入、CSV 转列表宏与 URL Query 构建引擎：
+- **Dock 侧栏全键盘无鼠标操作 (`DockView`)**：搜索框支持 `ArrowDown` 与 `ArrowUp` 平滑漫游高亮列表行，视口自动滚动至当前聚焦项；按 `Enter` 快速插入当前选中条目，按 `Ctrl+Enter` / `Meta+Enter` 快捷复制正文。
+- **CSV/TSV 智能解析为 Markdown 列表引擎与动态宏 (`csvToList`)**：支持将逗号、制表符等分隔的多项文本一键转为 Markdown 无序列表（`- item`）或有序编号列表（`1. item`）；扩展动态宏 `{{xlc:csv:list|苹果, 香蕉}}`、`{{xlc:csv:numbered|步骤1, 步骤2}}`、`{{xlc:csv:list|\t|Col1\tCol2}}`。
+- **Key-Value 键值对安全序列化构建 URL Query 引擎与动态宏 (`buildUrlQuery`)**：支持从多行 `k=v` 键值文本安全序列化生成标准 URL Query 串，自动拼接于指定目标地址；扩展动态宏 `{{xlc:url:query|k=v|https://api.io}}` 与 `{{xlc:url:build|from=search}}`。
+- **全套质量门禁突破**：单元测试通过数扩增至 **1030/1030 项全绿**，双向严格负向突变注入验证（突变 143）精准拦截通过，25 张 UI 渲染截图与 77/77 交互审计全部通过。
 
 <details>
-<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.69，已折叠)</b></summary>
+<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.70，已折叠)</b></summary>
 
 | 里程碑版本 | 核心更新亮点摘要 | 架构决策 |
 | :--- | :--- | :--- |
+| **v0.10.70** | Dock 侧栏分类折叠跨刷新记忆保持、URL 结构化提取宏与多行前后缀装饰宏 | [ADR 0152](./docs/adr/0152-dock-memory-and-formatting-macros.md) |
 | **v0.10.69** | 视觉感知层现代化、系统三档设计令牌收敛与无障碍强化（0 hex/0 渐变残留、三档阴影、控件8态） | [ADR 0151](./docs/adr/0151-visual-token-convergence-and-a11y-hierarchy.md) |
 | **v0.10.68** | Dock分类树状折叠大纲、高级拖拽多模态注入、右键上下文菜单与端到端体验深度加固 | [ADR 0150](./docs/adr/0150-dock-tree-folding-and-drag-modes.md) |
 | **v0.10.66** | 质量加固、右键上下文分流、回车自愈新建、表格前后文转置保护、设置胶囊导航 | [ADR 0148](./docs/adr/0148-quality-hardening-callout-preview-and-prototype-defense.md) |
