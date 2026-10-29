@@ -1220,6 +1220,14 @@ export default class XiaolvCommonPlugin extends Plugin {
             getUsage: () => this.state.usage,
             isSourceMissing: (entry) => this.missingSources.has(entry.id),
             hasActiveEditor: () => this.host.hasActiveEditor(),
+            editItem: async (itemId) => {
+                const got = await this.library.getItem(itemId);
+                if (!got.ok) {
+                    this.notify("error", got.message);
+                    return;
+                }
+                this.openEditDialog(got.data);
+            },
         };
     }
 

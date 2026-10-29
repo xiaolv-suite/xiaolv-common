@@ -226,10 +226,11 @@ test("DockView: instantiates and renders compact header, search, chips, and list
         // 2. 验证单列列表渲染
         const listContainer = container.querySelector(".xlc-dock-list");
         assert.ok(listContainer);
-        assert.equal(listContainer.children.length, 2);
+        const rows = listContainer.querySelectorAll(".xlc-dock-row");
+        assert.equal(rows.length, 2);
 
         // 3. 验证第一行条目内容与可拖拽特性
-        const row0 = listContainer.children[0];
+        const row0 = rows[0];
         assert.ok(row0.className.includes("xlc-dock-row"));
         assert.equal(row0.draggable, true); // 原生 HTML5 拖拽属性
 

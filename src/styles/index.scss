@@ -4400,6 +4400,53 @@
     }
   }
 
+  .xlc-dock-group-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    margin: 4px 0 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--xlc-muted);
+    background: var(--xlc-soft);
+    border-radius: var(--xlc-radius-sm);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--xlc-dur-fast) ease;
+
+    &:hover {
+      background: var(--xlc-lavender);
+      color: var(--xlc-lavender-ink);
+    }
+
+    .xlc-dock-group-arrow {
+      width: 12px;
+      font-size: 10px;
+      line-height: 1;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .xlc-dock-group-name {
+      flex: 1 1 auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .xlc-dock-group-count {
+      flex: 0 0 auto;
+      padding: 1px 6px;
+      border-radius: var(--xlc-radius-pill);
+      font-size: 10px;
+      line-height: 1.2;
+      background: var(--xlc-surface);
+      color: var(--xlc-muted);
+      border: 1px solid var(--xlc-line);
+    }
+  }
+
   .xlc-dock-drawer {
     flex: 0 0 auto;
     max-height: 45%;
@@ -4452,6 +4499,50 @@
         font-size: 12px;
         padding: 2px 8px;
       }
+    }
+  }
+}
+
+// 侧边栏专属快捷上下文菜单
+.xlc-dock-menu {
+  z-index: 9999;
+  padding: 4px;
+  border: 1px solid var(--xlc-line);
+  border-radius: var(--xlc-radius-sm);
+  background: var(--xlc-raised);
+  box-shadow: var(--xlc-overlay-shadow);
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  box-sizing: border-box;
+
+  .xlc-dock-menu-item {
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: var(--xlc-font-sm);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    background: transparent;
+    color: var(--xlc-ink);
+    cursor: pointer;
+    border-radius: 4px;
+    text-align: left;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+
+    &:hover {
+      background: var(--xlc-soft);
+      color: var(--xlc-accent-text);
+    }
+
+    .xlc-dock-menu-ic {
+      width: 16px;
+      text-align: center;
+      flex-shrink: 0;
+      font-size: 12px;
     }
   }
 }

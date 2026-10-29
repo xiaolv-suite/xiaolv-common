@@ -997,7 +997,9 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
       .xlc-settings-nav-pill,
       .xlc-quicklook-card,
       .xlc-dock-row,
-      .xlc-dock-chip {
+      .xlc-dock-chip,
+      .xlc-dock-group-head,
+      .xlc-dock-menu {
         border: 1px solid CanvasText;
       }
 

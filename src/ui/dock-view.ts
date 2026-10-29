@@ -31,6 +31,7 @@ export interface DockViewDeps {
     getUsage?: () => Record<string, {count: number; lastAt?: number}>;
     isSourceMissing: (entry: SearchEntry) => boolean;
     hasActiveEditor?: () => boolean;
+    editItem?: (itemId: string) => Promise<void>;
 }
 
 export class DockView {
@@ -42,6 +43,8 @@ export class DockView {
     private searchSeq = 0;
     private debounceTimer: any = null;
     private isDestroyed = false;
+    private collapsedCategories = new Set<string>();
+    private activeMenuEl: HTMLElement | null = null;
 
     // DOM 引用
     private searchInput!: HTMLInputElement;
@@ -244,104 +247,235 @@ export class DockView {
             return;
         }
 
-        for (let i = 0; i < this.results.length; i++) {
-            const entry = this.results[i]!;
-            const row = document.createElement("div");
-            row.className = "xlc-dock-row" + (i === this.activeIndex ? " xlc-dock-row--active" : "");
-            row.dataset.index = String(i);
+        const isBrowsingAll = this.currentScope === "all" && !this.searchInput.value.trim();
 
-            // 原生 HTML5 拖拽属性支持（直接按住拖入正文）
-            row.draggable = true;
-            row.addEventListener("dragstart", (e) => {
-                const dragPayload = entry.content || entry.summary || entry.title || "";
-                e.dataTransfer?.setData("text/plain", dragPayload);
-                e.dataTransfer?.setData("text/siyuan", dragPayload);
-            });
-
-            // 左侧：类型徽标
-            const badge = document.createElement("span");
-            const cType = entry.itemType || "text";
-            badge.className = `xlc-badge xlc-badge--${cType}`;
-            badge.textContent = cType.toUpperCase().slice(0, 4);
-            row.appendChild(badge);
-
-            // 中间：标题与别名
-            const titleWrap = document.createElement("div");
-            titleWrap.className = "xlc-dock-row-title-wrap";
-
-            const title = document.createElement("span");
-            title.className = "xlc-dock-row-title";
-            title.textContent = entry.title || entry.summary || "未命名条目";
-            titleWrap.appendChild(title);
-
-            if (entry.alias) {
-                const alias = document.createElement("span");
-                alias.className = "xlc-dock-row-alias";
-                alias.textContent = entry.alias;
-                titleWrap.appendChild(alias);
+        if (isBrowsingAll) {
+            // 模式 A：分类树状折叠大纲模式 (F1)
+            const groups = new Map<string, SearchEntry[]>();
+            for (const e of this.results) {
+                const cat = e.category?.trim() || "未分类";
+                if (!groups.has(cat)) groups.set(cat, []);
+                groups.get(cat)!.push(e);
             }
-            row.appendChild(titleWrap);
 
-            // 右侧：悬停快捷动作栏
-            const hoverActs = document.createElement("div");
-            hoverActs.className = "xlc-dock-row-actions";
+            let globalIdx = 0;
+            for (const [catName, catEntries] of groups.entries()) {
+                const isCollapsed = this.collapsedCategories.has(catName);
+                const groupHead = document.createElement("div");
+                groupHead.className = "xlc-dock-group-head";
+                groupHead.innerHTML = `
+                    <span class="xlc-dock-group-arrow">${isCollapsed ? "▸" : "▾"}</span>
+                    <span class="xlc-dock-group-name">${catName}</span>
+                    <span class="xlc-dock-group-count">${catEntries.length}</span>
+                `;
+                groupHead.addEventListener("click", () => {
+                    if (this.collapsedCategories.has(catName)) {
+                        this.collapsedCategories.delete(catName);
+                    } else {
+                        this.collapsedCategories.add(catName);
+                    }
+                    this.renderList();
+                });
+                this.listContainer.appendChild(groupHead);
 
-            // 快捷插入按钮
-            const insertBtn = document.createElement("button");
-            insertBtn.type = "button";
-            insertBtn.className = "xlc-dock-act-btn";
-            insertBtn.title = "插入到当前文档光标处";
-            insertBtn.textContent = "＋";
-            insertBtn.addEventListener("mousedown", (e) => {
-                e.preventDefault(); // 阻止抢夺编辑器光标焦点
-            });
-            insertBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                void this.insertEntry(entry);
-            });
-            hoverActs.appendChild(insertBtn);
+                if (!isCollapsed) {
+                    for (const entry of catEntries) {
+                        const row = this.renderItemRow(entry, globalIdx++);
+                        this.listContainer.appendChild(row);
+                    }
+                } else {
+                    globalIdx += catEntries.length;
+                }
+            }
+        } else {
+            // 模式 B：过滤/搜索扁平模式
+            for (let i = 0; i < this.results.length; i++) {
+                const row = this.renderItemRow(this.results[i]!, i);
+                this.listContainer.appendChild(row);
+            }
+        }
+    }
 
-            // 快捷复制按钮
-            const copyBtn = document.createElement("button");
-            copyBtn.type = "button";
-            copyBtn.className = "xlc-dock-act-btn";
-            copyBtn.title = "复制纯文本到剪贴板";
-            copyBtn.textContent = "⧉";
-            copyBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                void this.copyEntry(entry);
-            });
-            hoverActs.appendChild(copyBtn);
+    private renderItemRow(entry: SearchEntry, index: number): HTMLElement {
+        const row = document.createElement("div");
+        row.className = "xlc-dock-row" + (index === this.activeIndex ? " xlc-dock-row--active" : "");
+        row.dataset.index = String(index);
 
-            // 收藏切换按钮
-            const favBtn = document.createElement("button");
-            favBtn.type = "button";
-            favBtn.className = "xlc-dock-act-btn" + (this.deps.isFavorite(entry.id) ? " xlc-dock-act-btn--fav" : "");
-            favBtn.title = this.deps.isFavorite(entry.id) ? "取消收藏" : "加入收藏";
+        // 原生 HTML5 拖拽属性支持（F2：支持按住 Alt 拖出块引用、按住 Shift 拖出嵌入块）
+        row.draggable = true;
+        row.addEventListener("dragstart", (e) => {
+            const targetId = entry.targetBlockId || entry.sourceBlockId || entry.id;
+            let dragPayload = entry.content || entry.summary || entry.title || "";
+            if (e.altKey && targetId) {
+                dragPayload = `((${targetId} '${entry.title || "引用"}'))`;
+                this.deps.notify?.("info", "已拖出块引用链接");
+            } else if (e.shiftKey && targetId) {
+                dragPayload = `{{select * from blocks where id='${targetId}'}}`;
+                this.deps.notify?.("info", "已拖出同步嵌入块");
+            }
+            e.dataTransfer?.setData("text/plain", dragPayload);
+            e.dataTransfer?.setData("text/siyuan", dragPayload);
+        });
+
+        // 右键上下文菜单 (F3)
+        row.addEventListener("contextmenu", (e) => {
+            this.showContextMenu(e, entry);
+        });
+
+        // 左侧：类型徽标
+        const badge = document.createElement("span");
+        const cType = entry.itemType || "text";
+        badge.className = `xlc-badge xlc-badge--${cType}`;
+        badge.textContent = cType.toUpperCase().slice(0, 4);
+        row.appendChild(badge);
+
+        // 中间：标题与别名
+        const titleWrap = document.createElement("div");
+        titleWrap.className = "xlc-dock-row-title-wrap";
+
+        const title = document.createElement("span");
+        title.className = "xlc-dock-row-title";
+        title.textContent = entry.title || entry.summary || "未命名条目";
+        titleWrap.appendChild(title);
+
+        if (entry.alias) {
+            const alias = document.createElement("span");
+            alias.className = "xlc-dock-row-alias";
+            alias.textContent = entry.alias;
+            titleWrap.appendChild(alias);
+        }
+        row.appendChild(titleWrap);
+
+        // 右侧：悬停快捷动作栏
+        const hoverActs = document.createElement("div");
+        hoverActs.className = "xlc-dock-row-actions";
+
+        // 快捷插入按钮
+        const insertBtn = document.createElement("button");
+        insertBtn.type = "button";
+        insertBtn.className = "xlc-dock-act-btn";
+        insertBtn.title = "插入到当前文档光标处";
+        insertBtn.textContent = "＋";
+        insertBtn.addEventListener("mousedown", (e) => {
+            e.preventDefault(); // 阻止抢夺编辑器光标焦点
+        });
+        insertBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            void this.insertEntry(entry);
+        });
+        hoverActs.appendChild(insertBtn);
+
+        // 快捷复制按钮
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "xlc-dock-act-btn";
+        copyBtn.title = "复制纯文本到剪贴板";
+        copyBtn.textContent = "⧉";
+        copyBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            void this.copyEntry(entry);
+        });
+        hoverActs.appendChild(copyBtn);
+
+        // 收藏切换按钮
+        const favBtn = document.createElement("button");
+        favBtn.type = "button";
+        favBtn.className = "xlc-dock-act-btn" + (this.deps.isFavorite(entry.id) ? " xlc-dock-act-btn--fav" : "");
+        favBtn.title = this.deps.isFavorite(entry.id) ? "取消收藏" : "加入收藏";
+        favBtn.textContent = this.deps.isFavorite(entry.id) ? "★" : "☆";
+        favBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.deps.toggleFavorite(entry.id);
             favBtn.textContent = this.deps.isFavorite(entry.id) ? "★" : "☆";
-            favBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                this.deps.toggleFavorite(entry.id);
-                favBtn.textContent = this.deps.isFavorite(entry.id) ? "★" : "☆";
-                favBtn.classList.toggle("xlc-dock-act-btn--fav", this.deps.isFavorite(entry.id));
+            favBtn.classList.toggle("xlc-dock-act-btn--fav", this.deps.isFavorite(entry.id));
+        });
+        hoverActs.appendChild(favBtn);
+
+        row.appendChild(hoverActs);
+
+        // 行点击：激活并在底部抽屉展开轻量预览
+        row.addEventListener("click", () => {
+            this.activeIndex = index;
+            this.updateActiveRow();
+            this.openDrawer(entry);
+        });
+
+        // 行双击：快速复制纯文本
+        row.addEventListener("dblclick", () => {
+            void this.copyEntry(entry);
+        });
+
+        return row;
+    }
+
+    private showContextMenu(e: MouseEvent, entry: SearchEntry): void {
+        e.preventDefault();
+        this.closeContextMenu();
+
+        const menu = document.createElement("div");
+        menu.className = "xlc-dock-menu";
+        const posX = typeof window !== "undefined" ? Math.min(e.clientX, window.innerWidth - 180) : e.clientX;
+        const posY = typeof window !== "undefined" ? Math.min(e.clientY, window.innerHeight - 200) : e.clientY;
+        menu.style.position = "fixed";
+        menu.style.left = `${posX}px`;
+        menu.style.top = `${posY}px`;
+
+        const addItem = (icon: string, label: string, action: () => void) => {
+            const it = document.createElement("button");
+            it.type = "button";
+            it.className = "xlc-dock-menu-item";
+            it.innerHTML = `<span class="xlc-dock-menu-ic">${icon}</span><span>${label}</span>`;
+            it.addEventListener("click", () => {
+                this.closeContextMenu();
+                action();
             });
-            hoverActs.appendChild(favBtn);
+            menu.appendChild(it);
+        };
 
-            row.appendChild(hoverActs);
-
-            // 行点击：激活并在底部抽屉展开轻量预览
-            row.addEventListener("click", () => {
-                this.activeIndex = i;
-                this.updateActiveRow();
-                this.openDrawer(entry);
+        addItem("＋", this.deps.t("insert") || "插入到当前光标", () => void this.insertEntry(entry));
+        addItem("⧉", this.deps.t("copy") || "复制纯文本", () => void this.copyEntry(entry));
+        const targetId = entry.targetBlockId || entry.sourceBlockId || entry.id;
+        if (targetId) {
+            addItem("((•))", "复制块引用语法", async () => {
+                const code = `((${targetId} '${entry.title || "引用"}'))`;
+                await this.deps.copyProviderPayload(code);
+                this.deps.notify?.("info", `已复制块引用: ${code}`);
             });
+        }
+        addItem("↗", this.deps.t("openSource") || "打开来源块", () => void this.deps.openSource(entry.id));
+        addItem(this.deps.isFavorite(entry.id) ? "★" : "☆", this.deps.isFavorite(entry.id) ? "取消收藏" : "加入收藏", () => {
+            this.deps.toggleFavorite(entry.id);
+            this.renderList();
+        });
+        if (this.deps.editItem) {
+            addItem("✎", this.deps.t("edit") || "编辑条目", () => void this.deps.editItem?.(entry.id));
+        }
 
-            // 行双击：快速复制纯文本
-            row.addEventListener("dblclick", () => {
-                void this.copyEntry(entry);
-            });
+        if (typeof document !== "undefined" && document.body) {
+            document.body.appendChild(menu);
+            this.activeMenuEl = menu;
 
-            this.listContainer.appendChild(row);
+            const dismiss = (ev: MouseEvent) => {
+                if (!menu.contains(ev.target as Node)) {
+                    this.closeContextMenu();
+                    if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+                        document.removeEventListener("pointerdown", dismiss);
+                    }
+                }
+            };
+            setTimeout(() => {
+                if (this.isDestroyed || !this.activeMenuEl) return;
+                if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+                    document.addEventListener("pointerdown", dismiss);
+                }
+            }, 0);
+        }
+    }
+
+    private closeContextMenu(): void {
+        if (this.activeMenuEl) {
+            this.activeMenuEl.remove();
+            this.activeMenuEl = null;
         }
     }
 
@@ -439,6 +573,7 @@ export class DockView {
 
     public destroy(): void {
         this.isDestroyed = true;
+        this.closeContextMenu();
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
         this.container.classList.remove("xlc-dock");
         this.container.innerHTML = "";

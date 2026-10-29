@@ -124,21 +124,27 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.67] — 2026-10-29 (Latest)
+### [v0.10.68] — 2026-10-29 (Latest)
 
-Native Dock Panel view, HTML5 drag-and-drop to editor, and persistent snippet shelf:
-- **Native Dock Panel View (`DockView`)**: Fully integrates with official SiYuan `addDock` contract (defaults to `RightTop` dock), tailored for 240px~360px vertical sidebars. Complements the modal launcher for continuous, side-by-side writing workflows.
-- **Native HTML5 Drag & Drop Support**: Snippet items natively support draggable data transfer; users can drag snippets directly into any position in the SiYuan editor to drop content.
-- **Hover Quick Capsule & Mini Drawer Preview**: Hovering over an item reveals instant actions (`＋` insert without stealing editor focus, `⧉` copy plain text, `★` toggle favorite); clicking expands a mini bottom drawer with Callout/code syntax preview and action buttons.
-- **Bidirectional Reactive Delta Sync (`notifyExternalDataChange`)**: Any snippet creation, edit, deletion, favorite toggle, or import across modal launcher and dock panel updates simultaneously while preserving scroll position.
-- **Global Command & Mobile Fallback**: Registered `xiaolv.common.toggleDock` (`⌥⇧D`) to toggle the dock panel; cleanly falls back on mobile (`isMobile`) without rendering redundant desktop DOM.
-- **Quality Gates**: Unit test suite expanded to **1011/1011 passing tests** with verified negative injection mutation 137.
+Dock category tree folding, advanced drag-and-drop modalities, context menu, and end-to-end UX hardening:
+- **Category Tree Folding (`DockView`)**: Full support for hierarchical category folding in the Dock sidebar (with `▾`/`▸` indicators and counter badges); remembers folding states and seamlessly switches to flat search mode during filtering.
+- **Advanced Drag-and-Drop Modalities**: Hold `Alt` while dragging to generate SiYuan block references (`((id 'title'))`), hold `Shift` while dragging to generate synced embed blocks, or drag normally to drop Markdown content.
+- **Dock Context Menu**: Right-click any snippet to open a lightweight action menu (insert, copy, copy block ref, open source, toggle favorite, edit).
+- **End-to-End Reliability Hardening**:
+  - **P0 Draft Protection**: Accidental Esc or backdrop dismissal now saves uncommitted content into session memory, showing a one-click restore banner on next open.
+  - **P1-1 Multi-select Esc Guard**: Pressing Esc while in batch mode clears selection instead of closing the whole window.
+  - **P1-2 Reactive Library Switching**: Changing content library in settings immediately triggers a live delta sync on the Dock sidebar.
+  - **P1-3 Scope Clear Shortcut**: Search box supports `Alt+Backspace` to clear `in:` path filter instantly.
+  - **P2-1 Badge Flex Protection**: Dock badges receive `min-width: 28px` and `flex-shrink: 0` for ultra-narrow screens.
+  - **P2-2 Live Alias Conflict Check**: Capture form alias input provides 150ms debounced inline duplicate warnings.
+- **Quality Gates**: Unit test suite expanded to **1016/1016 passing tests** with 3 verified negative injection mutations (138 ~ 140).
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.66, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.67, collapsed)</b></summary>
 
 | Milestone | Key Release Highlights Summary | Architecture Decision |
 | :--- | :--- | :--- |
+| **v0.10.67** | Native Dock Panel view MVP, HTML5 drag-and-drop to editor, and persistent snippet shelf | [ADR 0149](./docs/adr/0149-dock-native-view-mvp.md) |
 | **v0.10.66** | Quality hardening, context-aware context menu, enter-to-create empty state self-healing, and interaction reliability | [ADR 0148](./docs/adr/0148-quality-hardening-callout-preview-and-prototype-defense.md) |
 | **v0.10.65** | Table beautification (`beautifyMarkdownTable`), JSON path query macro (`queryJsonPath` / `{{xlc:json}}`), and Callout formatting | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callout-converter.md) |
 | **v0.10.64** | Comprehensive quality optimization, zero lifecycle leaks, syntax highlighting fix, and interaction reliability | [ADR 0146](./docs/adr/0146-comprehensive-quality-optimization-and-reliability.md) |
