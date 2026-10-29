@@ -14674,6 +14674,28 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           };
           titleEl.addEventListener("input", syncAliasRecommendation);
           setTimeout(syncAliasRecommendation, 0);
+          let aliasCheckTimer = null;
+          aliasEl.addEventListener("input", () => {
+            if (aliasCheckTimer) clearTimeout(aliasCheckTimer);
+            aliasCheckTimer = setTimeout(async () => {
+              const currentAlias = aliasEl.value.trim();
+              if (!currentAlias) {
+                syncAliasRecommendation();
+                return;
+              }
+              if (this.deps.checkAliasConflict) {
+                const res = await this.deps.checkAliasConflict(currentAlias);
+                if (res.conflict) {
+                  aliasHint.textContent = `\u26A0\uFE0F \u8BE5\u522B\u540D\u5DF2\u88AB\u300C${res.itemTitle || "\u5176\u4ED6\u6761\u76EE"}\u300D\u5360\u7528`;
+                  aliasHint.style.color = "var(--xlc-warm-ink)";
+                  aliasHint.style.display = "block";
+                  return;
+                }
+              }
+              aliasHint.style.color = "";
+              syncAliasRecommendation();
+            }, 150);
+          });
           const tagRow = document.createElement("div");
           tagRow.className = "xlc-form-row";
           const initialTags = (overrides == null ? void 0 : overrides.tags) ? overrides.tags.join("; ") : "";
@@ -26095,7 +26117,7 @@ fi`;
           const clearScopeBtn = document.createElement("button");
           clearScopeBtn.type = "button";
           clearScopeBtn.className = "b3-button xlc-btn-primary xlc-empty-action";
-          clearScopeBtn.textContent = "\u{1F50D} \u6E05\u9664\u8DEF\u5F84\u9650\u5B9A\uFF0C\u5728\u5168\u5E93\u65E0\u9650\u5236\u641C\u7D22";
+          clearScopeBtn.textContent = "\u{1F50D} \u6E05\u9664\u8DEF\u5F84\u9650\u5B9A\uFF0C\u5728\u5168\u5E93\u65E0\u9650\u5236\u641C\u7D22 (Alt+\u232B)";
           clearScopeBtn.addEventListener("click", () => {
             var _a2;
             const input = (_a2 = this.dialog) == null ? void 0 : _a2.element.querySelector(".xlc-search-input");
@@ -29252,6 +29274,20 @@ ${progress.progressBar}`);
         e.preventDefault();
         this.closeQuickLook();
         return;
+      }
+      if (this.multiSelectMode && e.key === "Escape") {
+        e.preventDefault();
+        this.exitMultiSelectMode();
+        return;
+      }
+      if (e.altKey && (e.key === "Backspace" || e.key === "Delete") && input && isInputFocused) {
+        const raw = input.value;
+        if (/(?:in|path|book|box):[^\s]+/i.test(raw)) {
+          e.preventDefault();
+          input.value = raw.replace(/(?:in|path|book|box):[^\s]+/gi, "").trim();
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          return;
+        }
       }
       const isHistoryDown = e.altKey && e.key === "ArrowDown" || e.key === "ArrowDown" && isInputFocused && this.historyCursor >= 0;
       if (isHistoryDown && input) {

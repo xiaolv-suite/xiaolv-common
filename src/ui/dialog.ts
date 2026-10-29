@@ -2065,7 +2065,7 @@ export class CommonSearchDialog {
                 const clearScopeBtn = document.createElement("button");
                 clearScopeBtn.type = "button";
                 clearScopeBtn.className = "b3-button xlc-btn-primary xlc-empty-action";
-                clearScopeBtn.textContent = "🔍 清除路径限定，在全库无限制搜索";
+                clearScopeBtn.textContent = "🔍 清除路径限定，在全库无限制搜索 (Alt+⌫)";
                 clearScopeBtn.addEventListener("click", () => {
                     const input = this.dialog?.element.querySelector<HTMLInputElement>(".xlc-search-input");
                     if (input) {
@@ -5158,6 +5158,24 @@ export class CommonSearchDialog {
             e.preventDefault();
             this.closeQuickLook();
             return;
+        }
+
+        // P1-1: 多选批量操作模式下按 Esc 优先退出多选模式，防止搜索弹窗误关导致勾选状态全部丢失
+        if (this.multiSelectMode && e.key === "Escape") {
+            e.preventDefault();
+            this.exitMultiSelectMode();
+            return;
+        }
+
+        // P1-3: Alt+Backspace / Alt+Delete 快速清除路径限定符 (如 in:目录名、path:xxx 等)
+        if (e.altKey && (e.key === "Backspace" || e.key === "Delete") && input && isInputFocused) {
+            const raw = input.value;
+            if (/(?:in|path|book|box):[^\s]+/i.test(raw)) {
+                e.preventDefault();
+                input.value = raw.replace(/(?:in|path|book|box):[^\s]+/gi, "").trim();
+                input.dispatchEvent(new Event("input", {bubbles: true}));
+                return;
+            }
         }
 
         // 历史回溯向下回退（ADR 0043）：支持 Alt+ArrowDown 或在历史态中向下

@@ -4338,6 +4338,9 @@
       padding: 1px 4px;
       flex-shrink: 0;
       line-height: 1.2;
+      min-width: 28px;
+      text-align: center;
+      box-sizing: border-box;
     }
 
     .xlc-dock-row-title-wrap {

@@ -53,6 +53,7 @@ export interface CaptureDeps {
     onNotConfigured?: () => void;
     getExistingTags?: () => string[];
     getExistingCategories?: () => string[];
+    checkAliasConflict?: (alias: string) => Promise<{conflict: boolean; itemTitle?: string}> | {conflict: boolean; itemTitle?: string};
 }
 
 /** 选区 → 条目类型推断 */
@@ -573,6 +574,31 @@ export class CaptureDialog {
 
         titleEl.addEventListener("input", syncAliasRecommendation);
         setTimeout(syncAliasRecommendation, 0);
+
+        // 别名实时查重防抖反馈（P2-2）
+        let aliasCheckTimer: any = null;
+        aliasEl.addEventListener("input", () => {
+            if (aliasCheckTimer) clearTimeout(aliasCheckTimer);
+            aliasCheckTimer = setTimeout(async () => {
+                const currentAlias = (aliasEl as HTMLInputElement).value.trim();
+                if (!currentAlias) {
+                    syncAliasRecommendation();
+                    return;
+                }
+                if (this.deps.checkAliasConflict) {
+                    const res = await this.deps.checkAliasConflict(currentAlias);
+                    if (res.conflict) {
+                        aliasHint.textContent = `⚠️ 该别名已被「${res.itemTitle || "其他条目"}」占用`;
+                        aliasHint.style.color = "var(--xlc-warm-ink)";
+                        aliasHint.style.display = "block";
+                        return;
+                    }
+                }
+                aliasHint.style.color = "";
+                syncAliasRecommendation();
+            }, 150);
+        });
+
         // 标签 + 分类（原型：双栏行）
         const tagRow = document.createElement("div");
         tagRow.className = "xlc-form-row";

@@ -356,6 +356,14 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
                 return Array.from(set).slice(0, 10);
             },
+            checkAliasConflict: (alias: string) => {
+                const trimmed = alias.trim();
+                if (!trimmed) return {conflict: false};
+                const idx = this.library.getIndex();
+                if (!idx) return {conflict: false};
+                const match = idx.entries.find((e) => e.alias && e.alias.toLowerCase() === trimmed.toLowerCase());
+                return {conflict: Boolean(match), itemTitle: match?.title};
+            },
         });
         // 协议命令面（稳定 ID；雷切等通过 app.plugins 获取本插件后调用）
         this.protocolCommands["xiaolv.common.open"] = async () => {
@@ -2222,6 +2230,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.library.setConfig(config);
         this.invalidatePreviewCache();
         this.persistSidecar(STORAGE_KEYS.config, config);
+        this.notifyExternalDataChange();
         void this.library.reindex().then((idx) => {
             this.notifyExternalDataChange();
             this.notify("info", idx.truncated
