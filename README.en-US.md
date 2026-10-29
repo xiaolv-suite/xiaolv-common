@@ -124,19 +124,19 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.75] — 2026-10-30 (Latest)
+### [v0.10.76] — 2026-10-30 (Latest)
 
-CSV/TSV interactive wizard column mapping closure, dynamic option generation, and automatic initial inference:
-- **Dynamic Column Options & Field Label Closure (`csv-tsv-wizard.ts`)**: Equipped all 6 mapping fields (Title, Content, Category, Tags, Alias, URL) with dedicated labels and responsive card containers; dynamically generates `<option>` elements from header rows, eliminating blank select fields.
-- **Header Recognition & Auto-Inference**: Automatically invokes `inferColumnMapping(grid)` on table paste when fields are unconfigured, showing the top 5 parsed snippets instantly without extra clicks.
-- **Wizard Mapping Card Modernization (`index.scss`)**: Applied `.xlc-wizard-mapping-row` and `.xlc-wizard-field-item` modern floating card styles aligned with design tokens.
-- **Quality Gates**: Unit test suite expanded to **1043/1043 passing tests** with verified negative mutation gate (mutation 147), with all 25 UI render snapshots and 77/77 interaction audits green.
+Sync diff visualization modal host mount closure, and settings data management integration:
+- **Sync Diff Modal Native Dialog Mounting (`sync-diff-modal.ts`)**: In browser environments, wrapped the modal within SiYuan's native `new Dialog()` host with explicit destruction callbacks; eliminates orphan unmounted DOM nodes.
+- **Settings Data Management Diff Sync Action (`settings-dialog.ts`)**: Added dedicated "⚡ Diff Sync" action button in Settings -> Data Management; opens a file picker to parse external JSON, computes live diff against local library, and applies smart merges.
+- **Quality Gates**: Unit test suite expanded to **1044/1044 passing tests** with verified negative mutation gate (mutation 148), with all 25 UI render snapshots and 77/77 interaction audits green.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.74, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.75, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.75** | CSV/TSV interactive wizard column mapping closure, dynamic option generation, and automatic initial inference | [ADR 0157](./docs/adr/0157-csv-tsv-wizard-closure.md) |
 | **v0.10.74** | UI backlog full closure, search history horizontal scrolling, optical indicator alignment, and breathable multi-select pill styling | [ADR 0156](./docs/adr/0156-ui-backlog-refinements-and-optical-alignments.md) |
 | **v0.10.73** | Comprehensive entry usability audit, P0 selection caret blockId extraction fix, command palette mode dispatching, and single-item paste queue action | [ADR 0155](./docs/adr/0155-entry-usability-and-closure-hardening.md) |
 | **v0.10.71** | Dock keyboard roving navigation & quick action, CSV to list macro, and URL Query building engine | [ADR 0153](./docs/adr/0153-dock-keyboard-and-formatting-pipeline.md) |

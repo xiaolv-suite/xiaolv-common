@@ -11,6 +11,7 @@ import {
     planLibrarySync,
     executeSyncMerge,
 } from "../model/sync-diff";
+import {Dialog} from "siyuan";
 import {escapeHtml} from "../model/clipboard";
 import {mountPlatformDialogTitleWrap} from "./dialog-dom";
 
@@ -352,10 +353,30 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
     };
 
     if (isBrowser) {
-        const container = document.createElement("div");
-        container.className = "b3-dialog__container xlc-sync-diff-modal";
+        let dialog: Dialog | null = null;
+        try {
+            dialog = new Dialog({
+                title: titleText,
+                content: "",
+                width: "min(960px, 94vw)",
+                height: "min(860px, 92vh)",
+                destroyCallback: () => {
+                    props.onCancel?.();
+                },
+            });
+        } catch {
+            dialog = null;
+        }
+
+        const hostEl = dialog?.element;
+        const container = (hostEl?.querySelector?.(".b3-dialog__container") as HTMLElement | null) || document.createElement("div");
+        container.className = "b3-dialog__container xlc-sync-diff-modal xlc-form-host";
         container.innerHTML = fullHtml;
-        mountPlatformDialogTitleWrap(container, titleText);
+        if (hostEl) {
+            mountPlatformDialogTitleWrap(hostEl, titleText);
+        } else {
+            mountPlatformDialogTitleWrap(container, titleText);
+        }
 
         const updateView = () => {
             currentPlan = planLibrarySync(props.report, currentStrategy, {mirrorDelete});
@@ -420,11 +441,13 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
 
         const cancelBtn = container.querySelector(".b3-button--cancel");
         cancelBtn?.addEventListener("click", () => {
+            dialog?.destroy();
             props.onCancel?.();
         });
 
         const confirmBtn = container.querySelector(".xlc-btn-confirm");
         confirmBtn?.addEventListener("click", async () => {
+            dialog?.destroy();
             await performApply();
         });
 
@@ -448,6 +471,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
             getCurrentPlan: () => currentPlan,
             applySync: performApply,
             close: () => {
+                dialog?.destroy();
                 props.onCancel?.();
             },
         };

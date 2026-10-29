@@ -22,6 +22,8 @@ import {calculateUsageInsights, type UsageItemMeta} from "../model/usage-insight
 import {detectEcosystem} from "../service/ecosystem";
 import {openSanitizerOptionsDialog} from "./export-sanitizer-modal";
 import type {SanitizerOptions} from "../model/export-sanitizer";
+import {openSyncDiffModal} from "./sync-diff-modal";
+import {diffLibraries, SyncEntry} from "../model/sync-diff";
 
 type TFn = (key: string, ...args: string[]) => string;
 
@@ -2386,6 +2388,78 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
         });
     });
     dataBtns.appendChild(csvImportBtn);
+
+    const syncDiffBtn = mkBtn("⚡ " + (t("syncDiffBtn") || "同步冲突比对"), undefined, "settings.data.syncDiff");
+    syncDiffBtn.addEventListener("click", () => {
+        if (syncDiffBtn.disabled) return;
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = ".json,application/json";
+        fileInput.dataset.xlcControl = "settings.sync-diff.file";
+        fileInput.addEventListener("change", () => {
+            const file = fileInput.files?.[0];
+            if (!file) return;
+            void file.text().then(async (text) => {
+                const validation = validateImport(text);
+                if (!validation.ok || !validation.parsed) {
+                    ctx.notify("error", t("importFailed", validation.reason ?? t("importReasonUnknown")));
+                    return;
+                }
+                const idx = await ctx.library.ensureIndex();
+                const localList: SyncEntry[] = Array.from(idx.items.values()).map((it) => ({
+                    id: it.id,
+                    title: it.title,
+                    kramdown: it.summary || "",
+                    itemType: it.itemType,
+                    tags: it.tags || [],
+                    category: it.category || "",
+                    updatedAt: it.updatedAt || Date.now(),
+                }));
+                const remoteList: SyncEntry[] = validation.parsed.items.map((it: any) => ({
+                    id: it.id,
+                    title: it.title,
+                    kramdown: it.markdown || it.content || it.summary || "",
+                    itemType: it.itemType,
+                    tags: it.tags || [],
+                    category: it.category || "",
+                    updatedAt: it.updatedAt || Date.now(),
+                }));
+                const report = diffLibraries(localList, remoteList);
+                openSyncDiffModal({
+                    report,
+                    localEntries: localList,
+                    onConfirm: async (receipt, plan) => {
+                        const toImport: ExportedItem[] = plan.items
+                            .filter((pi) => pi.entry && (pi.action === "create" || pi.action === "update" || pi.action === "fork"))
+                            .map((pi) => {
+                                const src = pi.entry!;
+                                return {
+                                    id: pi.action === "fork" ? `xlc-fork-${Date.now().toString(36)}` : src.id,
+                                    title: pi.action === "fork" ? `${src.title} (副本)` : src.title,
+                                    alias: src.alias || "",
+                                    itemType: src.itemType || "text",
+                                    kramdown: src.kramdown || "",
+                                    tags: [...(src.tags || [])],
+                                    category: src.category || "",
+                                    source: {sourceDocId: "", sourceBlockId: "", sourceType: "manual"},
+                                    url: src.url || "",
+                                    targetBlockId: src.targetBlockId || "",
+                                    createdAt: Date.now(),
+                                    updatedAt: Date.now(),
+                                };
+                            });
+                        if (toImport.length > 0) {
+                            await ctx.importMarkdownItems(toImport, "rename");
+                            ctx.refreshSearch?.();
+                            ctx.notify("info", `同步合并完成：处理 ${receipt.success} 项条目`);
+                        }
+                    },
+                });
+            });
+        });
+        fileInput.click();
+    });
+    dataBtns.appendChild(syncDiffBtn);
     dataSec.appendChild(dataBtns);
     
     // 提示包导入（R74）

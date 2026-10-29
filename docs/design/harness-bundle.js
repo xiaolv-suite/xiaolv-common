@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.75";
+      PLUGIN_VERSION = "0.10.76";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -18378,6 +18378,953 @@ ${finalHtml}
     }
   });
 
+  // src/model/batch-ops.ts
+  function normalizeTagForCompare(tag) {
+    return (tag != null ? tag : "").trim().toLowerCase().replace(/^#+/, "").replace(/#+$/, "");
+  }
+  function mergeTags(currentTags, toAdd) {
+    const existing = cleanTagList(currentTags);
+    const added = cleanTagList(toAdd);
+    const seen = new Set(existing.map((t) => normalizeTagForCompare(t)));
+    const merged = [...existing];
+    for (const tag of added) {
+      const norm = normalizeTagForCompare(tag);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        merged.push(tag);
+        if (merged.length >= LIMITS.tags) break;
+      }
+    }
+    return merged;
+  }
+  function removeTags(currentTags, toRemove) {
+    const existing = cleanTagList(currentTags);
+    const removeSet = new Set(cleanTagList(toRemove).map((t) => normalizeTagForCompare(t)));
+    if (removeSet.size === 0) return existing;
+    return existing.filter((t) => !removeSet.has(normalizeTagForCompare(t)));
+  }
+  function applyBatchTagCategoryOps(item, patch) {
+    var _a, _b, _c;
+    let nextTags = [...(_a = item.tags) != null ? _a : []];
+    let tagsChanged = false;
+    if (patch.addTags && patch.addTags.length > 0) {
+      const afterMerge = mergeTags(nextTags, patch.addTags);
+      if (afterMerge.length !== nextTags.length || afterMerge.some((t, i) => t !== nextTags[i])) {
+        nextTags = afterMerge;
+        tagsChanged = true;
+      }
+    }
+    if (patch.removeTags && patch.removeTags.length > 0) {
+      const afterRemove = removeTags(nextTags, patch.removeTags);
+      if (afterRemove.length !== nextTags.length) {
+        nextTags = afterRemove;
+        tagsChanged = true;
+      }
+    }
+    let nextCategory = (_b = item.category) != null ? _b : "";
+    let categoryChanged = false;
+    if (typeof patch.setCategory === "string") {
+      const cleanCat = patch.setCategory.trim().slice(0, LIMITS.category);
+      if (cleanCat !== ((_c = item.category) != null ? _c : "")) {
+        nextCategory = cleanCat;
+        categoryChanged = true;
+      }
+    }
+    const changed = tagsChanged || categoryChanged;
+    return {
+      tags: nextTags,
+      category: categoryChanged ? nextCategory : item.category || void 0,
+      changed
+    };
+  }
+  var init_batch_ops = __esm({
+    "src/model/batch-ops.ts"() {
+      "use strict";
+      init_constants();
+      init_item();
+    }
+  });
+
+  // src/model/sync-diff.ts
+  function computeItemFingerprint(entry) {
+    var _a;
+    const normTags = cleanTagList((_a = entry.tags) != null ? _a : []).sort().join(",");
+    const payload = [
+      entry.itemType || "text",
+      (entry.title || "").trim(),
+      (entry.alias || "").trim(),
+      normTags,
+      (entry.category || "").trim(),
+      (entry.url || "").trim(),
+      (entry.targetBlockId || "").trim(),
+      (entry.kramdown || "").replace(/\r\n/g, "\n").trim()
+    ].join("\xA7");
+    let hash = 2166136261;
+    for (let i = 0; i < payload.length; i++) {
+      hash ^= payload.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  }
+  function detectChangedFields(local, remote) {
+    var _a, _b;
+    const fields = [];
+    if (local.itemType !== remote.itemType) fields.push("itemType");
+    if ((local.title || "").trim() !== (remote.title || "").trim()) fields.push("title");
+    if ((local.alias || "").trim() !== (remote.alias || "").trim()) fields.push("alias");
+    if ((local.category || "").trim() !== (remote.category || "").trim()) fields.push("category");
+    if ((local.url || "").trim() !== (remote.url || "").trim()) fields.push("url");
+    if ((local.targetBlockId || "").trim() !== (remote.targetBlockId || "").trim()) fields.push("targetBlockId");
+    const localTags = cleanTagList((_a = local.tags) != null ? _a : []).sort().join(",");
+    const remoteTags = cleanTagList((_b = remote.tags) != null ? _b : []).sort().join(",");
+    if (localTags !== remoteTags) fields.push("tags");
+    const localBody = (local.kramdown || "").replace(/\r\n/g, "\n").trim();
+    const remoteBody = (remote.kramdown || "").replace(/\r\n/g, "\n").trim();
+    if (localBody !== remoteBody) fields.push("kramdown");
+    return fields;
+  }
+  function diffLibraries(localEntries, remoteEntries, options) {
+    var _a, _b;
+    const localMap = /* @__PURE__ */ new Map();
+    for (const item of localEntries) {
+      if (item && item.id) localMap.set(item.id, item);
+    }
+    const remoteMap = /* @__PURE__ */ new Map();
+    for (const item of remoteEntries) {
+      if (item && item.id) remoteMap.set(item.id, item);
+    }
+    const diffs = [];
+    const processedIds = /* @__PURE__ */ new Set();
+    const baseline = (_a = options == null ? void 0 : options.baselineTimestamp) != null ? _a : 0;
+    const tolerance = (_b = options == null ? void 0 : options.timestampToleranceMs) != null ? _b : 1e3;
+    for (const [id, remote] of remoteMap.entries()) {
+      processedIds.add(id);
+      const local = localMap.get(id);
+      if (!local) {
+        diffs.push({
+          id,
+          status: "added",
+          remote,
+          changedFields: ["id", "title", "kramdown"],
+          remoteFingerprint: computeItemFingerprint(remote)
+        });
+        continue;
+      }
+      const localFp = computeItemFingerprint(local);
+      const remoteFp = computeItemFingerprint(remote);
+      const changedFields = detectChangedFields(local, remote);
+      if (localFp === remoteFp && changedFields.length === 0) {
+        diffs.push({
+          id,
+          status: "identical",
+          local,
+          remote,
+          changedFields: [],
+          localFingerprint: localFp,
+          remoteFingerprint: remoteFp
+        });
+        continue;
+      }
+      const localTime = Number(local.updatedAt) || 0;
+      const remoteTime = Number(remote.updatedAt) || 0;
+      let isConflict = false;
+      if (baseline > 0) {
+        if (localTime > baseline && remoteTime > baseline) {
+          isConflict = true;
+        }
+      } else {
+        const timeDiff = Math.abs(localTime - remoteTime);
+        if (timeDiff <= tolerance) {
+          isConflict = true;
+        }
+      }
+      diffs.push({
+        id,
+        status: isConflict ? "conflict" : "modified",
+        local,
+        remote,
+        changedFields,
+        localFingerprint: localFp,
+        remoteFingerprint: remoteFp
+      });
+    }
+    for (const [id, local] of localMap.entries()) {
+      if (processedIds.has(id)) continue;
+      diffs.push({
+        id,
+        status: "removed",
+        local,
+        changedFields: ["id", "title", "kramdown"],
+        localFingerprint: computeItemFingerprint(local)
+      });
+    }
+    let identicalCount = 0;
+    let addedCount = 0;
+    let removedCount = 0;
+    let modifiedCount = 0;
+    let conflictCount = 0;
+    for (const d of diffs) {
+      switch (d.status) {
+        case "identical":
+          identicalCount++;
+          break;
+        case "added":
+          addedCount++;
+          break;
+        case "removed":
+          removedCount++;
+          break;
+        case "modified":
+          modifiedCount++;
+          break;
+        case "conflict":
+          conflictCount++;
+          break;
+      }
+    }
+    return {
+      timestamp: Date.now(),
+      totalLocal: localMap.size,
+      totalRemote: remoteMap.size,
+      identicalCount,
+      addedCount,
+      removedCount,
+      modifiedCount,
+      conflictCount,
+      diffs
+    };
+  }
+  function planLibrarySync(report, strategy, options) {
+    var _a, _b, _c;
+    const items = [];
+    const rand = (_a = options == null ? void 0 : options.random) != null ? _a : Math.random;
+    for (const diff of report.diffs) {
+      if (diff.status === "identical") {
+        items.push({
+          id: diff.id,
+          action: "noop",
+          status: diff.status,
+          strategy,
+          entry: diff.local,
+          reason: "\u4E24\u7AEF\u5185\u5BB9\u5B8C\u5168\u4E00\u81F4\uFF0C\u65E0\u9700\u64CD\u4F5C"
+        });
+        continue;
+      }
+      if (diff.status === "added") {
+        items.push({
+          id: diff.id,
+          action: "create",
+          status: diff.status,
+          strategy,
+          entry: diff.remote,
+          reason: "\u8FDC\u7AEF\u65B0\u589E\u6761\u76EE\uFF0C\u5408\u5165\u672C\u5730"
+        });
+        continue;
+      }
+      if (diff.status === "removed") {
+        if (options == null ? void 0 : options.mirrorDelete) {
+          items.push({
+            id: diff.id,
+            action: "delete",
+            status: diff.status,
+            strategy,
+            entry: diff.local,
+            reason: "\u8FDC\u7AEF\u5DF2\u65E0\u6B64\u9879\uFF0C\u955C\u50CF\u5220\u9664\u672C\u5730\u526F\u672C"
+          });
+        } else {
+          items.push({
+            id: diff.id,
+            action: "noop",
+            status: diff.status,
+            strategy,
+            entry: diff.local,
+            reason: "\u8FDC\u7AEF\u65E0\u5BF9\u5E94\u9879\uFF0C\u672C\u5730\u4FDD\u7559\u65E2\u6709\u5185\u5BB9"
+          });
+        }
+        continue;
+      }
+      if (diff.status === "modified" || diff.status === "conflict") {
+        const local = diff.local;
+        const remote = diff.remote;
+        switch (strategy) {
+          case "keep-local":
+            items.push({
+              id: diff.id,
+              action: "noop",
+              status: diff.status,
+              strategy,
+              entry: local,
+              reason: "\u7B56\u7565\u6307\u5B9A\u4FDD\u7559\u672C\u5730\u7248\u672C"
+            });
+            break;
+          case "keep-remote":
+            items.push({
+              id: diff.id,
+              action: "update",
+              status: diff.status,
+              strategy,
+              entry: remote,
+              reason: "\u7B56\u7565\u6307\u5B9A\u4EE5\u8FDC\u7AEF\u7248\u672C\u8986\u76D6\u672C\u5730"
+            });
+            break;
+          case "keep-both": {
+            const forkedId = newLogicalId(Date.now(), rand);
+            const forkedTitle = ((remote.title || "").slice(0, LIMITS.title - 6) + " (\u540C\u6B65\u526F\u672C)").trim();
+            const forkedEntry = {
+              ...remote,
+              id: forkedId,
+              title: forkedTitle
+            };
+            items.push({
+              id: diff.id,
+              action: "fork",
+              status: diff.status,
+              strategy,
+              entry: forkedEntry,
+              forkedId,
+              reason: "\u7B56\u7565\u6307\u5B9A\u4E24\u8005\u5E76\u5B58\uFF0C\u4E3A\u8FDC\u7AEF\u7248\u672C\u5206\u914D\u65B0 ID"
+            });
+            break;
+          }
+          case "latest-wins": {
+            const localTime = Number(local.updatedAt) || 0;
+            const remoteTime = Number(remote.updatedAt) || 0;
+            if (remoteTime > localTime) {
+              items.push({
+                id: diff.id,
+                action: "update",
+                status: diff.status,
+                strategy,
+                entry: remote,
+                reason: `\u8FDC\u7AEF\u66F4\u65B0\u65F6\u95F4\u8F83\u65B0 (${remoteTime} > ${localTime})\uFF0C\u6267\u884C\u8986\u76D6`
+              });
+            } else if (localTime > remoteTime) {
+              items.push({
+                id: diff.id,
+                action: "noop",
+                status: diff.status,
+                strategy,
+                entry: local,
+                reason: `\u672C\u5730\u66F4\u65B0\u65F6\u95F4\u8F83\u65B0 (${localTime} > ${remoteTime})\uFF0C\u4FDD\u7559\u672C\u5730`
+              });
+            } else {
+              const lFp = diff.localFingerprint || "";
+              const rFp = diff.remoteFingerprint || "";
+              if (rFp > lFp) {
+                items.push({
+                  id: diff.id,
+                  action: "update",
+                  status: diff.status,
+                  strategy,
+                  entry: remote,
+                  reason: "\u66F4\u65B0\u65F6\u95F4\u6233\u76F8\u540C\uFF0C\u6839\u636E\u5185\u5BB9\u6307\u7EB9\u89C4\u5219\u80DC\u51FA\u8FDC\u7AEF"
+                });
+              } else {
+                items.push({
+                  id: diff.id,
+                  action: "noop",
+                  status: diff.status,
+                  strategy,
+                  entry: local,
+                  reason: "\u66F4\u65B0\u65F6\u95F4\u6233\u76F8\u540C\uFF0C\u6839\u636E\u5185\u5BB9\u6307\u7EB9\u89C4\u5219\u4FDD\u7559\u672C\u5730"
+                });
+              }
+            }
+            break;
+          }
+          case "smart-merge": {
+            const localTime = Number(local.updatedAt) || 0;
+            const remoteTime = Number(remote.updatedAt) || 0;
+            const remoteIsNewer = remoteTime >= localTime;
+            const mergedTags = mergeTags((_b = local.tags) != null ? _b : [], (_c = remote.tags) != null ? _c : []);
+            const mergedCategory = (local.category || "").trim() || (remote.category || "").trim();
+            const chosenBody = remoteIsNewer ? remote.kramdown : local.kramdown;
+            const chosenTitle = remoteIsNewer ? remote.title : local.title;
+            const chosenAlias = remoteIsNewer ? remote.alias : local.alias;
+            const mergedEntry = {
+              ...remoteIsNewer ? remote : local,
+              id: diff.id,
+              title: chosenTitle || local.title,
+              alias: chosenAlias != null ? chosenAlias : local.alias,
+              tags: mergedTags,
+              category: mergedCategory,
+              kramdown: chosenBody != null ? chosenBody : local.kramdown,
+              updatedAt: Math.max(localTime, remoteTime, Date.now())
+            };
+            items.push({
+              id: diff.id,
+              action: "update",
+              status: diff.status,
+              strategy,
+              entry: mergedEntry,
+              reason: "\u667A\u80FD\u5408\u5E76\uFF1A\u6807\u7B7E\u53D6\u5E76\u96C6\u3001\u5206\u7C7B\u8865\u5145\u7EE7\u627F\u3001\u66F4\u65B0\u53D6\u6700\u65B0"
+            });
+            break;
+          }
+        }
+      }
+    }
+    const summary = {
+      total: items.length,
+      noop: items.filter((x) => x.action === "noop").length,
+      create: items.filter((x) => x.action === "create").length,
+      update: items.filter((x) => x.action === "update").length,
+      fork: items.filter((x) => x.action === "fork").length,
+      delete: items.filter((x) => x.action === "delete").length
+    };
+    return {
+      strategy,
+      items,
+      summary
+    };
+  }
+  function executeSyncMerge(localEntries, plan) {
+    const entryMap = /* @__PURE__ */ new Map();
+    for (const e of localEntries) {
+      if (e && e.id) entryMap.set(e.id, { ...e });
+    }
+    const results = [];
+    let success = 0;
+    let failed = 0;
+    for (const item of plan.items) {
+      try {
+        switch (item.action) {
+          case "noop":
+            results.push({
+              id: item.id,
+              action: "noop",
+              ok: true,
+              finalEntry: entryMap.get(item.id)
+            });
+            success++;
+            break;
+          case "create":
+            if (!item.entry) {
+              throw new Error("\u7F3A\u5C11\u65B0\u589E\u6761\u76EE\u8F7D\u8377");
+            }
+            entryMap.set(item.id, { ...item.entry });
+            results.push({
+              id: item.id,
+              action: "create",
+              ok: true,
+              finalEntry: { ...item.entry }
+            });
+            success++;
+            break;
+          case "update":
+            if (!item.entry) {
+              throw new Error("\u7F3A\u5C11\u66F4\u65B0\u6761\u76EE\u8F7D\u8377");
+            }
+            entryMap.set(item.id, { ...item.entry });
+            results.push({
+              id: item.id,
+              action: "update",
+              ok: true,
+              finalEntry: { ...item.entry }
+            });
+            success++;
+            break;
+          case "fork":
+            if (!item.entry || !item.forkedId) {
+              throw new Error("\u7F3A\u5C11 fork \u6761\u76EE\u6216\u5206\u914D\u7684 ID");
+            }
+            entryMap.set(item.forkedId, { ...item.entry });
+            results.push({
+              id: item.id,
+              action: "fork",
+              ok: true,
+              finalEntry: { ...item.entry }
+            });
+            success++;
+            break;
+          case "delete":
+            entryMap.delete(item.id);
+            results.push({
+              id: item.id,
+              action: "delete",
+              ok: true
+            });
+            success++;
+            break;
+        }
+      } catch (err) {
+        failed++;
+        results.push({
+          id: item.id,
+          action: item.action,
+          ok: false,
+          error: toErrorMessage(err, "\u6267\u884C\u5931\u8D25")
+        });
+      }
+    }
+    return {
+      appliedAt: Date.now(),
+      strategy: plan.strategy,
+      total: plan.items.length,
+      success,
+      failed,
+      results,
+      finalEntries: Array.from(entryMap.values())
+    };
+  }
+  var init_sync_diff = __esm({
+    "src/model/sync-diff.ts"() {
+      "use strict";
+      init_constants();
+      init_item();
+      init_batch_ops();
+      init_errors();
+    }
+  });
+
+  // src/ui/sync-diff-modal.ts
+  function getStatusMeta(status) {
+    switch (status) {
+      case "identical":
+        return { text: "\u5B8C\u5168\u4E00\u81F4", cls: "xlc-status-identical" };
+      case "added":
+        return { text: "\u8FDC\u7AEF\u65B0\u589E", cls: "xlc-status-added" };
+      case "modified":
+        return { text: "\u5B57\u6BB5\u53D8\u52A8", cls: "xlc-status-modified" };
+      case "conflict":
+        return { text: "\u51B2\u7A81\u5F85\u89E3", cls: "xlc-status-conflict" };
+      case "removed":
+        return { text: "\u8FDC\u7AEF\u7F3A\u5931", cls: "xlc-status-removed" };
+      default:
+        return { text: status, cls: "" };
+    }
+  }
+  function getActionMeta(action) {
+    switch (action) {
+      case "create":
+        return { text: "\u5408\u5165\u65B0\u589E", cls: "xlc-action-create" };
+      case "update":
+        return { text: "\u66F4\u65B0\u5185\u5BB9", cls: "xlc-action-update" };
+      case "fork":
+        return { text: "\u5E76\u5B58\u526F\u672C", cls: "xlc-action-fork" };
+      case "delete":
+        return { text: "\u955C\u50CF\u5220\u9664", cls: "xlc-action-delete" };
+      case "noop":
+        return { text: "\u4FDD\u6301\u539F\u6837", cls: "xlc-action-noop" };
+      default:
+        return { text: action, cls: "" };
+    }
+  }
+  function openSyncDiffModal(props) {
+    var _a, _b, _c;
+    let currentStrategy = (_a = props.initialStrategy) != null ? _a : "smart-merge";
+    let mirrorDelete = (_b = props.mirrorDelete) != null ? _b : false;
+    let currentStatusFilter = null;
+    let searchKeyword = "";
+    let currentPlan = planLibrarySync(props.report, currentStrategy, { mirrorDelete });
+    const isBrowser = typeof document !== "undefined" && typeof document.createElement === "function";
+    const renderSummaryHeaderHtml = (report, activeFilter) => {
+      const isAct = (s) => activeFilter === s ? "xlc-summary-card--active" : "";
+      return `
+            <div class="xlc-sync-summary-cards">
+                <div class="xlc-summary-card ${isAct(null)}" data-status="" role="button" tabindex="0" title="\u70B9\u51FB\u67E5\u770B\u5168\u90E8\u660E\u7EC6">
+                    <span class="xlc-card-label">\u603B\u8BA1\u5BF9\u6BD4</span>
+                    <span class="xlc-card-value">${report.totalLocal} / ${report.totalRemote}</span>
+                </div>
+                <div class="xlc-summary-card xlc-card-identical ${isAct("identical")}" data-status="identical" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u4E00\u81F4\u9879">
+                    <span class="xlc-card-label">\u4E00\u81F4\u9879</span>
+                    <span class="xlc-card-value">${report.identicalCount}</span>
+                </div>
+                <div class="xlc-summary-card xlc-card-added ${isAct("added")}" data-status="added" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u8FDC\u7AEF\u65B0\u589E">
+                    <span class="xlc-card-label">\u8FDC\u7AEF\u65B0\u589E</span>
+                    <span class="xlc-card-value">${report.addedCount}</span>
+                </div>
+                <div class="xlc-summary-card xlc-card-modified ${isAct("modified")}" data-status="modified" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u5B57\u6BB5\u53D8\u52A8">
+                    <span class="xlc-card-label">\u5B57\u6BB5\u53D8\u52A8</span>
+                    <span class="xlc-card-value">${report.modifiedCount}</span>
+                </div>
+                <div class="xlc-summary-card xlc-card-conflict ${isAct("conflict")}" data-status="conflict" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u51B2\u7A81\u9879">
+                    <span class="xlc-card-label">\u51B2\u7A81\u5F85\u89E3</span>
+                    <span class="xlc-card-value">${report.conflictCount}</span>
+                </div>
+                <div class="xlc-summary-card xlc-card-removed ${isAct("removed")}" data-status="removed" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u8FDC\u7AEF\u7F3A\u5931">
+                    <span class="xlc-card-label">\u8FDC\u7AEF\u7F3A\u5931</span>
+                    <span class="xlc-card-value">${report.removedCount}</span>
+                </div>
+            </div>
+        `;
+    };
+    const renderStrategySelectorHtml = () => {
+      const strategies = ["smart-merge", "latest-wins", "keep-both", "keep-remote", "keep-local"];
+      const optionsHtml = strategies.map(
+        (s) => `<option value="${s}" ${s === currentStrategy ? "selected" : ""}>${s}: ${STRATEGY_DESCRIPTIONS[s].split("\uFF1A")[0]}</option>`
+      ).join("");
+      return `
+            <div class="xlc-sync-diff-controls b3-dialog__content">
+                <div class="xlc-sync-strategy-row">
+                    <label class="xlc-field-label">\u5408\u5E76\u51B2\u7A81\u7B56\u7565\uFF1A</label>
+                    <select class="b3-select xlc-sync-strategy-select">
+                        ${optionsHtml}
+                    </select>
+                    <label class="b3-label xlc-mirror-checkbox-label" title="\u82E5\u52FE\u9009\uFF0C\u8FDC\u7AEF\u5DF2\u4E0D\u5B58\u5728\u7684\u6761\u76EE\u5C06\u5728\u672C\u5730\u5220\u9664">
+                        <input type="checkbox" class="b3-switch xlc-mirror-checkbox" ${mirrorDelete ? "checked" : ""} />
+                        \u955C\u50CF\u5220\u9664\u672C\u5730\u591A\u4F59\u9879
+                    </label>
+                    <input type="text" class="b3-text-field xlc-diff-search-input" placeholder="\u{1F50D} \u5FEB\u901F\u8FC7\u6EE4\u6807\u9898\u6216 ID..." value="${escapeHtml(searchKeyword)}" style="flex:1; min-width:140px; height:28px; font-size:12px;" />
+                </div>
+                <div class="b3-label__text xlc-strategy-hint">
+                    ${escapeHtml(STRATEGY_DESCRIPTIONS[currentStrategy])}
+                </div>
+            </div>
+        `;
+    };
+    const renderDiffRowsHtml = (report, plan, activeFilter, keyword) => {
+      const actionMap = /* @__PURE__ */ new Map();
+      for (const item of plan.items) {
+        actionMap.set(item.id, item);
+      }
+      const cleanKw = (keyword != null ? keyword : "").trim().toLowerCase();
+      let candidateDiffs = activeFilter ? report.diffs.filter((d) => d.status === activeFilter) : report.diffs;
+      if (cleanKw) {
+        candidateDiffs = candidateDiffs.filter((d) => {
+          const target = d.remote || d.local;
+          const title = ((target == null ? void 0 : target.title) || "").toLowerCase();
+          const id = d.id.toLowerCase();
+          return title.includes(cleanKw) || id.includes(cleanKw);
+        });
+      }
+      if (candidateDiffs.length === 0) {
+        return `<tr><td colspan="5" class="xlc-empty-diff">${activeFilter || cleanKw ? "\u5F53\u524D\u7B5B\u9009\u4E0B\u65E0\u5339\u914D\u9879\uFF08\u70B9\u51FB\u4E0A\u65B9\u5361\u7247\u6216\u6E05\u7A7A\u641C\u7D22\u53EF\u91CD\u7F6E\uFF09\u3002" : "\u4E24\u7AEF\u5185\u5BB9\u5E93\u5B8C\u5168\u4E00\u81F4\uFF0C\u65E0\u4EFB\u4F55\u53D8\u52A8\u9879\u3002"}</td></tr>`;
+      }
+      return candidateDiffs.map((diff) => {
+        const target = diff.remote || diff.local;
+        const title = escapeHtml((target == null ? void 0 : target.title) || "\u672A\u547D\u540D\u6761\u76EE");
+        const itemType = escapeHtml((target == null ? void 0 : target.itemType) || "text");
+        const statusMeta = getStatusMeta(diff.status);
+        const planned = actionMap.get(diff.id);
+        const actionMeta = getActionMeta((planned == null ? void 0 : planned.action) || "noop");
+        const fields = diff.changedFields.length > 0 ? diff.changedFields.map((f) => `<span class="xlc-field-badge">${escapeHtml(f)}</span>`).join(" ") : "-";
+        return `
+                    <tr class="xlc-diff-row" data-id="${escapeHtml(diff.id)}" data-status="${diff.status}">
+                        <td class="xlc-col-type"><span class="xlc-type-badge">${itemType}</span></td>
+                        <td class="xlc-col-title">
+                            <div class="xlc-item-title" title="${title}">${title}</div>
+                            <div class="xlc-item-id">${escapeHtml(diff.id)}</div>
+                        </td>
+                        <td class="xlc-col-status">
+                            <span class="xlc-status-badge ${statusMeta.cls}">${statusMeta.text}</span>
+                        </td>
+                        <td class="xlc-col-fields">${fields}</td>
+                        <td class="xlc-col-action">
+                            <span class="xlc-action-badge ${actionMeta.cls}">${actionMeta.text}</span>
+                        </td>
+                    </tr>
+                `;
+      }).join("");
+    };
+    const renderTableHtml = (report, plan) => {
+      return `
+            <div class="xlc-sync-diff-table-container">
+                <table class="xlc-sync-diff-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 70px;">\u7C7B\u578B</th>
+                            <th>\u6761\u76EE\u6807\u9898 / ID</th>
+                            <th style="width: 90px;">\u6BD4\u5BF9\u72B6\u6001</th>
+                            <th style="width: 140px;">\u53D8\u52A8\u5B57\u6BB5</th>
+                            <th style="width: 100px;">\u9884\u8BA1\u52A8\u4F5C</th>
+                        </tr>
+                    </thead>
+                    <tbody class="xlc-sync-diff-tbody">
+                        ${renderDiffRowsHtml(report, plan)}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    };
+    const renderFooterHtml = (plan) => {
+      const actionableCount = plan.summary.create + plan.summary.update + plan.summary.fork + plan.summary.delete;
+      return `
+            <div class="b3-dialog__action">
+                <span class="xlc-plan-stat-hint">
+                    \u9884\u8BA1\u53D8\u52A8\uFF1A\u65B0\u589E ${plan.summary.create} \xB7 \u66F4\u65B0 ${plan.summary.update} \xB7 \u526F\u672C ${plan.summary.fork} \xB7 \u5220\u9664 ${plan.summary.delete} \xB7 \u4E0D\u53D8 ${plan.summary.noop}
+                </span>
+                <button class="b3-button b3-button--cancel">\u53D6\u6D88</button>
+                <div class="fn__space"></div>
+                <button class="b3-button b3-button--text b3-button--primary xlc-btn-confirm">
+                    \u786E\u8BA4\u6267\u884C\u5408\u5E76 (${actionableCount} \u9879)
+                </button>
+            </div>
+        `;
+    };
+    const titleText = props.title || "\u591A\u6E90\u5185\u5BB9\u5E93\u540C\u6B65\u4E0E\u51B2\u7A81\u5408\u5E76\u6BD4\u5BF9";
+    const fullHtml = `
+        <div class="b3-dialog__header">
+            <div class="b3-dialog__title">${escapeHtml(titleText)}</div>
+        </div>
+        ${renderSummaryHeaderHtml(props.report)}
+        ${renderStrategySelectorHtml()}
+        ${renderTableHtml(props.report, currentPlan)}
+        ${renderFooterHtml(currentPlan)}
+    `;
+    const performApply = async () => {
+      const baseEntries = props.localEntries || props.report.diffs.map((d) => d.local).filter((e) => Boolean(e));
+      const receipt = executeSyncMerge(baseEntries, currentPlan);
+      if (props.onConfirm) {
+        await props.onConfirm(receipt, currentPlan);
+      }
+      return receipt;
+    };
+    if (isBrowser) {
+      let dialog = null;
+      try {
+        dialog = new import_siyuan6.Dialog({
+          title: titleText,
+          content: "",
+          width: "min(960px, 94vw)",
+          height: "min(860px, 92vh)",
+          destroyCallback: () => {
+            var _a2;
+            (_a2 = props.onCancel) == null ? void 0 : _a2.call(props);
+          }
+        });
+      } catch {
+        dialog = null;
+      }
+      const hostEl = dialog == null ? void 0 : dialog.element;
+      const container = ((_c = hostEl == null ? void 0 : hostEl.querySelector) == null ? void 0 : _c.call(hostEl, ".b3-dialog__container")) || document.createElement("div");
+      container.className = "b3-dialog__container xlc-sync-diff-modal xlc-form-host";
+      container.innerHTML = fullHtml;
+      if (hostEl) {
+        mountPlatformDialogTitleWrap(hostEl, titleText);
+      } else {
+        mountPlatformDialogTitleWrap(container, titleText);
+      }
+      const updateView = () => {
+        currentPlan = planLibrarySync(props.report, currentStrategy, { mirrorDelete });
+        const hintEl = container.querySelector(".xlc-strategy-hint");
+        if (hintEl) {
+          hintEl.textContent = STRATEGY_DESCRIPTIONS[currentStrategy];
+        }
+        const tbody = container.querySelector(".xlc-sync-diff-tbody");
+        if (tbody) {
+          tbody.innerHTML = renderDiffRowsHtml(props.report, currentPlan, currentStatusFilter, searchKeyword);
+        }
+        const statHint = container.querySelector(".xlc-plan-stat-hint");
+        if (statHint) {
+          statHint.textContent = `\u9884\u8BA1\u53D8\u52A8\uFF1A\u65B0\u589E ${currentPlan.summary.create} \xB7 \u66F4\u65B0 ${currentPlan.summary.update} \xB7 \u526F\u672C ${currentPlan.summary.fork} \xB7 \u5220\u9664 ${currentPlan.summary.delete} \xB7 \u4E0D\u53D8 ${currentPlan.summary.noop}`;
+        }
+        const confirmBtn3 = container.querySelector(".xlc-btn-confirm");
+        if (confirmBtn3) {
+          const actionableCount = currentPlan.summary.create + currentPlan.summary.update + currentPlan.summary.fork + currentPlan.summary.delete;
+          confirmBtn3.textContent = `\u786E\u8BA4\u6267\u884C\u5408\u5E76 (${actionableCount} \u9879)`;
+        }
+      };
+      const cards = container.querySelectorAll(".xlc-summary-card");
+      cards.forEach((card) => {
+        card.addEventListener("click", () => {
+          const status = card.dataset.status || null;
+          currentStatusFilter = currentStatusFilter === status ? null : status;
+          cards.forEach((c) => {
+            const cStat = c.dataset.status || null;
+            c.classList.toggle("xlc-summary-card--active", cStat === currentStatusFilter);
+          });
+          updateView();
+        });
+      });
+      const strategySelect2 = container.querySelector(".xlc-sync-strategy-select");
+      strategySelect2 == null ? void 0 : strategySelect2.addEventListener("change", () => {
+        currentStrategy = strategySelect2.value || "smart-merge";
+        updateView();
+      });
+      const mirrorCheck2 = container.querySelector(".xlc-mirror-checkbox");
+      mirrorCheck2 == null ? void 0 : mirrorCheck2.addEventListener("change", () => {
+        mirrorDelete = mirrorCheck2.checked;
+        updateView();
+      });
+      const searchInput = container.querySelector(".xlc-diff-search-input");
+      searchInput == null ? void 0 : searchInput.addEventListener("input", () => {
+        searchKeyword = searchInput.value;
+        updateView();
+      });
+      const cancelBtn2 = container.querySelector(".b3-button--cancel");
+      cancelBtn2 == null ? void 0 : cancelBtn2.addEventListener("click", () => {
+        var _a2;
+        dialog == null ? void 0 : dialog.destroy();
+        (_a2 = props.onCancel) == null ? void 0 : _a2.call(props);
+      });
+      const confirmBtn2 = container.querySelector(".xlc-btn-confirm");
+      confirmBtn2 == null ? void 0 : confirmBtn2.addEventListener("click", async () => {
+        dialog == null ? void 0 : dialog.destroy();
+        await performApply();
+      });
+      return {
+        element: container,
+        getCurrentStrategy: () => currentStrategy,
+        setStrategy: (strategy) => {
+          currentStrategy = strategy;
+          if (strategySelect2) strategySelect2.value = strategy;
+          updateView();
+        },
+        getStatusFilter: () => currentStatusFilter,
+        setStatusFilter: (status) => {
+          currentStatusFilter = status;
+          cards.forEach((c) => {
+            const cStat = c.dataset.status || null;
+            c.classList.toggle("xlc-summary-card--active", cStat === currentStatusFilter);
+          });
+          updateView();
+        },
+        getCurrentPlan: () => currentPlan,
+        applySync: performApply,
+        close: () => {
+          var _a2;
+          dialog == null ? void 0 : dialog.destroy();
+          (_a2 = props.onCancel) == null ? void 0 : _a2.call(props);
+        }
+      };
+    }
+    const mockContainer = new MockElement2("div");
+    mockContainer.classList.add("b3-dialog__container", "xlc-sync-diff-modal");
+    mockContainer.innerHTML = fullHtml;
+    const strategySelect = new MockElement2("select");
+    strategySelect.classList.add("b3-select", "xlc-sync-strategy-select");
+    strategySelect.value = currentStrategy;
+    mockContainer.children.push(strategySelect);
+    const mirrorCheck = new MockElement2("input");
+    mirrorCheck.classList.add("b3-switch", "xlc-mirror-checkbox");
+    mirrorCheck.checked = mirrorDelete;
+    mockContainer.children.push(mirrorCheck);
+    const cancelBtn = new MockElement2("button");
+    cancelBtn.classList.add("b3-button", "b3-button--cancel");
+    cancelBtn.addEventListener("click", () => {
+      var _a2;
+      (_a2 = props.onCancel) == null ? void 0 : _a2.call(props);
+    });
+    mockContainer.children.push(cancelBtn);
+    const confirmBtn = new MockElement2("button");
+    confirmBtn.classList.add("b3-button", "b3-button--primary", "xlc-btn-confirm");
+    confirmBtn.addEventListener("click", async () => {
+      await performApply();
+    });
+    mockContainer.children.push(confirmBtn);
+    const updateMock = () => {
+      currentPlan = planLibrarySync(props.report, currentStrategy, { mirrorDelete });
+    };
+    strategySelect.addEventListener("change", (e) => {
+      if (e && e.target && e.target.value) {
+        currentStrategy = e.target.value;
+      } else if (strategySelect.value) {
+        currentStrategy = strategySelect.value;
+      }
+      updateMock();
+    });
+    mirrorCheck.addEventListener("change", () => {
+      mirrorDelete = mirrorCheck.checked;
+      updateMock();
+    });
+    return {
+      element: mockContainer,
+      getCurrentStrategy: () => currentStrategy,
+      setStrategy: (strategy) => {
+        currentStrategy = strategy;
+        strategySelect.value = strategy;
+        updateMock();
+      },
+      getStatusFilter: () => currentStatusFilter,
+      setStatusFilter: (status) => {
+        currentStatusFilter = status;
+        updateMock();
+      },
+      getCurrentPlan: () => currentPlan,
+      applySync: performApply,
+      close: () => {
+        var _a2;
+        (_a2 = props.onCancel) == null ? void 0 : _a2.call(props);
+      }
+    };
+  }
+  var import_siyuan6, MockElement2, STRATEGY_DESCRIPTIONS;
+  var init_sync_diff_modal = __esm({
+    "src/ui/sync-diff-modal.ts"() {
+      "use strict";
+      init_sync_diff();
+      import_siyuan6 = __toESM(require_stub_dom());
+      init_clipboard();
+      init_dialog_dom();
+      MockElement2 = class {
+        constructor(tagName) {
+          this.className = "";
+          this.classList = {
+            classes: /* @__PURE__ */ new Set(),
+            add: (...cls) => {
+              cls.forEach((c) => this.classList.classes.add(c));
+              this.className = Array.from(this.classList.classes).join(" ");
+            },
+            remove: (...cls) => {
+              cls.forEach((c) => this.classList.classes.delete(c));
+              this.className = Array.from(this.classList.classes).join(" ");
+            },
+            contains: (c) => this.classList.classes.has(c)
+          };
+          this.innerHTML = "";
+          this.value = "";
+          this.checked = false;
+          this.disabled = false;
+          this.children = [];
+          this.listeners = {};
+          this.tagName = tagName.toLowerCase();
+        }
+        addEventListener(event, fn) {
+          if (!this.listeners[event]) this.listeners[event] = [];
+          this.listeners[event].push(fn);
+        }
+        dispatchEvent(event) {
+          const list = this.listeners[event.type] || [];
+          for (const fn of list) {
+            fn(event);
+          }
+        }
+        click() {
+          this.dispatchEvent({ type: "click" });
+        }
+        querySelector(selector) {
+          return this.findChild(selector);
+        }
+        querySelectorAll(selector) {
+          const results = [];
+          this.collectChildren(selector, results);
+          return results;
+        }
+        findChild(selector) {
+          for (const child of this.children) {
+            if (this.matchSelector(child, selector)) return child;
+            const sub = child.findChild(selector);
+            if (sub) return sub;
+          }
+          return null;
+        }
+        collectChildren(selector, acc) {
+          for (const child of this.children) {
+            if (this.matchSelector(child, selector)) acc.push(child);
+            child.collectChildren(selector, acc);
+          }
+        }
+        matchSelector(el, selector) {
+          if (selector.startsWith(".")) {
+            return el.classList.contains(selector.slice(1));
+          }
+          if (selector.startsWith("#")) {
+            return false;
+          }
+          return el.tagName === selector.toLowerCase();
+        }
+      };
+      STRATEGY_DESCRIPTIONS = {
+        "smart-merge": "\u667A\u80FD\u5408\u5E76\uFF1A\u6B63\u6587\u4E0E\u6807\u9898\u4EE5\u6700\u65B0\u4E3A\u51C6\uFF0C\u6807\u7B7E\u53D6\u5E76\u96C6\uFF0C\u5206\u7C7B\u8865\u5145\u7EE7\u627F\uFF08\u63A8\u8350\uFF09\u3002",
+        "latest-wins": "\u6700\u65B0\u4F18\u5148\uFF1A\u57FA\u4E8E updatedAt \u65F6\u95F4\u6233\u51B3\u80DC\uFF0C\u8F83\u65B0\u4E00\u65B9\u5B8C\u5168\u8986\u76D6\u65E7\u65B9\u3002",
+        "keep-both": "\u4E24\u8005\u5E76\u5B58\uFF1A\u4FDD\u7559\u672C\u5730\u7248\u672C\uFF0C\u8FDC\u7AEF\u7248\u672C\u751F\u6210\u72EC\u7ACB\u65B0 ID \u5E76\u8FFD\u52A0 (\u540C\u6B65\u526F\u672C) \u540E\u7F00\u5E76\u5B58\u3002",
+        "keep-remote": "\u8FDC\u7AEF\u4E3A\u51C6\uFF1A\u65E0\u8BBA\u65F6\u95F4\u65E9\u665A\uFF0C\u65E0\u6761\u4EF6\u4EE5\u8FDC\u7AEF\u5185\u5BB9\u8986\u76D6\u672C\u5730\u5185\u5BB9\u3002",
+        "keep-local": "\u672C\u5730\u4E3A\u51C6\uFF1A\u5FFD\u7565\u8FDC\u7AEF\u7684\u6240\u6709\u53D8\u52A8\u4E0E\u51B2\u7A81\uFF0C\u5B8C\u6574\u4FDD\u6301\u672C\u5730\u7248\u672C\u4E0D\u52A8\u3002"
+      };
+    }
+  });
+
   // node_modules/.pnpm/js-yaml@5.4.3/node_modules/js-yaml/dist/js-yaml.mjs
   function defineScalarTag(tagName, options) {
     var _a, _b, _c, _d, _e;
@@ -21024,7 +21971,7 @@ ${exception.mark.snippet}`;
     }
     activeSetupDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan6.Dialog({
+    const dialog = new import_siyuan7.Dialog({
       title: t("setupTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -21054,7 +22001,7 @@ ${exception.mark.snippet}`;
     }
     activeSettingsDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan6.Dialog({
+    const dialog = new import_siyuan7.Dialog({
       title: t("openSettings"),
       content: "",
       width: "min(720px, 92vw)",
@@ -21181,7 +22128,7 @@ ${exception.mark.snippet}`;
     }
     const all = Array.from(idx.items.values());
     const categories = Array.from(new Set(all.map((i) => i.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-    const dialog = new import_siyuan6.Dialog({
+    const dialog = new import_siyuan7.Dialog({
       title: t("packExportTitle"),
       content: "",
       width: "min(580px, 92vw)",
@@ -21419,7 +22366,7 @@ ${exception.mark.snippet}`;
     syncClearUsage();
     clearBtn.addEventListener("click", () => {
       if (!hasUsage()) return;
-      (0, import_siyuan6.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
+      (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
         var _a;
         ctx.state.usage = {};
         ctx.persistSoon();
@@ -22016,7 +22963,7 @@ ${exception.mark.snippet}`;
       }
       const revision = setupRevision;
       const confirmText = mode === "new-notebook" ? t("setupIndependentConfirmCreate", notebookName, title) : t("setupConfirmCreate", title);
-      (0, import_siyuan6.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
+      (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
         if (creatingLibrary || setupRevision !== revision || modeSelect.value !== mode || mode === "new-doc" && nbSelect.value !== notebookId || mode === "new-notebook" && independentNotebookInput.value.trim() !== notebookName || nameInput.value.trim() !== title) return;
         creatingLibrary = true;
         clearOrphanReceipt();
@@ -22387,7 +23334,7 @@ ${exception.mark.snippet}`;
         delBtn.dataset.xlcControl = `settings.ai.custom-transform.delete.${ct.id}`;
         delBtn.textContent = t("delete");
         delBtn.addEventListener("click", () => {
-          (0, import_siyuan6.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
+          (0, import_siyuan7.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
             ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
             persistCt();
             repaintCt();
@@ -22552,7 +23499,7 @@ ${exception.mark.snippet}`;
         remove.dataset.xlcControl = "settings.saved-view.delete";
         remove.textContent = t("savedViewsDelete");
         remove.addEventListener("click", () => {
-          (0, import_siyuan6.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
+          (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
             var _a;
             if (ctx.deleteSavedDiscoveryView) {
               ctx.deleteSavedDiscoveryView(view.id);
@@ -22959,7 +23906,7 @@ fi`;
     const clearRecentsBtn = mkBtn(ctx.state.recents.length ? t("clearRecents") : t("clearRecentsEmpty"), void 0, "settings.data.clearRecents");
     clearRecentsBtn.addEventListener("click", () => {
       if (ctx.state.recents.length === 0 || clearRecentsBtn.disabled) return;
-      (0, import_siyuan6.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
+      (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
         var _a;
         ctx.state.recents = [];
         ctx.persistSoon();
@@ -23139,6 +24086,78 @@ fi`;
       });
     });
     dataBtns.appendChild(csvImportBtn);
+    const syncDiffBtn = mkBtn("\u26A1 " + (t("syncDiffBtn") || "\u540C\u6B65\u51B2\u7A81\u6BD4\u5BF9"), void 0, "settings.data.syncDiff");
+    syncDiffBtn.addEventListener("click", () => {
+      if (syncDiffBtn.disabled) return;
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = ".json,application/json";
+      fileInput.dataset.xlcControl = "settings.sync-diff.file";
+      fileInput.addEventListener("change", () => {
+        var _a;
+        const file = (_a = fileInput.files) == null ? void 0 : _a[0];
+        if (!file) return;
+        void file.text().then(async (text) => {
+          var _a2;
+          const validation = validateImport(text);
+          if (!validation.ok || !validation.parsed) {
+            ctx.notify("error", t("importFailed", (_a2 = validation.reason) != null ? _a2 : t("importReasonUnknown")));
+            return;
+          }
+          const idx = await ctx.library.ensureIndex();
+          const localList = Array.from(idx.items.values()).map((it) => ({
+            id: it.id,
+            title: it.title,
+            kramdown: it.summary || "",
+            itemType: it.itemType,
+            tags: it.tags || [],
+            category: it.category || "",
+            updatedAt: it.updatedAt || Date.now()
+          }));
+          const remoteList = validation.parsed.items.map((it) => ({
+            id: it.id,
+            title: it.title,
+            kramdown: it.markdown || it.content || it.summary || "",
+            itemType: it.itemType,
+            tags: it.tags || [],
+            category: it.category || "",
+            updatedAt: it.updatedAt || Date.now()
+          }));
+          const report = diffLibraries(localList, remoteList);
+          openSyncDiffModal({
+            report,
+            localEntries: localList,
+            onConfirm: async (receipt, plan) => {
+              var _a3;
+              const toImport = plan.items.filter((pi) => pi.entry && (pi.action === "create" || pi.action === "update" || pi.action === "fork")).map((pi) => {
+                const src = pi.entry;
+                return {
+                  id: pi.action === "fork" ? `xlc-fork-${Date.now().toString(36)}` : src.id,
+                  title: pi.action === "fork" ? `${src.title} (\u526F\u672C)` : src.title,
+                  alias: src.alias || "",
+                  itemType: src.itemType || "text",
+                  kramdown: src.kramdown || "",
+                  tags: [...src.tags || []],
+                  category: src.category || "",
+                  source: { sourceDocId: "", sourceBlockId: "", sourceType: "manual" },
+                  url: src.url || "",
+                  targetBlockId: src.targetBlockId || "",
+                  createdAt: Date.now(),
+                  updatedAt: Date.now()
+                };
+              });
+              if (toImport.length > 0) {
+                await ctx.importMarkdownItems(toImport, "rename");
+                (_a3 = ctx.refreshSearch) == null ? void 0 : _a3.call(ctx);
+                ctx.notify("info", `\u540C\u6B65\u5408\u5E76\u5B8C\u6210\uFF1A\u5904\u7406 ${receipt.success} \u9879\u6761\u76EE`);
+              }
+            }
+          });
+        });
+      });
+      fileInput.click();
+    });
+    dataBtns.appendChild(syncDiffBtn);
     dataSec.appendChild(dataBtns);
     const templateRow = document.createElement("div");
     templateRow.className = "xlc-setting-row xlc-template-import-row";
@@ -23362,7 +24381,7 @@ fi`;
   }
   function openEspansoImportDialog(ctx, onClose) {
     const t = ctx.t;
-    const dialog = new import_siyuan6.Dialog({
+    const dialog = new import_siyuan7.Dialog({
       title: t("espansoTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -23500,7 +24519,7 @@ fi`;
     } catch (err) {
       throw new Error(ctx.aiErrorText(err));
     }
-    const dialog = new import_siyuan6.Dialog({
+    const dialog = new import_siyuan7.Dialog({
       title: t("tagAuditTitle"),
       content: "",
       width: "min(620px, 92vw)",
@@ -23548,7 +24567,7 @@ fi`;
   function openImportPolicyDialog(ctx, parsed, issues, source) {
     var _a, _b, _c;
     const t = ctx.t;
-    const dialog = new import_siyuan6.Dialog({
+    const dialog = new import_siyuan7.Dialog({
       title: t("importPolicyTitle"),
       content: "",
       width: "min(540px, 92vw)",
@@ -23713,11 +24732,11 @@ fi`;
     wrap.appendChild(receiptHint);
     body.appendChild(wrap);
   }
-  var import_siyuan6, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
+  var import_siyuan7, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
   var init_settings_dialog = __esm({
     "src/ui/settings-dialog.ts"() {
       "use strict";
-      import_siyuan6 = __toESM(require_stub_dom());
+      import_siyuan7 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_storage();
       init_constants();
@@ -23733,6 +24752,8 @@ fi`;
       init_usage_insights();
       init_ecosystem();
       init_export_sanitizer_modal();
+      init_sync_diff_modal();
+      init_sync_diff();
       activeSetupDialog = null;
       activeSettingsDialog = null;
       espansoParserPromise = null;
@@ -30423,7 +31444,7 @@ ${progress.progressBar}`);
   init_capture();
 
   // src/ui/discovery-dialog.ts
-  var import_siyuan7 = __toESM(require_stub_dom());
+  var import_siyuan8 = __toESM(require_stub_dom());
   init_constants();
   init_dialog_dom();
   init_item();
@@ -30699,7 +31720,7 @@ ${progress.progressBar}`);
       var _a, _b, _c;
       if (this.dialog) return;
       this.closed = false;
-      const dialog = new import_siyuan7.Dialog({
+      const dialog = new import_siyuan8.Dialog({
         title: (_a = this.options.title) != null ? _a : this.tx(this.titleKey()),
         content: "",
         width: "min(1040px, 94vw)",
@@ -30787,7 +31808,7 @@ ${progress.progressBar}`);
     openCloseConfirmation(onClosed) {
       var _a;
       if (this.closeConfirmationDialog || this.closed) return;
-      const dialog = new import_siyuan7.Dialog({
+      const dialog = new import_siyuan8.Dialog({
         title: this.tx("discoveryCloseTitle"),
         content: "",
         width: "min(440px, 92vw)",
@@ -31809,7 +32830,7 @@ ${progress.progressBar}`);
         pathLabel: ((_f = this.options.sourcePath) != null ? _f : "").slice(0, LIMITS.savedViewPathChars),
         defaultCategory: ((_h = (_g = this.defaultCategoryInput) == null ? void 0 : _g.value) != null ? _h : "").trim().slice(0, LIMITS.category)
       };
-      const dialog = new import_siyuan7.Dialog({
+      const dialog = new import_siyuan8.Dialog({
         title: this.tx("discoverySaveView"),
         content: "",
         width: "min(440px, 92vw)",
@@ -32308,7 +33329,7 @@ ${details.join("\n")}` : ""}`;
 
   // src/service/commands.ts
   var siyuan = __toESM(require_stub_dom());
-  var import_siyuan8 = __toESM(require_stub_dom());
+  var import_siyuan9 = __toESM(require_stub_dom());
   init_constants();
   init_actions();
   init_placeholders();
@@ -32684,70 +33705,7 @@ ${details.join("\n")}` : ""}`;
   init_constants();
   init_client();
   init_item();
-
-  // src/model/batch-ops.ts
-  init_constants();
-  init_item();
-  function normalizeTagForCompare(tag) {
-    return (tag != null ? tag : "").trim().toLowerCase().replace(/^#+/, "").replace(/#+$/, "");
-  }
-  function mergeTags(currentTags, toAdd) {
-    const existing = cleanTagList(currentTags);
-    const added = cleanTagList(toAdd);
-    const seen = new Set(existing.map((t) => normalizeTagForCompare(t)));
-    const merged = [...existing];
-    for (const tag of added) {
-      const norm = normalizeTagForCompare(tag);
-      if (norm && !seen.has(norm)) {
-        seen.add(norm);
-        merged.push(tag);
-        if (merged.length >= LIMITS.tags) break;
-      }
-    }
-    return merged;
-  }
-  function removeTags(currentTags, toRemove) {
-    const existing = cleanTagList(currentTags);
-    const removeSet = new Set(cleanTagList(toRemove).map((t) => normalizeTagForCompare(t)));
-    if (removeSet.size === 0) return existing;
-    return existing.filter((t) => !removeSet.has(normalizeTagForCompare(t)));
-  }
-  function applyBatchTagCategoryOps(item, patch) {
-    var _a, _b, _c;
-    let nextTags = [...(_a = item.tags) != null ? _a : []];
-    let tagsChanged = false;
-    if (patch.addTags && patch.addTags.length > 0) {
-      const afterMerge = mergeTags(nextTags, patch.addTags);
-      if (afterMerge.length !== nextTags.length || afterMerge.some((t, i) => t !== nextTags[i])) {
-        nextTags = afterMerge;
-        tagsChanged = true;
-      }
-    }
-    if (patch.removeTags && patch.removeTags.length > 0) {
-      const afterRemove = removeTags(nextTags, patch.removeTags);
-      if (afterRemove.length !== nextTags.length) {
-        nextTags = afterRemove;
-        tagsChanged = true;
-      }
-    }
-    let nextCategory = (_b = item.category) != null ? _b : "";
-    let categoryChanged = false;
-    if (typeof patch.setCategory === "string") {
-      const cleanCat = patch.setCategory.trim().slice(0, LIMITS.category);
-      if (cleanCat !== ((_c = item.category) != null ? _c : "")) {
-        nextCategory = cleanCat;
-        categoryChanged = true;
-      }
-    }
-    const changed = tagsChanged || categoryChanged;
-    return {
-      tags: nextTags,
-      category: categoryChanged ? nextCategory : item.category || void 0,
-      changed
-    };
-  }
-
-  // src/service/library.ts
+  init_batch_ops();
   init_kramdown();
   init_pinyin();
   init_variables();
