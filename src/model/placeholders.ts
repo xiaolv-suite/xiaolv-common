@@ -44,7 +44,7 @@ export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" 
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|((?:(?!\}\})[\s\S])+))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -620,7 +620,9 @@ export function resolveRegexArg(rawArg: string, subAction?: string): string | nu
         const replacement = afterPattern.slice(0, secondPipe);
         const text = afterPattern.slice(secondPipe + 1);
         if (action === "mreplace" || action === "multiline") {
-            return regexReplaceMultiline(text, pattern, replacement);
+            if (isDangerousRegex(pattern)) return null;
+            const cappedText = text.length > 10000 ? text.slice(0, 10000) : text;
+            return regexReplaceMultiline(cappedText, pattern, replacement);
         }
         return applyRegexFilter("replace", pattern, text, replacement);
     }
@@ -1104,7 +1106,9 @@ export function resolveMatchArg(rawArg: string, subPattern?: string): string | n
     }
 
     if (!pattern || !template) return null;
-    return formatByRegexGroups(text, pattern, template);
+    if (isDangerousRegex(pattern)) return null;
+    const cappedText = text.length > 10000 ? text.slice(0, 10000) : text;
+    return formatByRegexGroups(cappedText, pattern, template);
 }
 
 /** 解析 valid 语法参数（数据格式规范性校验） */

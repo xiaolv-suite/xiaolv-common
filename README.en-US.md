@@ -124,19 +124,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.63] — 2026-10-29 (Latest)
+### [v0.10.64] — 2026-10-29 (Latest)
 
-Markdown heading numbering/stripping, task progress bar macro, and table matrix transposition:
-- **Heading Numbers Auto-Assignment & Stripping (`numberMarkdownHeadings`)**: Pure function automatically generating decimal hierarchical numbers (`1.`, `1.1`, `1.1.1`) for `#`~`######` headings, protecting code fence comments, and supporting `mode: "strip"` to clean heading numbers; wired to action menu and variable form.
-- **Task Progress Bar Generator (`formatTaskProgressBar`) & `{{xlc:progress}}` Macro**: Pure function generating visual progress indicators across `block` (`[███████░░░]`), `circle` (`[●●●○○]`), and `ascii` (`[===>      ]`) styles with smart width auto-scaling for $\le 20$ items; expanded dynamic macros `{{xlc:progress|7|10}}`, `{{xlc:progress:circle|3|5}}`, and `{{xlc:progress|75}}`; wired to action menu and variable form.
-- **Markdown Table Matrix Transposition (`transposeMarkdownTable`)**: Pure function swapping rows into columns and columns into rows with reconstructed alignment separator lines (`:---`) and uniform column padding, satisfying involution $M^{TT} = M$; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 993/993 passing tests with verified negative tests.
+Comprehensive quality optimization, lifecycle governance, syntax highlighting alignment, and interaction reliability:
+- **Zero Lifecycle Leaks**: Hardened native dialog cleanup across search modal, CSV/TSV wizard, and variable form; completely eliminated dangling global `pointerdown` listeners, `visualViewport` bindings, long-press timers, and debounces; automatically restored editor focus on modal dismiss.
+- **Async Robustness & UI Unlocking**: Hardened Quick Edit modal and action invocation error handling with official `toErrorMessage` normalization; prevents permanent loading button lockouts during network or validation faults.
+- **UI Consistency & Syntax Highlighting**: Aligned preview tokenizer CSS classes with design token rules, fully restoring colorful syntax highlighting across Markdown, TS, JSON, and SQL; corrected surround-mode banner styles and standardized modal control dimensions.
+- **Core Path Performance & ReDoS Defense**: Refactored regex group templating and sensitive text censoring into single-pass scans, completely removing in-loop regex object compilation; bounded width parameters to eliminate `RangeError`; integrated ReDoS defense for regex macros; optimized Tab focus checks to prevent layout thrashing.
+- **Quality Gates**: Unit test suite expanded to 997/997 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.62, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.63, collapsed)</b></summary>
 
 | Milestone | Key Release Highlights Summary | Architecture Decision |
 | :--- | :--- | :--- |
+| **v0.10.63** | Markdown heading numbering/stripping (`numberMarkdownHeadings`), task progress bar macro (`{{xlc:progress}}`), and table matrix transposition | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
 | **v0.10.62** | Markdown headings to list conversion (`convertHeadingsToList`), list shuffle macro (`shuffleList` / `{{xlc:shuffle}}`), and numeric range line filtering | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |
 | **v0.10.61** | Number symbol conversion (`convertNumberSymbols`), sensitive keyword censoring (`censorText` / `{{xlc:censor}}`), and Markdown pure code block extraction | [ADR 0143](./docs/adr/0143-number-symbols-censor-macro-and-extract-code.md) |
 | **v0.10.60** | Markdown nested list flattening (`flattenNestedList`), string range masking (`maskTextRange` / `{{xlc:smask}}`), and comprehensive CJK spacing | [ADR 0142](./docs/adr/0142-flatten-list-smask-macro-and-cjk-spacing.md) |

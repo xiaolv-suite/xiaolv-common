@@ -8,3 +8,4 @@ tests/.build/
 .mimosa/
 prep-r*.tmp
 .jeikcode/codegraph/
+.zcode/

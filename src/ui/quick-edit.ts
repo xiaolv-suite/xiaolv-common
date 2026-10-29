@@ -5,6 +5,7 @@
 import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {validateOmniBlockUpdate} from "../service/omni-search";
+import {toErrorMessage} from "../model/errors";
 
 export interface QuickEditDeps {
     t: (key: string, ...args: string[]) => string;
@@ -20,6 +21,7 @@ export function openQuickEditDialog(
 ): Dialog {
     let closed = false;
     let saving = false;
+    const prevActive = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
     const dialog = new Dialog({
         title: `${deps.t("quickEditBlock")} (${blockId})`,
         content: "",
@@ -30,12 +32,16 @@ export function openQuickEditDialog(
                 window.visualViewport.removeEventListener("resize", handleViewport);
                 window.visualViewport.removeEventListener("scroll", handleViewport);
             }
+            try {
+                prevActive?.focus();
+            } catch {}
         },
     });
 
     mountPlatformDialogTitleWrap(dialog.element, `${deps.t("quickEditBlock")} (${blockId.slice(0, 15)})`);
 
     const containerDialog = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
+    if (containerDialog) containerDialog.classList.add("xlc-form-host", "xlc-dialog-host");
     const handleViewport = () => {
         if (!containerDialog || typeof window === "undefined" || !window.visualViewport) return;
         const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
@@ -84,7 +90,7 @@ export function openQuickEditDialog(
     cancelBtn.addEventListener("click", () => dialog.destroy());
 
     const saveBtn = document.createElement("button");
-    saveBtn.className = "b3-button b3-button--text";
+    saveBtn.className = "b3-button xlc-btn-primary";
     saveBtn.textContent = deps.t("saveChanges");
     saveBtn.dataset.xlcControl = "quick-edit.save";
 
@@ -111,18 +117,29 @@ export function openQuickEditDialog(
         saveBtn.textContent = deps.t("loading");
         errHint.style.display = "none";
 
-        const res = await deps.updateBlock(blockId, val);
-        if (closed) return;
-        saving = false;
-        saveBtn.disabled = false;
-        saveBtn.textContent = deps.t("saveChanges");
+        try {
+            const res = await deps.updateBlock(blockId, val);
+            if (closed) return;
+            saving = false;
+            saveBtn.disabled = false;
+            saveBtn.textContent = deps.t("saveChanges");
 
-        if (res.success) {
-            deps.notify("info", deps.t("blockUpdated"));
-            deps.onUpdated?.(blockId, val);
-            dialog.destroy();
-        } else {
-            const msg = res.error || deps.t("kernelError", "failed to update");
+            if (res.success) {
+                deps.notify("info", deps.t("blockUpdated"));
+                deps.onUpdated?.(blockId, val);
+                dialog.destroy();
+            } else {
+                const msg = res.error || deps.t("kernelError", "failed to update");
+                errHint.textContent = msg;
+                errHint.style.display = "";
+                deps.notify("error", msg);
+            }
+        } catch (err) {
+            if (closed) return;
+            saving = false;
+            saveBtn.disabled = false;
+            saveBtn.textContent = deps.t("saveChanges");
+            const msg = toErrorMessage(err) || deps.t("kernelError", "failed to update");
             errHint.textContent = msg;
             errHint.style.display = "";
             deps.notify("error", msg);
@@ -137,6 +154,24 @@ export function openQuickEditDialog(
             void doSave();
         } else if (e.key === "Escape") {
             dialog.destroy();
+        }
+    });
+
+    container.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            e.preventDefault();
+            dialog.destroy();
+            return;
+        }
+        if (e.key === "Tab") {
+            const focusables = [textarea, cancelBtn, saveBtn].filter((el) => !el.disabled);
+            if (focusables.length === 0) return;
+            const idx = focusables.indexOf(document.activeElement as any);
+            e.preventDefault();
+            const nextIdx = e.shiftKey
+                ? (idx - 1 + focusables.length) % focusables.length
+                : (idx + 1) % focusables.length;
+            focusables[nextIdx]?.focus();
         }
     });
 

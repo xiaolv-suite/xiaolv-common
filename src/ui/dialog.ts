@@ -194,6 +194,7 @@ export class CommonSearchDialog {
     open(): void {
         const isMobile = this.deps.isMobile();
         void this.deps.syncSystemClipboard?.();
+        this.prevActiveElement = (document.activeElement as HTMLElement | null);
         const dialog = new Dialog({
             title: this.deps.t("pluginName"),
             content: "",
@@ -201,11 +202,17 @@ export class CommonSearchDialog {
             width: isMobile ? "100vw" : "min(960px, 94vw)",
             height: isMobile ? "100vh" : "min(820px, 92vh)",
             destroyCallback: () => {
+                this.destroy();
                 this.dialog = null;
                 this.deps.close();
             },
         });
         this.dialog = dialog;
+        dialog.element.addEventListener("keydown", (e) => {
+            if (e.key === "Tab") {
+                void this.onKeydown(e);
+            }
+        });
         const content = this.buildDom(isMobile);
         this.setupDragAndPaste(content);
         const body = getDialogBody(dialog.element);
@@ -1109,6 +1116,10 @@ export class CommonSearchDialog {
                         saveOmni.disabled = false;
                         saveOmni.textContent = "✦ " + this.deps.t("saveToCommon") + " (Alt+S)";
                     }
+                }).catch((err) => {
+                    saveOmni.disabled = false;
+                    saveOmni.textContent = "✦ " + this.deps.t("saveToCommon") + " (Alt+S)";
+                    this.deps.notify?.("error", toErrorMessage(err));
                 });
             }
         });
@@ -1137,9 +1148,13 @@ export class CommonSearchDialog {
                 if (cleaned.hasChanges) {
                     entry.content = cleaned.cleanedText;
                     entry.summary = cleaned.cleanedText.slice(0, 100).replace(/[\s\r\n]+/g, " ");
-                    await this.deps.copyProviderPayload(cleaned.cleanedText);
-                    this.updatePreview(entry.id);
-                    this.deps.notify?.("info", `已清洗并复制到剪贴板: ${cleaned.changeDetails.join("、") || "文本已规整"}`);
+                    try {
+                        await this.deps.copyProviderPayload(cleaned.cleanedText);
+                        this.updatePreview(entry.id);
+                        this.deps.notify?.("info", `已清洗并复制到剪贴板: ${cleaned.changeDetails.join("、") || "文本已规整"}`);
+                    } catch (err) {
+                        this.deps.notify?.("error", toErrorMessage(err));
+                    }
                 } else {
                     this.deps.notify?.("info", "文本结构规范，无需清洗");
                 }
@@ -2585,13 +2600,15 @@ export class CommonSearchDialog {
         await this.refresh();
         if (selectedId) {
             const next = this.results.findIndex((entry) => entry.id === selectedId);
-            if (next >= 0) this.activeIndex = next;
+            if (next >= 0 && next !== this.activeIndex) {
+                this.activeIndex = next;
+                if (list) this.renderList(list);
+                this.updatePreview();
+            }
         }
         if (list) {
-            this.renderList(list);
             list.scrollTop = scrollTop;
         }
-        this.updatePreview();
     }
 
     /** 统一导航位：0..results.length-1 为库条目，之后为提供方行 */
@@ -3229,7 +3246,11 @@ export class CommonSearchDialog {
                         this.menuDismiss?.();
                         this.menuDismiss = null;
                     }
-                    await execution;
+                    try {
+                        await execution;
+                    } catch (err) {
+                        this.deps.notify?.("error", toErrorMessage(err));
+                    }
                 }));
             };
             if (entry.itemType === "blockref") {
@@ -5375,10 +5396,7 @@ export class CommonSearchDialog {
             if (!root) return;
             const focusables = Array.from(root.querySelectorAll<HTMLElement>(
                 'input:not([disabled]):not([type="hidden"]), select:not([disabled]), button:not([disabled]), [tabindex="0"]:not([disabled])'
-            )).filter((el) => {
-                return (el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0)
-                    && window.getComputedStyle(el).visibility !== "hidden";
-            });
+            )).filter((el) => el.offsetParent !== null);
             if (focusables.length === 0) return;
             const first = focusables[0];
             const last = focusables[focusables.length - 1];
@@ -5865,8 +5883,16 @@ export class CommonSearchDialog {
         }
     }
 
+    private isDestroying = false;
+    private prevActiveElement: HTMLElement | null = null;
+
     destroy(): void {
-        if (this.inputDebounce) clearTimeout(this.inputDebounce);
+        if (this.isDestroying) return;
+        this.isDestroying = true;
+        if (this.inputDebounce) {
+            clearTimeout(this.inputDebounce);
+            this.inputDebounce = null;
+        }
         this.virtualListCleanup?.();
         this.virtualListCleanup = null;
         this.virtualEnsureIndex = null;
@@ -5882,8 +5908,14 @@ export class CommonSearchDialog {
             this.menuDismiss();
             this.menuDismiss = null;
         }
-        this.dialog?.destroy();
+        const dlg = this.dialog;
         this.dialog = null;
+        dlg?.destroy();
+        try {
+            this.prevActiveElement?.focus();
+        } catch {}
+        this.prevActiveElement = null;
+        this.isDestroying = false;
     }
 
     private dragOverlay: HTMLElement | null = null;

@@ -3920,13 +3920,15 @@ export function formatByRegexGroups(
     }
 
     return text.replace(regex, (...args) => {
-        let out = template;
-        out = out.replace(/\$0/g, args[0] as string);
-        for (let i = 1; i < args.length - 2; i++) {
-            const capture = (args[i] !== undefined && args[i] !== null) ? String(args[i]) : "";
-            out = out.replace(new RegExp(`\\$${i}`, "g"), capture);
-        }
-        return out;
+        return template.replace(/\$(\d+)/g, (_, numStr) => {
+            const idx = parseInt(numStr, 10);
+            if (idx === 0) return args[0] as string;
+            if (idx > 0 && idx < args.length - 2) {
+                const val = args[idx];
+                return val !== undefined && val !== null ? String(val) : "";
+            }
+            return `$${numStr}`;
+        });
     });
 }
 
@@ -5751,7 +5753,7 @@ export function padOrTruncate(
 ): string {
     if (text === undefined || text === null) return "";
     const str = String(text);
-    const targetWidth = Math.max(1, width);
+    const targetWidth = Math.min(10000, Math.max(1, width));
     const dir = options.direction || "left";
     const padChar = options.padChar && options.padChar.length > 0 ? options.padChar.charAt(0) : " ";
     const ellipsis = options.ellipsis === true;
@@ -5954,7 +5956,7 @@ export function generateNumericSequence(
     }
 
     const delimiter = options.delimiter !== undefined ? options.delimiter : ", ";
-    const padWidth = options.padWidth || 0;
+    const padWidth = Math.min(1000, Math.max(0, options.padWidth || 0));
     const padChar = options.padChar && options.padChar.length > 0 ? options.padChar.charAt(0) : "0";
     const prefix = options.prefix || "";
     const suffix = options.suffix || "";
@@ -7779,15 +7781,13 @@ export function censorText(
 
     if (words.length === 0) return text;
 
-    let cur = text;
-    for (const w of words) {
-        if (!w) continue;
-        const repl = replacement !== undefined ? replacement : "*".repeat(w.length);
-        const escapedWord = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        cur = cur.replace(new RegExp(escapedWord, "gi"), repl);
-    }
+    const escapedWords = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const combinedRegex = new RegExp(escapedWords.join("|"), "gi");
 
-    return cur;
+    if (replacement !== undefined) {
+        return text.replace(combinedRegex, replacement);
+    }
+    return text.replace(combinedRegex, (match) => "*".repeat(match.length));
 }
 
 export interface ExtractCodeBlocksOptions {

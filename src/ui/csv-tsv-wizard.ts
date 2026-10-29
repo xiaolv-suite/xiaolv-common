@@ -28,11 +28,32 @@ export interface CsvTsvWizardState {
 /** 交互式字段映射向导对话框 */
 export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => void): void {
     const t = ctx.t;
+    let released = false;
+    let parseTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const release = (): void => {
+        if (released) return;
+        released = true;
+        if (parseTimer) {
+            clearTimeout(parseTimer);
+            parseTimer = undefined;
+        }
+        if (typeof window !== "undefined" && window.visualViewport) {
+            window.visualViewport.removeEventListener("resize", handleViewport);
+            window.visualViewport.removeEventListener("scroll", handleViewport);
+        }
+        observer?.disconnect();
+        onClose?.();
+    };
+
     const dialog = new Dialog({
         title: t("csvImportTitle"),
         content: "",
         width: "min(800px, 96vw)",
         height: "min(700px, 86vh)",
+        destroyCallback: () => {
+            release();
+        },
     });
     const container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
@@ -205,13 +226,6 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     root.appendChild(foot);
     body.appendChild(root);
 
-    let released = false;
-    const release = (): void => {
-        if (released) return;
-        released = true;
-        observer?.disconnect();
-        onClose?.();
-    };
     let observer: MutationObserver | null = null;
     observer = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
         if (!dialog.element.isConnected) release();
@@ -273,7 +287,6 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
         }
     };
 
-    let parseTimer: ReturnType<typeof setTimeout> | undefined;
     ta.addEventListener("input", () => {
         if (parseTimer) clearTimeout(parseTimer);
         state.rawText = ta.value;

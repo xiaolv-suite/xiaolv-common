@@ -119,10 +119,10 @@ export function newLogicalId(now = Date.now(), random = Math.random): string {
 function cleanString(v: unknown, max: number): string {
     if (typeof v !== "string") return "";
     if (v.length <= max) return v;
-    // UTF-16 码元截断会拆散代理对：尾部孤立代理项一并去除（R144）
+    // UTF-16 码元截断会拆散代理对：仅当尾部为孤立高代理（0xd800..0xdbff）且缺失低代理时才去除（R144）
     const sliced = v.slice(0, max);
     const last = sliced.charCodeAt(sliced.length - 1);
-    return last >= 0xd800 && last <= 0xdfff ? sliced.slice(0, -1) : sliced;
+    return last >= 0xd800 && last <= 0xdbff ? sliced.slice(0, -1) : sliced;
 }
 
 export function cleanTagList(v: unknown): string[] {
@@ -236,7 +236,7 @@ export function deriveTitle(kramdown: string, itemType: ItemType, attrs: Record<
     if (alias) return alias;
     const text = kramdownToPlainText(kramdown);
     const firstLine = text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "";
-    if (firstLine) return firstLine.slice(0, LIMITS.title);
+    if (firstLine) return cleanString(firstLine, LIMITS.title);
     if (itemType === "url") return cleanString(attrs?.[ATTR.url], LIMITS.title) || "URL";
     if (itemType === "code") return "Code";
     return itemType;

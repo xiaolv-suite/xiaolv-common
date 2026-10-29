@@ -52,6 +52,16 @@ export function renderLivePreviewText(templateText: string, fills: Record<string
 
 export function openVariableFillCard(options: VariableFillOptions): void {
     const t = options.t;
+    let liveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let container: HTMLElement | null = null;
+
+    // 移动端虚拟键盘避让（window.visualViewport 动态抬升，防遮挡按钮）
+    const handleViewport = () => {
+        if (!container || typeof window === "undefined" || !window.visualViewport) return;
+        const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
+        container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
+    };
+
     const dialog = new Dialog({
         title: t("varFormTitle"),
         content: "",
@@ -60,6 +70,10 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         // 所有关闭路径（Esc/scrim）统一走 onCancel：上层搜索弹窗焦点回归（R128）；
         // 按钮确认/取消已自行结算，不在此重复触发（R138 结算语义）
         destroyCallback: () => {
+            if (liveDebounceTimer) {
+                clearTimeout(liveDebounceTimer);
+                liveDebounceTimer = null;
+            }
             if (typeof window !== "undefined" && window.visualViewport) {
                 window.visualViewport.removeEventListener("resize", handleViewport);
                 window.visualViewport.removeEventListener("scroll", handleViewport);
@@ -68,15 +82,9 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         },
     });
     // 原型屏 4：紧凑卡形态，卡头（徽标+标题+Esc 取消）即标题，隐藏宿主标题栏
-    const container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
+    container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     if (container) container.classList.add("xlc-varform-host");
 
-    // 移动端虚拟键盘避让（window.visualViewport 动态抬升，防遮挡按钮）
-    const handleViewport = () => {
-        if (!container || typeof window === "undefined" || !window.visualViewport) return;
-        const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
-        container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
-    };
     if (typeof window !== "undefined" && window.visualViewport) {
         window.visualViewport.addEventListener("resize", handleViewport);
         window.visualViewport.addEventListener("scroll", handleViewport);
@@ -275,7 +283,6 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     };
 
     let previewBox: HTMLElement | null = null;
-    let liveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (options.templateText) {
         const previewWrap = document.createElement("div");
@@ -482,6 +489,18 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     root.addEventListener("keydown", (ev) => {
         // IME 组合态（中文组词候选未上屏）：Enter 属选词，不得触发插入（对齐 dialog.ts 惯例，R138）
         if (ev.isComposing || (ev as KeyboardEvent).keyCode === 229) return;
+        if (ev.key === "Escape") {
+            ev.preventDefault();
+            if (liveDebounceTimer) {
+                clearTimeout(liveDebounceTimer);
+                liveDebounceTimer = null;
+            }
+            if (settled) return;
+            settled = true;
+            dialog.destroy();
+            options.onCancel?.();
+            return;
+        }
         // Ctrl+Enter / Cmd+Enter: 在任何输入控件/多行文本中直接快速确认提交 (G46)
         if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
             ev.preventDefault();
@@ -492,7 +511,10 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         if ((ev.altKey && (ev.key === "c" || ev.key === "C")) || (ev.ctrlKey && ev.shiftKey && (ev.key === "C" || ev.key === "c"))) {
             if (options.onCopy) {
                 ev.preventDefault();
-                if (liveDebounceTimer) clearTimeout(liveDebounceTimer);
+                if (liveDebounceTimer) {
+                    clearTimeout(liveDebounceTimer);
+                    liveDebounceTimer = null;
+                }
                 if (settled) return;
                 settled = true;
                 dialog.destroy();
@@ -516,8 +538,8 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         }
         if (ev.key === "Tab") {
             const focusables = Array.from(
-                root.querySelectorAll<HTMLElement>("input, textarea, button"),
-            ).filter((el) => !el.hasAttribute("disabled"));
+                root.querySelectorAll<HTMLElement>("input, textarea, select, button"),
+            ).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
             if (focusables.length === 0) return;
             const index = focusables.indexOf(document.activeElement as HTMLElement);
             ev.preventDefault();

@@ -279,7 +279,11 @@ export function createKernelClient(options: {
             if (existing) return existing as Promise<T>;
             const rootController = new AbortController();
             const relayAbort = (): void => rootController.abort();
-            requestOptions.signal?.addEventListener("abort", relayAbort, {once: true});
+            if (requestOptions.signal?.aborted) {
+                rootController.abort();
+            } else {
+                requestOptions.signal?.addEventListener("abort", relayAbort, {once: true});
+            }
             if (requestOptions.latest && requestOptions.raceKey) {
                 const previous = latestRequests.get(requestOptions.raceKey);
                 if (previous && previous.requestKey !== requestKey) previous.controller.abort();

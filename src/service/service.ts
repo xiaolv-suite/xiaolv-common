@@ -426,7 +426,9 @@ export class XiaolvCommonService {
         // 侧车清理用归一化后的 id（raw 非字符串时会残留幽灵收藏，R144）
         this.deps.state.favorites = this.deps.state.favorites.filter((x) => x !== id);
         this.deps.state.recents = this.deps.state.recents.filter((r) => r.id !== id);
-        delete this.deps.state.usage[id];
+        if (this.deps.state.usage) {
+            delete this.deps.state.usage[id];
+        }
         this.deps.onStateChange();
         this.deps.onLibraryChange?.();
         this.emitEvent(EVENTS.itemDeleted, id);

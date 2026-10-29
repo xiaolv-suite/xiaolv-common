@@ -947,7 +947,7 @@ export class CaptureDialog {
                     markdown,
                     title: (titleEl as HTMLInputElement).value || undefined,
                     alias: (aliasEl as HTMLInputElement).value || undefined,
-                    tags: (tagsEl as HTMLInputElement).value ? (tagsEl as HTMLInputElement).value.split(/[,,]/).map((s) => s.trim()).filter(Boolean) : undefined,
+                    tags: (tagsEl as HTMLInputElement).value ? (tagsEl as HTMLInputElement).value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : undefined,
                     category: (categoryEl as HTMLInputElement).value || undefined,
                     url: type === "url" ? markdown : undefined,
                     targetBlockId: overrides?.targetBlockId,

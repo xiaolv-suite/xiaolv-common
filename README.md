@@ -178,19 +178,21 @@
 
 ## 🆕 最新更新动态
 
-### [v0.10.63] — 2026-10-29（最新）
+### [v0.10.64] — 2026-10-29（最新）
 
-Markdown标题层级序号编排剥离、任务进度条宏与表格行列转置：
-- **Markdown 标题层级序号自动编排与剥离引擎 (`numberMarkdownHeadings`)**：纯函数支持为多级 Markdown 标题自动生成十进制递增层级序号（如 `1.`、`1.1`、`1.1.1`），支持自定义末尾点号与生效起止层级，严格避开代码围栏保护注释，支持 `mode: "strip"` 一键安全剥离多级数字序号；动作菜单接线「🔢 为各级标题编排递增层级序号并复制」与「🧹 一键剥离标题层级数字序号并复制」，表单格式栏接入「✦ 标题编序号」与「✦ 标题剥序号」。
-- **Unicode/ASCII 任务进度条度量生成器 (`formatTaskProgressBar`) 与 `{{xlc:progress}}` 动态宏**：纯函数支持基于完成数/总数或直接百分比生成图形化进度条，支持 `block`（方块 `[███████░░░]`）、`circle`（圆点 `[●●●○○]`）与 `ascii`（箭头 `[===>      ]`）三种排版视觉形态，内置自适应宽度规则；扩展动态宏体系 `{{xlc:progress|7|10}}`、`{{xlc:progress:circle|3|5}}`、`{{xlc:progress|75}}`；动作菜单接线「📊 度量任务生成进度条指示器并复制」，表单变量栏补充 `{{xlc:progress|7|10}}`，格式栏接入「✦ 插入进度条」。
-- **Markdown 表格矩阵行列转置引擎 (`transposeMarkdownTable`)**：纯函数支持将 Markdown 表格的行与列互换（原第 0 行表头转为第 0 列属性名，原各数据行转为后续各列），自动重构并对齐分隔线（`:---`），支持非等宽列自动补齐，满足二次转置完全还原（$M^{TT} = M$）；动作菜单接线「🔄 转置 Markdown 表格行列并复制」，表单格式栏接入「✦ 表格行列转置」。
-- **全套质量门禁**：单元测试增至 993/993 项全绿通过，双向严格负向注入验证通过。
+全面质量优化、生命周期治理、语法高亮与交互稳定性提升：
+- **生命周期零泄漏治理**：完善搜索弹窗、字段映射向导与变量表单的原生关闭清理流程，彻底消除悬挂的全局 `pointerdown` 监听器、`visualViewport` 视口监听、长按及防抖计时器；弹窗关闭时自动无损还原编辑器焦点。
+- **异步健壮性与防 UI 锁死**：强化快编弹窗（Quick Edit）与动作调用异常处理流程，使用官方规范 `toErrorMessage` 统一错误回执，失败时安全恢复按钮并友好提示；消除空指针潜在风险。
+- **UI 一致性与语法高亮对齐**：对齐预览渲染器与设计令牌的词法 CSS 类名，全面恢复 Markdown、TS、JSON、SQL 等代码块的多彩高亮；修复选区包围模式横幅样式；标准化弹窗按钮尺寸与暗黑主题色阶。
+- **核心路径性能与安全防御**：重构正则分组重组与敏感词屏蔽为单遍线性扫描，彻底消除循环内动态正则创建；增加超大宽度安全截断杜绝 `RangeError`；为宏引入 ReDoS 安全过滤；优化 Tab 键焦点检测避免强制同步重排（Layout Thrashing）。
+- **全套质量门禁**：单元测试增至 997/997 项全绿通过，双向严格负向注入验证通过。
 
 <details>
-<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.62，已折叠)</b></summary>
+<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.63，已折叠)</b></summary>
 
 | 里程碑版本 | 核心更新亮点摘要 | 架构决策 |
 | :--- | :--- | :--- |
+| **v0.10.63** | Markdown 标题层级序号编排剥离 (`numberMarkdownHeadings`)、任务进度条宏 (`{{xlc:progress}}`) 与表格行列转置 | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
 | **v0.10.62** | Markdown 标题与列表双向互转 (`convertHeadingsToList`)、列表打乱宏 (`shuffleList` / `{{xlc:shuffle}}`) 与数值区间行过滤 | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |
 | **v0.10.61** | 数字圈号序号互转 (`convertNumberSymbols`)、敏感词遮罩过滤宏 (`censorText` / `{{xlc:censor}}`) 与 Markdown 纯代码块提取 | [ADR 0143](./docs/adr/0143-number-symbols-censor-macro-and-extract-code.md) |
 | **v0.10.60** | Markdown 嵌套列表展开打平 (`flattenNestedList`)、任意文本范围脱敏宏 (`maskTextRange` / `{{xlc:smask}}`) 与中英文排版综合规整 | [ADR 0142](./docs/adr/0142-flatten-list-smask-macro-and-cjk-spacing.md) |
