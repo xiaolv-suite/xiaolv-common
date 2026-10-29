@@ -69,43 +69,48 @@ Upon first launch, an onboarding dialog will appear:
 
 ---
 
-## 🛠️ Feature Overview
+## 🛠️ Core Capabilities & Functions Overview
 
-### 1. Asset Management & Architecture
-- **Real Block Single Source of Truth**: Data lives in native SiYuan blocks with `custom-xlc-*` attributes. Sidecar storage holds only local preferences.
-- **Rich Types**: Text, Markdown, Code (with syntax highlighting), URL, Image, Asset, Blockref, Structure.
-- **Semantic Badges & Hierarchical Tags**: Predefined color badges and nested `/` slash tag navigation.
-- **Frecency Smart Ranking**: Combines frequency with time decay (24h/7d/30d/90d) for optimal ordering.
+### 1. Native Block Asset Single Source of Truth
+- **Native Block Storage**: All snippets, templates, and text assets are stored in native SiYuan blocks with `custom-xlc-*` attributes. Zero proprietary sidecar database lock-in; blocks remain searchable, editable, and linkable even without the plugin.
+- **Rich Content Types**: First-class support for Plain Text, Markdown, Code (with auto syntax highlighting), Web URLs, Images, Assets, Block References, and Complex Composite Structures.
+- **Multi-Dimensional Tagging**: Predefined semantic color badges (`Red`, `Orange`, `Green`, `Blue`, `Purple`) alongside infinite hierarchical `/` slash tags for flexible cataloging.
+- **Zero-SQL Redline**: Strictly enforces standard kernel document tree APIs, eliminating `/api/query/sql` to prevent kernel lockups and database corruption.
 
-### 2. Dynamic Variables & Macro Engine
-- **Interactive Forms**: `{{xlc:ask:name}}`, dropdowns, multi-select, textareas, default values, and presets.
-- **Date & Time**: `{{xlc:date}}`, `{{xlc:date|+3d}}`, `{{xlc:date|tomorrow}}`, `{{xlc:timeago|timestamp}}`.
-- **Computation & Helpers**:
-  - `{{xlc:calc|100*1.13}}`: Recursive-descent math parser;
-  - `{{xlc:uuid}}` / `{{xlc:id|12}}`: Standard UUID and compact short ID;
-  - `{{xlc:password|16}}`: Secure random password generator;
-  - `{{xlc:currency|1234.56}}`: Chinese currency uppercase characters;
-  - `{{xlc:case:camel|text}}`: Case and naming convention transformer;
-  - `{{xlc:hash|text}}`: Deterministic hash fingerprint (FNV-1a / CRC32);
-  - `{{xlc:mask|phone|number}}`: Sensitive data masking (`138****8000`);
-  - `{{xlc:count:chars|text}}`: Character and word counter;
-  - `{{xlc:filesize|1048576}}`: Byte capacity human-readable formatter;
-  - `{{xlc:lunar:year}}`: Chinese lunar stem-branch and zodiac calculator;
-  - `{{xlc:snippet:title}}`: Nested snippet expansion;
-  - `{{xlc:selection}}`: Surround selection placeholder.
+### 2. Interactive Parameterized Form & Dynamic Macros
+- **On-Demand Variable Forms**: Embed `{{xlc:ask:client_name}}`, `{{xlc:ask:plan|Basic,Pro,VIP}}`, or textareas. Entering hotkey prompts a focused popup with instant preview.
+- **Preset Configuration Memory**: Save frequently used variable combinations (e.g., standard quotation vs. discounted quotation) for 1-click filling without retyping.
+- **Rich Dynamic Macro Engine**:
+  - **Date & Time**: `{{xlc:date}}`, `{{xlc:date|+3d}}`, `{{xlc:date|tomorrow}}`, `{{xlc:timeago|timestamp}}`, `{{xlc:lunar:year}}`;
+  - **Math & Security**: `{{xlc:calc|100*1.13}}` (recursive-descent parser), `{{xlc:password|16}}`, `{{xlc:uuid}}`, `{{xlc:nanoid}}`, `{{xlc:fingerprint}}`, `{{xlc:checksum}}`;
+  - **Text & Transformation**: `{{xlc:currency}}` (Chinese uppercase), `{{xlc:thousands}}`, `{{xlc:radix}}`, `{{xlc:case:camel}}`, `{{xlc:obfuscate}}`, `{{xlc:plural}}`, `{{xlc:initials}}`, `{{xlc:truncate}}`, `{{xlc:btruncate}}`, `{{xlc:mask}}`, `{{xlc:smask}}`, `{{xlc:censor}}`, `{{xlc:pad}}`, `{{xlc:seq}}`, `{{xlc:repeat}}`, `{{xlc:center}}`, `{{xlc:slash}}`, `{{xlc:revwords}}`, `{{xlc:randomname}}`, `{{xlc:if}}`, `{{xlc:shuffle}}`;
+  - **Structure & Context**: `{{xlc:snippet:title}}` nested expansion, `{{xlc:selection}}` selection surround placeholder, `{{xlc:template}}` key-value interpolation.
 
-### 3. Formatting Toolbox (Actions & Form Toolbar)
-30+ pure utility functions:
-- **Typography**: Pangu spacing, Title Case formatting, equal-width padding, line numbering.
-- **Tables & Structure**: TSV to Markdown table, table alignment, CSV/TSV to JSON, task status toggling.
-- **Multi-line Tools**: Batch affixing/stripping, join/split lines, deduplication, sorting, shuffling.
-- **Technical Transforms**: UTF-8 Base64, URL encoding, HTML entity escaping, JSON/Properties conversion, Tab/space indentation.
-- **Text Extraction**: Markdown links & images extraction, executive summary, word frequency distribution.
+### 3. Sub-Second Pinyin Retrieval & Omni-Search Penetration
+- **Full Pinyin & Initial Abbreviation Indexing**: Search `cwbx` to immediately match `财务报销`, with real-time matched character highlights.
+- **Workspace-Wide Omni-Search**: Search all blocks across the entire workspace notebook library via `@` or `/` prefix; assetize high-value snippets into Common Library with `Alt+S`.
+- **Frecency Intelligent Ranking**: Merges access frequency with time decay (recent 24h, 7d, 30d, 90d weights) to ensure most relevant items float to the top.
+- **Recall Alias Direct Insertion**: Assign short aliases (e.g. `addr`) to items; type in editor and press `Tab` to insert instantly without opening search modal.
 
-### 4. Omni-Search & Global Automation
-- **Zero-SQL Omni-Search**: Search across all workspace note blocks via `@`, `/`, or `sy:`.
-- **Paste Queue (Stacking Mode)**: Multi-select items and sequentially paste with `⌥⇧Q`.
-- **Global Integration**: Window bridge `window.xiaolvCommon`, protocol commands, Quicker, Raycast, and AutoHotkey scripts.
+### 4. Universal Clipboard & Text Cleansing Engine
+- **80+ Pure Utility Functions**: Clean and transform text in 1 click from search dialog action menu or creation form toolbar.
+- **CJK Typography Formatting**: Pangu Chinese-English spacing, punctuation correction, NBSP and trailing whitespace stripping, CJK visual width measurement.
+- **Markdown Document Processing**: Heading-list bidirectional conversion, table column alignment & key-value/CSV conversion, footnote re-indexing, code fence language tagging, blockquote flattening, inline formatting stripping, task list status inversion & progress tracking.
+- **List & Data Processing**: Numeric range filtering, list shuffling, list indentation shifting, alphabetical grouping, delimiter sniffing & conversion, deduplication with count.
+
+### 5. Multi-Mode Output Matrix & Quick Look
+- **5-Way Insertion Matrix**:
+  - `Enter`: Insert plain/Markdown text directly into editor cursor;
+  - `Ctrl + Enter` (Mac: `⌘ + Enter`): Copy plain text or rich HTML to system clipboard;
+  - `Shift + Enter`: Insert as a live synchronized embed block (`{{id}}`);
+  - `Alt + Enter`: Insert as a standard bi-directional block reference (`((id 'anchor'))`);
+  - `⌥ + ⇧ + W`: Wrap current selected editor text with snippet template (Surround Mode).
+- **Sequential Paste Queue (Stacking)**: Multi-select items to form a queue, then sequentially paste items one by one with `⌥⇧Q`.
+- **Quick Look Immersive Modal**: Press `Space` in launcher to open centered large-card preview with syntax highlighting.
+
+### 6. Cross-Application Ecosystem & Protocol Bridges
+- **Global External Launcher Direct Access**: Support external tools (Quicker, Raycast, Alfred, AutoHotkey) invoking `window.xiaolvCommon.insertCommonItem()` or protocol commands.
+- **Lv Plugin Family Interoperability**: Seamlessly bridges with Lv SpeedSwitch, Lv Checkin, Lv Contacts, Lv Glean, and Lv Exam via the standardized `xiaolv-common/v1` protocol.
 
 ---
 
@@ -128,220 +133,27 @@ Markdown headings to list conversion, list shuffle macro, and numeric range line
 - **Quality Gates**: Unit test suite expanded to 990/990 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical releases (v0.10.0 ~ v0.10.61)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.61, collapsed)</b></summary>
 
-#### [v0.10.61] — 2026-10-29
-- Number symbol conversion (`convertNumberSymbols`) for plain, circled, and bracketed numbers.
-- Sensitive keyword censoring (`censorText`) & `{{xlc:censor}}` macro.
-- Markdown code block extraction (`extractCodeBlocksFromMarkdown`).
+| Milestone | Key Release Highlights Summary | Architecture Decision |
+| :--- | :--- | :--- |
+| **v0.10.61** | Number symbol conversion (`convertNumberSymbols`), sensitive keyword censoring (`censorText` / `{{xlc:censor}}`), and Markdown pure code block extraction | [ADR 0143](./docs/adr/0143-number-symbols-censor-macro-and-extract-code.md) |
+| **v0.10.60** | Markdown nested list flattening (`flattenNestedList`), string range masking (`maskTextRange` / `{{xlc:smask}}`), and comprehensive CJK spacing | [ADR 0142](./docs/adr/0142-flatten-list-smask-macro-and-cjk-spacing.md) |
+| **v0.10.59** | Visual width metrics (`measureVisualWidth`), ternary conditional evaluation (`{{xlc:if}}`), and list indentation shifting | [ADR 0141](./docs/adr/0141-visual-width-if-macro-and-shift-indent.md) |
+| **v0.10.58** | Markdown KPI summary card generation (`formatKpiSummaryCard`), realistic random name generator (`{{xlc:randomname}}`), and alphabetical list grouping | [ADR 0140](./docs/adr/0140-kpi-card-random-name-and-alphabet-group.md) |
+| **v0.10.57** | Markdown blockquote flattening & stripping (`flattenMarkdownBlockquotes`), word-level reversal (`{{xlc:revwords}}`), and inline Markdown formatting stripping | [ADR 0139](./docs/adr/0139-flatten-quotes-revwords-and-strip-inline.md) |
+| **v0.10.56** | Markdown footnote re-indexing & bottom grouping (`normalizeMarkdownFootnotes`), backslash escaping (`{{xlc:slash}}`), and delimiter line chunking | [ADR 0138](./docs/adr/0138-footnotes-slash-macro-and-line-chunks.md) |
+| **v0.10.55** | Markdown task status inversion (`invertTaskStatus`), visual width centering (`{{xlc:center}}`), and list delimiter smart conversion | [ADR 0137](./docs/adr/0137-invert-task-center-macro-and-delim-convert.md) |
+| **v0.10.54** | Markdown list pinyin/alphabetical sorting (`sortMarkdownList`), character sequence repetition (`{{xlc:repeat}}`), and visual width line sorting | [ADR 0136](./docs/adr/0136-sort-list-repeat-macro-and-sort-by-width.md) |
+| **v0.10.53** | Code fence language tagging (`setMarkdownCodeFenceLang`), macro pipe delimiter escaping (`{{xlc:escape}}`), and multi-column grid formatting | [ADR 0135](./docs/adr/0135-code-fence-lang-escape-macro-and-grid-columns.md) |
+| **v0.10.52** | Key-value to Markdown table (`keyValueToMarkdownTable`), English plural/singular toggle (`{{xlc:plural}}`), and outline TOC generation | [ADR 0134](./docs/adr/0134-kv-to-table-plural-macro-and-markdown-toc.md) |
+| **v0.10.51** | Markdown table to YAML/key-value (`markdownTableToKeyValue`), Chinese pinyin initials (`{{xlc:initials}}`), and strict blank line normalization | [ADR 0133](./docs/adr/0133-table-to-kv-initials-macro-and-blank-lines.md) |
+| **v0.10.50** | Markdown links conversion & extraction (`convertMarkdownLinks`), UTF-8 byte boundary truncation (`{{xlc:btruncate}}`), and punctuation spacing formatting | [ADR 0132](./docs/adr/0132-markdown-links-btruncate-and-punctuation-spacing.md) |
+| **v0.10.40 ~ v0.10.49** | Punctuation correction, text obfuscation, code comments toggle, unit spacing, brackets balance, set operations, radix conversion, and 30+ pure utility functions | [CHANGELOG.md](./CHANGELOG.md) |
+| **v0.10.0 ~ v0.10.39** | Pure text cleaning toolbox, parameterized form builder, variable preset memory, Omni-Search, and Quicker/Raycast external launcher integration | [CHANGELOG.md](./CHANGELOG.md) |
+| **v0.1.0 ~ v0.9.x** | Native block single-source-of-truth architecture, pinyin search, bi-directional link tracking, export redaction, and core launcher | [CHANGELOG.md](./CHANGELOG.md) |
 
-#### [v0.10.60] — 2026-10-29
-- Markdown nested list flattening (`flattenNestedList`).
-- String range masking (`maskTextRange`) & `{{xlc:smask}}` macro.
-- Comprehensive CJK spacing (`formatCJKSpacingComprehensive`).
-
-#### [v0.10.59] — 2026-10-29
-- Visual width metrics (`measureVisualWidth`).
-- Ternary conditional evaluation (`evaluateTernaryCondition`) & `{{xlc:if}}` macro.
-- List indentation shifting (`shiftListIndentation`).
-
-#### [v0.10.58] — 2026-10-29
-- Markdown KPI summary card (`formatKpiSummaryCard`).
-- Realistic random name generator (`generateRandomName`) & `{{xlc:randomname}}` macro.
-- Alphabetical list grouping (`groupLinesByAlphabet`).
-
-#### [v0.10.57] — 2026-10-29
-- Markdown blockquote flattening & stripping (`flattenMarkdownBlockquotes`).
-- Word-level reversal (`reverseWords`) & `{{xlc:revwords}}` macro.
-- Inline Markdown formatting stripping (`stripInlineMarkdownFormatting`).
-
-#### [v0.10.56] — 2026-10-29
-- Markdown footnote re-indexing/grouping (`normalizeMarkdownFootnotes`).
-- Backslash escaping (`escapeBackslash`) & `{{xlc:slash}}` macro.
-- Delimiter line chunking (`chunkLinesByDelimiter`).
-
-#### [v0.10.55] — 2026-10-29
-- Markdown task status inversion (`invertTaskStatus`).
-- Visual width centering (`centerText`) & `{{xlc:center}}` macro.
-- List delimiter conversion (`convertListDelimiter`).
-
-#### [v0.10.54] — 2026-10-29
-- Markdown list pinyin/alphabetical sorting (`sortMarkdownList`).
-- Character sequence repeat (`repeatText`) & `{{xlc:repeat}}` macro.
-- Visual width sorting (`sortLinesByVisualWidth`).
-
-#### [v0.10.53] — 2026-10-29
-- Code fence language tagging (`setMarkdownCodeFenceLang`).
-- Macro parameter pipe delimiter escaping (`escapeMacroPipe`) & `{{xlc:escape}}` macro.
-- Multi-column grid formatter (`formatTextColumnsGrid`).
-
-#### [v0.10.52] — 2026-10-29
-- Key-value to Markdown table (`keyValueToMarkdownTable`).
-- English plural/singular toggle (`pluralizeText`) & `{{xlc:plural}}` macro.
-- Markdown outline TOC generator (`generateMarkdownToc`).
-
-#### [v0.10.51] — 2026-10-29
-- Markdown table to key-value & YAML (`markdownTableToKeyValue`).
-- Chinese Pinyin initials extraction (`extractChinesePinyinInitials`) & `{{xlc:initials}}` macro.
-- Strict blank lines normalization (`normalizeBlankLinesStrict`).
-
-#### [v0.10.50] — 2026-10-29
-- Markdown links conversion & extraction (`convertMarkdownLinks`).
-- UTF-8 byte boundary truncation (`truncateByBytes`) & `{{xlc:btruncate}}` macro.
-- Punctuation spacing formatting (`formatPunctuationSpacing`).
-
-#### [v0.10.49] — 2026-10-29
-- Prefix/suffix line filtering (`filterLinesByAffix`).
-- Random color code generator (`generateRandomColor`) & `{{xlc:randomcolor}}` macro.
-- Markdown ordered list renumbering (`renumberOrderedList`).
-
-#### [v0.10.48] — 2026-10-29
-- Markdown list style bidirectional conversion (`convertListStyle`).
-- Lightweight short hash fingerprint (`generateShortHash`) & `{{xlc:fingerprint}}` macro.
-- Task list status filtering (`filterTaskItems`) with checkbox stripping.
-
-#### [v0.10.47] — 2026-10-29
-- Identifier naming style conversion (`convertIdentifierNamingStyle`) for camelCase, snake_case, PascalCase, and kebab-case.
-- Numeric sequence generation (`generateNumericSequence`) & `{{xlc:seq}}` macro.
-- Markdown table to CSV/TSV export (`markdownTableToDelimited`) with RFC 4180 escaping.
-
-#### [v0.10.46] — 2026-10-29
-- Markdown table column alignment batch conversion (`alignMarkdownTableColumns`).
-- Fixed-width field pad & truncate (`padOrTruncate`) & `{{xlc:pad}}` macro.
-- Line endings & NBSP sanitization engine (`sanitizeLineEndingsAndSpaces`).
-
-#### [v0.10.45] — 2026-10-29
-- Safe code comments stripping (`stripCodeComments`) while protecting string literals.
-- Line grouping by prefix pattern (`groupLinesByPattern`) with H3 summaries.
-- Markdown HRules normalization (`normalizeHorizontalRules`) with heading trap protection.
-
-#### [v0.10.44] — 2026-10-29
-- Markdown blockquote nesting level shifting (`shiftMarkdownBlockquotes`).
-- Lightweight checksum engine (`calculateChecksum`) & `{{xlc:checksum}}` macro.
-- Equal-width column alignment (`alignDelimitedColumns`).
-
-#### [v0.10.43] — 2026-10-29
-- Markdown task list progress (`calculateTaskProgress`).
-- Line slicing by start and end pattern (`sliceLinesByPattern`).
-- Thousands number grouping (`formatNumberGrouping`) & `{{xlc:thousands}}` macro.
-
-#### [v0.10.42] — 2026-10-29
-- Code language detection (`detectCodeLanguage`).
-- Word/character scrambling (`scrambleText`) & `{{xlc:scramble}}` macro.
-- Repetitive punctuation compacting (`compactRepeatedCharacters`).
-
-#### [v0.10.41] — 2026-10-29
-- Markdown heading level shifting (`shiftMarkdownHeadings`).
-- Idempotent line affixes (`ensureLineAffixes`).
-- Multiline regex anchors (`regexReplaceMultiline`) & macro.
-
-#### [v0.10.40] — 2026-10-29
-- Adaptive punctuation correction (`normalizePunctuationAdaptive`).
-- Text obfuscation (`obfuscateText`) & `{{xlc:obfuscate}}` macro.
-- Fixed width text wrapping (`wrapTextLines`).
-
-#### [v0.10.39] — 2026-10-29
-- Multi-line code comments toggle (`toggleLineComments`).
-- Simple template variable interpolation (`renderSimpleTemplate`) & `{{xlc:template}}` macro.
-- Brackets balance checker (`checkBracketsBalance`).
-
-#### [v0.10.38] — 2026-10-29
-- Unit spacing formatting (`formatUnitSpacing`).
-- Character set filtering (`filterCharacterSet`).
-- Compact unique NanoID generator (`generateNanoId`) & `{{xlc:nanoid}}` macro.
-
-#### [v0.10.37] — 2026-10-29
-- Smart quotes normalization (`normalizeSmartQuotes`).
-- Multi-line interleaving (`interleaveLines`).
-- Object keys case converter (`convertObjectKeysCase`).
-
-#### [v0.10.36] — 2026-10-29
-- Line parts swapping (`swapLineParts`).
-- Path and URL component parsing (`parsePathParts`) & `{{xlc:path}}` macro.
-- Deduplication with occurrence counts (`deduplicateWithCount`).
-
-#### [v0.10.35] — 2026-10-29
-- Multi-line custom indentation/outdentation (`indentLines`/`outdentLines`).
-- Data format validation (`validateFormat`) & `{{xlc:valid}}` macro.
-- Markdown table column filter (`filterMarkdownTable`).
-
-#### [v0.10.34] — 2026-10-28
-- Key-value pair extraction (`parseKeyValuePairs`) & `{{xlc:kv}}` macro.
-- Column-based multi-line sorting (`sortLinesByColumn`).
-- Regex capture group formatting (`formatByRegexGroups`) & `{{xlc:match}}` macro.
-
-#### [v0.10.33] — 2026-10-28
-- Line set operations (`setOperationsOnLines`).
-- Multi-radix conversion (`convertRadix`) & `{{xlc:radix}}` macro.
-- Code variable affix stripper (`stripAffixWords`).
-
-#### [v0.10.32] — 2026-10-28
-- Pairwise line merging (`zipLines`).
-- Advanced numeric statistics (`calculateStats`) & `{{xlc:stats}}` macro.
-- Title to Slug converter (`slugifyText`).
-
-#### [v0.10.31] — 2026-10-28
-- Lightweight line-level diff (`diffLinesQuick`).
-- Color format conversion (`convertColorFormat`) & `{{xlc:color}}` macro.
-- Identifier humanization (`humanizeIdentifier`).
-
-#### [v0.10.30] — 2026-10-28
-- Table matrix transposition (`transposeMatrixText`).
-- Number to English words (`numberToEnglishWords`) & `{{xlc:words:en}}` macro.
-- English contractions expansion (`expandEnglishContractions`).
-
-#### [v0.10.29] — 2026-10-28
-- Multi-line column extraction (`extractColumnFromLines`).
-- Weighted random choice (`pickWeightedOption`) & `{{xlc:choose}}` macro.
-- English noun pluralization (`pluralizeText`).
-
-#### [v0.10.28] — 2026-10-28
-- Multi-line numeric lines summary (`sumNumericLines`).
-- Chinese lunar year & zodiac calculator (`getChineseZodiacAndStemBranch`) and `{{xlc:lunar:year}}` macro.
-- Repeated phrases extraction (`extractRepeatedPhrases`).
-
-#### [v0.10.27] — 2026-10-28
-- Line symmetrical surrounding (`surroundEachLine`) with quotes/brackets.
-- Executive summary extraction (`extractExecutiveSummary`) and `{{xlc:summary}}` macro.
-- Leading indentation conversion (`convertIndentation`) between spaces and tabs.
-
-#### [v0.10.26] — 2026-10-28
-- Consecutive empty lines compacting (`compactBlankLines`).
-- Relative time formatting (`formatRelativeTime`) and `{{xlc:timeago}}` macro.
-- Word frequency distribution analysis (`countWordFrequency`).
-
-#### [v0.10.25] — 2026-10-28
-- Multi-line equal width padding and alignment (`padLines`).
-- Natural language Cron expression parser (`explainCronExpression`) and `{{xlc:cron}}` macro.
-- Simplified and Traditional Chinese character converter (`convertChineseVariant`).
-
-#### [v0.10.24] — 2026-10-28
-- Line filtering engine (`filterLines`) with invert matching.
-- Unicode and Emoji safe character reversal (`reverseText`) and `{{xlc:reverse}}` macro.
-- Bidirectional Roman and Arabic numeral converter (`romanToArabic`/`arabicToRoman`).
-
-#### [v0.10.23] — 2026-10-28
-- Strip Markdown formatting down to clean plain text (`stripMarkdownFormatting`).
-- Byte capacity formatting (`formatByteSize`) and `{{xlc:filesize}}` macro.
-- Multi-line random shuffling (`shuffleLines`) based on Fisher-Yates algorithm.
-
-#### [v0.10.22] — 2026-10-28
-- Join multi-lines with delimiters and split text to lines.
-- Chinese currency uppercase character formatting (`formatChineseCurrency`) and `{{xlc:currency}}` macro.
-- Acronym and initials extraction (`extractInitials`).
-
-#### [v0.10.21] — 2026-10-28
-- Batch prefix/suffix stripping (`stripAffixes`).
-- Properties and JSON bidirectional conversion (`propertiesToJson`/`jsonToProperties`).
-- Sensitive text masking (`maskSensitiveText`) and `{{xlc:mask}}` macro.
-
-#### [v0.10.20] — 2026-10-28
-- Advanced whitespace and document-end trimming (`trimLinesAdvanced`).
-- Object quotes normalization (`normalizeObjectQuotes`).
-- Text truncation (`truncateText`) and `{{xlc:truncate}}` macro.
-
-#### [v0.10.0 ~ v0.10.19]
-See [CHANGELOG.md](./CHANGELOG.md) for full historical details.
+> 📌 For the full evolution history across 520+ tasks and commits, please refer to the complete [CHANGELOG.md](./CHANGELOG.md).
 </details>
 
 ---

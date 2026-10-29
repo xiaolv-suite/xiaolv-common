@@ -68,44 +68,103 @@
 
 ---
 
-## 🛠️ 核心功能全景
+## 🛠️ 核心功能与作用全景
 
-### 一、内容资产与组织架构
-- **思源块真源原则**：条目即真实思源块，元数据走 `custom-xlc-*` 属性，侧车仅存本地收藏/排序/UI 偏好，随时可重建迁移。
-- **丰富条目类型**：原生识别并支持纯文本 (Text)、Markdown、代码块 (Code，保留语法高亮)、网址 (URL)、图片 (Image)、附件资源 (Asset)、块引用 (Blockref) 与超级块结构 (Structure)。
+### 一、思源原生内容资产层（安全真源）
+- **思源块真源原则（Zero-SQL）**：条目即真实思源块，正文严格由思源块管理，元数据走 `custom-xlc-*` 属性，侧车（`loadData`）仅管理本地收藏/排序/UI 偏好，随时可重建迁移。
+- **7 种丰富条目形态**：原生识别并支持纯文本 (Text)、Markdown、代码块 (Code，保留语法高亮)、网址 (URL)、图片 (Image)、附件资源 (Asset)、块引用 (Blockref) 与超级块结构 (Structure)。
 - **场景分类与层次化标签**：预置商务天蓝、客服翡翠绿、开发淡紫、写作暖琥珀、AI 亮靛语义徽标；支持 `/` 斜杠路径多层级标签与级联筛选。
-- **智能热度混合排序 (Frecency)**：结合使用频次与时间衰减阶梯（24小时/7天/30天/90天），高频常用条目自动置顶。
+- **智能热度混合排序 (Frecency)**：结合使用频次与时间衰减阶梯（24小时/7天/30天/90天），高频常用条目自适应置顶。
+- **别名唯一匹配 Tab 直达**：输入词与条目别名完全吻合且全局唯一时，行内呈现金色 ⚡ 徽标，按 Tab 闪电插入，心流毫无停顿。
+- **Space 沉浸大卡片预览**：非输入态按空格键即可弹出居中 720px 沉浸式 Quick Look 大卡片，阅读长文与代码无需受右侧窄栏限制。
 
-### 二、动态参数与强大宏求值体系
-在条目中嵌入 `{{xlc:...}}` 语法，插入或复制时自动完成动态求值：
-- **交互填参**：`{{xlc:ask:客户名}}`（单行输入）、`{{xlc:ask:方案|标准版,旗舰版}}`（下拉选择）、`{{xlc:ask:需求|UI,开发,测试|multi}}`（多选胶囊）、`{{xlc:ask:备注|textarea}}`（多行输入）。支持多预设方案切换与记忆。
-- **时间与日期**：`{{xlc:date}}`、`{{xlc:time}}`、`{{xlc:date|+3d}}`、`{{xlc:date|明天}}`、`{{xlc:date|下周五}}`、`{{xlc:date|YYYY年MM月DD日}}`、`{{xlc:timeago|时间戳}}`（相对时间）。
-- **算法与数据处理**：
-  - `{{xlc:calc|100*1.13}}`：安全递归下降四则数学算术求值；
-  - `{{xlc:uuid}}` / `{{xlc:id|12}}`：标准 UUID 与防混淆短 ID 生成；
-  - `{{xlc:password|16}}`：随机高安全密码与 PIN 码；
-  - `{{xlc:currency|1234.56}}`：中文人民币大写金额（`壹仟贰佰叁拾肆元伍角陆分`）；
-  - `{{xlc:case:camel|字段}}` / `{{xlc:case:snake|字段}}`：命名范式大小写转换；
-  - `{{xlc:hash|文本}}`：跨平台确定性散列指纹 (FNV-1a / CRC32)；
-  - `{{xlc:mask|phone|13800138000}}`：敏感信息掩码脱敏（`138****8000`）；
-  - `{{xlc:count:chars|文本}}` / `{{xlc:count:words|文本}}`：字数与词数度量；
-  - `{{xlc:filesize|1048576}}`：字节大小人性化格式化（`1.00 MB`）；
-  - `{{xlc:lunar:year}}`：中国农历干支生肖年份推算（`丙午年 (马年)`）；
-  - `{{xlc:snippet:公共头}}`：片段嵌套调用（支持环路熔断保护）；
-  - `{{xlc:selection}}`：选区包裹占位符。
+### 二、交互式填参表单与选区包裹
+- **交互填参卡片**：`{{xlc:ask:客户名}}`（单行输入）、`{{xlc:ask:方案|标准版,旗舰版}}`（下拉单选）、`{{xlc:ask:需求|UI,开发,测试|multi}}`（多选胶囊）、`{{xlc:ask:日期|date}}`（日期拾取器）、`{{xlc:ask:备注|textarea}}`（多行文本输入）。
+- **光标选区包裹模式**：支持 `{{xlc:selection}}` 与 `{{xlc:selection|默认内容}}`，在思源编辑器中划选文本即可一键包裹进 Prompt 模板、引用块或代码围栏。
+- **变量历史记忆与预设**：自动本地记忆变量最近输入值（LRU 200 项），支持「💾 存为预设方案」与多套方案自由切换。
+- **实时展开动态预览**：填写卡底部实时防抖求值并展示展开后预览效果，所见即所得。
 
-### 三、格式化工具箱（动作菜单与表单快捷栏）
-内置 30+ 项高频纯函数排版与格式化引擎：
-- **排版美化**：盘古之白中英文加空格、英文标题大小写规整 (Title Case)、多行等宽填充对齐、多行批量添加/剥离编号。
-- **表格与结构**：制表符表格转 Markdown 表格、Markdown 表格列宽对齐、CSV/TSV 转结构化 JSON、Markdown 待办任务清单状态批量切换 (`- [ ]` ⇋ `- [x]`)。
-- **多行批处理**：多行前后缀批量添加/剥离、多行文本合并单行/单行拆分多行、多行文本顺序去重、自然排序、随机打乱洗牌 (Shuffle)。
-- **技术转换**：UTF-8 Base64 编解码、URL 组件编解码、HTML 实体安全转义/反转义、JSON/Properties 双向互转、代码缩进 Tab ⇋ 空格转换。
-- **文本提炼**：批量提取 Markdown 链接与图片、提炼首段核心精要摘要、统计高频词与词频分布。
+### 三、强大动态宏计算引擎（35+ 动态宏体系）
+在模板中嵌入 `{{xlc:...}}` 语法，插入或复制时自动完成动态求值与替换：
+- **时间与日期**：`{{xlc:date}}`、`{{xlc:time}}`、`{{xlc:datetime}}`、`{{xlc:weekday}}`、`{{xlc:year}}`、`{{xlc:quarter}}`、`{{xlc:month}}`、`{{xlc:day}}`、`{{xlc:timeago}}`（自然语言相对时间，如“刚刚”、“3分钟前”）、`{{xlc:lunar}}`（农历干支生肖年份）、`{{xlc:cron}}`（Cron 表达式自然语言解析）、`{{xlc:greeting}}`（早中晚自适应问候语）。
+- **随机生成与采样**：`{{xlc:uuid}}`（标准 UUIDv4）、`{{xlc:id}}`（短 ID）、`{{xlc:nanoid}}`（紧凑安全 NanoID）、`{{xlc:password}}`（高安全密码生成）、`{{xlc:random}}`（等概率随机选择）、`{{xlc:choose}}`（加权概率抽取）、`{{xlc:seq}}`（区间数字序列生成，支持步长、前导零补齐与换行分列）、`{{xlc:randomcolor}}`（随机 HEX/RGB/HSL 色值）、`{{xlc:randomname}}`（拟真中英文随机姓名）。
+- **数值、算法与逻辑**：
+  - `{{xlc:if|10 > 5|大|小}}` / `{{xlc:if|role == 'admin'|管理员|用户}}`：安全递归无 eval 三元条件判断；
+  - `{{xlc:calc|100*1.13}}`：递归下降零 eval 纯数学计算器；
+  - `{{xlc:stats|10,20,30,40}}`：均值、中位数、方差与总和快速计算；
+  - `{{xlc:thousands|1234567.89}}`：数值千分位逗号添加与清洗；
+  - `{{xlc:checksum|hello}}`：CRC32 与 Adler32 十六进制轻量校验和短码；
+  - `{{xlc:currency|1234.56}}`：中文人民币大写金额转换；
+  - `{{xlc:plural|item|2}}`：英文单词单复数规则与不规则智能转换。
+- **文本转换与脱敏保护**：
+  - `{{xlc:case:camel|text}}`：全大写、全小写、小驼峰、大驼峰、蛇形等 8 种代码命名规范转换；
+  - `{{xlc:radix:16:10|0xFF}}`：二进制/八进制/十进制/十六进制跨进制互转；
+  - `{{xlc:smask|keep|13812345678|3|4}}`：任意字符串留头留尾区间脱敏（`138****5678`）；
+  - `{{xlc:censor|文本|敏感词|***}}`：敏感词屏蔽与等长星号遮罩；
+  - `{{xlc:btruncate|10|你好世界}}`：UTF-8 字节安全边界截断，彻底避免汉字多字节被劈开导致乱码；
+  - `{{xlc:initials|思源笔记}}`：中文汉字拼音首字母与英文首字母缩写提取（`SYBJ`）；
+  - `{{xlc:repeat|=|20}}`：字符/短语指定次数重复生成；
+  - `{{xlc:center|20|标题}}`：中英视觉字宽对称居中对齐填充；
+  - `{{xlc:revwords|the quick brown fox}}`：单词级别逆序反转；
+  - `{{xlc:escape|a|b|c}}`：宏嵌套管道符 `\|` 转义保护；
+  - `{{xlc:slash|C:\Users}}`：反斜杠转义保护；
+  - `{{xlc:template|你好 {name}|name=张三}}`：迷你模板变量插值渲染；
+  - `{{xlc:snippet:公共头}}`：片段嵌套引用调用（支持环路熔断保护）。
 
-### 四、全域搜索与外部全局联动
+### 四、纯文本与排版工程处理工具箱（70+ 纯函数，动作菜单与表单快捷栏一键执行）
+- **Markdown 专业排版与结构化**：
+  - 盘古之白中英文智能空格排版（`formatPanguSpacing`）；
+  - 中英混排标点间距与全半角空白规范化（`formatPunctuationSpacing`）；
+  - 全流程综合排版规整（`formatCJKSpacingComprehensive`）；
+  - 水平分割线标准化与防 Setext 二级标题误解析保护（`normalizeHorizontalRules`）；
+  - 引用块层级升降（`shiftMarkdownBlockquotes`）与引用块扁平化剥离（`flattenMarkdownBlockquotes`）；
+  - 代码围栏语言高亮批量补全（`setMarkdownCodeFenceLang`）；
+  - 各级标题与缩进列表双向智能互转（`convertHeadingsToList`）；
+  - 多级标题大纲目录 TOC 提取与锚点 Slug 生成（`generateMarkdownToc`）；
+  - 脚注编号自动重排与底端归集（`normalizeMarkdownFootnotes`）；
+  - 超链接批量提取与形态转换（`convertMarkdownLinks`）；
+  - 行内粗体、斜体、删除线、代码标记批量剥离（`stripInlineMarkdownFormatting`）。
+- **表格数据全能转换**：
+  - TSV / CSV 转 Markdown 对称表格；
+  - Markdown 表格列对齐方式批量设置（居中、靠右、靠左，`alignMarkdownTableColumns`）；
+  - Markdown 表格按指定列排序（`sortLinesByColumn`）与条件筛选（`filterMarkdownTable`）；
+  - Markdown 表格导出为标准 RFC 4180 CSV / TSV（`markdownTableToDelimited`）；
+  - Markdown 表格导出为 YAML / Properties / JSON 键值对（`markdownTableToKeyValue`）；
+  - 键值对 / YAML / JSON 对象快速生成 Markdown 表格（`keyValueToMarkdownTable`）；
+  - 多行关键数据自动生成 KPI 核心指标汇总看板卡片（`formatKpiSummaryCard`）。
+- **列表与待办深度重整**：
+  - 有序与无序列表双向批量互转（`convertListStyle`）；
+  - 有序列表断裂序号重新按序连续自增编号（`renumberOrderedList`）；
+  - 列表项按拼音/字母自然排序（`sortMarkdownList`）；
+  - 多层嵌套列表展开打平或祖先路径展开（`flattenNestedList`）；
+  - 列表层级缩进批量升降（`shiftListIndentation`，增加或减少 2 空格）；
+  - 列表分隔符智能嗅探与逗号/换行批量互转（`convertListDelimiter`）；
+  - Markdown 任务列表进度条与统计（`calculateTaskProgress`）；
+  - 待办任务状态智能反转（`invertTaskStatus`）与任务状态筛选提取（`filterTaskItems`）。
+- **代码与文本深度清洗**：
+  - 代码注释批量安全剥离（状态机追踪单双引号与反引号，保护字符串字面量中的 `//` 和 `#`）；
+  - 代码语言智能嗅探（高置信度识别 10+ 门主流语言特征并自动包裹代码块）；
+  - 多行日志/任务按前缀标记自动分组聚合（`groupLinesByPattern`）；
+  - 变量命名法智能互转（camelCase、snake_case、PascalCase、kebab-case）；
+  - Markdown 纯代码块提取并剥离文字解释（`extractCodeBlocksFromMarkdown`）；
+  - 多行文本基于列宽网格分栏排版（`formatTextColumnsGrid`）；
+  - 多行文本按中英视觉宽度升降序排序（`sortLinesByVisualWidth`）；
+  - 多行文本按首字拼音/字母分节大纲生成（`groupLinesByAlphabet`）；
+  - 行尾多余空白与不可见 NBSP 严格清洗（`sanitizeLineEndingsAndSpaces`）；
+  - 连续多余空行严格归一化压缩与首尾边缘修剪（`normalizeBlankLinesStrict`）；
+  - 阿拉伯数字 1~20 与圈号序号符号（`①`~`⑳`）、括号序号双向转换（`convertNumberSymbols`）；
+  - 多行数值区间范围筛选（`filterNumericRangeLines`）；
+  - 多行文本前后缀幂等补齐（`ensureLineAffixes`）与剥离（`stripAffixes`）；
+  - 多行文本集合运算（差集、交集、并集，`setOperationsOnLines`）。
+
+### 五、全域搜索与外部全局联动生态
 - **全库块穿透检索 (Omni-Search)**：输入 `@`、`/` 或 `sy:` 穿透搜索思源全库块资产，免写 SQL，支持 `in:路径` 限定范围。
 - **连续粘贴取用队列 (Paste Queue)**：多选常用条目设为取用队列，按下 `⌥⇧Q` 连续出栈粘贴填入，大幅提高多表单填写效率。
-- **外部直喷联动**：开放 `window.xiaolvCommon` 窗口桥与公开思源协议命令，设置面板提供开箱即用的 Quicker 动作配置、Mac Raycast 脚本与 AutoHotkey 脚本。
+- **外部桌面全局直喷**：开放 `window.xiaolvCommon` 窗口桥与公开思源协议命令，设置面板提供开箱即用的 Quicker 动作配置、Mac Raycast 脚本与 AutoHotkey 脚本。
+
+### 六、资产健康体检与效率收益透视
+- **内容库语法与依赖健康体检中心**：一键全库扫描死链、损坏占位符与嵌套死循环，分级输出诊断报告。
+- **打字时间节省与工时收益看板**：基于调用频次与字符数，在设置面板实时量化呈现累计击键节省量与工时收益。
 
 ---
 
@@ -128,220 +187,27 @@ Markdown标题与列表双向互转、词汇打乱宏与数值区间行过滤：
 - **全套质量门禁**：单元测试增至 990/990 项全绿通过，双向严格负向注入验证通过。
 
 <details>
-<summary><b>📜 点击查看历史版本更新记录 (v0.10.0 ~ v0.10.61)</b></summary>
+<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.61，已折叠)</b></summary>
 
-#### [v0.10.61] — 2026-10-29
-- **数字符号与圈号序号互转 (`convertNumberSymbols`)**：阿拉伯数字 1~20 与圆圈序号（①~⑳）、括号序号双向互转；动作菜单与表单接入。
-- **敏感词遮罩过滤 (`censorText`) 与 `{{xlc:censor}}` 动态宏**：多关键词批量遮罩与等长星号替换；扩展动态宏。
-- **Markdown 纯代码块提取 (`extractCodeBlocksFromMarkdown`)**：剥离周围正文说明提取纯代码脚本；动作菜单与表单接入。
+| 里程碑版本 | 核心更新亮点摘要 | 架构决策 |
+| :--- | :--- | :--- |
+| **v0.10.61** | 数字圈号序号互转 (`convertNumberSymbols`)、敏感词遮罩过滤宏 (`censorText` / `{{xlc:censor}}`) 与 Markdown 纯代码块提取 | [ADR 0143](./docs/adr/0143-number-symbols-censor-macro-and-extract-code.md) |
+| **v0.10.60** | Markdown 嵌套列表展开打平 (`flattenNestedList`)、任意文本范围脱敏宏 (`maskTextRange` / `{{xlc:smask}}`) 与中英文排版综合规整 | [ADR 0142](./docs/adr/0142-flatten-list-smask-macro-and-cjk-spacing.md) |
+| **v0.10.59** | 文本字符视觉宽度度量 (`measureVisualWidth`)、动态三元条件求值宏 (`{{xlc:if}}`) 与列表缩进批量升降 | [ADR 0141](./docs/adr/0141-visual-width-if-macro-and-shift-indent.md) |
+| **v0.10.58** | Markdown 核心指标 KPI 看板卡片生成 (`formatKpiSummaryCard`)、拟真随机姓名宏 (`{{xlc:randomname}}`) 与首字拼音分节大纲 | [ADR 0140](./docs/adr/0140-kpi-card-random-name-and-alphabet-group.md) |
+| **v0.10.57** | Markdown 引用块扁平化剥离 (`flattenMarkdownBlockquotes`)、单词逆序反转宏 (`{{xlc:revwords}}`) 与行内格式标记批量剥离 | [ADR 0139](./docs/adr/0139-flatten-quotes-revwords-and-strip-inline.md) |
+| **v0.10.56** | Markdown 脚注编号重整底端归集 (`normalizeMarkdownFootnotes`)、反斜杠转义宏 (`{{xlc:slash}}`) 与分割线分段归集 | [ADR 0138](./docs/adr/0138-footnotes-slash-macro-and-line-chunks.md) |
+| **v0.10.55** | Markdown 任务状态智能反转 (`invertTaskStatus`)、字宽居中对齐宏 (`{{xlc:center}}`) 与分隔符智能嗅探互转 | [ADR 0137](./docs/adr/0137-invert-task-center-macro-and-delim-convert.md) |
+| **v0.10.54** | Markdown 列表项拼音自然排序 (`sortMarkdownList`)、字符重复宏 (`{{xlc:repeat}}`) 与文本行视觉宽度排序 | [ADR 0136](./docs/adr/0136-sort-list-repeat-macro-and-sort-by-width.md) |
+| **v0.10.53** | Markdown 代码块语言标识批量补全 (`setMarkdownCodeFenceLang`)、宏管道符转义宏 (`{{xlc:escape}}`) 与多列网格分栏排版 | [ADR 0135](./docs/adr/0135-code-fence-lang-escape-macro-and-grid-columns.md) |
+| **v0.10.52** | 键值对转 Markdown 表格 (`keyValueToMarkdownTable`)、英文单复数智能切换宏 (`{{xlc:plural}}`) 与多级大纲 TOC 生成 | [ADR 0134](./docs/adr/0134-kv-to-table-plural-macro-and-markdown-toc.md) |
+| **v0.10.51** | Markdown 表格转 YAML/键值对 (`markdownTableToKeyValue`)、拼音缩写宏 (`{{xlc:initials}}`) 与多行空行严格归一化 | [ADR 0133](./docs/adr/0133-table-to-kv-initials-macro-and-blank-lines.md) |
+| **v0.10.50** | Markdown 超链接批量转换提取 (`convertMarkdownLinks`)、UTF-8 字节截断宏 (`{{xlc:btruncate}}`) 与标点间距排版规整 | [ADR 0132](./docs/adr/0132-markdown-links-btruncate-and-punctuation-spacing.md) |
+| **v0.10.40 ~ v0.10.49** | 标点自适应纠错、文本混淆、代码注释切换、单位间距、括号平衡、集合运算、进制转换等 30+ 纯函数工具扩展 | [CHANGELOG.md](./CHANGELOG.md) |
+| **v0.10.0 ~ v0.10.39** | 纯文本清洗工具箱、模板参数化表单、变量预设记忆、全库穿透检索 (Omni-Search)、Quicker/Raycast 联动直喷 | [CHANGELOG.md](./CHANGELOG.md) |
+| **v0.1.0 ~ v0.9.x** | 原生块真源架构奠定、拼音搜索、双链回溯、导出脱敏与基础功能搭建 | [CHANGELOG.md](./CHANGELOG.md) |
 
-#### [v0.10.60] — 2026-10-29
-- **Markdown 嵌套列表展开打平 (`flattenNestedList`)**：支持平级打平与携带祖先路径前缀；动作菜单与表单接入。
-- **任意文本范围与留头尾脱敏 (`maskTextRange`) 与 `{{xlc:smask}}` 动态宏**：灵活配置留头留尾位数或区间脱敏；扩展动态宏。
-- **中英文排版综合规整 (`formatCJKSpacingComprehensive`)**：一键执行空格清洗、中英空格与标点规范化；动作菜单与表单接入。
-
-#### [v0.10.59] — 2026-10-29
-- **文本字符视觉宽度度量 (`measureVisualWidth`)**：准确计算 CJK 双倍列宽与字符类型明细；动作菜单与表单接入。
-- **动态布尔条件求值 (`evaluateTernaryCondition`) 与 `{{xlc:if}}` 动态宏**：支持数值对比、字符串包含与真假值三元求值；扩展动态宏。
-- **列表缩进批量升降 (`shiftListIndentation`)**：批量增减列表层级缩进（+2格）；动作菜单与表单接入。
-
-#### [v0.10.58] — 2026-10-29
-- **Markdown KPI 核心指标看板卡片 (`formatKpiSummaryCard`)**：自动解析键值生成引用块卡片；动作菜单与表单接入。
-- **拟真随机姓名生成 (`generateRandomName`) 与 `{{xlc:randomname}}` 动态宏**：内置常见姓名池生成拟真中英文名；扩展动态宏。
-- **首字拼音/字母分节大纲 (`groupLinesByAlphabet`)**：按 A~Z 字母及声母自动分节归集列表；动作菜单与表单接入。
-
-#### [v0.10.57] — 2026-10-29
-- **Markdown 引用块扁平化与剥离 (`flattenMarkdownBlockquotes`)**：彻底剥离引用符号或压缩为单层标准引用；动作菜单与表单接入。
-- **单词级别逆序反转 (`reverseWords`) 与 `{{xlc:revwords}}` 动态宏**：按单词为单位逆序反转并保持行首缩进；扩展动态宏。
-- **Markdown 行内格式标记剥离 (`stripInlineMarkdownFormatting`)**：一键剥离粗斜体、删除线、高亮及代码标记；动作菜单与表单接入。
-
-#### [v0.10.56] — 2026-10-29
-- **Markdown 脚注重整归集 (`normalizeMarkdownFootnotes`)**：正文引用自增编号，定义行整齐归集至文档末尾；动作菜单与表单接入。
-- **反斜杠安全转义 (`escapeBackslash`) 与 `{{xlc:slash}}` 动态宏**：安全编码路径与控制字符反斜杠；扩展动态宏。
-- **多行文本分割线分段 (`chunkLinesByDelimiter`)**：按分割线切分文本块并生成小标题；动作菜单与表单接入。
-
-#### [v0.10.55] — 2026-10-29
-- **Markdown 任务状态反转 (`invertTaskStatus`)**：批量反转待办勾选状态，支持全选完成与全取消；动作菜单与表单接入。
-- **纯文本视觉居中对齐 (`centerText`) 与 `{{xlc:center}}` 动态宏**：按中英视觉宽度对称居中填充空格或符号；扩展动态宏。
-- **列表分隔符智能嗅探互转 (`convertListDelimiter`)**：自动分析最占优分隔符，支持换行与逗号/分号批量互转；动作菜单与表单接入。
-
-#### [v0.10.54] — 2026-10-29
-- **Markdown 列表项拼音自然排序 (`sortMarkdownList`)**：支持平级无序/有序列表按拼音字母自然升序/降序排列；动作菜单与表单接入。
-- **字符序列重复生成 (`repeatText`) 与 `{{xlc:repeat}}` 动态宏**：支持按指定次数与分隔符重复输出文本，内建安全截断；扩展动态宏。
-- **文本行视觉宽度排序 (`sortLinesByVisualWidth`)**：按中英视觉宽度长短智能排序；动作菜单与表单接入。
-
-#### [v0.10.53] — 2026-10-29
-- **代码块语言标识批量补全 (`setMarkdownCodeFenceLang`)**：为裸代码块统一补齐指定语言高亮（如 `ts`, `json`）；动作菜单与表单接入。
-- **宏参数管道符转义 (`escapeMacroPipe`) 与 `{{xlc:escape}}` 动态宏**：安全编码与还原管道符避免嵌套语法冲突；扩展动态宏。
-- **多列网格分栏排版 (`formatTextColumnsGrid`)**：多行清单按指定列宽紧凑网格化输出；动作菜单与表单接入。
-
-#### [v0.10.52] — 2026-10-29
-- **键值对转 Markdown 表格 (`keyValueToMarkdownTable`)**：自动解析 YAML、Properties、JSON 并导出为表格；动作菜单与表单接入。
-- **英文单复数智能切换 (`pluralizeText`) 与 `{{xlc:plural}}` 动态宏**：根据数量或模式智能转换词尾规则与不规则单复数；扩展动态宏。
-- **多级标题大纲 TOC 提取 (`generateMarkdownToc`)**：提取各级标题生成锚点列表，避开代码块注释干扰；动作菜单与表单接入。
-
-#### [v0.10.51] — 2026-10-29
-- **Markdown 表格转键值对与 YAML (`markdownTableToKeyValue`)**：解析表格键值列并导出为 YAML、Properties 或 JSON；动作菜单与表单接入。
-- **中文拼音缩写提取 (`extractChinesePinyinInitials`) 与 `{{xlc:initials}}` 动态宏**：支持中英混排汉字提取拼音大写缩写；扩展动态宏。
-- **多行文本空行严格归一化 (`normalizeBlankLinesStrict`)**：清除空白假空行并压缩多余空行、修剪首尾；动作菜单与表单接入。
-
-#### [v0.10.50] — 2026-10-29
-- **Markdown 超链接批量转换提取 (`convertMarkdownLinks`)**：支持剥离链接、提取裸链接、标题加括号及自动包裹 Markdown 链接；动作菜单与表单接入。
-- **UTF-8 字节安全边界截断 (`truncateByBytes`) 与 `{{xlc:btruncate}}` 动态宏**：严格按 UTF-8 编码边界安全截断防止多字节字符破损乱码；扩展动态宏。
-- **中英混排标点间距排版规整 (`formatPunctuationSpacing`)**：清理中文全角标点冗余空格，规范英文标点半角空格；动作菜单与表单接入。
-
-#### [v0.10.49] — 2026-10-29
-- **文本行前后缀精准过滤 (`filterLinesByAffix`)**：按前缀或后缀过滤多行文本，支持大小写与反向排除；动作菜单与表单接入。
-- **随机颜色生成 (`generateRandomColor`) 与 `{{xlc:randomcolor}}` 动态宏**：支持 HEX、RGB、HSL 及鲜艳/柔和色调；扩展动态宏。
-- **有序列表编号自动重排 (`renumberOrderedList`)**：自动修复断裂序号，自增连续编号并保护缩进；动作菜单与表单接入。
-
-#### [v0.10.48] — 2026-10-29
-- **Markdown 列表样式互转 (`convertListStyle`)**：无序与有序列表双向批量转换，支持多级独立嵌套编号；动作菜单与表单接入。
-- **轻量指纹哈希 (`generateShortHash`) 与 `{{xlc:fingerprint}}` 动态宏**：基于 64 位双轮 FNV-1a 生成短十六进制指纹；扩展动态宏。
-- **任务待办项状态筛选 (`filterTaskItems`)**：提取未完成待办或已完成待办，支持自动剥离复选框；动作菜单与表单接入。
-
-#### [v0.10.47] — 2026-10-29
-- **变量标识符命名法智能互转 (`convertIdentifierNamingStyle`)**：支持驼峰、下划线、帕斯卡、常量大写与短横线互转；动作菜单与表单接入。
-- **数字区间序列生成 (`generateNumericSequence`) 与 `{{xlc:seq}}` 动态宏**：支持正反向区间、步长、定宽前导零与换行；扩展动态宏。
-- **Markdown 表格转 CSV/TSV 导出 (`markdownTableToDelimited`)**：RFC 4180 规范解析并导出标准表格数据；动作菜单与表单接入。
-
-#### [v0.10.46] — 2026-10-29
-- **Markdown 表格列对齐批量转换 (`alignMarkdownTableColumns`)**：批量修改表格各列对齐方式（居中、靠右、靠左）；动作菜单与表单接入。
-- **定长补齐截断 (`padOrTruncate`) 与 `{{xlc:pad}}` 动态宏**：指定宽度定长补齐或截断，支持 CJK 中文字宽计算；扩展动态宏。
-- **行尾空格与 NBSP 隐形空格清洗 (`sanitizeLineEndingsAndSpaces`)**：清洗不换行空格 `\u00A0` 与行尾空白；动作菜单与表单接入。
-
-#### [v0.10.45] — 2026-10-29
-- **代码文本注释批量安全剥离 (`stripCodeComments`)**：词法状态机精确剥离单行与块级注释并保护字符串字面量；动作菜单与表单接入。
-- **文本行按前缀模式分组聚合 (`groupLinesByPattern`)**：根据日志级别或分类前缀自动聚合并输出结构化大纲汇总；动作菜单与表单接入。
-- **Markdown 水平分割线标准化与防标题误伤 (`normalizeHorizontalRules`)**：规范化分割线样式并强制空行隔离防 Setext H2 误伤；动作菜单与表单接入。
-
-#### [v0.10.44] — 2026-10-29
-- **Markdown 引用块嵌套层级升降 (`shiftMarkdownBlockquotes`)**：支持引用层级整体升高或降低；动作菜单与表单接入。
-- **字符串轻量校验和计算 (`calculateChecksum`) 与 `{{xlc:checksum}}` 动态宏**：支持 CRC32 与 Adler32 短校验和；扩展动态宏。
-- **文本行按分隔符等宽对齐 (`alignDelimitedColumns`)**：多列数据自动填充空格实现视觉垂直对齐；动作菜单与表单接入。
-
-#### [v0.10.43] — 2026-10-29
-- **Markdown 任务列表进度统计 (`calculateTaskProgress`)**：统计已完成、未完成及进度条；动作菜单与表单接入。
-- **文本行按起止标记条件截取 (`sliceLinesByPattern`)**：截取两标记间的内容片段；动作菜单与表单接入。
-- **千分位数值格式化 (`formatNumberGrouping`) 与 `{{xlc:thousands}}` 动态宏**：数值添加与剥离千分位逗号；扩展动态宏。
-
-#### [v0.10.42] — 2026-10-29
-- **代码语言智能嗅探 (`detectCodeLanguage`)**：高置信度识别 10+ 门常见语言并包裹代码块；动作菜单与表单接入。
-- **单词字符随机洗牌 (`scrambleText`) 与 `{{xlc:scramble}}` 动态宏**：支持单词顺序或字符打乱；扩展动态宏。
-- **冗余重复标点压缩 (`compactRepeatedCharacters`)**：压缩连续多余的感叹号与问号；动作菜单与表单接入。
-
-#### [v0.10.41] — 2026-10-29
-- **Markdown 标题层级批量升降 (`shiftMarkdownHeadings`)**：支持 H1~H6 范围内批量升高或降低；动作菜单与表单接入。
-- **文本行幂等前后缀补齐 (`ensureLineAffixes`)**：为每行安全补齐 SQL 引号逗号或任务列表标记；动作菜单与表单接入。
-- **多行正则跨行锚点替换 (`regexReplaceMultiline`) 与宏增强**：支持 `^` 与 `$` 跨行正则全局替换；扩展动态宏。
-
-#### [v0.10.40] — 2026-10-29
-- **中英混排自适应标点纠错 (`normalizePunctuationAdaptive`)**：自动适配中英文语境标点，保护数值与小数；动作菜单与表单接入。
-- **文本安全混淆 (`obfuscateText`) 与 `{{xlc:obfuscate}}` 动态宏**：支持 ROT13 加解密与 Leet 字符替换；扩展动态宏。
-- **固定列宽格式化智能折行 (`wrapTextLines`)**：按 80 列宽度对超长文本硬折行；动作菜单与表单接入。
-
-#### [v0.10.39] — 2026-10-29
-- **多行代码文本注释批量切换 (`toggleLineComments`)**：自动侦测并批量添加/解注释；动作菜单与表单接入。
-- **字符串模板简单变量插值 (`renderSimpleTemplate`) 与 `{{xlc:template}}` 动态宏**：支持 `{key}` 插值渲染；扩展动态宏。
-- **文本标点与括号闭合配对平衡性校验 (`checkBracketsBalance`)**：校验各类括号与标点闭合；动作菜单与表单接入。
-
-#### [v0.10.38] — 2026-10-29
-- **中英混排数字与度量单位规范间距 (`formatUnitSpacing`)**：在数字与 MB/GB/kg/km/GHz 之间插入规范半角空格；动作菜单与表单接入。
-- **文本字符集提取清洗过滤 (`filterCharacterSet`)**：仅提取汉字、仅提取字母数字、剔除标点与Emoji；动作菜单与表单接入。
-- **紧凑安全 NanoID 生成 (`generateNanoId`) 与 `{{xlc:nanoid}}` 动态宏**：生成 URL 安全随机唯一标识；扩展动态宏。
-
-#### [v0.10.37] — 2026-10-29
-- **文本标点两端引号智能配对与规范化 (`normalizeSmartQuotes`)**：支持直引号、中文弯引号与直角引号互转；动作菜单与表单接入。
-- **多行文本交替穿插合并 (`interleaveLines`)**：支持两段多行文本交替穿插合并；动作菜单与表单接入。
-- **JSON / Properties 键名风格批量转换 (`convertObjectKeysCase`)**：对象键名转换为 camelCase/snake_case；动作菜单与表单接入。
-
-#### [v0.10.36] — 2026-10-29
-- **多行文本两部分位置互换对调 (`swapLineParts`)**：支持对调键值对前后两项；动作菜单与表单接入。
-- **文件路径与 URL 结构解析 (`parsePathParts`) 与 `{{xlc:path}}` 动态宏**：解析目录、文件名、基本名与扩展名；扩展动态宏。
-- **多行去重带频次统计 (`deduplicateWithCount`)**：统计重复次数并按频次降序排序；动作菜单与表单接入。
-
-#### [v0.10.35] — 2026-10-29
-- **多行文本指定层级缩进/反缩进 (`indentLines`/`outdentLines`)**：支持空格与 Tab 自定义步长，智能跳过空行；动作菜单与表单接入。
-- **数据格式规范性校验 (`validateFormat`) 与 `{{xlc:valid}}` 动态宏**：支持邮箱、手机号、IPv4、URL与数字规范性校验；扩展动态宏。
-- **Markdown 表格列条件过滤 (`filterMarkdownTable`)**：按指定列对表格行进行条件筛选，保留表头分隔线；动作菜单与表单接入。
-
-#### [v0.10.34] — 2026-10-28
-- **键值对提取与参数解析 (`parseKeyValuePairs`/`extractKvValue`) 与 `{{xlc:kv}}` 动态宏**：支持 URL 查询串与 YAML 参数提取；扩展动态宏。
-- **多行文本基于指定列排序 (`sortLinesByColumn`)**：按指定列进行数值与拼音字典序排序；动作菜单与表单接入。
-- **正则多捕获组重组与格式化替换 (`formatByRegexGroups`) 与 `{{xlc:match}}` 动态宏**：将正则捕获组重组填入输出模板；扩展动态宏。
-
-#### [v0.10.33] — 2026-10-28
-- **多行文本集合运算 (`setOperationsOnLines`)**：纯函数支持多行差集、交集与并集运算；动作菜单与表单接入。
-- **跨进制数值互转 (`convertRadix`) 与 `{{xlc:radix}}` 动态宏**：支持 BIN/OCT/DEC/HEX 双向互转与位对齐；扩展动态宏。
-- **代码变量词缀剥离 (`stripAffixWords`)**：批量剥离方法前缀与实体后缀；动作菜单与表单接入。
-
-#### [v0.10.32] — 2026-10-28
-- **多行文本两两配对合并 (`zipLines`)**：纯函数支持将两组多行文本进行两两对应行拼接或交替行拼接；动作菜单接线。
-- **高级统计指标计算 (`calculateStats`) 与 `{{xlc:stats}}` 动态宏**：计算均值、中位数、方差与标准差；扩展动态宏。
-- **标题转 URL / Git 连字符别名 (`slugifyText`)**：将文本转换为安全别名 Slug；动作菜单与表单接入。
-
-#### [v0.10.31] — 2026-10-28
-- **多行文本轻量行级差异对比引擎 (`diffLinesQuick`)**：比较两段多行文本变动，输出统一 Diff 清单；动作菜单接线。
-- **色彩代码解析与格式互转 (`convertColorFormat`) 与 `{{xlc:color}}` 动态宏**：HEX、RGB 与 HSL 颜色无损互转；扩展动态宏。
-- **变量标识符转人类可读自然短语 (`humanizeIdentifier`)**：驼峰、下划线、短横线转自然短语；动作菜单与表单接入。
-
-#### [v0.10.30] — 2026-10-28
-- **多行多列表格行列转置与矩阵倒置引擎 (`transposeMatrixText`)**：纯函数支持将制表符或逗号分隔的多行数据进行横向行与纵向列互换对调；动作菜单与表单接入。
-- **数字转英文大写拼写单词引擎 (`numberToEnglishWords`) 与 `{{xlc:words:en}}` 动态宏**：整数转换为规范英文单词拼写（如 `42` -> `forty-two`）；扩展动态宏。
-- **英文日常缩写展开为正式公文形态引擎 (`expandEnglishContractions`)**：日常缩写（`don't` -> `do not`, `I'm` -> `I am` 等）展开为正式书面形态；动作菜单与表单接入。
-
-#### [v0.10.29] — 2026-10-28
-- **多行文本指定列数据提取引擎 (`extractColumnFromLines`)**：纯函数支持按索引提取指定列数据；动作菜单与表单接入。
-- **加权随机概率抽取引擎 (`pickWeightedOption`) 与 `{{xlc:choose}}` 动态宏**：支持按相对权重抽样；扩展动态宏。
-- **英文单词单复数规则转换引擎 (`pluralizeText`)**：双向智能转换英文名词单复数形态；动作菜单与表单接入。
-
-#### [v0.10.28] — 2026-10-28
-- **多行文本数值求和与统计引擎 (`sumNumericLines`)**：纯函数智能提取多行文本中的有效金额与数值，计算总和、平均值、有效笔数及极值区间；动作菜单与表单接入。
-- **农历天干地支与生肖年份推算引擎 (`getChineseZodiacAndStemBranch`) 与 `{{xlc:lunar}}` 动态宏**：公历纪年到中国农历干支纪年与生肖精准推算；扩展动态宏 `{{xlc:lunar:year}}`。
-- **高频重复词组与短语检测分析器 (`extractRepeatedPhrases`)**：基于 N-gram 滑动窗口自动检出文本中重复出现的 2~4 字词组；动作菜单与表单接入。
-
-#### [v0.10.27] — 2026-10-28
-- **多行文本成对双边对称包裹引擎 (`surroundEachLine`)**：自动识别括号对（`()`、`[]`、`{}`、`《》`、`【】`、`“”`）与自定义元组标记；动作菜单接线「🔄 多行双边双引号包裹并复制」，表单格式栏接入「✦ 双边包裹」。
-- **文本精要摘要提炼引擎 (`extractExecutiveSummary`) 与 `{{xlc:summary}}` 动态宏**：提炼首段有效核心正文并剥离 Markdown 语法标记；扩展动态宏 `{{xlc:summary|100|...}}`；动作菜单与表单接入「✦ 提精要」。
-- **代码与文本前置缩进双向转换器 (`convertIndentation`)**：支持 `spaces-to-tabs` 与 `tabs-to-spaces`，保持内部空格不受影响；动作菜单与表单接入「✦ 空格转Tab」。
-
-#### [v0.10.26] — 2026-10-28
-- **多行文本连续空行折叠压缩 (`compactBlankLines`)**：折叠多行连续空行为单空行，清理纯空格伪空行；动作菜单与表单接入「✦ 压空行」。
-- **时间戳自然相对时间分析引擎 (`formatRelativeTime`) 与 `{{xlc:timeago}}` 动态宏**：支持刚刚、X分钟前、昨天、X天前等直观相对时间；扩展动态宏 `{{xlc:timeago|1761624000}}`。
-- **常用语单词词频统计分析器 (`countWordFrequency`)**：统计中英文单词出现频次与占比分布（过滤停用词）；动作菜单与表单接入「✦ 词频统计」。
-
-#### [v0.10.25] — 2026-10-28
-- **多行文本等宽与居中/左右对齐填充 (`padLines`)**：自动计算最长行宽度进行等宽对齐填充；动作菜单与表单接入「✦ 等宽对齐」。
-- **Cron 表达式自然语言解析引擎 (`explainCronExpression`) 与 `{{xlc:cron}}` 动态宏**：解读标准 5~7 段定时表达式为直观中文；扩展动态宏 `{{xlc:cron|0 30 9 * * 1-5}}`。
-- **常用汉字简繁体双向转换 (`convertChineseVariant`)**：高频常用汉字双向无损转换；动作菜单与表单接入「✦ 简转繁」与「✦ 繁转简」。
-
-#### [v0.10.24] — 2026-10-28
-- **多行文本行过滤与提取引擎 (`filterLines`)**：支持基于关键词与正则过滤，支持反向排除匹配行 (`invert: true`)；动作菜单接入。
-- **Unicode 与 Emoji 安全字符逆序反转 (`reverseText`) 与 `{{xlc:reverse}}` 动态宏**：安全处理多字节代理对与 Emoji，杜绝乱码；扩展动态宏。
-- **罗马数字与阿拉伯数字双向转换 (`romanToArabic`/`arabicToRoman`)**：1~3999 区间罗马数字与阿拉伯数字双向转换；动作菜单与表单接入。
-
-#### [v0.10.23] — 2026-10-28
-- **Markdown 标记语法剥离纯文本 (`stripMarkdownFormatting`)**：从 Markdown 正文中剥离粗体、代码、标题等语法，还原干净纯文本；动作菜单与表单接入。
-- **字节容量友好格式化 (`formatByteSize`) 与 `{{xlc:filesize}}` 动态宏**：字节数转换为 KB/MB/GB；扩展动态宏 `{{xlc:filesize|1048576}}`。
-- **多行文本公平随机洗牌打乱 (`shuffleLines`)**：基于 Fisher-Yates 算法随机打乱行顺序；动作菜单与表单接入。
-
-#### [v0.10.22] — 2026-10-28
-- **多行合并单行与单行拆分多行 (`joinLinesWithDelimiter`/`splitTextToLines`)**：多行用逗号/分号合并为单行，或按标点拆分为多行；动作菜单与表单接入。
-- **中文人民币大写金额规范化 (`formatChineseCurrency`) 与 `{{xlc:currency}}` 动态宏**：阿拉伯数字转中文大写汉字（如 `壹仟贰佰叁拾肆元伍角陆分`）；扩展动态宏。
-- **文本词组首字母与缩写提取 (`extractInitials`)**：提取短语首字母缩写（如 `CPU`）；动作菜单与表单接入。
-
-#### [v0.10.21] — 2026-10-28
-- **多行前后缀自动剥离 (`stripAffixes`)**：一键剔除多行列表项（`- `、`1. `、`① `）与引用前缀（`> `）；动作菜单与表单接入。
-- **Properties 键值对与 JSON 双向互转 (`propertiesToJson`/`jsonToProperties`)**：支持键值对配置与 JSON 对象互转；动作菜单与表单接入。
-- **敏感信息掩码脱敏 (`maskSensitiveText`) 与 `{{xlc:mask}}` 动态宏**：手机号、身份证、邮箱掩码脱敏；扩展动态宏。
-
-#### [v0.10.20] — 2026-10-28
-- **多行文本高级空白修剪 (`trimLinesAdvanced`)**：修剪整篇首尾空行、行尾空格及公共最小缩进；动作菜单与表单接入。
-- **JSON/JS 属性键名与单双引号标准化 (`normalizeObjectQuotes`)**：属性名双引号标准化；动作菜单与表单接入。
-- **文本定长截断与动态省略宏 (`truncateText` / `{{xlc:truncate}}`)**：定长截断并追加自定义省略号；扩展动态宏。
-
-#### [v0.10.0 ~ v0.10.19]
-完整演进记录详见 [CHANGELOG.md](./CHANGELOG.md)。
+> 📌 完整的 520+ 项研发演进记录与提交历史，请参阅完整版 [CHANGELOG.md](./CHANGELOG.md)。
 </details>
 
 ---
