@@ -861,14 +861,18 @@
         line-height: var(--xlc-line-control);
         font-family: inherit;
         cursor: pointer;
+        max-width: 130px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
                     color var(--xlc-dur-fast) var(--xlc-ease),
                     transform var(--xlc-dur-fast) var(--xlc-ease);
 
         &:hover {
-          background: var(--xlc-lilac-soft, var(--xlc-lavender));
-          color: var(--xlc-lilac-ink, var(--xlc-lavender-ink));
-          transform: scale(1.04);
+          background: var(--xlc-lavender);
+          color: var(--xlc-accent-text);
+          transform: translateY(-0.5px);
         }
 
         &--on {
