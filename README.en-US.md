@@ -124,18 +124,32 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.77] — 2026-10-30 (Latest)
+### [v0.10.78] — 2026-10-30 (Latest Release)
 
-Export sanitizer options dialog hierarchy cleanup and design token convergence:
-- **Redundant Nested Header & Container Purging (`export-sanitizer-modal.ts`)**: Refactored the modal into pure `.xlc-export-sanitizer-form` content, allowing `mountPlatformDialogTitleWrap` to manage the outer dialog title bar cleanly and eliminating duplicate headers and double borders.
-- **Card-like Styling & Design Token Alignment (`index.scss`)**: Applied translucent hairline borders, responsive label spacings, and monospace dictionary textareas adhering to R187 design tokens.
+v0.10.78 Local Official Release: Full-spectrum usability closure, 6 core modern visual design systems, and comprehensive user-facing manual overhaul:
+- **Six Core Modern Visual Systems Implemented**:
+  - Dual-Layer Floating Architecture: Primary hue-derived (243°) ultra-light canvas (`#f6f6fb`, L=97.6%) combined with pure white cards (L=100%) for a 2.4% subtle float difference;
+  - Decoupled Semantics: Primary violet reserved strictly for interactive operations, while emerald green (25° offset) handles usage frequency and telemetry metrics;
+  - Contrast Rhythm Bento Cards: Deep theme-tinted dark cards (L=11.5%) with inverse text and dramatic ~3x typography scaling;
+  - Diffused Soft Shadows & Hairline Dividers: Layered shadows replacing harsh outlines; 7% opacity dividers for retina clarity;
+  - Asymmetric Motion Curves: Fast-in-slow-out (140ms) entering and crisp exiting (110ms) with `scale(0.98)` tactile feedback;
+  - Monospace Numerics: Enforced `tabular-nums` across ordinals, counters, and line numbers.
+- **Full-Spectrum Usability Closures**:
+  - Fixed P0 selection caret blockId loss (collapsed carets accurately resolve enclosing blocks for instant block capture);
+  - Dedicated command palette mode routing (`insertCmd`/`copyCmd`/`openSourceCmd`);
+  - Single-item instant addition to Paste Queue (⌥⇧Q) from context menus;
+  - Dynamic option population and auto-inference in CSV/TSV table import wizard;
+  - Complete SiYuan Dialog host mounting and destruction lifecycle for Sync Diff modal;
+  - Clean container hierarchy for Export Sanitizer settings dialog.
+- **Comprehensive User-Facing Documentation Overhaul**: Re-architected with 3-step quick start, panel-by-panel guide, settings breakdown with defaults, full hotkey index, FAQ, and local-first zero-network privacy declarations.
 - **Quality Gates**: Unit test suite expanded to **1045/1045 passing tests** with verified negative mutation gate (mutation 149), with all 25 UI render snapshots and 77/77 interaction audits green.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.76, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.77, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.77** | Export sanitizer options dialog hierarchy cleanup and design token convergence | [ADR 0159](./docs/adr/0159-export-sanitizer-modal-closure.md) |
 | **v0.10.76** | Sync diff visualization modal host mount closure, and settings data management integration | [ADR 0158](./docs/adr/0158-sync-diff-ui-closure.md) |
 | **v0.10.75** | CSV/TSV interactive wizard column mapping closure, dynamic option generation, and automatic initial inference | [ADR 0157](./docs/adr/0157-csv-tsv-wizard-closure.md) |
 | **v0.10.74** | UI backlog full closure, search history horizontal scrolling, optical indicator alignment, and breathable multi-select pill styling | [ADR 0156](./docs/adr/0156-ui-backlog-refinements-and-optical-alignments.md) |

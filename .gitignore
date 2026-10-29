@@ -1,6 +1,8 @@
 node_modules/
 dist/
 package.zip
+package-*.zip
+dist-backup*/
 tests/.build/
 *.log
 .DS_Store
