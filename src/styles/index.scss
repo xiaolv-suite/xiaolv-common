@@ -4642,3 +4642,25 @@
   }
 }
 
+// ---------- 导出安全脱敏选项（G31 / T-0143）----------
+.xlc-export-sanitizer-modal {
+  width: 100%;
+  box-sizing: border-box;
+
+  .b3-label {
+    padding: var(--xlc-space-2) 0;
+    border-bottom: 1px solid var(--xlc-line);
+
+    &:last-of-type {
+      border-bottom: none;
+    }
+  }
+
+  .xlc-export-sanitizer-custom {
+    font-family: var(--mono, monospace);
+    font-size: var(--xlc-font-xs);
+    line-height: var(--xlc-leading-normal);
+  }
+}
+
+

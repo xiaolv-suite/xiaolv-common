@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.76";
+      PLUGIN_VERSION = "0.10.77";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -18175,13 +18175,13 @@ ${finalHtml}
     const customReplacements = initial.customReplacements || {};
     const customText = Object.entries(customReplacements).map(([k, v]) => `${k}=${v}`).join("\n");
     const htmlContent = `
-        <div class="b3-dialog__header">
-            <div class="b3-dialog__title">\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879</div>
+        <div class="b3-dialog__header xlc-export-sanitizer-header">
+            <div class="b3-dialog__title xlc-form-title">\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879</div>
         </div>
-        <div class="b3-dialog__body xlc-export-sanitizer-body" style="display:flex; flex-direction:column; gap:12px; padding:16px;">
+        <div class="xlc-export-sanitizer-form xlc-form" style="display:flex; flex-direction:column; gap:12px; padding:8px 0;">
             <div class="b3-label">
                 <div class="fn__flex">
-                    <span class="fn__flex-1">\u8131\u654F\u7B56\u7565\u6A21\u5F0F</span>
+                    <span class="fn__flex-1 xlc-form-label">\u8131\u654F\u7B56\u7565\u6A21\u5F0F</span>
                     <select class="b3-select xlc-export-sanitizer-mode">
                         <option value="mask" ${mode === "mask" ? "selected" : ""}>\u63A9\u7801\u66FF\u6362 (\u4F8B\u5982 138****0000)</option>
                         <option value="placeholder" ${mode === "placeholder" ? "selected" : ""}>\u53D8\u91CF\u5316\u5360\u4F4D\u7B26 (\u4F8B\u5982 {{xlc:ask:\u624B\u673A\u53F7}})</option>
@@ -18189,36 +18189,35 @@ ${finalHtml}
                 </div>
             </div>
             <div class="b3-label fn__flex">
-                <span class="fn__flex-1">\u8FC7\u6EE4\u5927\u9646 11 \u4F4D\u624B\u673A\u53F7\u7801</span>
+                <span class="fn__flex-1 xlc-form-label">\u8FC7\u6EE4\u5927\u9646 11 \u4F4D\u624B\u673A\u53F7\u7801</span>
                 <input type="checkbox" class="b3-switch xlc-export-sanitizer-phone" ${sanitizePhones ? "checked" : ""} />
             </div>
             <div class="b3-label fn__flex">
-                <span class="fn__flex-1">\u8FC7\u6EE4\u7535\u5B50\u90AE\u7BB1\u5730\u5740</span>
+                <span class="fn__flex-1 xlc-form-label">\u8FC7\u6EE4\u7535\u5B50\u90AE\u7BB1\u5730\u5740</span>
                 <input type="checkbox" class="b3-switch xlc-export-sanitizer-email" ${sanitizeEmails ? "checked" : ""} />
             </div>
             <div class="b3-label fn__flex">
-                <span class="fn__flex-1">\u8FC7\u6EE4 18 \u4F4D\u8EAB\u4EFD\u8BC1\u53F7\u7801</span>
+                <span class="fn__flex-1 xlc-form-label">\u8FC7\u6EE4 18 \u4F4D\u8EAB\u4EFD\u8BC1\u53F7\u7801</span>
                 <input type="checkbox" class="b3-switch xlc-export-sanitizer-idcard" ${sanitizeIdCards ? "checked" : ""} />
             </div>
             <div class="b3-label fn__flex">
-                <span class="fn__flex-1">\u8FC7\u6EE4 API \u5BC6\u94A5\u4E0E Bearer Token</span>
+                <span class="fn__flex-1 xlc-form-label">\u8FC7\u6EE4 API \u5BC6\u94A5\u4E0E Bearer Token</span>
                 <input type="checkbox" class="b3-switch xlc-export-sanitizer-token" ${sanitizeTokens ? "checked" : ""} />
             </div>
             <div class="b3-label" style="display:flex; flex-direction:column; gap:4px;">
-                <span>\u81EA\u5B9A\u4E49\u5B57\u9762\u66FF\u6362\u8BCD\u5178\uFF08\u6BCF\u884C \u539F\u59CB\u8BCD=\u66FF\u6362\u8BCD\uFF09</span>
+                <span class="xlc-form-label">\u81EA\u5B9A\u4E49\u5B57\u9762\u66FF\u6362\u8BCD\u5178\uFF08\u6BCF\u884C \u539F\u59CB\u8BCD=\u66FF\u6362\u8BCD\uFF09</span>
                 <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" placeholder="\u5185\u90E8IP=10.0.0.x&#10;\u6838\u5FC3\u5BA2\u6237=\u4FDD\u5BC6\u5BA2\u6237">${escapeHtml(customText)}</textarea>
             </div>
         </div>
-        <div class="b3-dialog__action" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 16px;">
+        <div class="b3-dialog__action xlc-form-actions" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 0 0 0;">
             <button class="b3-button b3-button--cancel">\u53D6\u6D88</button>
-            <button class="b3-button b3-button--text b3-button--primary">\u786E\u8BA4\u5BFC\u51FA</button>
+            <button class="b3-button b3-button--primary xlc-btn-primary">\u4FDD\u5B58\u8131\u654F\u914D\u7F6E</button>
         </div>
     `;
     if (typeof document !== "undefined") {
       const container = document.createElement("div");
       container.className = "b3-dialog__container xlc-export-sanitizer-modal";
       container.innerHTML = htmlContent;
-      mountPlatformDialogTitleWrap(container, "\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879");
       const parseOptions = () => {
         var _a2, _b, _c, _d;
         const modeSelect = container.querySelector(".xlc-export-sanitizer-mode");
@@ -18318,6 +18317,7 @@ ${finalHtml}
     }
     const container = dialog.element.querySelector(".b3-dialog__container");
     container == null ? void 0 : container.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, "\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879");
     const body = getDialogBody(dialog.element);
     if (!body) return dialog;
     body.innerHTML = "";
@@ -18332,6 +18332,8 @@ ${finalHtml}
       }
     });
     body.appendChild(modal.element);
+    const innerHeader = body.querySelector(".xlc-export-sanitizer-header");
+    if (innerHeader) innerHeader.style.display = "none";
     return dialog;
   }
   var import_siyuan5, MockElement;

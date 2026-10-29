@@ -80,13 +80,13 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
         .join("\n");
 
     const htmlContent = `
-        <div class="b3-dialog__header">
-            <div class="b3-dialog__title">导出安全脱敏选项</div>
+        <div class="b3-dialog__header xlc-export-sanitizer-header">
+            <div class="b3-dialog__title xlc-form-title">导出安全脱敏选项</div>
         </div>
-        <div class="b3-dialog__body xlc-export-sanitizer-body" style="display:flex; flex-direction:column; gap:12px; padding:16px;">
+        <div class="xlc-export-sanitizer-form xlc-form" style="display:flex; flex-direction:column; gap:12px; padding:8px 0;">
             <div class="b3-label">
                 <div class="fn__flex">
-                    <span class="fn__flex-1">脱敏策略模式</span>
+                    <span class="fn__flex-1 xlc-form-label">脱敏策略模式</span>
                     <select class="b3-select xlc-export-sanitizer-mode">
                         <option value="mask" ${mode === "mask" ? "selected" : ""}>掩码替换 (例如 138****0000)</option>
                         <option value="placeholder" ${mode === "placeholder" ? "selected" : ""}>变量化占位符 (例如 {{xlc:ask:手机号}})</option>
@@ -94,29 +94,29 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
                 </div>
             </div>
             <div class="b3-label fn__flex">
-                <span class="fn__flex-1">过滤大陆 11 位手机号码</span>
+                <span class="fn__flex-1 xlc-form-label">过滤大陆 11 位手机号码</span>
                 <input type="checkbox" class="b3-switch xlc-export-sanitizer-phone" ${sanitizePhones ? "checked" : ""} />
             </div>
             <div class="b3-label fn__flex">
-                <span class="fn__flex-1">过滤电子邮箱地址</span>
+                <span class="fn__flex-1 xlc-form-label">过滤电子邮箱地址</span>
                 <input type="checkbox" class="b3-switch xlc-export-sanitizer-email" ${sanitizeEmails ? "checked" : ""} />
             </div>
             <div class="b3-label fn__flex">
-                <span class="fn__flex-1">过滤 18 位身份证号码</span>
+                <span class="fn__flex-1 xlc-form-label">过滤 18 位身份证号码</span>
                 <input type="checkbox" class="b3-switch xlc-export-sanitizer-idcard" ${sanitizeIdCards ? "checked" : ""} />
             </div>
             <div class="b3-label fn__flex">
-                <span class="fn__flex-1">过滤 API 密钥与 Bearer Token</span>
+                <span class="fn__flex-1 xlc-form-label">过滤 API 密钥与 Bearer Token</span>
                 <input type="checkbox" class="b3-switch xlc-export-sanitizer-token" ${sanitizeTokens ? "checked" : ""} />
             </div>
             <div class="b3-label" style="display:flex; flex-direction:column; gap:4px;">
-                <span>自定义字面替换词典（每行 原始词=替换词）</span>
+                <span class="xlc-form-label">自定义字面替换词典（每行 原始词=替换词）</span>
                 <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" placeholder="内部IP=10.0.0.x&#10;核心客户=保密客户">${escapeHtml(customText)}</textarea>
             </div>
         </div>
-        <div class="b3-dialog__action" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 16px;">
+        <div class="b3-dialog__action xlc-form-actions" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 0 0 0;">
             <button class="b3-button b3-button--cancel">取消</button>
-            <button class="b3-button b3-button--text b3-button--primary">确认导出</button>
+            <button class="b3-button b3-button--primary xlc-btn-primary">保存脱敏配置</button>
         </div>
     `;
 
@@ -124,7 +124,6 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
         const container = document.createElement("div");
         container.className = "b3-dialog__container xlc-export-sanitizer-modal";
         container.innerHTML = htmlContent;
-        mountPlatformDialogTitleWrap(container, "导出安全脱敏选项");
 
         const parseOptions = (): SanitizerOptions => {
             const modeSelect = container.querySelector(".xlc-export-sanitizer-mode") as HTMLSelectElement | null;
@@ -234,6 +233,7 @@ export function openSanitizerOptionsDialog(
     }
     const container = dialog.element.querySelector(".b3-dialog__container");
     container?.classList.add("xlc-form-host", "xlc-settings-host");
+    mountPlatformDialogTitleWrap(dialog.element, "导出安全脱敏选项");
     const body = getDialogBody(dialog.element);
     if (!body) return dialog;
     body.innerHTML = "";
@@ -249,5 +249,7 @@ export function openSanitizerOptionsDialog(
         },
     });
     body.appendChild(modal.element as HTMLElement);
+    const innerHeader = body.querySelector(".xlc-export-sanitizer-header") as HTMLElement | null;
+    if (innerHeader) innerHeader.style.display = "none";
     return dialog;
 }
