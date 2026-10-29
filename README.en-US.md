@@ -124,20 +124,20 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.64] — 2026-10-29 (Latest)
+### [v0.10.65] — 2026-10-29 (Latest)
 
-Comprehensive quality optimization, lifecycle governance, syntax highlighting alignment, and interaction reliability:
-- **Zero Lifecycle Leaks**: Hardened native dialog cleanup across search modal, CSV/TSV wizard, and variable form; completely eliminated dangling global `pointerdown` listeners, `visualViewport` bindings, long-press timers, and debounces; automatically restored editor focus on modal dismiss.
-- **Async Robustness & UI Unlocking**: Hardened Quick Edit modal and action invocation error handling with official `toErrorMessage` normalization; prevents permanent loading button lockouts during network or validation faults.
-- **UI Consistency & Syntax Highlighting**: Aligned preview tokenizer CSS classes with design token rules, fully restoring colorful syntax highlighting across Markdown, TS, JSON, and SQL; corrected surround-mode banner styles and standardized modal control dimensions.
-- **Core Path Performance & ReDoS Defense**: Refactored regex group templating and sensitive text censoring into single-pass scans, completely removing in-loop regex object compilation; bounded width parameters to eliminate `RangeError`; integrated ReDoS defense for regex macros; optimized Tab focus checks to prevent layout thrashing.
-- **Quality Gates**: Unit test suite expanded to 997/997 passing tests with verified negative tests.
+Markdown table beautification, JSON path query macro, and Markdown callout block transformation:
+- **Markdown Table Column Beautification (`beautifyMarkdownTable`)**: Pure function automatically calculating maximum visual column widths across CJK double-width and ASCII characters, padding cells with spaces so column vertical borders are perfectly aligned in raw markdown; wired to action menu and variable form.
+- **JSON Path Query Engine (`queryJsonPath`) & `{{xlc:json}}` Macro**: Pure function extracting nested properties via dot/bracket paths (e.g., `user.roles[0].name`), listing top-level keys (`keys`), or pretty-formatting JSON; expanded dynamic macros `{{xlc:json|user.name|{"user":{"name":"Alice"}}}}`, `{{xlc:json:keys|...}}`, and `{{xlc:json:pretty|...}}`; wired to action menu and variable form.
+- **Markdown Callout Formatting (`formatMarkdownCallout`)**: Pure function wrapping text or existing blockquotes into standard GitHub/Obsidian callouts (`> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`, etc.), supporting collapsible headers (`> [!NOTE]- Title`) and clean stripping; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite reached the milestone of **1000/1000 passing tests** with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.63, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.64, collapsed)</b></summary>
 
 | Milestone | Key Release Highlights Summary | Architecture Decision |
 | :--- | :--- | :--- |
+| **v0.10.64** | Comprehensive quality optimization, zero lifecycle leaks, syntax highlighting fix, and interaction reliability | [ADR 0146](./docs/adr/0146-comprehensive-quality-optimization-and-reliability.md) |
 | **v0.10.63** | Markdown heading numbering/stripping (`numberMarkdownHeadings`), task progress bar macro (`{{xlc:progress}}`), and table matrix transposition | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
 | **v0.10.62** | Markdown headings to list conversion (`convertHeadingsToList`), list shuffle macro (`shuffleList` / `{{xlc:shuffle}}`), and numeric range line filtering | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |
 | **v0.10.61** | Number symbol conversion (`convertNumberSymbols`), sensitive keyword censoring (`censorText` / `{{xlc:censor}}`), and Markdown pure code block extraction | [ADR 0143](./docs/adr/0143-number-symbols-censor-macro-and-extract-code.md) |

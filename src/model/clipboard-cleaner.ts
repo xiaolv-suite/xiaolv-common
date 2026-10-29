@@ -8188,3 +8188,282 @@ export function transposeMarkdownTable(
 
     return resultLines.join("\n");
 }
+
+/**
+ * Markdown 复杂表格自动等宽对齐与视觉美化引擎 (beautifyMarkdownTable)
+ * 智能计算包含 CJK 双倍字宽与 ASCII 的各列最大视觉宽度，
+ * 对所有单元格填充空格使列边框完全垂直对齐，标准化分隔行。
+ */
+export function beautifyMarkdownTable(tableMarkdown: string): string {
+    if (!tableMarkdown || typeof tableMarkdown !== "string") return tableMarkdown ?? "";
+    const lines = tableMarkdown.replace(/\r\n?/g, "\n").split("\n");
+
+    const getCharWidth = (ch: string) => {
+        const code = ch.charCodeAt(0);
+        return (code >= 0x4e00 && code <= 0x9fa5) || code > 0xff ? 2 : 1;
+    };
+    const getCellVisualWidth = (s: string) => {
+        let w = 0;
+        for (const c of s) w += getCharWidth(c);
+        return w;
+    };
+
+    const isSeparatorRow = (line: string): boolean => {
+        const trimmed = line.trim();
+        return /^\|?\s*[-:]+\s*\|/.test(trimmed) && /^[\s|:-]+$/.test(trimmed);
+    };
+
+    // 寻找表格区块
+    let tableStart = -1;
+    let tableEnd = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i]!.includes("|")) {
+            if (tableStart === -1) tableStart = i;
+            tableEnd = i;
+        } else if (tableStart !== -1) {
+            break;
+        }
+    }
+
+    if (tableStart === -1 || tableEnd <= tableStart) return tableMarkdown;
+
+    const tableLines = lines.slice(tableStart, tableEnd + 1);
+    const parsedRows: string[][] = [];
+    const alignments: ("left" | "center" | "right")[] = [];
+
+    for (const rawLine of tableLines) {
+        const line = rawLine.trim();
+        if (!line.includes("|")) continue;
+
+        if (isSeparatorRow(line)) {
+            let content = line;
+            if (content.startsWith("|")) content = content.slice(1);
+            if (content.endsWith("|")) content = content.slice(0, -1);
+            const sepCells = content.split(/(?<!\\)\|/).map((c) => c.trim());
+            for (const cell of sepCells) {
+                if (cell.startsWith(":") && cell.endsWith(":")) alignments.push("center");
+                else if (cell.endsWith(":")) alignments.push("right");
+                else alignments.push("left");
+            }
+            continue;
+        }
+
+        let content = line;
+        if (content.startsWith("|")) content = content.slice(1);
+        if (content.endsWith("|")) content = content.slice(0, -1);
+        const cells = content.split(/(?<!\\)\|/).map((c) => c.trim());
+        if (cells.length > 0) {
+            parsedRows.push(cells);
+        }
+    }
+
+    if (parsedRows.length === 0) return tableMarkdown;
+
+    const colCount = Math.max(...parsedRows.map((r) => r.length));
+    if (colCount === 0) return tableMarkdown;
+
+    // 补齐对齐方式
+    while (alignments.length < colCount) {
+        alignments.push("left");
+    }
+
+    // 计算各列最大视觉宽度
+    const colWidths: number[] = Array(colCount).fill(3);
+    for (const row of parsedRows) {
+        for (let c = 0; c < colCount; c++) {
+            const cell = row[c] ?? "";
+            const w = getCellVisualWidth(cell);
+            if (w > (colWidths[c] ?? 0)) {
+                colWidths[c] = w;
+            }
+        }
+    }
+
+    // 格式化单元格
+    const formatCell = (content: string, colIdx: number): string => {
+        const width = colWidths[colIdx] ?? 3;
+        const align = alignments[colIdx] || "left";
+        const curW = getCellVisualWidth(content);
+        const diff = Math.max(0, width - curW);
+
+        if (align === "right") {
+            return " ".repeat(diff) + content;
+        } else if (align === "center") {
+            const left = Math.floor(diff / 2);
+            const right = diff - left;
+            return " ".repeat(left) + content + " ".repeat(right);
+        }
+        return content + " ".repeat(diff);
+    };
+
+    // 生成对齐分隔线
+    const sepRow = colWidths.map((w, idx) => {
+        const align = alignments[idx] || "left";
+        if (align === "center") {
+            return `:${"-".repeat(Math.max(1, w - 2))}:`;
+        } else if (align === "right") {
+            return `${"-".repeat(Math.max(2, w - 1))}:`;
+        }
+        return `:${"-".repeat(Math.max(2, w - 1))}`;
+    });
+
+    const formattedRows: string[] = [];
+    // 表头
+    formattedRows.push(`| ${parsedRows[0]!.map((cell, idx) => formatCell(cell, idx)).join(" | ")} |`);
+    // 分隔线
+    formattedRows.push(`| ${sepRow.join(" | ")} |`);
+    // 数据行
+    for (let r = 1; r < parsedRows.length; r++) {
+        const row = parsedRows[r]!;
+        while (row.length < colCount) row.push("");
+        formattedRows.push(`| ${row.map((cell, idx) => formatCell(cell, idx)).join(" | ")} |`);
+    }
+
+    const result = [
+        ...lines.slice(0, tableStart),
+        ...formattedRows,
+        ...lines.slice(tableEnd + 1),
+    ];
+    return result.join("\n");
+}
+
+export interface QueryJsonPathOptions {
+    fallback?: string;
+    pretty?: boolean;
+}
+
+/**
+ * JSON 数据路径安全提取与查询引擎 (queryJsonPath)
+ * 支持点号与括号语法（如 user.roles[0].name、status、data.items.length），
+ * 严格 zero-eval 纯属性键遍历，支持提取顶层键名列表 (keys) 与 JSON 紧凑/美化格式化。
+ */
+export function queryJsonPath(
+    jsonText: string,
+    path = "",
+    options: QueryJsonPathOptions = {},
+): string {
+    if (!jsonText || typeof jsonText !== "string") return options.fallback ?? "";
+    let data: unknown;
+    try {
+        data = JSON.parse(jsonText.trim());
+    } catch {
+        return options.fallback ?? "";
+    }
+
+    const trimmedPath = path.trim();
+    if (trimmedPath === "" || trimmedPath === "." || trimmedPath === "$") {
+        if (options.pretty) {
+            return JSON.stringify(data, null, 2);
+        }
+        return typeof data === "object" && data !== null ? JSON.stringify(data) : String(data);
+    }
+
+    if (trimmedPath === "keys" || trimmedPath === "@keys") {
+        if (typeof data === "object" && data !== null) {
+            return Array.isArray(data)
+                ? String(data.length)
+                : Object.keys(data).join(", ");
+        }
+        return options.fallback ?? "";
+    }
+
+    const segments = trimmedPath.split(/[.[\]]+/).filter(Boolean);
+    let cur: any = data;
+
+    for (const seg of segments) {
+        if (cur === undefined || cur === null) {
+            return options.fallback ?? "";
+        }
+        if (typeof cur === "object") {
+            cur = cur[seg];
+        } else {
+            return options.fallback ?? "";
+        }
+    }
+
+    if (cur === undefined) {
+        return options.fallback ?? "";
+    }
+
+    if (cur === null) {
+        return "null";
+    }
+
+    if (typeof cur === "object") {
+        return options.pretty ? JSON.stringify(cur, null, 2) : JSON.stringify(cur);
+    }
+
+    return String(cur);
+}
+
+export type CalloutType =
+    | "NOTE"
+    | "TIP"
+    | "IMPORTANT"
+    | "WARNING"
+    | "CAUTION"
+    | "INFO"
+    | "SUCCESS"
+    | "QUESTION"
+    | "DANGER"
+    | "EXAMPLE";
+
+export interface CalloutOptions {
+    title?: string;
+    collapsible?: boolean;
+    strip?: boolean;
+}
+
+/**
+ * Markdown Callout 告警提示块智能包装与转换引擎 (formatMarkdownCallout)
+ * 支持将文本包装为 GitHub/Obsidian 规范 Callout（> [!NOTE]、> [!TIP] 等），
+ * 支持折叠形态（> [!NOTE]- 自定义标题）与一键剥离还原为常规正文。
+ */
+export function formatMarkdownCallout(
+    text: string,
+    type: CalloutType = "NOTE",
+    options: CalloutOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+
+    const lines = text.split("\n");
+    if (options.strip === true) {
+        // 剥离 Callout 头部并还原引用/文本
+        const cleanedLines: string[] = [];
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i]!;
+            if (i === 0 && /^>\s*\[![A-Za-z]+\][-+]?(?:\s+(.*))?$/.test(line.trim())) {
+                const titleMatch = line.trim().match(/^>\s*\[![A-Za-z]+\][-+]?(?:\s+(.*))?$/);
+                const title = titleMatch?.[1]?.trim();
+                if (title) cleanedLines.push(`> **${title}**`);
+                continue;
+            }
+            cleanedLines.push(line);
+        }
+        return cleanedLines.join("\n");
+    }
+
+    // 提取正文并剥除已有引用前缀与 Callout 头部
+    const rawBodyLines: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i]!;
+        if (i === 0 && /^>\s*\[![A-Za-z]+\][-+]?(?:\s+(.*))?$/.test(line.trim())) {
+            continue;
+        }
+        // 剥离行首引用符
+        if (line.startsWith("> ")) {
+            line = line.slice(2);
+        } else if (line.startsWith(">")) {
+            line = line.slice(1);
+        }
+        rawBodyLines.push(line);
+    }
+
+    const foldMark = options.collapsible ? "-" : "";
+    const titleStr = options.title ? ` ${options.title}` : "";
+    const header = `> [!${type.toUpperCase()}]${foldMark}${titleStr}`;
+
+    const quotedBody = rawBodyLines.map((l) => (l.trim().length > 0 ? `> ${l}` : ">"));
+
+    return [header, ...quotedBody].join("\n");
+}

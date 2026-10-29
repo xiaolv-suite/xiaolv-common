@@ -178,20 +178,20 @@
 
 ## 🆕 最新更新动态
 
-### [v0.10.64] — 2026-10-29（最新）
+### [v0.10.65] — 2026-10-29（最新）
 
-全面质量优化、生命周期治理、语法高亮与交互稳定性提升：
-- **生命周期零泄漏治理**：完善搜索弹窗、字段映射向导与变量表单的原生关闭清理流程，彻底消除悬挂的全局 `pointerdown` 监听器、`visualViewport` 视口监听、长按及防抖计时器；弹窗关闭时自动无损还原编辑器焦点。
-- **异步健壮性与防 UI 锁死**：强化快编弹窗（Quick Edit）与动作调用异常处理流程，使用官方规范 `toErrorMessage` 统一错误回执，失败时安全恢复按钮并友好提示；消除空指针潜在风险。
-- **UI 一致性与语法高亮对齐**：对齐预览渲染器与设计令牌的词法 CSS 类名，全面恢复 Markdown、TS、JSON、SQL 等代码块的多彩高亮；修复选区包围模式横幅样式；标准化弹窗按钮尺寸与暗黑主题色阶。
-- **核心路径性能与安全防御**：重构正则分组重组与敏感词屏蔽为单遍线性扫描，彻底消除循环内动态正则创建；增加超大宽度安全截断杜绝 `RangeError`；为宏引入 ReDoS 安全过滤；优化 Tab 键焦点检测避免强制同步重排（Layout Thrashing）。
-- **全套质量门禁**：单元测试增至 997/997 项全绿通过，双向严格负向注入验证通过。
+Markdown表格等宽美化、JSON路径查询宏与Callout告警提示块转换：
+- **Markdown 表格等宽对齐与视觉美化引擎 (`beautifyMarkdownTable`)**：纯函数支持自动计算中英 CJK 双倍宽度的各列最大列宽，智能填充空格使整张表格在源码视图下完全垂直对齐，自动重构标准化分隔线；动作菜单接线「✨ 美化对齐 Markdown 表格列宽并复制」，表单格式栏接入「✦ 表格列宽美化」。
+- **JSON 数据路径安全提取与查询引擎 (`queryJsonPath`) 与 `{{xlc:json}}` 动态宏**：纯函数支持基于属性路径与数组下标安全提取深层字段（如 `user.roles[0].name`、`status`），支持顶层键名列表（`keys`）与美化格式化；扩展动态宏体系 `{{xlc:json|user.name|{"user":{"name":"Alice"}}}}`、`{{xlc:json:keys|...}}`、`{{xlc:json:pretty|...}}`；动作菜单接线「🔍 提取 JSON 顶层键名并复制」，表单变量栏补充 `{{xlc:json|key|JSON}}`，格式栏接入「✦ 提取JSON键」。
+- **Markdown Callout 告警提示块智能包装与转换引擎 (`formatMarkdownCallout`)**：纯函数支持将文本或现有引用块快速包装为 GitHub/Obsidian 规范的 Callout 警告块（`> [!NOTE]`、`> [!TIP]`、`> [!WARNING]` 等），支持折叠语法（`> [!NOTE]- 标题`）与一键纯净剥离；动作菜单接线「💡 包装为 Callout 提示块 (> [!NOTE]) 并复制」，表单格式栏接入「✦ 包装Callout」。
+- **全套质量门禁**：单元测试正式跨越 **1000/1000 项全绿**里程碑，双向严格负向注入验证通过。
 
 <details>
-<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.63，已折叠)</b></summary>
+<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.64，已折叠)</b></summary>
 
 | 里程碑版本 | 核心更新亮点摘要 | 架构决策 |
 | :--- | :--- | :--- |
+| **v0.10.64** | 全面质量优化、生命周期治理 (零泄漏)、语法高亮对齐与交互稳定性提升 | [ADR 0146](./docs/adr/0146-comprehensive-quality-optimization-and-reliability.md) |
 | **v0.10.63** | Markdown 标题层级序号编排剥离 (`numberMarkdownHeadings`)、任务进度条宏 (`{{xlc:progress}}`) 与表格行列转置 | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
 | **v0.10.62** | Markdown 标题与列表双向互转 (`convertHeadingsToList`)、列表打乱宏 (`shuffleList` / `{{xlc:shuffle}}`) 与数值区间行过滤 | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |
 | **v0.10.61** | 数字圈号序号互转 (`convertNumberSymbols`)、敏感词遮罩过滤宏 (`censorText` / `{{xlc:censor}}`) 与 Markdown 纯代码块提取 | [ADR 0143](./docs/adr/0143-number-symbols-censor-macro-and-extract-code.md) |

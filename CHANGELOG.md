@@ -2,6 +2,16 @@
 
 本文件记录「小驴常用（内测版）」的面向用户的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.10.65] — 2026-10-29
+
+Markdown表格等宽美化、JSON路径查询宏与Callout告警提示块转换。
+
+### 新增与优化
+- **Markdown 表格等宽对齐与视觉美化引擎 (`beautifyMarkdownTable`)**：纯函数支持自动计算中英 CJK 双倍宽度的各列最大列宽，智能填充空格使整张表格在源码视图下完全垂直对齐，自动重构标准化分隔线；动作菜单接线「✨ 美化对齐 Markdown 表格列宽并复制」，表单格式栏接入「✦ 表格列宽美化」。
+- **JSON 数据路径安全提取与查询引擎 (`queryJsonPath`) 与 `{{xlc:json}}` 动态宏**：纯函数支持基于属性路径与数组下标安全提取深层字段（如 `user.roles[0].name`、`status`），支持顶层键名列表（`keys`）与美化格式化；扩展动态宏体系 `{{xlc:json|user.name|{"user":{"name":"Alice"}}}}`、`{{xlc:json:keys|...}}`、`{{xlc:json:pretty|...}}`；动作菜单接线「🔍 提取 JSON 顶层键名并复制」，表单变量栏补充 `{{xlc:json|key|JSON}}`，格式栏接入「✦ 提取JSON键」。
+- **Markdown Callout 告警提示块智能包装与转换引擎 (`formatMarkdownCallout`)**：纯函数支持将文本或现有引用块快速包装为 GitHub/Obsidian 规范的 Callout 警告块（`> [!NOTE]`、`> [!TIP]`、`> [!WARNING]` 等），支持折叠语法（`> [!NOTE]- 标题`）与一键纯净剥离；动作菜单接线「💡 包装为 Callout 提示块 (> [!NOTE]) 并复制」，表单格式栏接入「✦ 包装Callout」。
+- **全套质量门禁**：单元测试通过数正式跨越 **1000/1000 项全绿**里程碑，双向严格负向注入验证通过。
+
 ## [0.10.64] — 2026-10-29
 
 全面质量优化、生命周期治理、语法高亮与交互稳定性提升。
