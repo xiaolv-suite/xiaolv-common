@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.74";
+      PLUGIN_VERSION = "0.10.75";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -17649,7 +17649,27 @@ ${finalHtml}
     mappingGrid.style.gridTemplateColumns = "repeat(auto-fill, minmax(200px, 1fr))";
     mappingGrid.style.gap = "12px";
     mappingGrid.style.marginTop = "8px";
-    const createMappingSelect = (fieldName) => {
+    const FIELD_METAS = [
+      { key: "titleIndex", label: "\u6807\u9898 (Title)" },
+      { key: "contentIndex", label: "\u6B63\u6587 (Content)" },
+      { key: "categoryIndex", label: "\u5206\u7C7B (Category)" },
+      { key: "tagsIndex", label: "\u6807\u7B7E (Tags)" },
+      { key: "aliasIndex", label: "\u522B\u540D (Alias)" },
+      { key: "urlIndex", label: "\u94FE\u63A5 (URL)" }
+    ];
+    const createMappingItem = (fieldName, labelText) => {
+      const itemWrap = document.createElement("div");
+      itemWrap.className = "xlc-wizard-field-item";
+      itemWrap.style.display = "flex";
+      itemWrap.style.flexDirection = "column";
+      itemWrap.style.gap = "4px";
+      const label = document.createElement("label");
+      label.className = "xlc-form-label";
+      label.textContent = labelText;
+      label.style.fontSize = "12px";
+      label.style.fontWeight = "600";
+      label.style.color = "var(--b3-theme-on-surface)";
+      itemWrap.appendChild(label);
       const select = document.createElement("select");
       select.className = "b3-text-field xlc-wizard-select";
       select.dataset.xlcControl = `wizard.field.${fieldName}`;
@@ -17657,19 +17677,12 @@ ${finalHtml}
         state.mapping[fieldName] = parseInt(select.value, 10);
         updatePreview();
       });
-      return select;
+      itemWrap.appendChild(select);
+      return itemWrap;
     };
-    const fieldLabels = [
-      { key: "titleIndex" },
-      { key: "contentIndex" },
-      { key: "categoryIndex" },
-      { key: "tagsIndex" },
-      { key: "aliasIndex" },
-      { key: "urlIndex" }
-    ];
-    for (const { key } of fieldLabels) {
-      const sel = createMappingSelect(key);
-      mappingGrid.appendChild(sel);
+    for (const { key, label } of FIELD_METAS) {
+      const item = createMappingItem(key, label);
+      mappingGrid.appendChild(item);
     }
     const btnRow = document.createElement("div");
     btnRow.className = "xlc-form-actions";
@@ -17761,6 +17774,16 @@ ${finalHtml}
         const { delimiter, grid } = parser.parseDelimitedTable(state.rawText, state.delimiter);
         state.delimiter = delimiter;
         state.grid = grid;
+        const allUnset = Object.values(state.mapping).every((val) => val === -1);
+        if (allUnset && grid.length > 0) {
+          const inferred = inferColumnMapping(grid);
+          state.mapping.titleIndex = inferred.titleIndex;
+          state.mapping.contentIndex = inferred.contentIndex;
+          state.mapping.categoryIndex = inferred.categoryIndex;
+          state.mapping.tagsIndex = inferred.tagsIndex;
+          state.mapping.aliasIndex = inferred.aliasIndex;
+          state.mapping.urlIndex = inferred.urlIndex;
+        }
         mapRow.style.display = "block";
         syncMappingToUI();
         const result = parser.parseCsvTsvItems(state.rawText, state.delimiter, Date.now(), state.mapping);
@@ -17782,9 +17805,22 @@ ${finalHtml}
     };
     const syncMappingToUI = () => {
       var _a;
+      const headerRow = state.grid[0] || [];
       const selects = mappingGrid.querySelectorAll(".xlc-wizard-select");
       for (const sel of Array.from(selects)) {
         const fieldName = (_a = sel.dataset.xlcControl) == null ? void 0 : _a.replace("wizard.field.", "");
+        sel.innerHTML = "";
+        const optNone = document.createElement("option");
+        optNone.value = "-1";
+        optNone.textContent = "\uFF08\u4E0D\u6620\u5C04\uFF09";
+        sel.appendChild(optNone);
+        for (let i = 0; i < headerRow.length; i++) {
+          const opt = document.createElement("option");
+          opt.value = String(i);
+          const colName = (headerRow[i] || "").trim().slice(0, 16);
+          opt.textContent = `\u7B2C ${i + 1} \u5217${colName ? ` (${colName})` : ""}`;
+          sel.appendChild(opt);
+        }
         if (fieldName && fieldName in state.mapping) {
           sel.value = String(state.mapping[fieldName]);
         }

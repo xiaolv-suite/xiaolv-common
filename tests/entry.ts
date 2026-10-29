@@ -58,6 +58,7 @@ import * as pasteQueue from "../src/model/paste-queue";
 import * as templateWizard from "../src/model/template-wizard";
 import * as textMetrics from "../src/model/text-metrics";
 import * as dockView from "../src/ui/dock-view";
+import * as csvTsvWizard from "../src/ui/csv-tsv-wizard";
 
 export {
     item,
@@ -116,4 +117,5 @@ export {
     textMetrics,
     textFormatting,
     dockView,
+    csvTsvWizard,
 };

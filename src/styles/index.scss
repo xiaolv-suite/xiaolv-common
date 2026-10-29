@@ -4607,3 +4607,38 @@
     }
   }
 }
+
+// ---------- CSV/TSV 字段映射向导（G13 / R271）----------
+.xlc-wizard-mapping-row {
+  margin: var(--xlc-space-3) 0;
+  padding: var(--xlc-space-3) var(--xlc-space-4);
+  border: 1px solid var(--xlc-line);
+  border-radius: var(--xlc-radius-lg);
+  background: var(--xlc-surface);
+  box-shadow: var(--xlc-shadow-sm);
+
+  .xlc-wizard-field-item {
+    padding: var(--xlc-space-1);
+
+    .xlc-form-label {
+      color: var(--xlc-ink);
+      font-size: var(--xlc-font-xs);
+      font-weight: var(--xlc-weight-semibold);
+    }
+
+    .xlc-wizard-select {
+      height: 32px;
+      font-size: var(--xlc-font-xs);
+      border-radius: var(--xlc-radius-sm);
+      background-color: var(--xlc-soft);
+      border: 1px solid var(--xlc-line);
+      color: var(--xlc-ink);
+
+      &:focus {
+        border-color: var(--xlc-accent);
+        background-color: var(--xlc-surface);
+      }
+    }
+  }
+}
+

@@ -124,22 +124,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.74] — 2026-10-30 (Latest)
+### [v0.10.75] — 2026-10-30 (Latest)
 
-UI backlog full closure, search history horizontal scrolling, optical indicator alignment, and breathable multi-select pill styling:
-- **Search History Horizontal Roving (UI-01)**: Refactored `.xlc-search-history-bar` to single-line `flex-wrap: nowrap; overflow-x: auto;` with hidden scrollbars and shrink protection, eliminating viewport height crowding.
-- **Dock Category Folding Arrow Optical Alignment (UI-02)**: Standardized `.xlc-dock-group-arrow` with `inline-flex` vertical centering, eliminating cross-platform font 1px baseline shifts.
-- **Breathable Multi-Select Option Styling (UI-03)**: Upgraded multi-option selection states to semi-transparent lavender tint `var(--xlc-lavender)` with accent text, balancing visual hierarchy and breathable translucency.
-- **Discovery Status Row Grid Alignment (UI-04)**: Standardized action gap in discovery status rows to `var(--xlc-space-2)` (8px).
-- **Quality Gates**: Unit test suite expanded to **1042/1042 passing tests** with verified negative mutation gate (mutation 146), with all 25 UI render snapshots and 77/77 interaction audits green.
+CSV/TSV interactive wizard column mapping closure, dynamic option generation, and automatic initial inference:
+- **Dynamic Column Options & Field Label Closure (`csv-tsv-wizard.ts`)**: Equipped all 6 mapping fields (Title, Content, Category, Tags, Alias, URL) with dedicated labels and responsive card containers; dynamically generates `<option>` elements from header rows, eliminating blank select fields.
+- **Header Recognition & Auto-Inference**: Automatically invokes `inferColumnMapping(grid)` on table paste when fields are unconfigured, showing the top 5 parsed snippets instantly without extra clicks.
+- **Wizard Mapping Card Modernization (`index.scss`)**: Applied `.xlc-wizard-mapping-row` and `.xlc-wizard-field-item` modern floating card styles aligned with design tokens.
+- **Quality Gates**: Unit test suite expanded to **1043/1043 passing tests** with verified negative mutation gate (mutation 147), with all 25 UI render snapshots and 77/77 interaction audits green.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.73, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.74, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.74** | UI backlog full closure, search history horizontal scrolling, optical indicator alignment, and breathable multi-select pill styling | [ADR 0156](./docs/adr/0156-ui-backlog-refinements-and-optical-alignments.md) |
 | **v0.10.73** | Comprehensive entry usability audit, P0 selection caret blockId extraction fix, command palette mode dispatching, and single-item paste queue action | [ADR 0155](./docs/adr/0155-entry-usability-and-closure-hardening.md) |
-| **v0.10.72** | Visual identity evolution, dual-layer base background, operational/data color decoupling, and dark contrast rhythm cards | [ADR 0154](./docs/adr/0154-visual-identity-and-contrast-hierarchy.md) |
 | **v0.10.71** | Dock keyboard roving navigation & quick action, CSV to list macro, and URL Query building engine | [ADR 0153](./docs/adr/0153-dock-keyboard-and-formatting-pipeline.md) |
 | **v0.10.70** | Dock category tree state memory, URL component extraction engine, and multi-line prefix/suffix formatting macros | [ADR 0152](./docs/adr/0152-dock-memory-and-formatting-macros.md) |
 | **v0.10.69** | Visual and perceptual layer modernization, unified three-tier design tokens convergence, and accessibility hardening | [ADR 0151](./docs/adr/0151-visual-token-convergence-and-a11y-hierarchy.md) |

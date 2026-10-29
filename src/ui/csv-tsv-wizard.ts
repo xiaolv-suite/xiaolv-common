@@ -124,7 +124,30 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     mappingGrid.style.gap = "12px";
     mappingGrid.style.marginTop = "8px";
 
-    const createMappingSelect = (fieldName: keyof typeof state.mapping): HTMLSelectElement => {
+    const FIELD_METAS: Array<{key: keyof typeof state.mapping; label: string}> = [
+        {key: "titleIndex", label: "标题 (Title)"},
+        {key: "contentIndex", label: "正文 (Content)"},
+        {key: "categoryIndex", label: "分类 (Category)"},
+        {key: "tagsIndex", label: "标签 (Tags)"},
+        {key: "aliasIndex", label: "别名 (Alias)"},
+        {key: "urlIndex", label: "链接 (URL)"},
+    ];
+
+    const createMappingItem = (fieldName: keyof typeof state.mapping, labelText: string): HTMLElement => {
+        const itemWrap = document.createElement("div");
+        itemWrap.className = "xlc-wizard-field-item";
+        itemWrap.style.display = "flex";
+        itemWrap.style.flexDirection = "column";
+        itemWrap.style.gap = "4px";
+
+        const label = document.createElement("label");
+        label.className = "xlc-form-label";
+        label.textContent = labelText;
+        label.style.fontSize = "12px";
+        label.style.fontWeight = "600";
+        label.style.color = "var(--b3-theme-on-surface)";
+        itemWrap.appendChild(label);
+
         const select = document.createElement("select");
         select.className = "b3-text-field xlc-wizard-select";
         select.dataset.xlcControl = `wizard.field.${fieldName}`;
@@ -132,21 +155,13 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
             state.mapping[fieldName] = parseInt(select.value, 10);
             updatePreview();
         });
-        return select;
+        itemWrap.appendChild(select);
+        return itemWrap;
     };
 
-    const fieldLabels: Array<{key: keyof typeof state.mapping}> = [
-        {key: "titleIndex"},
-        {key: "contentIndex"},
-        {key: "categoryIndex"},
-        {key: "tagsIndex"},
-        {key: "aliasIndex"},
-        {key: "urlIndex"},
-    ];
-
-    for (const {key} of fieldLabels) {
-        const sel = createMappingSelect(key);
-        mappingGrid.appendChild(sel);
+    for (const {key, label} of FIELD_METAS) {
+        const item = createMappingItem(key, label);
+        mappingGrid.appendChild(item);
     }
 
     const btnRow = document.createElement("div");
@@ -254,7 +269,19 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
             state.delimiter = delimiter;
             state.grid = grid;
 
-            // 显示字段映射区域
+            // 若尚未映射字段，自动触发初次智能推断（粘完立得识别，无需手动多点一次）
+            const allUnset = Object.values(state.mapping).every((val) => val === -1);
+            if (allUnset && grid.length > 0) {
+                const inferred = inferColumnMapping(grid);
+                state.mapping.titleIndex = inferred.titleIndex;
+                state.mapping.contentIndex = inferred.contentIndex;
+                state.mapping.categoryIndex = inferred.categoryIndex;
+                state.mapping.tagsIndex = inferred.tagsIndex;
+                state.mapping.aliasIndex = inferred.aliasIndex;
+                state.mapping.urlIndex = inferred.urlIndex;
+            }
+
+            // 显示字段映射区域并同步动态选项
             mapRow.style.display = "block";
             syncMappingToUI();
 
@@ -278,9 +305,25 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     };
 
     const syncMappingToUI = (): void => {
+        const headerRow = state.grid[0] || [];
         const selects = mappingGrid.querySelectorAll<HTMLSelectElement>(".xlc-wizard-select");
         for (const sel of Array.from(selects)) {
             const fieldName = sel.dataset.xlcControl?.replace("wizard.field.", "") as keyof typeof state.mapping;
+            sel.innerHTML = "";
+
+            const optNone = document.createElement("option");
+            optNone.value = "-1";
+            optNone.textContent = "（不映射）";
+            sel.appendChild(optNone);
+
+            for (let i = 0; i < headerRow.length; i++) {
+                const opt = document.createElement("option");
+                opt.value = String(i);
+                const colName = (headerRow[i] || "").trim().slice(0, 16);
+                opt.textContent = `第 ${i + 1} 列${colName ? ` (${colName})` : ""}`;
+                sel.appendChild(opt);
+            }
+
             if (fieldName && fieldName in state.mapping) {
                 sel.value = String(state.mapping[fieldName]);
             }

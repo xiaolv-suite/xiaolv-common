@@ -5,9 +5,57 @@ module.exports = {
     getActiveEditor: () => null,
     openTab: () => {},
     Dialog: class {
-        constructor() {}
+        constructor() {
+            const children = [];
+            const bodyEl = {
+                innerHTML: "",
+                children,
+                appendChild: (child) => { children.push(child); return child; },
+                querySelector: (sel) => {
+                    const search = (node) => {
+                        if (!node) return null;
+                        if (sel.startsWith(".") && node.className && node.className.includes(sel.slice(1))) return node;
+                        for (const c of node.children || []) {
+                            const found = search(c);
+                            if (found) return found;
+                        }
+                        return null;
+                    };
+                    for (const c of children) {
+                        const found = search(c);
+                        if (found) return found;
+                    }
+                    return null;
+                },
+                querySelectorAll: (sel) => {
+                    const res = [];
+                    const collect = (node) => {
+                        if (!node) return;
+                        if (sel.startsWith(".") && node.className && node.className.includes(sel.slice(1))) res.push(node);
+                        for (const c of node.children || []) collect(c);
+                    };
+                    for (const c of children) collect(c);
+                    return res;
+                },
+            };
+            const containerEl = { classList: { add: () => {} }, style: {}, children: [bodyEl] };
+            const headerEl = { querySelector: () => ({ appendChild: () => {}, textContent: "" }) };
+            this.element = {
+                querySelector: (sel) => {
+                    if (sel === ".b3-dialog__container") return containerEl;
+                    if (sel === ".b3-dialog__header") return headerEl;
+                    if (sel === ".b3-dialog__body" || sel === ".b3-dialog__content") return bodyEl;
+                    return bodyEl.querySelector(sel);
+                },
+                querySelectorAll: (sel) => bodyEl.querySelectorAll(sel),
+                classList: { add: () => {} },
+                isConnected: true,
+            };
+            if (typeof document !== "undefined" && document.body && typeof document.body.appendChild === "function") {
+                document.body.appendChild(this.element);
+            }
+        }
         destroy() {}
-        element() {}
     },
     confirm: () => {},
     showMessage: () => {},
