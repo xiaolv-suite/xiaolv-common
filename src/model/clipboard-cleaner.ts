@@ -8262,6 +8262,11 @@ export function beautifyMarkdownTable(tableMarkdown: string): string {
     const colCount = Math.max(...parsedRows.map((r) => r.length));
     if (colCount === 0) return tableMarkdown;
 
+    // 确保表头行与所有数据行均补齐至 colCount 列，杜绝表头列数少于数据行导致列不对齐破损
+    for (const r of parsedRows) {
+        while (r.length < colCount) r.push("");
+    }
+
     // 补齐对齐方式
     while (alignments.length < colCount) {
         alignments.push("left");
@@ -8367,7 +8372,42 @@ export function queryJsonPath(
         return options.fallback ?? "";
     }
 
-    const segments = trimmedPath.split(/[.[\]]+/).filter(Boolean);
+    const segments: string[] = [];
+    let i = 0;
+    while (i < trimmedPath.length) {
+        const ch = trimmedPath[i];
+        if (ch === "." || ch === "[" || ch === "]") {
+            i++;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            const quote = ch;
+            i++;
+            let val = "";
+            while (i < trimmedPath.length && trimmedPath[i] !== quote) {
+                if (trimmedPath[i] === "\\" && i + 1 < trimmedPath.length) {
+                    val += trimmedPath[i + 1];
+                    i += 2;
+                } else {
+                    val += trimmedPath[i];
+                    i++;
+                }
+            }
+            if (i < trimmedPath.length && trimmedPath[i] === quote) {
+                i++;
+            }
+            segments.push(val);
+        } else {
+            let val = "";
+            while (i < trimmedPath.length && trimmedPath[i] !== "." && trimmedPath[i] !== "[" && trimmedPath[i] !== "]") {
+                val += trimmedPath[i];
+                i++;
+            }
+            if (val.trim()) {
+                segments.push(val.trim());
+            }
+        }
+    }
     let cur: any = data;
 
     for (const seg of segments) {
@@ -8375,7 +8415,16 @@ export function queryJsonPath(
             return options.fallback ?? "";
         }
         if (typeof cur === "object") {
-            cur = cur[seg];
+            // 防御原型链穿透（如 toString, valueOf, constructor, __proto__ 等）：
+            // 仅允许自身拥有的属性，对于数组允许数字下标与 length
+            const isArray = Array.isArray(cur);
+            if (isArray && (seg === "length" || /^\d+$/.test(seg))) {
+                cur = cur[seg];
+            } else if (Object.prototype.hasOwnProperty.call(cur, seg)) {
+                cur = cur[seg];
+            } else {
+                return options.fallback ?? "";
+            }
         } else {
             return options.fallback ?? "";
         }
@@ -8427,12 +8476,21 @@ export function formatMarkdownCallout(
     if (!text || typeof text !== "string") return text ?? "";
 
     const lines = text.split("\n");
+    // 寻找首个非空行作为 Callout 头部候选行
+    let firstNonEmptyIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i]!.trim().length > 0) {
+            firstNonEmptyIdx = i;
+            break;
+        }
+    }
+
     if (options.strip === true) {
         // 剥离 Callout 头部并还原引用/文本
         const cleanedLines: string[] = [];
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i]!;
-            if (i === 0 && /^>\s*\[![A-Za-z]+\][-+]?(?:\s+(.*))?$/.test(line.trim())) {
+            if (i === firstNonEmptyIdx && /^>\s*\[![A-Za-z]+\][-+]?(?:\s+(.*))?$/.test(line.trim())) {
                 const titleMatch = line.trim().match(/^>\s*\[![A-Za-z]+\][-+]?(?:\s+(.*))?$/);
                 const title = titleMatch?.[1]?.trim();
                 if (title) cleanedLines.push(`> **${title}**`);
@@ -8447,7 +8505,7 @@ export function formatMarkdownCallout(
     const rawBodyLines: string[] = [];
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i]!;
-        if (i === 0 && /^>\s*\[![A-Za-z]+\][-+]?(?:\s+(.*))?$/.test(line.trim())) {
+        if (i === firstNonEmptyIdx && /^>\s*\[![A-Za-z]+\][-+]?(?:\s+(.*))?$/.test(line.trim())) {
             continue;
         }
         // 剥离行首引用符

@@ -73,6 +73,7 @@
 ### 一、思源原生内容资产层（安全真源）
 - **思源块真源原则（Zero-SQL）**：条目即真实思源块，正文严格由思源块管理，元数据走 `custom-xlc-*` 属性，侧车（`loadData`）仅管理本地收藏/排序/UI 偏好，随时可重建迁移。
 - **7 种丰富条目形态**：原生识别并支持纯文本 (Text)、Markdown、代码块 (Code，保留语法高亮)、网址 (URL)、图片 (Image)、附件资源 (Asset)、块引用 (Blockref) 与超级块结构 (Structure)。
+- **富文本与结构化原生预览**：内置零安全隐患的富文本渲染器，原生支持代码高亮着色、Markdown 任务清单交互样式、表格多列对齐与 Callout 告警卡片化预览（💡 NOTE、🚀 TIP、⚠️ WARNING、🛑 DANGER 等）。
 - **场景分类与层次化标签**：预置商务天蓝、客服翡翠绿、开发淡紫、写作暖琥珀、AI 亮靛语义徽标；支持 `/` 斜杠路径多层级标签与级联筛选。
 - **智能热度混合排序 (Frecency)**：结合使用频次与时间衰减阶梯（24小时/7天/30天/90天），高频常用条目自适应置顶。
 - **别名唯一匹配 Tab 直达**：输入词与条目别名完全吻合且全局唯一时，行内呈现金色 ⚡ 徽标，按 Tab 闪电插入，心流毫无停顿。
@@ -101,6 +102,9 @@
   - `{{xlc:radix:16:10|0xFF}}`：二进制/八进制/十进制/十六进制跨进制互转；
   - `{{xlc:smask|keep|13812345678|3|4}}`：任意字符串留头留尾区间脱敏（`138****5678`）；
   - `{{xlc:censor|文本|敏感词|***}}`：敏感词屏蔽与等长星号遮罩；
+  - `{{xlc:json|user.name|JSON}}` / `{{xlc:json:keys|JSON}}` / `{{xlc:json:pretty|JSON}}`：安全提取多层属性与数组下标（支持单双引号方括号语法，如 `users[0]["name"]`、`settings["api.key"]`），严密防御原型链穿透，支持格式化与键名提取；
+  - `{{xlc:progress|7|10}}` / `{{xlc:progress:circle|3|5}}` / `{{xlc:progress|75}}`：生成方块/圆点/ASCII 多种视觉形态的任务进度条；
+  - `{{xlc:shuffle|A,B,C}}`：列表候选项 Fisher-Yates 伪随机均匀打乱；
   - `{{xlc:btruncate|10|你好世界}}`：UTF-8 字节安全边界截断，彻底避免汉字多字节被劈开导致乱码；
   - `{{xlc:initials|思源笔记}}`：中文汉字拼音首字母与英文首字母缩写提取（`SYBJ`）；
   - `{{xlc:repeat|=|20}}`：字符/短语指定次数重复生成；
@@ -113,6 +117,10 @@
 
 ### 四、纯文本与排版工程处理工具箱（70+ 纯函数，动作菜单与表单快捷栏一键执行）
 - **Markdown 专业排版与结构化**：
+  - Markdown 表格列宽美化与对齐（`beautifyMarkdownTable`，计算 CJK 双倍字宽最大列宽，智能填充空格使整张表格在源码视图完全垂直对齐，自动补齐不对称列）；
+  - Markdown 表格矩阵行列转置（`transposeMarkdownTable`，行与列互换，$M^{TT} = M$ 可逆转置）；
+  - Markdown Callout 告警提示块智能包装与转换（`formatMarkdownCallout`，支持包装为 GitHub/Obsidian 规范的 `> [!NOTE]` 等 Callout 警告块及折叠语法，支持一键纯净剥离）；
+  - Markdown 标题十进制层级序号自动编排与剥离（`numberMarkdownHeadings`，自动编排 `1.`、`1.1`、`1.1.1` 序号或安全剥离）；
   - 盘古之白中英文智能空格排版（`formatPanguSpacing`）；
   - 中英混排标点间距与全半角空白规范化（`formatPunctuationSpacing`）；
   - 全流程综合排版规整（`formatCJKSpacingComprehensive`）；
@@ -178,19 +186,22 @@
 
 ## 🆕 最新更新动态
 
-### [v0.10.65] — 2026-10-29（最新）
+### [v0.10.66] — 2026-10-29（最新）
 
-Markdown表格等宽美化、JSON路径查询宏与Callout告警提示块转换：
-- **Markdown 表格等宽对齐与视觉美化引擎 (`beautifyMarkdownTable`)**：纯函数支持自动计算中英 CJK 双倍宽度的各列最大列宽，智能填充空格使整张表格在源码视图下完全垂直对齐，自动重构标准化分隔线；动作菜单接线「✨ 美化对齐 Markdown 表格列宽并复制」，表单格式栏接入「✦ 表格列宽美化」。
-- **JSON 数据路径安全提取与查询引擎 (`queryJsonPath`) 与 `{{xlc:json}}` 动态宏**：纯函数支持基于属性路径与数组下标安全提取深层字段（如 `user.roles[0].name`、`status`），支持顶层键名列表（`keys`）与美化格式化；扩展动态宏体系 `{{xlc:json|user.name|{"user":{"name":"Alice"}}}}`、`{{xlc:json:keys|...}}`、`{{xlc:json:pretty|...}}`；动作菜单接线「🔍 提取 JSON 顶层键名并复制」，表单变量栏补充 `{{xlc:json|key|JSON}}`，格式栏接入「✦ 提取JSON键」。
-- **Markdown Callout 告警提示块智能包装与转换引擎 (`formatMarkdownCallout`)**：纯函数支持将文本或现有引用块快速包装为 GitHub/Obsidian 规范的 Callout 警告块（`> [!NOTE]`、`> [!TIP]`、`> [!WARNING]` 等），支持折叠语法（`> [!NOTE]- 标题`）与一键纯净剥离；动作菜单接线「💡 包装为 Callout 提示块 (> [!NOTE]) 并复制」，表单格式栏接入「✦ 包装Callout」。
-- **全套质量门禁**：单元测试正式跨越 **1000/1000 项全绿**里程碑，双向严格负向注入验证通过。
+全方位质量加固、Markdown Callout 告警卡片化预览与原型链安全防御：
+- **Markdown Callout 告警卡片化原生预览 (`previewRenderer`)**：富文本预览引擎全新支持识别 GitHub/Obsidian 规范的 Callout 语法（`> [!NOTE]`、`> [!TIP]`、`> [!WARNING]`、`> [!DANGER]`、`> [!IMPORTANT]` 等），在主工作台与 Quick Look 大卡片中结构化渲染为高质感提示卡，呈现专属色彩边框、语义化图标（💡/🚀/⚠️/🛑/📌）与正文排版，并在 forced-colors 高对比度模式下赋予专属边框保护。
+- **JSON 路径查询增强与原型链安全防御 (`queryJsonPath`)**：属性路径 tokenizer 深度重构，完美支持嵌套引号的方括号复杂语法（如 `settings["api.key"]`、`items[0]['id']`）；严格落地自有属性安全审查（`hasOwnProperty`），坚决拦截 `toString`、`constructor`、`__proto__` 等原型链穿透，杜绝原生函数字面量泄露。
+- **Markdown 表格等宽美化列补齐修复 (`beautifyMarkdownTable`)**：针对表头列数少于数据行单元格数的不对称表格，自动补齐表头空单元格与分隔线，彻底杜绝表格美化后列数破损与竖线错位。
+- **Callout 转换容错前置空行 (`formatMarkdownCallout`)**：在文本包装或一键剥离还原时，智能容错并跳过文本前置的空白行与连续换行，精准锚定首个有效 Callout 头部。
+- **文档与展示体验全面升级**：重新梳理提炼插件整体定位与核心功能全景，更新日志规范化仅展示最新内容并将历史版本优雅折叠收起。
+- **全套质量门禁突破**：单元测试正式扩增至 **1004/1004 项全绿**，双向严格负向突变注入验证（突变 130、131、132）拦截通过。
 
 <details>
-<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.64，已折叠)</b></summary>
+<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.65，已折叠)</b></summary>
 
 | 里程碑版本 | 核心更新亮点摘要 | 架构决策 |
 | :--- | :--- | :--- |
+| **v0.10.65** | 表格等宽美化 (`beautifyMarkdownTable`)、JSON 路径提取宏 (`queryJsonPath` / `{{xlc:json}}`) 与 Callout 转换 | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callout-converter.md) |
 | **v0.10.64** | 全面质量优化、生命周期治理 (零泄漏)、语法高亮对齐与交互稳定性提升 | [ADR 0146](./docs/adr/0146-comprehensive-quality-optimization-and-reliability.md) |
 | **v0.10.63** | Markdown 标题层级序号编排剥离 (`numberMarkdownHeadings`)、任务进度条宏 (`{{xlc:progress}}`) 与表格行列转置 | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
 | **v0.10.62** | Markdown 标题与列表双向互转 (`convertHeadingsToList`)、列表打乱宏 (`shuffleList` / `{{xlc:shuffle}}`) 与数值区间行过滤 | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |

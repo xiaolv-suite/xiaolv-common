@@ -2,6 +2,18 @@
 
 本文件记录「小驴常用（内测版）」的面向用户的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.10.66] — 2026-10-29
+
+全方位质量加固、Markdown Callout 告警卡片化预览与原型链安全防御。
+
+### 新增与优化
+- **Markdown Callout 告警卡片化原生预览 (`previewRenderer`)**：富文本预览引擎全新支持识别 GitHub/Obsidian 规范的 Callout 语法（`> [!NOTE]`、`> [!TIP]`、`> [!WARNING]`、`> [!DANGER]`、`> [!IMPORTANT]` 等），在主工作台与 Quick Look 大卡片中结构化渲染为高质感提示卡，呈现专属色彩边框、语义化图标（💡/🚀/⚠️/🛑/📌）与正文排版，并在 forced-colors 高对比度模式下赋予专属边框保护。
+- **JSON 路径查询增强与原型链安全防御 (`queryJsonPath`)**：属性路径 tokenizer 深度重构，完美支持嵌套引号的方括号复杂语法（如 `settings["api.key"]`、`items[0]['id']`）；严格落地自有属性安全审查（`hasOwnProperty`），坚决拦截 `toString`、`constructor`、`__proto__` 等原型链穿透，杜绝原生函数字面量泄露。
+- **Markdown 表格等宽美化列补齐修复 (`beautifyMarkdownTable`)**：针对表头列数少于数据行单元格数的不对称表格，自动补齐表头空单元格与分隔线，彻底杜绝表格美化后列数破损与竖线错位。
+- **Callout 转换容错前置空行 (`formatMarkdownCallout`)**：在文本包装或一键剥离还原时，智能容错并跳过文本前置的空白行与连续换行，精准锚定首个有效 Callout 头部。
+- **文档与展示体验全面升级**：重新梳理提炼插件整体定位与核心功能全景，更新日志规范化仅展示最新内容并将历史版本优雅折叠收起。
+- **全套质量门禁**：单元测试通过数扩增至 **1004/1004 项全绿**，双向严格负向突变注入验证（突变 130、131、132）拦截通过。
+
 ## [0.10.65] — 2026-10-29
 
 Markdown表格等宽美化、JSON路径查询宏与Callout告警提示块转换。

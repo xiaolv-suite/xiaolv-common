@@ -124,19 +124,22 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.65] — 2026-10-29 (Latest)
+### [v0.10.66] — 2026-10-29 (Latest)
 
-Markdown table beautification, JSON path query macro, and Markdown callout block transformation:
-- **Markdown Table Column Beautification (`beautifyMarkdownTable`)**: Pure function automatically calculating maximum visual column widths across CJK double-width and ASCII characters, padding cells with spaces so column vertical borders are perfectly aligned in raw markdown; wired to action menu and variable form.
-- **JSON Path Query Engine (`queryJsonPath`) & `{{xlc:json}}` Macro**: Pure function extracting nested properties via dot/bracket paths (e.g., `user.roles[0].name`), listing top-level keys (`keys`), or pretty-formatting JSON; expanded dynamic macros `{{xlc:json|user.name|{"user":{"name":"Alice"}}}}`, `{{xlc:json:keys|...}}`, and `{{xlc:json:pretty|...}}`; wired to action menu and variable form.
-- **Markdown Callout Formatting (`formatMarkdownCallout`)**: Pure function wrapping text or existing blockquotes into standard GitHub/Obsidian callouts (`> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`, etc.), supporting collapsible headers (`> [!NOTE]- Title`) and clean stripping; wired to action menu and variable form.
-- **Quality Gates**: Unit test suite reached the milestone of **1000/1000 passing tests** with verified negative tests.
+Comprehensive quality hardening, native Markdown Callout card preview, and prototype pollution defense:
+- **Native Markdown Callout Card Preview (`previewRenderer`)**: Rich preview engine natively parses GitHub/Obsidian style callouts (`> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`, `> [!DANGER]`, `> [!IMPORTANT]`, etc.), rendering high-aesthetic structured cards with semantic color borders, icons (💡/🚀/⚠️/🛑/📌), and dedicated forced-colors high contrast borders.
+- **JSON Path Query Hardening & Prototype Defense (`queryJsonPath`)**: Path tokenizer refactored to fully support bracket paths with quotes (e.g. `settings["api.key"]`, `users[0]['name']`); strictly verifies `hasOwnProperty`, defending against prototype pollution attacks like `toString`, `constructor`, `__proto__`.
+- **Markdown Table Column Padding Fix (`beautifyMarkdownTable`)**: Automatically pads header rows when header has fewer columns than body rows, preventing column misalignment and border breakage.
+- **Callout Converter Leading Blank Line Tolerance (`formatMarkdownCallout`)**: Seamlessly handles and skips leading blank lines and line breaks when wrapping or stripping callout blocks.
+- **Documentation & Showcase Experience Upgrade**: Restructured plugin positioning and core feature map; Changelog strictly highlights latest release while cleanly collapsing historical milestones.
+- **Quality Gates**: Unit test suite expanded to **1004/1004 passing tests** with 3 verified negative injection mutations (130, 131, 132).
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.64, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.65, collapsed)</b></summary>
 
 | Milestone | Key Release Highlights Summary | Architecture Decision |
 | :--- | :--- | :--- |
+| **v0.10.65** | Table beautification (`beautifyMarkdownTable`), JSON path query macro (`queryJsonPath` / `{{xlc:json}}`), and Callout formatting | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callout-converter.md) |
 | **v0.10.64** | Comprehensive quality optimization, zero lifecycle leaks, syntax highlighting fix, and interaction reliability | [ADR 0146](./docs/adr/0146-comprehensive-quality-optimization-and-reliability.md) |
 | **v0.10.63** | Markdown heading numbering/stripping (`numberMarkdownHeadings`), task progress bar macro (`{{xlc:progress}}`), and table matrix transposition | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
 | **v0.10.62** | Markdown headings to list conversion (`convertHeadingsToList`), list shuffle macro (`shuffleList` / `{{xlc:shuffle}}`), and numeric range line filtering | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |

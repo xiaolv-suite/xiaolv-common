@@ -792,6 +792,77 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
     border-top: 1px solid var(--xlc-line);
     margin: var(--xlc-space-3) 0;
   }
+
+  // ══════════ Markdown Callout 告警提示块视觉基座 ══════════
+  .xlc-md-callout {
+    margin: var(--xlc-space-3) 0;
+    padding: var(--xlc-space-3) var(--xlc-space-4);
+    border: 1px solid var(--xlc-line);
+    border-left: 4px solid var(--xlc-accent);
+    border-radius: var(--xlc-radius-sm);
+    background: var(--xlc-soft);
+    box-sizing: border-box;
+
+    &--tip {
+      border-left-color: var(--xlc-success);
+      background: var(--xlc-success-soft);
+      .xlc-md-callout-title { color: var(--xlc-success); }
+    }
+    &--warning, &--caution {
+      border-left-color: var(--xlc-warning);
+      background: var(--xlc-warm);
+      .xlc-md-callout-title { color: var(--xlc-warm-ink); }
+    }
+    &--danger {
+      border-left-color: var(--xlc-danger);
+      background: var(--xlc-danger-soft);
+      .xlc-md-callout-title { color: var(--xlc-danger); }
+    }
+    &--info {
+      border-left-color: var(--xlc-info);
+      background: var(--xlc-info-soft);
+      .xlc-md-callout-title { color: var(--xlc-info); }
+    }
+    &--important {
+      border-left-color: var(--xlc-lilac);
+      background: var(--xlc-lilac-soft);
+      .xlc-md-callout-title { color: var(--xlc-lilac-ink); }
+    }
+  }
+
+  .xlc-md-callout-header {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-2);
+    font-size: var(--xlc-font-md);
+    font-weight: var(--xlc-weight-semibold);
+    line-height: var(--xlc-line-body);
+  }
+
+  .xlc-md-callout-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--xlc-font-lg);
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .xlc-md-callout-title {
+    color: var(--xlc-accent-text);
+  }
+
+  .xlc-md-callout-body {
+    margin-top: var(--xlc-space-2);
+  }
+
+  .xlc-md-callout-p {
+    margin: var(--xlc-space-1) 0;
+    font-size: var(--xlc-font-sm);
+    line-height: var(--xlc-leading-normal);
+    color: var(--xlc-ink);
+    &:last-child { margin-bottom: 0; }
+  }
 }
 
 // ══════════ 强制颜色与系统变量映射（forced-colors: active · Epoch 5）══════════
@@ -863,11 +934,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
     .xlc-discovery-list,
     .xlc-discovery-preview,
     .xlc-menu,
-    .xlc-kbd-hint,
-    .xlc-doclist-item,
-    .xlc-policy {
-      border: 1px solid CanvasText;
-    }
+      .xlc-kbd-hint,
+      .xlc-doclist-item,
+      .xlc-policy,
+      .xlc-md-callout {
+        border: 1px solid CanvasText;
+      }
 
     .b3-dialog__container {
       border: 2px solid CanvasText;

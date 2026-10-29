@@ -23,6 +23,7 @@ export type MarkdownBlockType =
     | "h2"
     | "h3"
     | "quote"
+    | "callout"
     | "list-bullet"
     | "list-ordered"
     | "task-item"
@@ -47,6 +48,9 @@ export interface MarkdownBlock {
     tableHeader?: string[];
     tableData?: string[][];
     tableAlignments?: Array<"left" | "center" | "right">;
+    calloutType?: string;
+    calloutTitle?: string;
+    calloutBodyLines?: string[];
 }
 
 // 常见多语言关键字集合（JS/TS, Python, SQL, Go, Rust, Shell 等）
@@ -303,6 +307,33 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
         if (/^###\s+/.test(trimmed)) {
             const content = trimmed.replace(/^###\s+/, "");
             blocks.push({type: "h3", rawText: content, inlines: tokenizeMarkdownInlines(content)});
+            continue;
+        }
+
+        // Callout 告警提示块（GitHub / Obsidian 规范：> [!NOTE] Title）
+        const calloutMatch = /^>\s*\[!([A-Za-z]+)\][-+]?(?:\s+(.*))?$/.exec(trimmed);
+        if (calloutMatch) {
+            const calloutType = calloutMatch[1]!.toUpperCase();
+            const calloutTitle = calloutMatch[2]?.trim() || calloutType;
+            const bodyLines: string[] = [];
+            while (l + 1 < lines.length) {
+                const nextLine = lines[l + 1] ?? "";
+                const nextTrimmed = nextLine.trim();
+                if (/^>\s?/.test(nextTrimmed)) {
+                    bodyLines.push(nextTrimmed.replace(/^>\s?/, ""));
+                    l++;
+                } else {
+                    break;
+                }
+            }
+            blocks.push({
+                type: "callout",
+                rawText: bodyLines.join("\n"),
+                inlines: tokenizeMarkdownInlines(calloutTitle),
+                calloutType,
+                calloutTitle,
+                calloutBodyLines: bodyLines,
+            });
             continue;
         }
 
@@ -566,6 +597,77 @@ export function renderSafePreview(
             }
             wrap.appendChild(table);
             container.appendChild(wrap);
+            continue;
+        }
+
+        if (block.type === "callout") {
+            const card = doc.createElement("div");
+            const cType = (block.calloutType || "NOTE").toLowerCase();
+            card.className = `xlc-md-callout xlc-md-callout--${cType}`;
+
+            const head = doc.createElement("div");
+            head.className = "xlc-md-callout-header";
+
+            const iconSpan = doc.createElement("span");
+            iconSpan.className = "xlc-md-callout-icon";
+            let iconText = "💡";
+            if (cType === "warning" || cType === "caution") iconText = "⚠️";
+            else if (cType === "danger") iconText = "🛑";
+            else if (cType === "tip") iconText = "🚀";
+            else if (cType === "important") iconText = "📌";
+            else if (cType === "info") iconText = "ℹ️";
+            else if (cType === "success") iconText = "✅";
+            else if (cType === "question") iconText = "❓";
+            else if (cType === "example") iconText = "📑";
+            iconSpan.textContent = iconText;
+            head.appendChild(iconSpan);
+
+            const titleSpan = doc.createElement("span");
+            titleSpan.className = "xlc-md-callout-title";
+            titleSpan.textContent = block.calloutTitle || block.calloutType || "NOTE";
+            head.appendChild(titleSpan);
+
+            card.appendChild(head);
+
+            if (block.calloutBodyLines && block.calloutBodyLines.length > 0) {
+                const bodyWrap = doc.createElement("div");
+                bodyWrap.className = "xlc-md-callout-body";
+                for (const bLine of block.calloutBodyLines) {
+                    const p = doc.createElement("p");
+                    p.className = "xlc-md-callout-p";
+                    const inlines = tokenizeMarkdownInlines(bLine);
+                    for (const tok of inlines) {
+                        if (tok.type === "bold") {
+                            const b = doc.createElement("strong");
+                            b.className = "xlc-md-bold";
+                            b.textContent = tok.text;
+                            p.appendChild(b);
+                        } else if (tok.type === "code") {
+                            const code = doc.createElement("code");
+                            code.className = "xlc-md-inline-code";
+                            code.textContent = tok.text;
+                            p.appendChild(code);
+                        } else if (tok.type === "variable") {
+                            const varSpan = doc.createElement("span");
+                            varSpan.className = "xlc-md-var";
+                            varSpan.textContent = tok.text;
+                            p.appendChild(varSpan);
+                        } else if (tok.type === "link" && tok.url) {
+                            const a = doc.createElement("a");
+                            a.className = "xlc-md-link";
+                            a.textContent = tok.text;
+                            a.href = tok.url;
+                            p.appendChild(a);
+                        } else {
+                            p.appendChild(doc.createTextNode(tok.text));
+                        }
+                    }
+                    bodyWrap.appendChild(p);
+                }
+                card.appendChild(bodyWrap);
+            }
+
+            container.appendChild(card);
             continue;
         }
 
