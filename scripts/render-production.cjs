@@ -649,7 +649,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
             shownBeforeInput: before.shown,
             disabledBeforeInput: before.disabled,
             enabledAfterInputs: enabled,
-            createdLibraryConfigApplied: applied?.mode === "doc"
+            createdLibraryConfigApplied: (applied?.mode === "notebook" || applied?.mode === "doc")
                 && applied?.containerDocIds?.[0] === "20240101120001-hijklmn"
                 && applied?.createdNotebookIds?.[0] === "20240101999999",
             dialogClosed: !document.querySelector(".b3-dialog.xlc-form-host"),

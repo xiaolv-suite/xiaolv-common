@@ -76,14 +76,14 @@ export class DockView {
 
         const newBtn = document.createElement("button");
         newBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
-        newBtn.title = "新建常用语 (Alt+Shift+N)";
+        newBtn.title = (this.deps.t("newItemAction") || "新建常用语") + " (Alt+Shift+N)";
         newBtn.textContent = "＋";
         newBtn.addEventListener("click", () => this.deps.newItem());
         actions.appendChild(newBtn);
 
         const refreshBtn = document.createElement("button");
         refreshBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
-        refreshBtn.title = "刷新内容库";
+        refreshBtn.title = this.deps.t("reindex") || "刷新内容库";
         refreshBtn.textContent = "↺";
         refreshBtn.addEventListener("click", () => void this.refresh());
         actions.appendChild(refreshBtn);
@@ -91,7 +91,7 @@ export class DockView {
         if (this.deps.openSettings) {
             const gearBtn = document.createElement("button");
             gearBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
-            gearBtn.title = "打开小驴常用设置";
+            gearBtn.title = this.deps.t("openSettings") || "打开小驴常用设置";
             gearBtn.textContent = "⚙";
             gearBtn.addEventListener("click", () => this.deps.openSettings?.());
             actions.appendChild(gearBtn);
@@ -110,7 +110,7 @@ export class DockView {
 
         this.searchInput = document.createElement("input");
         this.searchInput.className = "b3-text-field xlc-dock-search-input";
-        this.searchInput.placeholder = "搜索常用语、拼音缩写...";
+        this.searchInput.placeholder = this.deps.t("searchPlaceholder") || "搜索常用语、拼音缩写...";
         this.searchInput.addEventListener("input", () => {
             this.clearBtn.style.display = this.searchInput.value ? "inline-flex" : "none";
             if (this.debounceTimer) clearTimeout(this.debounceTimer);
@@ -133,7 +133,7 @@ export class DockView {
         this.clearBtn.className = "xlc-dock-clear";
         this.clearBtn.textContent = "×";
         this.clearBtn.style.display = "none";
-        this.clearBtn.title = "清空输入";
+        this.clearBtn.title = this.deps.t("clearSearch") || "清空输入";
         this.clearBtn.addEventListener("click", () => {
             this.searchInput.value = "";
             this.clearBtn.style.display = "none";
@@ -147,10 +147,10 @@ export class DockView {
         this.chipsContainer = document.createElement("div");
         this.chipsContainer.className = "xlc-dock-chips";
         const scopes: Array<{key: "all" | "common" | "recent" | "favorites"; label: string}> = [
-            {key: "all", label: "全部"},
-            {key: "common", label: "常用"},
-            {key: "recent", label: "最近"},
-            {key: "favorites", label: "★ 收藏"},
+            {key: "all", label: this.deps.t("scopeAll") || "全部"},
+            {key: "common", label: this.deps.t("filterCommon") || "常用"},
+            {key: "recent", label: this.deps.t("filterRecent") || "最近"},
+            {key: "favorites", label: "★ " + (this.deps.t("filterFavorites") || "收藏")},
         ];
         for (const s of scopes) {
             const chip = document.createElement("button");
@@ -355,9 +355,9 @@ export class DockView {
         try {
             const res = await this.deps.runAction(entry.id, "insert");
             if (res.ok) {
-                this.deps.notify?.("info", "已插入条目");
+                this.deps.notify?.("info", this.deps.t("providerInserted") || "已插入条目");
             } else {
-                this.deps.notify?.("error", res.message || "插入失败");
+                this.deps.notify?.("error", res.message || this.deps.t("insertFailed") || "插入失败");
             }
         } catch (err) {
             this.deps.notify?.("error", toErrorMessage(err));
@@ -368,9 +368,9 @@ export class DockView {
         try {
             const res = await this.deps.runAction(entry.id, "copy");
             if (res.ok) {
-                this.deps.notify?.("info", "已复制到剪贴板");
+                this.deps.notify?.("info", this.deps.t("copied") || "已复制到剪贴板");
             } else {
-                this.deps.notify?.("error", res.message || "复制失败");
+                this.deps.notify?.("error", res.message || this.deps.t("copyFailed") || "复制失败");
             }
         } catch (err) {
             this.deps.notify?.("error", toErrorMessage(err));
@@ -386,20 +386,20 @@ export class DockView {
 
         const title = document.createElement("strong");
         title.className = "xlc-dock-drawer-title";
-        title.textContent = entry.title || entry.summary || "详情预览";
+        title.textContent = entry.title || entry.summary || this.deps.t("actionsNoun") || "详情预览";
         head.appendChild(title);
 
         const closeBtn = document.createElement("button");
         closeBtn.className = "xlc-dock-drawer-close";
         closeBtn.textContent = "×";
-        closeBtn.title = "关闭预览";
+        closeBtn.title = this.deps.t("cancel") || "关闭预览";
         closeBtn.addEventListener("click", () => this.closeDrawer());
         head.appendChild(closeBtn);
         this.drawerContainer.appendChild(head);
 
         const body = document.createElement("div");
         body.className = "xlc-dock-drawer-body";
-        body.textContent = "加载预览中...";
+        body.textContent = this.deps.t("loading") || "加载预览中...";
         this.drawerContainer.appendChild(body);
 
         void this.deps.preview(entry.id).then((text) => {
@@ -416,14 +416,14 @@ export class DockView {
 
         const insertBtn = document.createElement("button");
         insertBtn.className = "b3-button xlc-btn-primary";
-        insertBtn.textContent = "＋ 插入到当前正文";
+        insertBtn.textContent = "＋ " + (this.deps.t("insert") || "插入到当前正文");
         insertBtn.addEventListener("mousedown", (e) => e.preventDefault());
         insertBtn.addEventListener("click", () => void this.insertEntry(entry));
         foot.appendChild(insertBtn);
 
         const copyBtn = document.createElement("button");
         copyBtn.className = "b3-button";
-        copyBtn.textContent = "⧉ 复制";
+        copyBtn.textContent = "⧉ " + (this.deps.t("copy") || "复制");
         copyBtn.addEventListener("click", () => void this.copyEntry(entry));
         foot.appendChild(copyBtn);
 
@@ -440,6 +440,7 @@ export class DockView {
     public destroy(): void {
         this.isDestroyed = true;
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.container.classList.remove("xlc-dock");
         this.container.innerHTML = "";
     }
 }
