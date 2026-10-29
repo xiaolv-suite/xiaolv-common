@@ -124,19 +124,20 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.62] — 2026-10-29 (Latest)
+### [v0.10.63] — 2026-10-29 (Latest)
 
-Markdown headings to list conversion, list shuffle macro, and numeric range line filtering:
-- **Headings to List Bidirectional Conversion (`convertHeadingsToList`)**: Pure function converting multi-level headings (`#`~`######`) into indented lists and vice versa; wired to action menu and variable form.
-- **List Shuffling (`shuffleList`) & `{{xlc:shuffle}}` Macro**: Pure function randomly shuffling items or lines using Fisher-Yates algorithm across commas, semicolons, or newlines; expanded dynamic macro `{{xlc:shuffle|A,B,C,D,E}}`; wired to variable form.
-- **Numeric Range Line Filtering (`filterNumericRangeLines`)**: Pure function extracting numbers from lines and filtering records within a specified numeric range (min and max); wired to action menu and variable form.
-- **Quality Gates**: Unit test suite expanded to 990/990 passing tests with verified negative tests.
+Markdown heading numbering/stripping, task progress bar macro, and table matrix transposition:
+- **Heading Numbers Auto-Assignment & Stripping (`numberMarkdownHeadings`)**: Pure function automatically generating decimal hierarchical numbers (`1.`, `1.1`, `1.1.1`) for `#`~`######` headings, protecting code fence comments, and supporting `mode: "strip"` to clean heading numbers; wired to action menu and variable form.
+- **Task Progress Bar Generator (`formatTaskProgressBar`) & `{{xlc:progress}}` Macro**: Pure function generating visual progress indicators across `block` (`[███████░░░]`), `circle` (`[●●●○○]`), and `ascii` (`[===>      ]`) styles with smart width auto-scaling for $\le 20$ items; expanded dynamic macros `{{xlc:progress|7|10}}`, `{{xlc:progress:circle|3|5}}`, and `{{xlc:progress|75}}`; wired to action menu and variable form.
+- **Markdown Table Matrix Transposition (`transposeMarkdownTable`)**: Pure function swapping rows into columns and columns into rows with reconstructed alignment separator lines (`:---`) and uniform column padding, satisfying involution $M^{TT} = M$; wired to action menu and variable form.
+- **Quality Gates**: Unit test suite expanded to 993/993 passing tests with verified negative tests.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.61, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.62, collapsed)</b></summary>
 
 | Milestone | Key Release Highlights Summary | Architecture Decision |
 | :--- | :--- | :--- |
+| **v0.10.62** | Markdown headings to list conversion (`convertHeadingsToList`), list shuffle macro (`shuffleList` / `{{xlc:shuffle}}`), and numeric range line filtering | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |
 | **v0.10.61** | Number symbol conversion (`convertNumberSymbols`), sensitive keyword censoring (`censorText` / `{{xlc:censor}}`), and Markdown pure code block extraction | [ADR 0143](./docs/adr/0143-number-symbols-censor-macro-and-extract-code.md) |
 | **v0.10.60** | Markdown nested list flattening (`flattenNestedList`), string range masking (`maskTextRange` / `{{xlc:smask}}`), and comprehensive CJK spacing | [ADR 0142](./docs/adr/0142-flatten-list-smask-macro-and-cjk-spacing.md) |
 | **v0.10.59** | Visual width metrics (`measureVisualWidth`), ternary conditional evaluation (`{{xlc:if}}`), and list indentation shifting | [ADR 0141](./docs/adr/0141-visual-width-if-macro-and-shift-indent.md) |

@@ -7949,3 +7949,242 @@ export function filterNumericRangeLines(
         return invert ? !inRange : inRange;
     }).join("\n");
 }
+
+export interface HeadingNumberingOptions {
+    mode?: "number" | "strip";
+    startLevel?: number; // 默认 1
+    maxLevel?: number;   // 默认 6
+    trailingDot?: boolean; // 默认单级为 1. ，多级为 1.1
+}
+
+/**
+ * Markdown 标题层级序号自动编排与剥离引擎 (numberMarkdownHeadings)
+ * 支持为多级 Markdown 标题自动生成十进制递增层级序号（如 1. 、1.1 、1.1.1 ），
+ * 支持重排已有序号或完全剥离层级序号，严格避开代码围栏（``` 或 ~~~）。
+ */
+export function numberMarkdownHeadings(
+    text: string,
+    options: HeadingNumberingOptions = {},
+): string {
+    if (!text || typeof text !== "string") return text ?? "";
+    const mode = options.mode || "number";
+    const startLevel = Math.max(1, Math.min(6, options.startLevel || 1));
+    const maxLevel = Math.max(startLevel, Math.min(6, options.maxLevel || 6));
+    const trailingDot = options.trailingDot;
+
+    const lines = text.split("\n");
+    let inCodeFence = false;
+    const counters = [0, 0, 0, 0, 0, 0, 0]; // 1-based index 1..6
+
+    const resultLines = lines.map((line) => {
+        const trimmed = line.trim();
+        if (/^(?:```|~~~)/.test(trimmed)) {
+            inCodeFence = !inCodeFence;
+            return line;
+        }
+        if (inCodeFence) {
+            return line;
+        }
+
+        const headingMatch = line.match(/^(#{1,6})(\s+)(.*)$/);
+        if (!headingMatch) {
+            return line;
+        }
+
+        const hashes = headingMatch[1]!;
+        const spacing = headingMatch[2]!;
+        let title = headingMatch[3]!;
+        const level = hashes.length;
+
+        // 先剥离现存的多级数字编号（如 1. 、1.1 、1.1.1. ）
+        title = title.replace(/^\d+(?:\.\d+)*\.?\s+/, "");
+
+        if (mode === "strip") {
+            return `${hashes}${spacing}${title}`;
+        }
+
+        // 仅在指定层级区间内编号
+        if (level < startLevel || level > maxLevel) {
+            return `${hashes}${spacing}${title}`;
+        }
+
+        counters[level] = (counters[level] ?? 0) + 1;
+        for (let i = level + 1; i <= 6; i++) {
+            counters[i] = 0;
+        }
+
+        const activeNumbers = counters.slice(startLevel, level + 1);
+        let numStr = activeNumbers.join(".");
+
+        let hasDot = false;
+        if (trailingDot !== undefined) {
+            hasDot = trailingDot;
+        } else {
+            hasDot = activeNumbers.length === 1;
+        }
+
+        if (hasDot) {
+            numStr += ".";
+        }
+
+        return `${hashes}${spacing}${numStr} ${title}`;
+    });
+
+    return resultLines.join("\n");
+}
+
+export interface TaskProgressBarOptions {
+    total?: number;
+    width?: number;
+    style?: "block" | "ascii" | "circle";
+    showPercent?: boolean;
+    showNumbers?: boolean;
+}
+
+/**
+ * Unicode/ASCII 任务进度条度量生成器 (formatTaskProgressBar)
+ * 支持基于完成数/总数或百分比生成图形化进度条，
+ * 支持 block 方块（[███████░░░]）、circle 圆点（[●●●○○]）及 ascii 箭头（[====>     ]）。
+ */
+export function formatTaskProgressBar(
+    completedOrPercent: number,
+    optionsOrTotal?: number | TaskProgressBarOptions,
+): string {
+    const completed = typeof completedOrPercent === "number" && !isNaN(completedOrPercent) ? completedOrPercent : 0;
+    let total = 100;
+    let width = 10;
+    let customWidth = false;
+    let style: "block" | "ascii" | "circle" = "block";
+    let showPercent = true;
+    let showNumbers = false;
+
+    if (typeof optionsOrTotal === "number") {
+        total = optionsOrTotal;
+        showNumbers = true;
+    } else if (optionsOrTotal && typeof optionsOrTotal === "object") {
+        if (optionsOrTotal.total !== undefined) {
+            total = optionsOrTotal.total;
+            showNumbers = true;
+        }
+        if (optionsOrTotal.width !== undefined) {
+            width = optionsOrTotal.width;
+            customWidth = true;
+        }
+        if (optionsOrTotal.style !== undefined) style = optionsOrTotal.style;
+        if (optionsOrTotal.showPercent !== undefined) showPercent = optionsOrTotal.showPercent;
+        if (optionsOrTotal.showNumbers !== undefined) showNumbers = optionsOrTotal.showNumbers;
+    }
+
+    if (!customWidth && total > 0 && total <= 20) {
+        width = total;
+    }
+
+    if (width <= 0) width = 10;
+    if (width > 50) width = 50;
+
+    let fraction = 0;
+    if (total > 0) {
+        fraction = completed / total;
+    }
+    if (fraction < 0) fraction = 0;
+    if (fraction > 1) fraction = 1;
+
+    const percentInt = Math.round(fraction * 100);
+    const filledCount = Math.round(fraction * width);
+    const emptyCount = width - filledCount;
+
+    let bar = "";
+    if (style === "circle") {
+        bar = "●".repeat(filledCount) + "○".repeat(emptyCount);
+    } else if (style === "ascii") {
+        if (filledCount === 0) {
+            bar = " ".repeat(width);
+        } else if (filledCount < width) {
+            bar = "=".repeat(filledCount - 1) + ">" + " ".repeat(emptyCount);
+        } else {
+            bar = "=".repeat(width);
+        }
+    } else {
+        bar = "█".repeat(filledCount) + "░".repeat(emptyCount);
+    }
+
+    const parts: string[] = [`[${bar}]`];
+    if (showNumbers && total !== 100) {
+        parts.push(`${completed}/${total}`);
+    }
+    if (showPercent) {
+        parts.push(`${percentInt}%`);
+    }
+
+    return parts.join(" ");
+}
+
+/**
+ * Markdown 表格矩阵行列转置引擎 (transposeMarkdownTable)
+ * 将 Markdown 表格的行与列互换（原第0行为表头，转置后原第0列成为新表头），
+ * 自动识别并重构分隔线 | :--- |，支持非等宽列自动补齐。
+ */
+export function transposeMarkdownTable(
+    tableMarkdown: string,
+    options: { alignment?: "left" | "center" | "right" } = {},
+): string {
+    if (!tableMarkdown || typeof tableMarkdown !== "string") return tableMarkdown ?? "";
+    const lines = tableMarkdown.replace(/\r\n?/g, "\n").split("\n");
+
+    const parsedRows: string[][] = [];
+    const isSeparatorRow = (line: string): boolean => {
+        const trimmed = line.trim();
+        return /^\|?\s*[-:]+\s*\|/.test(trimmed) && /^[\s|:-]+$/.test(trimmed);
+    };
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.includes("|")) continue;
+        if (isSeparatorRow(line)) continue;
+
+        let content = line;
+        if (content.startsWith("|")) content = content.slice(1);
+        if (content.endsWith("|")) content = content.slice(0, -1);
+
+        const cells = content.split(/(?<!\\)\|/).map((c) => c.trim());
+        if (cells.length > 0) {
+            parsedRows.push(cells);
+        }
+    }
+
+    if (parsedRows.length === 0) return tableMarkdown;
+
+    const rowCount = parsedRows.length;
+    const colCount = Math.max(...parsedRows.map((r) => r.length));
+    if (colCount === 0) return tableMarkdown;
+
+    const transposed: string[][] = [];
+    for (let c = 0; c < colCount; c++) {
+        const newRow: string[] = [];
+        for (let r = 0; r < rowCount; r++) {
+            newRow.push(parsedRows[r]?.[c] ?? "");
+        }
+        transposed.push(newRow);
+    }
+
+    if (transposed.length === 0) return tableMarkdown;
+
+    const align = options.alignment || "left";
+    const getAlignSep = () => {
+        if (align === "center") return ":---:";
+        if (align === "right") return "---:";
+        return ":---";
+    };
+
+    const newColCount = transposed[0]!.length;
+    const separatorRow = Array(newColCount).fill(getAlignSep());
+
+    const resultLines: string[] = [];
+    resultLines.push(`| ${transposed[0]!.join(" | ")} |`);
+    resultLines.push(`| ${separatorRow.join(" | ")} |`);
+    for (let i = 1; i < transposed.length; i++) {
+        resultLines.push(`| ${transposed[i]!.join(" | ")} |`);
+    }
+
+    return resultLines.join("\n");
+}

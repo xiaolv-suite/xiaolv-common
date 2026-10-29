@@ -178,19 +178,20 @@
 
 ## 🆕 最新更新动态
 
-### [v0.10.62] — 2026-10-29（最新）
+### [v0.10.63] — 2026-10-29（最新）
 
-Markdown标题与列表双向互转、词汇打乱宏与数值区间行过滤：
-- **Markdown 标题与列表双向智能互转引擎 (`convertHeadingsToList`)**：纯函数支持将多级标题（`#` ~ `######`）按深度转换为缩进圆点列表（`- `），或反向将缩进列表还原为 H1~H6 大纲标题；动作菜单接线「📑 转换各级标题为嵌套缩进列表并复制」，表单格式栏接入「✦ 标题转列表」。
-- **列表词汇随机打乱引擎 (`shuffleList`) 与 `{{xlc:shuffle}}` 动态宏**：纯函数支持自动嗅探逗号、分号或换行分隔符，执行标准 Fisher-Yates 均匀洗牌算法随机打乱元素序列；扩展动态宏体系 `{{xlc:shuffle|A,B,C,D,E}}`、`{{xlc:shuffle:line|1\n2\n3}}`；表单变量栏补充 `{{xlc:shuffle|A,B,C}}`。
-- **多行数据数值区间筛选过滤引擎 (`filterNumericRangeLines`)**：纯函数提取行内数值，根据设定的最小值与最大值精确保留落在区间范围内的有效数据行；动作菜单接线「🔍 仅保留包含数值 >= 100 的行并复制」，表单格式栏接入「✦ 筛选>=100」。
-- **全套质量门禁**：单元测试增至 990/990 项全绿通过，双向严格负向注入验证通过。
+Markdown标题层级序号编排剥离、任务进度条宏与表格行列转置：
+- **Markdown 标题层级序号自动编排与剥离引擎 (`numberMarkdownHeadings`)**：纯函数支持为多级 Markdown 标题自动生成十进制递增层级序号（如 `1.`、`1.1`、`1.1.1`），支持自定义末尾点号与生效起止层级，严格避开代码围栏保护注释，支持 `mode: "strip"` 一键安全剥离多级数字序号；动作菜单接线「🔢 为各级标题编排递增层级序号并复制」与「🧹 一键剥离标题层级数字序号并复制」，表单格式栏接入「✦ 标题编序号」与「✦ 标题剥序号」。
+- **Unicode/ASCII 任务进度条度量生成器 (`formatTaskProgressBar`) 与 `{{xlc:progress}}` 动态宏**：纯函数支持基于完成数/总数或直接百分比生成图形化进度条，支持 `block`（方块 `[███████░░░]`）、`circle`（圆点 `[●●●○○]`）与 `ascii`（箭头 `[===>      ]`）三种排版视觉形态，内置自适应宽度规则；扩展动态宏体系 `{{xlc:progress|7|10}}`、`{{xlc:progress:circle|3|5}}`、`{{xlc:progress|75}}`；动作菜单接线「📊 度量任务生成进度条指示器并复制」，表单变量栏补充 `{{xlc:progress|7|10}}`，格式栏接入「✦ 插入进度条」。
+- **Markdown 表格矩阵行列转置引擎 (`transposeMarkdownTable`)**：纯函数支持将 Markdown 表格的行与列互换（原第 0 行表头转为第 0 列属性名，原各数据行转为后续各列），自动重构并对齐分隔线（`:---`），支持非等宽列自动补齐，满足二次转置完全还原（$M^{TT} = M$）；动作菜单接线「🔄 转置 Markdown 表格行列并复制」，表单格式栏接入「✦ 表格行列转置」。
+- **全套质量门禁**：单元测试增至 993/993 项全绿通过，双向严格负向注入验证通过。
 
 <details>
-<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.61，已折叠)</b></summary>
+<summary><b>📜 点击展开历史版本演进记录 (v0.1.0 ~ v0.10.62，已折叠)</b></summary>
 
 | 里程碑版本 | 核心更新亮点摘要 | 架构决策 |
 | :--- | :--- | :--- |
+| **v0.10.62** | Markdown 标题与列表双向互转 (`convertHeadingsToList`)、列表打乱宏 (`shuffleList` / `{{xlc:shuffle}}`) 与数值区间行过滤 | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |
 | **v0.10.61** | 数字圈号序号互转 (`convertNumberSymbols`)、敏感词遮罩过滤宏 (`censorText` / `{{xlc:censor}}`) 与 Markdown 纯代码块提取 | [ADR 0143](./docs/adr/0143-number-symbols-censor-macro-and-extract-code.md) |
 | **v0.10.60** | Markdown 嵌套列表展开打平 (`flattenNestedList`)、任意文本范围脱敏宏 (`maskTextRange` / `{{xlc:smask}}`) 与中英文排版综合规整 | [ADR 0142](./docs/adr/0142-flatten-list-smask-macro-and-cjk-spacing.md) |
 | **v0.10.59** | 文本字符视觉宽度度量 (`measureVisualWidth`)、动态三元条件求值宏 (`{{xlc:if}}`) 与列表缩进批量升降 | [ADR 0141](./docs/adr/0141-visual-width-if-macro-and-shift-indent.md) |
