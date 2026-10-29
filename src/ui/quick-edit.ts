@@ -64,6 +64,8 @@ export function openQuickEditDialog(
     textarea.className = "b3-text-field fn__block";
     textarea.style.height = "180px";
     textarea.style.resize = "vertical";
+    textarea.style.minHeight = "130px";
+    textarea.style.maxHeight = "50vh";
     textarea.style.fontFamily = "var(--b3-font-family-code)";
     textarea.style.fontSize = "13px";
     textarea.style.lineHeight = "1.5";

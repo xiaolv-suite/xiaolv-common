@@ -5261,7 +5261,14 @@ export class CommonSearchDialog {
                 return;
             }
             const entry = this.results[this.activeIndex];
-            if (entry) await this.runPrimary(entry);
+            if (entry) {
+                await this.runPrimary(entry);
+            } else if (isInputFocused && input && input.value.trim() && !input.value.startsWith("?")) {
+                // 无搜索结果时按 Enter：将当前输入词一键带入新建表单，实现极致心流自愈闭环
+                const queryText = input.value.trim();
+                this.destroy();
+                this.deps.newItem(queryText);
+            }
         } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             if (this.quickLookOpen) this.closeQuickLook();

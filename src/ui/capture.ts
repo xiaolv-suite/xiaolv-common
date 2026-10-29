@@ -432,6 +432,9 @@ export class CaptureDialog {
                 : document.createElement("input");
             if (isArea) {
                 (inputEl as HTMLTextAreaElement).rows = 6;
+                inputEl.style.resize = "vertical";
+                inputEl.style.minHeight = "130px";
+                inputEl.style.maxHeight = "50vh";
             }
             inputEl.className = "b3-text-field " + cls;
             (inputEl as HTMLInputElement).value = value;

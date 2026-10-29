@@ -967,7 +967,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         try {
             this.addTopBar({
                 icon: "iconXlcCommon",
-                title: this.i18nFn()("openSearch"),
+                title: `${this.i18nFn()("openSearch")} (Alt+Shift+N / Alt+Shift+V)`,
                 callback: () => this.openSearch(),
                 position: "right",
             });
@@ -980,50 +980,47 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.addBreadcrumbButton({
                 id: "xiaolv-common-breadcrumb",
                 icon: "iconXlcCommon",
-                title: this.i18nFn()("openSearch"),
+                title: `${this.i18nFn()("openSearch")} (小驴常用)`,
                 callback: () => this.openSearch(),
             });
         } catch {
             // 旧宿主无此 API：顶栏/命令入口仍可用
         }
         try {
-            // 编辑器右键菜单（官方 eventBus open-menu-content；plugin-sample 同款用法）：
-            // 右键即「插入常用条目… / 保存为常用条目 / 捕获当前块」——最自然的捕获与调用路径
+            // 编辑器右键菜单：基于划选状态智能上下文分流，杜绝菜单过度平铺臃肿
             this.menuHandler = (event) => {
                 const {menu} = event.detail;
-                menu.addItem({
-                    icon: "iconXlcCommon",
-                    label: this.i18nFn()("insertMenu"),
-                    click: () => this.openSearch(),
-                });
-                menu.addItem({
-                    icon: "iconXlcCommon",
-                    label: this.i18nFn()("surroundSelection"),
-                    click: () => {
-                        const sel = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : "";
-                        this.openSearch(undefined, undefined, sel || undefined);
-                    },
-                });
-                menu.addItem({
-                    icon: "iconXlcCommon",
-                    label: this.i18nFn()("saveSelection"),
-                    click: () => void this.capture?.saveSelection(),
-                });
-                menu.addItem({
-                    icon: "iconXlcCommon",
-                    label: this.i18nFn()("captureBlock"),
-                    click: () => void this.capture?.captureCurrentBlock(),
-                });
-                menu.addItem({
-                    icon: "iconXlcCommon",
-                    label: this.i18nFn()("discoverCurrentDocument"),
-                    click: () => this.openDiscoveryForCurrentDocument(),
-                });
-                menu.addItem({
-                    icon: "iconXlcCommon",
-                    label: this.i18nFn()("discoverCurrentNotebook"),
-                    click: () => this.openDiscoveryForCurrentDocument("notebook"),
-                });
+                const sel = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : "";
+                if (sel) {
+                    // 有选区时：高亮呈现选区包裹与划选保存
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: this.i18nFn()("surroundSelection"),
+                        click: () => this.openSearch(undefined, undefined, sel),
+                    });
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: this.i18nFn()("saveSelection"),
+                        click: () => void this.capture?.saveSelection(),
+                    });
+                } else {
+                    // 无选区时：呈现常用调用、当前块捕获与文档发现
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: this.i18nFn()("insertMenu"),
+                        click: () => this.openSearch(),
+                    });
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: this.i18nFn()("captureBlock"),
+                        click: () => void this.capture?.captureCurrentBlock(),
+                    });
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: this.i18nFn()("discoverCurrentDocument"),
+                        click: () => this.openDiscoveryForCurrentDocument(),
+                    });
+                }
             };
             this.eventBus.on("open-menu-content", this.menuHandler);
             // 块引用右键：把被引用块存为 blockref 条目（官方 detail.element data-id）

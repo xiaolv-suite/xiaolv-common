@@ -3113,13 +3113,13 @@
     flex-direction: column;
     box-sizing: border-box;
     width: 100%;
-    max-width: 720px;
+    max-width: min(720px, 92vw);
     max-height: 80vh;
     overflow: hidden;
-    border: 1px solid var(--xlc-border-strong, var(--b3-border-color));
-    border-radius: var(--xlc-radius-3);
-    background-color: var(--xlc-surface-raised, var(--b3-theme-background));
-    box-shadow: var(--xlc-shadow-3, 0 12px 32px rgba(0, 0, 0, 0.24));
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius-lg);
+    background-color: var(--xlc-raised);
+    box-shadow: var(--xlc-overlay-shadow);
   }
 
   .xlc-quicklook-head {
