@@ -817,10 +817,11 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     padding: var(--xlc-space-3);
     background: var(--xlc-soft);
     border: 1px solid var(--xlc-line);
-    border-radius: var(--xlc-radius-md);
+    border-radius: var(--xlc-radius-sm);
+    box-shadow: 0 1px 2px rgba(41, 34, 72, 0.02);
     font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace;
     font-size: var(--xlc-font-sm);
-    line-height: 1.6;
+    line-height: var(--xlc-leading-relaxed);
     overflow-x: auto;
     white-space: pre;
 
@@ -844,6 +845,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     color: var(--xlc-muted);
     user-select: none;
     font-size: var(--xlc-font-xs);
+    font-variant-numeric: tabular-nums;
   }
 
   .xlc-code-content {
@@ -851,21 +853,21 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   }
 
   .xlc-tok {
-    &--kw, &--keyword { color: var(--xlc-tok-kw); font-weight: 600; }
+    &--kw, &--keyword { color: var(--xlc-tok-kw); font-weight: var(--xlc-weight-semibold); }
     &--str, &--string { color: var(--xlc-tok-str); }
-    &--num, &--number { color: var(--xlc-tok-num); }
+    &--num, &--number { color: var(--xlc-tok-num); font-variant-numeric: tabular-nums; }
     &--comment { color: var(--xlc-tok-comment); font-style: italic; }
     &--variable {
       color: var(--xlc-tok-var);
       background: var(--xlc-lavender);
       padding: 1px 4px;
-      border-radius: var(--xlc-radius-xs);
-      font-weight: 500;
+      border-radius: var(--xlc-radius-hairline);
+      font-weight: var(--xlc-weight-medium);
     }
   }
 
   .xlc-md-h {
-    font-weight: 600;
+    font-weight: var(--xlc-weight-semibold);
     color: var(--xlc-ink);
     margin: var(--xlc-space-3) 0 var(--xlc-space-2);
     line-height: var(--xlc-leading-snug);
@@ -888,6 +890,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     align-items: baseline;
     gap: var(--xlc-space-2);
     margin: var(--xlc-space-1) 0;
+    max-width: 72ch;
 
     &.xlc-md-nested {
       padding-left: var(--xlc-space-3);
@@ -897,8 +900,9 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   }
   .xlc-md-bullet, .xlc-md-ordered-num {
     color: var(--xlc-accent);
-    font-weight: 600;
+    font-weight: var(--xlc-weight-semibold);
     user-select: none;
+    font-variant-numeric: tabular-nums;
   }
   .xlc-md-task-item {
     align-items: center;
@@ -915,12 +919,14 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
 
   .xlc-md-p {
     margin: var(--xlc-space-2) 0;
-    line-height: var(--xlc-leading-loose);
+    line-height: var(--xlc-leading-relaxed);
     color: var(--xlc-ink);
+    max-width: 72ch;
+    letter-spacing: 0;
   }
 
   .xlc-md-bold {
-    font-weight: 600;
+    font-weight: var(--xlc-weight-semibold);
     color: var(--xlc-ink);
   }
 
