@@ -44,7 +44,11 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-tok-num: #ad5a18;
   --xlc-tok-comment: #858296;
   --xlc-tok-var: #c23b72;
-  --xlc-overlay-shadow: 0 12px 40px rgba(41, 34, 72, .10);
+  // 现代无杂质三档阴影（统一向下投射，层级递进）
+  --xlc-shadow-sm: 0 1px 3px rgba(41, 34, 72, 0.05), 0 1px 2px rgba(41, 34, 72, 0.03);
+  --xlc-shadow-md: 0 4px 14px rgba(41, 34, 72, 0.07), 0 1px 3px rgba(41, 34, 72, 0.04);
+  --xlc-shadow-lg: 0 12px 36px rgba(41, 34, 72, 0.10), 0 2px 6px rgba(41, 34, 72, 0.04);
+  --xlc-overlay-shadow: var(--xlc-shadow-lg);
   --xlc-chevron: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236c6a7f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: light;
 }
@@ -90,7 +94,11 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-tok-num: #f4b36d;
   --xlc-tok-comment: #8a869e;
   --xlc-tok-var: #f683a6;
-  --xlc-overlay-shadow: 0 12px 40px rgba(0, 0, 0, .32);
+  // 暗色模式统一三档阴影（增强与背景对比度，柔和深沉，不简单死黑）
+  --xlc-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.18);
+  --xlc-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.32), 0 1px 3px rgba(0, 0, 0, 0.22);
+  --xlc-shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --xlc-overlay-shadow: var(--xlc-shadow-lg);
   --xlc-chevron: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23b2aec4' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
@@ -159,12 +167,19 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-dur-fast: 120ms;
   --xlc-dur-control: 140ms;
   --xlc-dur: 160ms;
+  --xlc-dur-slow: 200ms;
+  // 三类标准动效时长（禁止随意时长与无意义弹跳）
+  --xlc-dur-state: var(--xlc-dur-fast); // 120ms 状态微交互
+  --xlc-dur-elevation: var(--xlc-dur); // 160ms 菜单/弹窗层级进出
+  --xlc-dur-spatial: var(--xlc-dur-slow); // 200ms 空间折叠与位移
+
   --xlc-layer-local: 1;
   --xlc-layer-popover: 10;
-  // 普通卡片和按钮靠描边/明度区分，只有浮层保留轻阴影。
-  --xlc-shadow-1: none;
-  --xlc-shadow-2: var(--xlc-overlay-shadow);
-  --xlc-shadow-soft-focus: 0 1px 2px rgba(0, 0, 0, .2);
+  // 现代统一三档阴影别名映射
+  --xlc-shadow-1: var(--xlc-shadow-sm);
+  --xlc-shadow-2: var(--xlc-shadow-md);
+  --xlc-shadow-3: var(--xlc-shadow-lg);
+  --xlc-shadow-soft-focus: var(--xlc-shadow-sm);
 
   --xlc-badge-text: var(--xlc-success);
   --xlc-badge-text-bg: var(--xlc-success-soft);
@@ -228,6 +243,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
 
   input[type="checkbox"] { accent-color: var(--xlc-accent); }
 
+  // 统计、计时、序号等宽排版对齐
+  :is(.xlc-row-ordinal, .xlc-row-usecount, .xlc-line-num, .xlc-pane-meta-date, .xlc-kbd-key, .xlc-card-value, .xlc-dock-row-usecount, .xlc-batch-count) {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
   .b3-button {
     min-height: 36px;
     padding: var(--xlc-space-2) var(--xlc-space-4);
@@ -239,20 +260,25 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     font-weight: var(--xlc-weight-semibold);
     line-height: var(--xlc-line-body);
     box-shadow: none;
-    transition: background-color var(--xlc-dur-control) ease, border-color var(--xlc-dur-control) ease;
+    transition: background-color var(--xlc-dur-control) ease,
+                border-color var(--xlc-dur-control) ease,
+                transform var(--xlc-dur-fast) ease,
+                opacity var(--xlc-dur-fast) ease;
 
     &:hover { background: var(--xlc-soft); border-color: var(--xlc-muted); }
-    &:active { transform: none; }
-    &:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    &:active { transform: scale(0.98); }
+    &:disabled, &[aria-disabled="true"] { opacity: .45; cursor: not-allowed; transform: none; }
+    &[aria-busy="true"] { opacity: .7; cursor: wait; pointer-events: none; }
   }
 
   .b3-button.xlc-btn-primary {
     background: var(--xlc-accent);
     color: var(--xlc-accent-contrast);
     border-color: transparent;
-    box-shadow: none;
+    box-shadow: var(--xlc-shadow-sm);
 
-    &:hover { background: var(--xlc-accent); border-color: transparent; }
+    &:hover { background: var(--xlc-accent); filter: brightness(1.08); border-color: transparent; }
+    &:active { transform: scale(0.98); filter: brightness(0.96); }
   }
 
   .b3-button.xlc-btn-ghost {
@@ -261,12 +287,16 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     color: var(--xlc-muted);
 
     &:hover { background: var(--xlc-soft); color: var(--xlc-ink); }
+    &:active { transform: scale(0.98); }
   }
 
   .b3-button.xlc-btn-ai {
     background: var(--xlc-lavender);
     color: var(--xlc-lavender-ink);
     border-color: transparent;
+
+    &:hover { background: var(--xlc-soft); color: var(--xlc-accent); }
+    &:active { transform: scale(0.98); }
   }
 
   :is(.b3-text-field, .b3-select) {
@@ -280,15 +310,23 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     font-size: var(--xlc-font-lg);
     line-height: var(--xlc-line-body);
     box-shadow: none;
+    transition: border-color var(--xlc-dur-control) ease,
+                background-color var(--xlc-dur-control) ease,
+                box-shadow var(--xlc-dur-control) ease;
 
     &:hover { border-color: var(--xlc-muted); }
-    &:focus { border-color: var(--xlc-accent); background-color: var(--xlc-surface); box-shadow: none; }
-    &:disabled { opacity: .6; cursor: not-allowed; }
+    &:focus { border-color: var(--xlc-accent); background-color: var(--xlc-surface); box-shadow: 0 0 0 2px var(--xlc-lavender); }
+    &:disabled, &[aria-disabled="true"] { opacity: .5; cursor: not-allowed; background-color: var(--xlc-soft); }
+    &[aria-busy="true"] { opacity: .7; cursor: wait; }
     &::placeholder { color: var(--xlc-muted); opacity: 1; }
   }
 
   .b3-select { height: 40px; padding-right: var(--xlc-space-8); }
-  .b3-text-field.xlc-input--error { border-color: var(--xlc-danger); }
+  .b3-text-field.xlc-input--error,
+  .b3-text-field[aria-invalid="true"] {
+    border-color: var(--xlc-danger);
+    &:focus { box-shadow: 0 0 0 2px var(--xlc-danger-soft); }
+  }
 
   .xlc-form-label { color: var(--xlc-ink); font-size: var(--xlc-font-sm); font-weight: var(--xlc-weight-semibold); line-height: var(--xlc-line-control); }
   .xlc-form-hint { color: var(--xlc-muted); font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); }
@@ -1091,3 +1129,20 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     font-weight: 700;
   }
 }
+
+// ══════════ 减少动态效果偏好（prefers-reduced-motion）══════════
+@media (prefers-reduced-motion: reduce) {
+  :is(#{$roots}) {
+    --xlc-dur-fast: 0ms !important;
+    --xlc-dur-control: 0ms !important;
+    --xlc-dur: 0ms !important;
+    --xlc-dur-slow: 0ms !important;
+    --xlc-dur-state: 0ms !important;
+    --xlc-dur-elevation: 0ms !important;
+    --xlc-dur-spatial: 0ms !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
