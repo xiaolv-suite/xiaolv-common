@@ -124,20 +124,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.73] — 2026-10-29 (Latest)
+### [v0.10.74] — 2026-10-30 (Latest)
 
-Comprehensive entry usability audit, P0 selection caret blockId extraction fix, command palette mode dispatching, and single-item paste queue action:
-- **P0 Selection Caret Fix (`getSelectionInfo`)**: In collapsed selection states where the caret rests inside a block without highlighted text, the parser correctly traverses upward to resolve the enclosing block ID; eliminates spurious "block not found" errors on right-click capture and `⌥⇧B`.
-- **Command Palette Intent Decoupling (`insertCmd`, `copyCmd`, `openSourceCmd`)**: Commands now supply specific `defaultActionMode` parameters; selecting "Copy snippet" hits Enter to copy plain text directly, and "Open source" directly navigates to the source block/doc.
-- **Single-Item Paste Queue Menu Entry**: Added "📋 Add to Paste Queue (⌥⇧Q)" in snippet `…` context menus, allowing single items to be pushed to the queue without entering batch mode.
-- **Sidebar Dock Hotkey Guidance**: Enhanced `⌥⇧D` command with mobile mode detection and friendly guidance when the dock icon is hidden.
-- **Quality Gates**: Unit test suite expanded to **1038/1038 passing tests** with verified negative mutation gate (mutation 145), with all 25 UI render snapshots and 77/77 interaction audits green.
+UI backlog full closure, search history horizontal scrolling, optical indicator alignment, and breathable multi-select pill styling:
+- **Search History Horizontal Roving (UI-01)**: Refactored `.xlc-search-history-bar` to single-line `flex-wrap: nowrap; overflow-x: auto;` with hidden scrollbars and shrink protection, eliminating viewport height crowding.
+- **Dock Category Folding Arrow Optical Alignment (UI-02)**: Standardized `.xlc-dock-group-arrow` with `inline-flex` vertical centering, eliminating cross-platform font 1px baseline shifts.
+- **Breathable Multi-Select Option Styling (UI-03)**: Upgraded multi-option selection states to semi-transparent lavender tint `var(--xlc-lavender)` with accent text, balancing visual hierarchy and breathable translucency.
+- **Discovery Status Row Grid Alignment (UI-04)**: Standardized action gap in discovery status rows to `var(--xlc-space-2)` (8px).
+- **Quality Gates**: Unit test suite expanded to **1042/1042 passing tests** with verified negative mutation gate (mutation 146), with all 25 UI render snapshots and 77/77 interaction audits green.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.72, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.73, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.73** | Comprehensive entry usability audit, P0 selection caret blockId extraction fix, command palette mode dispatching, and single-item paste queue action | [ADR 0155](./docs/adr/0155-entry-usability-and-closure-hardening.md) |
 | **v0.10.72** | Visual identity evolution, dual-layer base background, operational/data color decoupling, and dark contrast rhythm cards | [ADR 0154](./docs/adr/0154-visual-identity-and-contrast-hierarchy.md) |
 | **v0.10.71** | Dock keyboard roving navigation & quick action, CSV to list macro, and URL Query building engine | [ADR 0153](./docs/adr/0153-dock-keyboard-and-formatting-pipeline.md) |
 | **v0.10.70** | Dock category tree state memory, URL component extraction engine, and multi-line prefix/suffix formatting macros | [ADR 0152](./docs/adr/0152-dock-memory-and-formatting-macros.md) |

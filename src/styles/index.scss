@@ -246,15 +246,20 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
     padding: 3px 0 1px 0;
     font-size: var(--xlc-font-2xs);
     color: var(--b3-theme-on-surface);
+
+    &::-webkit-scrollbar { display: none; }
 
     .xlc-history-label {
       opacity: 0.7;
       margin-right: 2px;
       font-size: 11px;
+      flex-shrink: 0;
     }
 
     .xlc-history-pill {
@@ -268,6 +273,8 @@
       border-radius: var(--b3-border-radius);
       cursor: pointer;
       line-height: var(--xlc-line-control);
+      flex-shrink: 0;
+      white-space: nowrap;
       transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
                   border-color var(--xlc-dur-fast) var(--xlc-ease);
 
@@ -2427,9 +2434,9 @@
         }
 
         &--selected {
-          border-color: var(--lv-brand) !important;
-          background-color: var(--lv-brand) !important;
-          color: var(--xlc-accent-contrast) !important;
+          border-color: var(--xlc-accent) !important;
+          background-color: var(--xlc-lavender) !important;
+          color: var(--xlc-accent-text) !important;
           font-weight: var(--xlc-weight-semibold);
           box-shadow: var(--xlc-shadow-sm);
         }
@@ -3364,7 +3371,10 @@
     line-height: var(--xlc-leading-normal);
   }
 
-  .xlc-discovery-status-row { min-height: 30px; }
+  .xlc-discovery-status-row {
+    min-height: 32px;
+    gap: var(--xlc-space-2);
+  }
   .xlc-discovery-status-row .xlc-status { flex: 1; min-width: 0; }
 
   .xlc-discovery-filters {
@@ -4454,13 +4464,13 @@
     padding: 6px 8px;
     margin: 4px 0 2px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: var(--xlc-weight-semibold);
     color: var(--xlc-muted);
     background: var(--xlc-soft);
     border-radius: var(--xlc-radius-sm);
     cursor: pointer;
     user-select: none;
-    transition: background-color var(--xlc-dur-fast) ease;
+    transition: background-color var(--xlc-dur-fast) var(--xlc-ease);
 
     &:hover {
       background: var(--xlc-lavender);
@@ -4471,8 +4481,12 @@
       width: 12px;
       font-size: 10px;
       line-height: 1;
-      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      vertical-align: middle;
       flex-shrink: 0;
+      transition: transform var(--xlc-dur-fast) var(--xlc-ease);
     }
 
     .xlc-dock-group-name {
