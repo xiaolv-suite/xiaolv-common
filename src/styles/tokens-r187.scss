@@ -660,10 +660,32 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   .xlc-discovery-category-settings > .b3-text-field { flex: 0 1 150px; min-height: 36px; font-size: var(--xlc-font-sm); }
   .xlc-discovery-category-settings > .xlc-form-hint { flex: 1 1 220px; }
   .xlc-discovery-content { gap: var(--xlc-space-4); }
-  :is(.xlc-discovery-list, .xlc-discovery-preview) { border-radius: var(--xlc-radius-sheet); background: var(--xlc-surface); }
-  .xlc-discovery-list { padding: var(--xlc-space-2); }
-  .xlc-discovery-row { padding: var(--xlc-space-3) var(--xlc-space-3); gap: var(--xlc-space-3); border-radius: var(--xlc-radius); }
-  .xlc-discovery-row--active { background: var(--xlc-lavender); }
+  :is(.xlc-discovery-list, .xlc-discovery-preview) {
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius-lg);
+    background: var(--xlc-surface);
+    box-shadow: var(--xlc-shadow-float);
+  }
+  .xlc-discovery-list { padding: var(--xlc-space-3); }
+  .xlc-discovery-row {
+    padding: var(--xlc-space-3) var(--xlc-space-3);
+    gap: var(--xlc-space-3);
+    border-radius: var(--xlc-radius-sm);
+    border: 1px solid transparent;
+    transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
+                border-color var(--xlc-dur-fast) var(--xlc-ease),
+                transform var(--xlc-dur-fast) var(--xlc-ease);
+
+    &:hover {
+      background: var(--xlc-soft);
+      border-color: var(--xlc-line);
+      transform: translateY(-0.5px);
+    }
+  }
+  .xlc-discovery-row--active {
+    background: var(--xlc-lavender);
+    border-color: var(--xlc-accent);
+  }
   .xlc-discovery-row--disabled { opacity: 1; }
   .xlc-discovery-row-title { font-size: var(--xlc-font-md); line-height: var(--xlc-line-body); font-weight: var(--xlc-weight-strong); }
   :is(.xlc-discovery-row-meta, .xlc-discovery-row-summary) { font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); }
@@ -729,8 +751,21 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
 
 :is(#{$roots}).xlc-dialog--mobile {
   .xlc-list { width: 100%; flex: 1; border: 0; background: transparent; border-radius: 0; }
-  .xlc-row { margin-bottom: var(--xlc-space-2); padding: var(--xlc-space-3); border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius); background: var(--xlc-surface); box-shadow: none; }
-  .xlc-row--active { background: var(--xlc-lavender); border-color: var(--xlc-accent); box-shadow: none; }
+  .xlc-row {
+    margin-bottom: var(--xlc-space-2);
+    padding: var(--xlc-space-3);
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius);
+    background: var(--xlc-surface);
+    box-shadow: 0 1px 3px rgba(41, 34, 72, 0.03);
+    transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
+                border-color var(--xlc-dur-fast) var(--xlc-ease);
+  }
+  .xlc-row--active {
+    background: var(--xlc-lavender);
+    border-color: var(--xlc-accent);
+    box-shadow: var(--xlc-shadow-sm);
+  }
   .xlc-row-action { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
   .xlc-search .xlc-search-input { font-size: var(--xlc-font-xl); }
   .xlc-mobile-foot .b3-button { min-height: 44px; }

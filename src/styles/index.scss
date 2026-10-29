@@ -4052,19 +4052,23 @@
     border-radius: var(--xlc-radius-sm);
     background: var(--lv-brand);
     color: var(--xlc-accent-contrast);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    vertical-align: middle;
     flex-shrink: 0;
 
     svg {
       width: 14px;
       height: 14px;
+      display: block;
     }
   }
 
   .lv-dialog-title-text {
     font-weight: var(--xlc-weight-semibold);
+    display: inline-flex;
+    align-items: center;
   }
 
   .lv-dialog-title-pill {
