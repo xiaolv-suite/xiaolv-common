@@ -49,6 +49,7 @@ import {mountXlcBridge} from "./service/external-bridge";
 import {queryEcosystemItems} from "./service/ecosystem";
 import {registerRaikiriModuleSafely} from "./ecosystem-bridge-kit";
 import {getActivePasteQueue} from "./model/paste-queue";
+import {DockView, type DockViewDeps} from "./ui/dock-view";
 
 declare let __webpack_public_path__: string;
 
@@ -112,6 +113,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     private raikiriDisposer: (() => void) | null = null;
     private clipboardListenerCleanup: (() => void) | null = null;
     private discoveryDialog: DiscoveryDialogController | null = null;
+    private dockView: DockView | null = null;
     private unloading = false;
 
     async onload(): Promise<void> {
@@ -206,7 +208,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.executor = new ActionExecutor(this.library, this.host, this.notify, (item) => {
             this.service.touchRecent(item.id);
             this.recordUsage(item.id);
-            this.searchDialog?.refreshAfterExternalChange();
+            this.notifyExternalDataChange();
         }, {
             enabled: () => this.state.search.placeholders,
             now: () => new Date(),
@@ -244,7 +246,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             ai: this.ai,
             state: this.state,
             onStateChange: () => this.persistSoon(),
-            onLibraryChange: () => this.searchDialog?.refreshAfterExternalChange(),
+            onLibraryChange: () => this.notifyExternalDataChange(),
         });
         // 对外窗口桥 window.xiaolvCommon v1（T-0031 · ADR-0013）：只读子集，服务已装配即可挂
         this.bridgeDisposer = mountXlcBridge(this.service);
@@ -285,7 +287,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 const result = await this.library.createItem(input, undefined, options);
                 if (!result.ok) return {ok: false, message: result.message};
                 this.notify("info", this.i18nFn()("saved", result.data.item.title));
-                this.searchDialog?.refreshAfterExternalChange();
+                this.notifyExternalDataChange();
                 return {ok: true, message: result.data.item.title, itemId: result.data.item.id};
             },
             notify: this.notify,
@@ -584,7 +586,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 return result.data;
             },
             onAdded: () => {
-                this.searchDialog?.refreshAfterExternalChange();
+                this.notifyExternalDataChange();
             },
             savedViews: this.state.search.savedDiscoveryViews ?? [],
             onSaveView: (view) => this.saveDiscoveryView(view),
@@ -794,7 +796,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             const map = parseExistingMap(await this.kernelClient.request("checkBlocksExist", {ids: Array.from(ids)}));
             this.missingSources = new Set(Object.entries(map).filter(([, ok]) => !ok).map(([id]) => id));
             // 重绘走保滚动位刷新；预检已被节流挡住，不会递归
-            this.searchDialog?.refreshAfterExternalChange();
+            this.notifyExternalDataChange();
         } catch {
             // 预检失败不打扰用户：徽标缺席，打开来源时仍有实时校验兜底
         }
@@ -842,6 +844,16 @@ export default class XiaolvCommonPlugin extends Plugin {
             langKey: "open",
             hotkey: "⌥⇧C",
             callback: () => this.openSearch(),
+        });
+        this.addCommand({
+            langKey: "toggleDock",
+            hotkey: "⌥⇧D",
+            callback: () => {
+                const dockBtn = typeof document !== "undefined"
+                    ? document.querySelector<HTMLElement>('[data-type="xiaolv-common-dock"]')
+                    : null;
+                dockBtn?.click();
+            },
         });
         this.addCommand({
             langKey: "pasteQueueNext",
@@ -1119,6 +1131,94 @@ export default class XiaolvCommonPlugin extends Plugin {
         } catch {
             // 事件契约变化时降级：右键入口缺席，其余入口仍可用
         }
+        try {
+            if (!this.host.isMobile()) {
+                this.addDock({
+                    config: {
+                        position: "RightTop",
+                        size: { width: 300, height: 0 },
+                        icon: "iconXlcCommon",
+                        title: this.i18nFn()("pluginName") || "小驴常用",
+                        hotkey: "⌥⇧D",
+                    },
+                    data: {},
+                    type: "xiaolv-common-dock",
+                    init: (custom: any) => {
+                        this.dockView = new DockView(custom.element as HTMLElement, this.buildDockDeps());
+                    },
+                    destroy: () => {
+                        this.dockView?.destroy();
+                        this.dockView = null;
+                    },
+                });
+            }
+        } catch {
+            // 宿主无 addDock API 保护
+        }
+    }
+
+    private buildDockDeps(): DockViewDeps {
+        return {
+            t: this.i18nFn(),
+            notify: (kind, msg) => this.notify(kind, msg),
+            search: async (query) => {
+                if (!this.library) {
+                    return {entries: [], truncated: false, total: 0};
+                }
+                const loading = !this.library.getIndex();
+                const idx = await this.library.ensureIndex(5 * 60_000);
+                const results = searchEntries(idx.entries, query, this.searchContext());
+                const entries = results.map((r) => r.entry);
+                void this.prefetchSourceHealth(entries);
+                const error = entries.length === 0 && idx.errors.length > 0 ? idx.errors[0] : undefined;
+                return {entries, truncated: idx.truncated, total: idx.entries.length, loading, error};
+            },
+            preview: async (itemId) => {
+                const cached = this.previewCache.get(itemId);
+                if (cached !== undefined) return cached;
+                const got = await this.library.getItem(itemId);
+                if (!got.ok) return "";
+                const kd = await this.library.getItemKramdown(got.data);
+                return kd.ok ? await this.library.expandSnippetRefs(kd.data) : "";
+            },
+            runAction: async (itemId, mode) => {
+                const res = await this.service.insert(itemId, {mode});
+                return {ok: res.ok, message: res.message ?? ""};
+            },
+            runActionWithFills: async (itemId, mode, fills) => {
+                const res = await this.service.insert(itemId, {mode, fills});
+                return {ok: res.ok, message: res.message ?? ""};
+            },
+            toggleFavorite: (itemId) => {
+                const fav = this.service.toggleFavorite(itemId);
+                this.notifyExternalDataChange();
+                return fav;
+            },
+            isFavorite: (itemId) => this.state.favorites.includes(itemId),
+            copyText: async (text) => {
+                const html = isMarkdownFormattingPresent(text) ? renderSafeHtmlFromMarkdown(text) : undefined;
+                return this.host.writeClipboard(text, html);
+            },
+            copyProviderPayload: async (text) => {
+                const html = isMarkdownFormattingPresent(text) ? renderSafeHtmlFromMarkdown(text) : undefined;
+                return this.host.writeClipboard(text, html);
+            },
+            openSource: async (itemId) => {
+                const res = await this.service.openSource(itemId);
+                return {ok: res.ok, message: res.message ?? ""};
+            },
+            newItem: (initialTitle) => void this.capture?.newManual(initialTitle),
+            openSettings: () => this.openSetting(),
+            getUsage: () => this.state.usage,
+            isSourceMissing: (entry) => this.missingSources.has(entry.id),
+            hasActiveEditor: () => this.host.hasActiveEditor(),
+        };
+    }
+
+    /** 统一通知搜索弹窗与 Dock 侧边栏进行无感差量刷新 */
+    private notifyExternalDataChange(): void {
+        this.searchDialog?.refreshAfterExternalChange();
+        void this.dockView?.refresh();
     }
 
     // ---- 搜索界面 ----
@@ -1291,7 +1391,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 });
                 if (created.ok) {
                     this.notify("info", this.i18nFn()("saved", created.data.item.title));
-                    this.searchDialog?.refreshAfterExternalChange();
+                    this.notifyExternalDataChange();
                     return true;
                 } else {
                     this.notify("error", created.message);
@@ -1311,7 +1411,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                         if (active && (active.targetBlockId === blockId || active.id.includes(blockId))) {
                             active.content = newText;
                             active.summary = newText.slice(0, 100);
-                            this.searchDialog?.refreshAfterExternalChange();
+                            this.notifyExternalDataChange();
                         }
                     },
                 }, blockId, currentContent);
@@ -1378,7 +1478,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 if (created.ok) {
                     this.notify("info", this.i18nFn()("duplicated", shortTitle(created.data.item.title)));
                     // 副本即时出现在打开着的列表里（R138）
-                    this.searchDialog?.refreshAfterExternalChange();
+                    this.notifyExternalDataChange();
                 } else {
                     this.notify("error", created.message);
                 }
@@ -1401,7 +1501,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 });
                 if (created.ok) {
                     this.notify("info", this.i18nFn()("saved", created.data.item.title));
-                    this.searchDialog?.refreshAfterExternalChange();
+                    this.notifyExternalDataChange();
                 } else {
                     this.notify("error", created.message);
                 }
@@ -1780,8 +1880,8 @@ export default class XiaolvCommonPlugin extends Plugin {
                         this.persistSoon();
                         // 删除回执即时给出；后台重建索引失败另行诚实提示（不吞 rejection，R138）
                         this.notify("info", this.i18nFn()("deleted", got.data.title));
-                        // 搜索弹窗若开着，同步移除已删行（R138）
-                        this.searchDialog?.refreshAfterExternalChange();
+                        // 搜索弹窗与侧栏同步移除已删行
+                        this.notifyExternalDataChange();
                         this.library.reindex().catch((err) => {
                             this.notify("error", this.i18nFn()("kernelError", toErrorMessage(err)));
                         });
@@ -2061,7 +2161,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             fetchAssetBytes: (path) => this.fetchAssetBytes(path),
             aiErrorText: (err) => this.aiErrorText(err),
             applyPinyinAdapter: () => this.applyPinyinAdapter(),
-            refreshSearch: () => this.searchDialog?.refreshAfterExternalChange(),
+            refreshSearch: () => this.notifyExternalDataChange(),
             getSavedDiscoveryViews: () => this.state.search.savedDiscoveryViews ?? [],
             openSavedDiscoveryView: (view) => this.openSavedDiscoveryView(view),
             deleteSavedDiscoveryView: (id) => this.deleteSavedDiscoveryView(id),
@@ -2123,7 +2223,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.invalidatePreviewCache();
         this.persistSidecar(STORAGE_KEYS.config, config);
         void this.library.reindex().then((idx) => {
-            this.searchDialog?.refreshAfterExternalChange();
+            this.notifyExternalDataChange();
             this.notify("info", idx.truncated
                 ? this.i18nFn()("reindexTruncated", String(LIMITS.maxItems))
                 : this.i18nFn()("reindexDone", String(idx.entries.length)));
@@ -2169,7 +2269,7 @@ export default class XiaolvCommonPlugin extends Plugin {
 
     registerProvider(descriptor: ProviderDescriptor, runtime?: {search?(query: string): Promise<Array<{title: string; payload: string}>>}): void {
         const result = this.service.registerProvider(descriptor, runtime);
-        if (result.ok) this.searchDialog?.refreshAfterExternalChange();
+        if (result.ok) this.notifyExternalDataChange();
         this.notify(result.ok ? "info" : "error", result.ok
             ? this.i18nFn()("providerRegistered", descriptor.displayName)
             : (result.message ?? "rejected"));
@@ -2177,7 +2277,7 @@ export default class XiaolvCommonPlugin extends Plugin {
 
     unregisterProvider(pluginId: string): void {
         const result = this.service.unregisterProvider(pluginId);
-        if (result.ok) this.searchDialog?.refreshAfterExternalChange();
+        if (result.ok) this.notifyExternalDataChange();
         this.notify(result.ok ? "info" : "error", result.ok
             ? this.i18nFn()("providerUnregistered", pluginId)
             : (result.message ?? "rejected"));
@@ -2250,6 +2350,8 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.searchDialog = null;
         this.capture?.destroy();
         this.capture = null;
+        this.dockView?.destroy();
+        this.dockView = null;
         if (this.saveTimer) clearTimeout(this.saveTimer);
         this.persistSidecar(STORAGE_KEYS.state, this.state, false);
         if (discoveryShutdown) {

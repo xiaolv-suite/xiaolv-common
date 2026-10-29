@@ -1,7 +1,7 @@
 // R187 · 小驴常用视觉基座。
 // 配色取自小驴闪卡 R54 原型；变量别名参考小驴打卡的局部主题适配。
 // 只向本插件的根与已标记弹窗提供变量，不重定义宿主全局主题。
-$roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-host, .b3-dialog__container.xlc-form-host, .b3-dialog__container.xlc-varform-host, .b3-dialog__container.xlc-sheet";
+$roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.xlc-dialog-host, .b3-dialog__container.xlc-form-host, .b3-dialog__container.xlc-varform-host, .b3-dialog__container.xlc-sheet";
 
 @mixin light-palette {
   --xlc-canvas: #f7f7fc;
@@ -995,7 +995,9 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-dialog-
       .xlc-policy,
       .xlc-md-callout,
       .xlc-settings-nav-pill,
-      .xlc-quicklook-card {
+      .xlc-quicklook-card,
+      .xlc-dock-row,
+      .xlc-dock-chip {
         border: 1px solid CanvasText;
       }
 

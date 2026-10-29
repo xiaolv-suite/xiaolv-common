@@ -402,6 +402,7 @@
   "pasteQueueNext": "Paste Next Item from Queue",
   "pasteQueueEmpty": "Paste queue is empty. Select multiple items in the list to set up a queue first.",
   "pasteQueuePopped": "Popped \"%s\", %s item(s) remaining in queue",
+  "toggleDock": "Toggle Common Snippets Dock Panel",
   "surroundSelection": "Surround Selection with Snippet",
   "surroundNoSelection": "No active selection in the editor. Please select text first.",
   "setPasteQueue": "📋 Set as Paste Queue",

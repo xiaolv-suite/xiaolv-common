@@ -57,6 +57,7 @@ import * as clipboardCleaner from "../src/model/clipboard-cleaner";
 import * as pasteQueue from "../src/model/paste-queue";
 import * as templateWizard from "../src/model/template-wizard";
 import * as textMetrics from "../src/model/text-metrics";
+import * as dockView from "../src/ui/dock-view";
 
 export {
     item,
@@ -114,4 +115,5 @@ export {
     templateWizard,
     textMetrics,
     textFormatting,
+    dockView,
 };

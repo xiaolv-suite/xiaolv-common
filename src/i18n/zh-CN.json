@@ -402,6 +402,7 @@
   "pasteQueueNext": "连续取用粘贴队列下一项",
   "pasteQueueEmpty": "连续取用队列已空，请先在常用列表多选条目设立队列",
   "pasteQueuePopped": "已取用「%s」，队列剩余 %s 项",
+  "toggleDock": "切换常用语侧边栏 (Dock)",
   "surroundSelection": "用常用模板包裹选区",
   "surroundNoSelection": "当前编辑器无活动选区，请先划选一段文本",
   "setPasteQueue": "📋 设为取用队列",

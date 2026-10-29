@@ -124,29 +124,22 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.66] — 2026-10-29 (Latest)
+### [v0.10.67] — 2026-10-29 (Latest)
 
-Comprehensive quality hardening, context-aware context menu, enter-to-create empty state self-healing, and interaction reliability:
-- **Context-Aware Context Menu**: Dynamically bifurcates menu actions based on selection presence—shows template surround and save selection when text is selected, and presents snippet insert, block capture, and document discovery when unselected, completely eliminating context menu clutter.
-- **Empty Search Enter-to-Create Self-Healing (`newItem`)**: Pressing `Enter` when no search results match automatically opens the creation form with the query pre-filled, creating a zero-mouse flow.
-- **Scope Input Protection**: Removes aggressive scope reset upon input, preserving keyword filtering inside Favorites, Recent, and Clipboard scopes.
-- **Table Transposition Context Preservation (`transposeMarkdownTable`)**: Accurately detects table boundaries and keeps leading/trailing notes and markdown content 100% intact.
-- **Pane Action Footer Flow Layout**: Refactors `.xlc-pane-foot` to adaptive wrap layout, preventing action buttons from overflowing or being clipped on narrow windows.
-- **Sticky Settings Navigation Pills**: Adds 7 sticky category navigation pills (`📦 Library`, `⚙️ Preferences`, `🤖 AI`, `🔍 Search`, `🏥 Doctor`, `⚡ Ecosystem`, `💾 Data`) for instant smooth scrolling.
-- **Form Textarea Vertical Resizing**: Captures and quick edits now support vertical dragging with `50vh` viewport guard.
-- **Quick Look Responsive Enhancements**: Fully adopts R187 design tokens and `max-width: min(720px, 92vw)` with forced-colors accessibility borders.
-- **Native Markdown Callout Card Preview (`previewRenderer`)**: Rich preview engine natively parses GitHub/Obsidian style callouts (`> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`, `> [!DANGER]`, `> [!IMPORTANT]`, etc.), rendering high-aesthetic structured cards with semantic color borders, icons (💡/🚀/⚠️/🛑/📌), and dedicated forced-colors high contrast borders.
-- **JSON Path Query Hardening & Prototype Defense (`queryJsonPath`)**: Path tokenizer refactored to fully support bracket paths with quotes (e.g. `settings["api.key"]`, `users[0]['name']`); strictly verifies `hasOwnProperty`, defending against prototype pollution attacks like `toString`, `constructor`, `__proto__`.
-- **Markdown Table Column Padding Fix (`beautifyMarkdownTable`)**: Automatically pads header rows when header has fewer columns than body rows, preventing column misalignment and border breakage.
-- **Callout Converter Leading Blank Line Tolerance (`formatMarkdownCallout`)**: Seamlessly handles and skips leading blank lines and line breaks when wrapping or stripping callout blocks.
-- **Documentation & Showcase Experience Upgrade**: Restructured plugin positioning and core feature map; Changelog strictly highlights latest release while cleanly collapsing historical milestones.
-- **Quality Gates**: Unit test suite expanded to **1010/1010 passing tests** with 7 verified negative injection mutations (130 ~ 136).
+Native Dock Panel view, HTML5 drag-and-drop to editor, and persistent snippet shelf:
+- **Native Dock Panel View (`DockView`)**: Fully integrates with official SiYuan `addDock` contract (defaults to `RightTop` dock), tailored for 240px~360px vertical sidebars. Complements the modal launcher for continuous, side-by-side writing workflows.
+- **Native HTML5 Drag & Drop Support**: Snippet items natively support draggable data transfer; users can drag snippets directly into any position in the SiYuan editor to drop content.
+- **Hover Quick Capsule & Mini Drawer Preview**: Hovering over an item reveals instant actions (`＋` insert without stealing editor focus, `⧉` copy plain text, `★` toggle favorite); clicking expands a mini bottom drawer with Callout/code syntax preview and action buttons.
+- **Bidirectional Reactive Delta Sync (`notifyExternalDataChange`)**: Any snippet creation, edit, deletion, favorite toggle, or import across modal launcher and dock panel updates simultaneously while preserving scroll position.
+- **Global Command & Mobile Fallback**: Registered `xiaolv.common.toggleDock` (`⌥⇧D`) to toggle the dock panel; cleanly falls back on mobile (`isMobile`) without rendering redundant desktop DOM.
+- **Quality Gates**: Unit test suite expanded to **1011/1011 passing tests** with verified negative injection mutation 137.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.65, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.66, collapsed)</b></summary>
 
 | Milestone | Key Release Highlights Summary | Architecture Decision |
 | :--- | :--- | :--- |
+| **v0.10.66** | Quality hardening, context-aware context menu, enter-to-create empty state self-healing, and interaction reliability | [ADR 0148](./docs/adr/0148-quality-hardening-callout-preview-and-prototype-defense.md) |
 | **v0.10.65** | Table beautification (`beautifyMarkdownTable`), JSON path query macro (`queryJsonPath` / `{{xlc:json}}`), and Callout formatting | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callout-converter.md) |
 | **v0.10.64** | Comprehensive quality optimization, zero lifecycle leaks, syntax highlighting fix, and interaction reliability | [ADR 0146](./docs/adr/0146-comprehensive-quality-optimization-and-reliability.md) |
 | **v0.10.63** | Markdown heading numbering/stripping (`numberMarkdownHeadings`), task progress bar macro (`{{xlc:progress}}`), and table matrix transposition | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
@@ -191,6 +184,7 @@ Comprehensive quality hardening, context-aware context menu, enter-to-create emp
 | `Alt + S` | `⌥ + S` | Launcher | Capture clipboard snippet or note block into library |
 | `Alt + T` | `⌥ + T` | Launcher | Cycle search scopes (All / Common / Recent / Star / Clip / Omni) |
 | `Alt + P` | `⌥ + P` | Launcher | Toggle pin window mode for continuous usage |
+| `Alt + Shift + D` | `⌥ + ⇧ + D` | Global | Toggle open/close snippet Dock panel |
 
 ---
 
