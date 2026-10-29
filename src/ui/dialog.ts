@@ -92,6 +92,8 @@ export interface DialogDeps {
     deleteVariablePreset?: (itemId: string, name: string) => void;
     /** 定向插入目标（文档树入口；设置后 Enter/点按插入到该文档而非活动编辑器） */
     insertTarget?: {docId: string; hPath: string} | null;
+    /** 启动主动作预设模式（从特定命令唤起时支持默认快速复制或打开来源） */
+    defaultActionMode?: "insert" | "copy" | "openSource";
     toggleFavorite: (itemId: string) => boolean;
     isFavorite: (itemId: string) => boolean;
     insertRaw: (markdown: string, target?: {docId: string; hPath: string}) => Promise<boolean>;
@@ -3022,6 +3024,19 @@ export class CommonSearchDialog {
         const cleanQuery = this.lastQueryText.replace(/^\?+/, "").trim();
         if (cleanQuery) this.deps.addRecentQuery?.(cleanQuery);
         if (this.primaryBusy || this.varFormOpen) return;
+        if (this.deps.defaultActionMode === "copy") {
+            const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
+            const plain = kramdownToPlainText(raw || entry.summary || "");
+            await this.deps.copyProviderPayload(plain);
+            if (!this.pinWindow) this.destroy();
+            this.deps.notify?.("info", "已复制条目内容到剪贴板");
+            return;
+        }
+        if (this.deps.defaultActionMode === "openSource") {
+            if (!this.pinWindow) this.destroy();
+            await this.deps.openSource(entry.id);
+            return;
+        }
         await this.insertEntryWithVars(entry, (fills) => this.runActionFor(entry, fills));
     }
 
@@ -4862,6 +4877,18 @@ export class CommonSearchDialog {
                         }
                     }, "xlc-menu-item", this.deps.t("resetItemUsage", String(useCount)));
                 }
+                // 加入连续取用队列（解决单条必须进多选的断点）
+                addSilent("📋", "加入连续取用队列 (⌥⇧Q)", async () => {
+                    const queue = getActivePasteQueue();
+                    queue.add({
+                        id: entry.id,
+                        title: entry.title || entry.summary || "未命名",
+                        content: entry.content || entry.summary || "",
+                        itemType: entry.itemType,
+                    });
+                    this.syncQueueChipRef?.();
+                    this.deps.notify?.("info", `已加入连续取用队列（当前共 ${queue.size()} 项）`);
+                }, "xlc-menu-item", "加入连续取用队列，随后按 ⌥⇧Q 依次取用上屏");
                 // 删除 = 危险动作，固定语义红（样式层区分；确认弹窗不变）
                 addSilent("🗑", this.deps.t("delete"), () => this.deps.deleteItem(entry.id), "xlc-menu-item xlc-menu-item--danger", `${this.deps.t("delete")} (Alt+Delete)`);
             }

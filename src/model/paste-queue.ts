@@ -39,6 +39,10 @@ export class PasteQueue {
         });
     }
 
+    push(item: PasteQueueItem): void {
+        this.add(item);
+    }
+
     /**
      * 弹出队首条目（FIFO 出栈）
      */

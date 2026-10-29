@@ -857,10 +857,18 @@ export default class XiaolvCommonPlugin extends Plugin {
             langKey: "toggleDock",
             hotkey: "⌥⇧D",
             callback: () => {
+                if (this.host.isMobile()) {
+                    this.notify("info", "移动端模式暂不支持侧边栏，请使用 Alt+Shift+C 呼出搜索面板");
+                    return;
+                }
                 const dockBtn = typeof document !== "undefined"
                     ? document.querySelector<HTMLElement>('[data-type="xiaolv-common-dock"]')
                     : null;
-                dockBtn?.click();
+                if (dockBtn) {
+                    dockBtn.click();
+                } else {
+                    this.notify("info", "侧边栏按钮未在当前布局显示，请在右侧面板栏或外观设置中启用「小驴常用」Dock");
+                }
             },
         });
         this.addCommand({
@@ -926,15 +934,15 @@ export default class XiaolvCommonPlugin extends Plugin {
         });
         this.addCommand({
             langKey: "insertCmd",
-            callback: () => this.openSearch(),
+            callback: () => this.openSearch(undefined, undefined, undefined, "insert"),
         });
         this.addCommand({
             langKey: "copyCmd",
-            callback: () => this.openSearch(),
+            callback: () => this.openSearch(undefined, undefined, undefined, "copy"),
         });
         this.addCommand({
             langKey: "openSourceCmd",
-            callback: () => this.openSearch(),
+            callback: () => this.openSearch(undefined, undefined, undefined, "openSource"),
         });
         this.addCommand({
             langKey: "discoverCurrentDocument",
@@ -1318,8 +1326,8 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     }
 
-    /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式 */
-    openSearch(insertTarget?: {docId: string; hPath: string}, initialQuery?: string, surroundText?: string): void {
+    /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式，defaultAction 预设主操作模式 */
+    openSearch(insertTarget?: {docId: string; hPath: string}, initialQuery?: string, surroundText?: string, defaultAction?: "insert" | "copy" | "openSource"): void {
         if (!this.library || !this.capture || !this.service) {
             showMessage(this.i18nFn()("startupFailed", "services unavailable"), 7000, "error");
             return;
@@ -1363,6 +1371,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             t: this.i18nFn(),
             initialQuery,
             surroundText,
+            defaultActionMode: defaultAction,
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {
                 const loading = !this.library.getIndex();
@@ -2411,10 +2420,10 @@ export default class XiaolvCommonPlugin extends Plugin {
 /** 官方选区读取：纯文本 + 当前块 ID（仅依赖公开的 data-node-id，见 ADR 0003） */
 function getSelectionInfo(): {text: string; blockId: string | null} {
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return {text: "", blockId: null};
-    const text = sel.toString();
+    if (!sel || sel.rangeCount === 0) return {text: "", blockId: null};
+    const text = sel.isCollapsed ? "" : sel.toString();
     let node: Node | null = sel.anchorNode;
-    while (node && node instanceof Element === false) node = node.parentNode;
+    while (node && !(node instanceof Element)) node = node.parentNode;
     const el = node as Element | null;
     const block = el?.closest?.("[data-node-id]") as HTMLElement | null;
     return {text, blockId: block?.getAttribute("data-node-id") ?? null};

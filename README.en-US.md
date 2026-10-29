@@ -124,20 +124,21 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.72] — 2026-10-29 (Latest)
+### [v0.10.73] — 2026-10-29 (Latest)
 
-Visual identity evolution, dual-layer base background, operational/data color decoupling, and dark contrast rhythm cards:
-- **Dual-Layer Base & Floating White Card Architecture (`tokens-r187.scss`)**: Derived ultra-light matching canvas (`#f6f6fb`) at L=97.6% based on primary hue (243°), combined with pure white (`#ffffff`) content cards (delta L=2.4% < 3%); boosted with dual-layer soft shadows (`--xlc-shadow-float`) for a weightless floating feel; dark mode canvas anchored at near-black with cool-purple undertone (`#161522`, contrast 14.2:1).
-- **Two-Color Decoupling**: Primary accent `--xlc-accent` (Violet) dedicated exclusively to operational semantics (buttons, active states, focus rings); data semantic accent `--xlc-data-accent: #059669` (dark `#34d399`) offset by 25° for positive telemetry (usage frequency, hit counts, streaks).
-- **Dark Contrast Bento Cards & Dramatic Typography Scale**: Introduced theme-tinted dark card `--xlc-dark-card: #171622` (L=11.5%) for usage insights and key metrics, paired with bright telemetry accents; large data metrics scaled to 22px~24px with tabular numbers, providing a ~3x scale leap against 11px captions.
-- **Asymmetric Motion & Micro-tactile Feel**: Introduced fast-in-slow-out easing `--xlc-ease-in: cubic-bezier(0.16, 1, 0.3, 1)` and clean exit easing `--xlc-ease-out: cubic-bezier(0.4, 0, 1, 1)`; active press state standardized to `scale(0.98)` tactile feedback; borders softened to translucent hairlines (`rgba(44, 43, 62, 0.07)`).
-- **Quality Gates**: Unit test suite expanded to **1035/1035 passing tests** with verified negative mutation gate (mutation 144), with all 25 UI render snapshots and 77/77 interaction audits green.
+Comprehensive entry usability audit, P0 selection caret blockId extraction fix, command palette mode dispatching, and single-item paste queue action:
+- **P0 Selection Caret Fix (`getSelectionInfo`)**: In collapsed selection states where the caret rests inside a block without highlighted text, the parser correctly traverses upward to resolve the enclosing block ID; eliminates spurious "block not found" errors on right-click capture and `⌥⇧B`.
+- **Command Palette Intent Decoupling (`insertCmd`, `copyCmd`, `openSourceCmd`)**: Commands now supply specific `defaultActionMode` parameters; selecting "Copy snippet" hits Enter to copy plain text directly, and "Open source" directly navigates to the source block/doc.
+- **Single-Item Paste Queue Menu Entry**: Added "📋 Add to Paste Queue (⌥⇧Q)" in snippet `…` context menus, allowing single items to be pushed to the queue without entering batch mode.
+- **Sidebar Dock Hotkey Guidance**: Enhanced `⌥⇧D` command with mobile mode detection and friendly guidance when the dock icon is hidden.
+- **Quality Gates**: Unit test suite expanded to **1038/1038 passing tests** with verified negative mutation gate (mutation 145), with all 25 UI render snapshots and 77/77 interaction audits green.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.71, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.72, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.72** | Visual identity evolution, dual-layer base background, operational/data color decoupling, and dark contrast rhythm cards | [ADR 0154](./docs/adr/0154-visual-identity-and-contrast-hierarchy.md) |
 | **v0.10.71** | Dock keyboard roving navigation & quick action, CSV to list macro, and URL Query building engine | [ADR 0153](./docs/adr/0153-dock-keyboard-and-formatting-pipeline.md) |
 | **v0.10.70** | Dock category tree state memory, URL component extraction engine, and multi-line prefix/suffix formatting macros | [ADR 0152](./docs/adr/0152-dock-memory-and-formatting-macros.md) |
 | **v0.10.69** | Visual and perceptual layer modernization, unified three-tier design tokens convergence, and accessibility hardening | [ADR 0151](./docs/adr/0151-visual-token-convergence-and-a11y-hierarchy.md) |

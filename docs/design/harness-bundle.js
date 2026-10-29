@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.72";
+      PLUGIN_VERSION = "0.10.73";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -23739,6 +23739,9 @@ fi`;
         itemType: item.itemType
       });
     }
+    push(item) {
+      this.add(item);
+    }
     /**
      * 弹出队首条目（FIFO 出栈）
      */
@@ -27203,10 +27206,23 @@ fi`;
       });
     }
     async runPrimary(entry) {
-      var _a, _b;
+      var _a, _b, _c, _d;
       const cleanQuery = this.lastQueryText.replace(/^\?+/, "").trim();
       if (cleanQuery) (_b = (_a = this.deps).addRecentQuery) == null ? void 0 : _b.call(_a, cleanQuery);
       if (this.primaryBusy || this.varFormOpen) return;
+      if (this.deps.defaultActionMode === "copy") {
+        const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
+        const plain = kramdownToPlainText(raw || entry.summary || "");
+        await this.deps.copyProviderPayload(plain);
+        if (!this.pinWindow) this.destroy();
+        (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", "\u5DF2\u590D\u5236\u6761\u76EE\u5185\u5BB9\u5230\u526A\u8D34\u677F");
+        return;
+      }
+      if (this.deps.defaultActionMode === "openSource") {
+        if (!this.pinWindow) this.destroy();
+        await this.deps.openSource(entry.id);
+        return;
+      }
       await this.insertEntryWithVars(entry, (fills) => this.runActionFor(entry, fills));
     }
     runActionFor(entry, fills, overrideMode) {
@@ -29214,6 +29230,18 @@ ${progress.progressBar}`);
               }
             }, "xlc-menu-item", this.deps.t("resetItemUsage", String(useCount)));
           }
+          addSilent("\u{1F4CB}", "\u52A0\u5165\u8FDE\u7EED\u53D6\u7528\u961F\u5217 (\u2325\u21E7Q)", async () => {
+            var _a3, _b3, _c3;
+            const queue = getActivePasteQueue();
+            queue.add({
+              id: entry.id,
+              title: entry.title || entry.summary || "\u672A\u547D\u540D",
+              content: entry.content || entry.summary || "",
+              itemType: entry.itemType
+            });
+            (_a3 = this.syncQueueChipRef) == null ? void 0 : _a3.call(this);
+            (_c3 = (_b3 = this.deps).notify) == null ? void 0 : _c3.call(_b3, "info", `\u5DF2\u52A0\u5165\u8FDE\u7EED\u53D6\u7528\u961F\u5217\uFF08\u5F53\u524D\u5171 ${queue.size()} \u9879\uFF09`);
+          }, "xlc-menu-item", "\u52A0\u5165\u8FDE\u7EED\u53D6\u7528\u961F\u5217\uFF0C\u968F\u540E\u6309 \u2325\u21E7Q \u4F9D\u6B21\u53D6\u7528\u4E0A\u5C4F");
           addSilent("\u{1F5D1}", this.deps.t("delete"), () => this.deps.deleteItem(entry.id), "xlc-menu-item xlc-menu-item--danger", `${this.deps.t("delete")} (Alt+Delete)`);
         }
         const toDocBtn = this.menuButton("\u2913", this.deps.t("insertToDoc"), "xlc-menu-item", () => {
