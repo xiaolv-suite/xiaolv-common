@@ -157,13 +157,13 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     intro.textContent = t("settingsIntro");
     root.appendChild(intro);
 
-    // 顶部快速定位胶囊导航条（解决长面板反复滚动的痛点）
+    // 顶部快速定位胶囊导航条（解决长面板反复滚动的痛点，顺序严格与物理卡片一致）
     const navBar = document.createElement("div");
     navBar.className = "xlc-settings-nav-bar";
     const navTabs = [
         {id: "xlc-settings-lib", label: "📦 库配置"},
-        {id: "xlc-settings-prefs", label: "⚙️ 偏好设置"},
         {id: "xlc-settings-ai", label: "🤖 AI模型"},
+        {id: "xlc-settings-prefs", label: "⚙️ 偏好设置"},
         {id: "xlc-settings-search", label: "🔍 搜索配置"},
         {id: "xlc-settings-health", label: "🏥 健康体检"},
         {id: "xlc-settings-ext", label: "⚡ 外部联动"},

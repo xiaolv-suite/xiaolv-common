@@ -22026,8 +22026,8 @@ ${exception.mark.snippet}`;
     navBar.className = "xlc-settings-nav-bar";
     const navTabs = [
       { id: "xlc-settings-lib", label: "\u{1F4E6} \u5E93\u914D\u7F6E" },
-      { id: "xlc-settings-prefs", label: "\u2699\uFE0F \u504F\u597D\u8BBE\u7F6E" },
       { id: "xlc-settings-ai", label: "\u{1F916} AI\u6A21\u578B" },
+      { id: "xlc-settings-prefs", label: "\u2699\uFE0F \u504F\u597D\u8BBE\u7F6E" },
       { id: "xlc-settings-search", label: "\u{1F50D} \u641C\u7D22\u914D\u7F6E" },
       { id: "xlc-settings-health", label: "\u{1F3E5} \u5065\u5EB7\u4F53\u68C0" },
       { id: "xlc-settings-ext", label: "\u26A1 \u5916\u90E8\u8054\u52A8" },
