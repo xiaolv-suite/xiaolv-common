@@ -22507,6 +22507,7 @@ ${exception.mark.snippet}`;
     foot.appendChild(hint);
     const clearBtn = document.createElement("button");
     clearBtn.className = "b3-button";
+    clearBtn.setAttribute("aria-label", t("clearUsageBtn"));
     const hasUsage = () => Object.values(ctx.state.usage).some((item) => item.count > 0);
     const syncClearUsage = () => {
       clearBtn.disabled = !hasUsage();
@@ -22535,6 +22536,9 @@ ${exception.mark.snippet}`;
     const insightsBox = document.createElement("div");
     insightsBox.className = "xlc-usage-insights";
     insightsBox.dataset.xlcControl = "settings.usage.insights";
+    insightsBox.tabIndex = 0;
+    insightsBox.setAttribute("role", "region");
+    insightsBox.setAttribute("aria-label", "\u590D\u7528\u6D1E\u5BDF\u5206\u6790");
     const paintInsights = async () => {
       insightsBox.replaceChildren();
       const usage = ctx.state.usage;
@@ -22665,18 +22669,26 @@ ${exception.mark.snippet}`;
       empty.textContent = t("providerNone");
       provSec.appendChild(empty);
     } else {
+      const provList = document.createElement("div");
+      provList.className = "xlc-provider-list";
+      provList.setAttribute("role", "list");
+      provList.setAttribute("aria-label", t("providerSection"));
       for (const p of providers) {
         const row = document.createElement("div");
         row.className = "xlc-setting-row";
+        row.setAttribute("role", "listitem");
+        const statusLabel = p.runtime ? t("providerExecutable") : t("providerPendingReload");
+        row.setAttribute("aria-label", `${p.record.displayName}\uFF08v${p.record.protocolVersion}\uFF09\xB7 ${statusLabel}`);
         const status = document.createElement("span");
         status.className = "xlc-badge " + (p.runtime ? "xlc-badge--ai" : "xlc-badge--warn");
-        status.textContent = p.runtime ? t("providerExecutable") : t("providerPendingReload");
+        status.textContent = statusLabel;
         const cap = document.createElement("span");
         cap.textContent = `${p.record.displayName}\uFF08v${p.record.protocolVersion}\uFF09`;
         row.appendChild(status);
         row.appendChild(cap);
-        provSec.appendChild(row);
+        provList.appendChild(row);
       }
+      provSec.appendChild(provList);
     }
     root.appendChild(provSec);
   }
@@ -23505,6 +23517,8 @@ ${exception.mark.snippet}`;
     aiSec.appendChild(ctLabel);
     const ctList = document.createElement("div");
     ctList.className = "xlc-ct-list";
+    ctList.setAttribute("role", "list");
+    ctList.setAttribute("aria-label", t("customTransformSection"));
     aiSec.appendChild(ctList);
     const persistCt = () => {
       ctx.ai.updateSettings(ctx.state.ai);
@@ -23516,6 +23530,7 @@ ${exception.mark.snippet}`;
       for (const ct of ctx.state.ai.customTransforms) {
         const row = document.createElement("div");
         row.className = "xlc-ct-row";
+        row.setAttribute("role", "listitem");
         const nameInput = document.createElement("input");
         nameInput.className = "b3-text-field xlc-ct-name";
         nameInput.dataset.xlcControl = `settings.ai.custom-transform.name.${ct.id}`;
@@ -23545,6 +23560,8 @@ ${exception.mark.snippet}`;
         delBtn.className = "b3-button xlc-btn-ghost xlc-ct-del";
         delBtn.dataset.xlcControl = `settings.ai.custom-transform.delete.${ct.id}`;
         delBtn.textContent = t("delete");
+        delBtn.setAttribute("aria-label", `${t("delete")}\uFF1A${ct.name}`);
+        delBtn.title = `${t("delete")}\uFF1A${ct.name}`;
         delBtn.addEventListener("click", () => {
           (0, import_siyuan7.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
             ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
@@ -23571,6 +23588,7 @@ ${exception.mark.snippet}`;
     addCtBtn.dataset.xlcControl = "settings.ai.custom-transform.add";
     addCtBtn.style.alignSelf = "flex-start";
     addCtBtn.textContent = t("customTransformAdd");
+    addCtBtn.setAttribute("aria-label", t("customTransformAdd"));
     addCtBtn.addEventListener("click", () => {
       var _a;
       if (ctx.state.ai.customTransforms.length >= 10) return;

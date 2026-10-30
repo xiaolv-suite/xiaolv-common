@@ -578,6 +578,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     foot.appendChild(hint);
     const clearBtn = document.createElement("button");
     clearBtn.className = "b3-button";
+    clearBtn.setAttribute("aria-label", t("clearUsageBtn"));
     const hasUsage = (): boolean => Object.values(ctx.state.usage).some((item) => item.count > 0);
     const syncClearUsage = (): void => {
         clearBtn.disabled = !hasUsage();
@@ -606,6 +607,9 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const insightsBox = document.createElement("div");
     insightsBox.className = "xlc-usage-insights";
     insightsBox.dataset.xlcControl = "settings.usage.insights";
+    insightsBox.tabIndex = 0;
+    insightsBox.setAttribute("role", "region");
+    insightsBox.setAttribute("aria-label", "复用洞察分析");
 
     const paintInsights = async (): Promise<void> => {
         insightsBox.replaceChildren();
@@ -755,19 +759,27 @@ function buildProviderSection(ctx: SettingsUiContext, root: HTMLElement): void {
         empty.textContent = t("providerNone");
         provSec.appendChild(empty);
     } else {
+        const provList = document.createElement("div");
+        provList.className = "xlc-provider-list";
+        provList.setAttribute("role", "list");
+        provList.setAttribute("aria-label", t("providerSection"));
         for (const p of providers) {
             const row = document.createElement("div");
             row.className = "xlc-setting-row";
+            row.setAttribute("role", "listitem");
+            const statusLabel = p.runtime ? t("providerExecutable") : t("providerPendingReload");
+            row.setAttribute("aria-label", `${p.record.displayName}（v${p.record.protocolVersion}）· ${statusLabel}`);
             const status = document.createElement("span");
             // 可执行=AI 蓝（原型屏 5 同款）；待重载=warn 红保持
             status.className = "xlc-badge " + (p.runtime ? "xlc-badge--ai" : "xlc-badge--warn");
-            status.textContent = p.runtime ? t("providerExecutable") : t("providerPendingReload");
+            status.textContent = statusLabel;
             const cap = document.createElement("span");
             cap.textContent = `${p.record.displayName}（v${p.record.protocolVersion}）`;
             row.appendChild(status);
             row.appendChild(cap);
-            provSec.appendChild(row);
+            provList.appendChild(row);
         }
+        provSec.appendChild(provList);
     }
     root.appendChild(provSec);
 }
@@ -1651,6 +1663,8 @@ function buildAiSection(ctx: SettingsUiContext, root: HTMLElement): void {
     aiSec.appendChild(ctLabel);
     const ctList = document.createElement("div");
     ctList.className = "xlc-ct-list";
+    ctList.setAttribute("role", "list");
+    ctList.setAttribute("aria-label", t("customTransformSection"));
     aiSec.appendChild(ctList);
     const persistCt = (): void => {
         ctx.ai.updateSettings(ctx.state.ai);
@@ -1662,6 +1676,7 @@ function buildAiSection(ctx: SettingsUiContext, root: HTMLElement): void {
         for (const ct of ctx.state.ai.customTransforms) {
             const row = document.createElement("div");
             row.className = "xlc-ct-row";
+            row.setAttribute("role", "listitem");
             const nameInput = document.createElement("input");
             nameInput.className = "b3-text-field xlc-ct-name";
             nameInput.dataset.xlcControl = `settings.ai.custom-transform.name.${ct.id}`;
@@ -1691,6 +1706,8 @@ function buildAiSection(ctx: SettingsUiContext, root: HTMLElement): void {
             delBtn.className = "b3-button xlc-btn-ghost xlc-ct-del";
             delBtn.dataset.xlcControl = `settings.ai.custom-transform.delete.${ct.id}`;
             delBtn.textContent = t("delete");
+            delBtn.setAttribute("aria-label", `${t("delete")}：${ct.name}`);
+            delBtn.title = `${t("delete")}：${ct.name}`;
             delBtn.addEventListener("click", () => {
                 // 危险操作对齐惯例：确认 + 回执（名称+指令一键即失，且不可恢复，R138）
                 confirm(t("delete") + " · " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
@@ -1718,6 +1735,7 @@ function buildAiSection(ctx: SettingsUiContext, root: HTMLElement): void {
     addCtBtn.dataset.xlcControl = "settings.ai.custom-transform.add";
     addCtBtn.style.alignSelf = "flex-start";
     addCtBtn.textContent = t("customTransformAdd");
+    addCtBtn.setAttribute("aria-label", t("customTransformAdd"));
     addCtBtn.addEventListener("click", () => {
         if (ctx.state.ai.customTransforms.length >= 10) return;
         const id = `xltf-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

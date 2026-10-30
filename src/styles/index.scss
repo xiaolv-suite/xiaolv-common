@@ -2223,6 +2223,11 @@
       min-height: 24px;
       padding: var(--xlc-space-0-5) var(--xlc-space-2);
       font-size: var(--xlc-font-xs);
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
     }
   }
 }
@@ -2402,6 +2407,11 @@
 // ---------- 常用语使用数据透视（G28 / ADR 0081 · 重点对比块与大字阶层级）----------
 .xlc-usage-insights {
   margin-top: var(--xlc-space-2);
+
+  &:focus-visible {
+    outline: 2px solid var(--xlc-accent);
+    outline-offset: 1px;
+  }
 
   .xlc-insights-grid {
     display: grid;
