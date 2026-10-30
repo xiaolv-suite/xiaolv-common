@@ -3370,6 +3370,11 @@
     padding: var(--xlc-space-4);
     line-height: var(--xlc-leading-relaxed);
     overscroll-behavior: contain;
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: -2px;
+    }
   }
 
   .xlc-quicklook-loading {
@@ -3938,7 +3943,9 @@
   .xlc-batch-count {
     font-size: var(--xlc-font-xs);
     font-weight: var(--xlc-weight-semibold);
-    color: var(--b3-theme-primary);
+    color: var(--xlc-accent);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
 
   .xlc-batch-actions {
@@ -3947,8 +3954,14 @@
     gap: 6px;
 
     .b3-button {
+      min-height: 24px;
       padding: 2px 8px;
       font-size: var(--xlc-font-xs);
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
     }
   }
 }

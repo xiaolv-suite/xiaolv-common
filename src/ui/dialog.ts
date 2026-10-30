@@ -5264,6 +5264,13 @@ export class CommonSearchDialog {
                 e.preventDefault();
                 e.stopPropagation();
                 focusMenuItem(-1);
+            } else if (e.key === "Home" || e.key === "End") {
+                const items = Array.from(menu.querySelectorAll<HTMLElement>(".xlc-menu-item"));
+                if (items.length === 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") items[0]?.focus();
+                else items[items.length - 1]?.focus();
             } else if (e.key === "Tab") {
                 // 菜单为模态浮层：Tab/Shift+Tab 在菜单项间循环（不逃逸到弹窗底层）
                 e.preventDefault();
@@ -5848,6 +5855,9 @@ export class CommonSearchDialog {
 
         const body = document.createElement("div");
         body.className = "xlc-quicklook-body";
+        body.tabIndex = 0;
+        body.setAttribute("role", "region");
+        body.setAttribute("aria-label", "条目全文极速预览");
         const loading = document.createElement("div");
         loading.className = "xlc-quicklook-loading";
         loading.textContent = "加载中…";
@@ -5939,14 +5949,40 @@ export class CommonSearchDialog {
         const bar = document.createElement("div");
         bar.className = "xlc-batch-bar";
         bar.dataset.xlcControl = "search.batch.bar";
+        bar.setAttribute("role", "toolbar");
+        bar.setAttribute("aria-label", "批量多选操作栏");
         bar.style.display = "none";
 
         const countSpan = document.createElement("span");
         countSpan.className = "xlc-batch-count";
+        countSpan.setAttribute("role", "status");
+        countSpan.setAttribute("aria-live", "polite");
         countSpan.textContent = "已选 0 项";
 
         const actions = document.createElement("div");
         actions.className = "xlc-batch-actions";
+        actions.addEventListener("keydown", (e) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                const btns = Array.from(actions.querySelectorAll<HTMLButtonElement>("button:not([style*='display: none'])"));
+                if (btns.length === 0) return;
+                const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                if (idx === -1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                btns[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                const btns = Array.from(actions.querySelectorAll<HTMLButtonElement>("button:not([style*='display: none'])"));
+                if (btns.length === 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") btns[0]?.focus();
+                else btns[btns.length - 1]?.focus();
+            }
+        });
 
         const addTagBtn = document.createElement("button");
         addTagBtn.type = "button";
@@ -6069,6 +6105,7 @@ export class CommonSearchDialog {
         exitBtn.type = "button";
         exitBtn.className = "b3-button xlc-btn-ghost";
         exitBtn.dataset.xlcControl = "search.batch.exit";
+        exitBtn.setAttribute("aria-label", "退出多选模式");
         exitBtn.textContent = "退出多选 (Esc)";
         exitBtn.addEventListener("click", () => this.exitMultiSelectMode());
 
