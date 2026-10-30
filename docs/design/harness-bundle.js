@@ -26780,9 +26780,36 @@ fi`;
       root.appendChild(this.buildBatchBar());
       const footer = document.createElement("div");
       footer.className = "xlc-footer";
+      footer.setAttribute("role", "toolbar");
+      footer.setAttribute("aria-label", "\u4E3B\u5F39\u7A97\u5E95\u680F\u5DE5\u5177\u680F");
+      footer.addEventListener("keydown", (e) => {
+        var _a2, _b2, _c2;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          const btns = Array.from(footer.querySelectorAll("button:not([disabled]):not([style*='display: none'])"));
+          if (!btns.length) return;
+          const idx = btns.indexOf(document.activeElement);
+          if (idx === -1) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+          (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+          return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+          const btns = Array.from(footer.querySelectorAll("button:not([disabled]):not([style*='display: none'])"));
+          if (!btns.length) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Home") (_b2 = btns[0]) == null ? void 0 : _b2.focus();
+          else (_c2 = btns[btns.length - 1]) == null ? void 0 : _c2.focus();
+        }
+      });
       const count = document.createElement("span");
       count.className = "xlc-footer-count";
+      count.setAttribute("role", "status");
       count.setAttribute("aria-live", "polite");
+      count.setAttribute("aria-label", "\u6761\u76EE\u7EDF\u8BA1\u4FE1\u606F");
       if (isMobile) {
         const footBtns = document.createElement("div");
         footBtns.className = "xlc-mobile-foot";
@@ -26790,6 +26817,7 @@ fi`;
         newBtn.className = "b3-button";
         newBtn.dataset.xlcControl = "search.new";
         newBtn.textContent = this.deps.t("quickNew");
+        newBtn.setAttribute("aria-label", this.deps.t("quickNew"));
         newBtn.addEventListener("click", () => this.deps.newItem());
         footBtns.appendChild(newBtn);
         const insertBtn = document.createElement("button");
@@ -26797,6 +26825,8 @@ fi`;
         insertBtn.dataset.xlcControl = "preview.mobile-primary";
         insertBtn.textContent = this.deps.t(this.mobilePrimaryIsCopy() ? "copy" : "quickInsertSelected");
         insertBtn.disabled = true;
+        const insertLabel = this.deps.t(this.mobilePrimaryIsCopy() ? "copy" : "quickInsertSelected");
+        insertBtn.setAttribute("aria-label", insertLabel);
         if (this.mobilePrimaryIsCopy()) {
           insertBtn.title = this.deps.t("insertMobileActionHint");
           insertBtn.setAttribute("aria-label", this.deps.t("insertMobileActionHint"));
@@ -26826,12 +26856,14 @@ fi`;
       guide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-guide";
       guide.dataset.xlcControl = "footer.help";
       guide.textContent = "\u24D8 " + this.deps.t("usageGuideBtn");
+      guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
       guide.addEventListener("click", () => this.openUsageGuide());
       footer.appendChild(guide);
       const gear = document.createElement("button");
       gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";
       gear.dataset.xlcControl = "footer.settings";
       gear.textContent = "\u2699 " + this.deps.t("openSettings");
+      gear.setAttribute("aria-label", this.deps.t("openSettings"));
       gear.addEventListener("click", () => {
         this.destroy();
         this.deps.openSetup();
@@ -28024,6 +28056,32 @@ fi`;
       if (this.results.length === 0 && this.providerRows.length === 0 && this.emptyMessage) {
         const empty = document.createElement("div");
         empty.className = "xlc-empty";
+        empty.setAttribute("role", "status");
+        empty.setAttribute("aria-live", "polite");
+        empty.setAttribute("aria-label", "\u641C\u7D22\u7ED3\u679C\u4E3A\u7A7A\u63D0\u793A");
+        empty.addEventListener("keydown", (e) => {
+          var _a2, _b2, _c2;
+          if (e.isComposing || e.keyCode === 229) return;
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const btns = Array.from(empty.querySelectorAll("button.xlc-empty-action:not([disabled])"));
+            if (!btns.length) return;
+            const idx = btns.indexOf(document.activeElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+            (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+            return;
+          }
+          if (e.key === "Home" || e.key === "End") {
+            const btns = Array.from(empty.querySelectorAll("button.xlc-empty-action:not([disabled])"));
+            if (!btns.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Home") (_b2 = btns[0]) == null ? void 0 : _b2.focus();
+            else (_c2 = btns[btns.length - 1]) == null ? void 0 : _c2.focus();
+          }
+        });
         const icon = document.createElement("div");
         icon.className = "xlc-empty-icon";
         icon.textContent = "\u2726";
@@ -28038,6 +28096,7 @@ fi`;
           retry.className = "b3-button xlc-btn-primary xlc-empty-action";
           retry.dataset.xlcControl = "access.retry";
           retry.textContent = this.deps.t("retry");
+          retry.setAttribute("aria-label", this.deps.t("retry"));
           retry.addEventListener("click", () => {
             var _a2;
             this.accessIssueMessage = null;
@@ -28087,6 +28146,7 @@ fi`;
           guide.dataset.xlcAction = "help";
           guide.dataset.xlcControl = "empty.help";
           guide.textContent = "\u24D8 " + this.deps.t("usageGuideBtn");
+          guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
           guide.addEventListener("click", () => this.openUsageGuide());
           empty.appendChild(guide);
         }
@@ -28097,6 +28157,7 @@ fi`;
           clear.dataset.xlcAction = "clear-filters";
           clear.dataset.xlcControl = "empty.clear-filters";
           clear.textContent = this.deps.t("clearFilters");
+          clear.setAttribute("aria-label", this.deps.t("clearFilters"));
           clear.addEventListener("click", () => {
             var _a2;
             this.deps.setFilters({ type: "", tag: "", category: "" });
@@ -28113,6 +28174,7 @@ fi`;
           clearScopeBtn.type = "button";
           clearScopeBtn.className = "b3-button xlc-btn-primary xlc-empty-action";
           clearScopeBtn.textContent = "\u{1F50D} \u6E05\u9664\u8DEF\u5F84\u9650\u5B9A\uFF0C\u5728\u5168\u5E93\u65E0\u9650\u5236\u641C\u7D22 (Alt+\u232B)";
+          clearScopeBtn.setAttribute("aria-label", "\u6E05\u9664\u8DEF\u5F84\u9650\u5B9A\uFF0C\u5728\u5168\u5E93\u65E0\u9650\u5236\u641C\u7D22");
           clearScopeBtn.addEventListener("click", () => {
             var _a2;
             const input = (_a2 = this.dialog) == null ? void 0 : _a2.element.querySelector(".xlc-search-input");
@@ -32720,6 +32782,31 @@ ${progress.progressBar}`);
       error.setAttribute("role", "alert");
       const actions = document.createElement("div");
       actions.className = "xlc-form-actions";
+      actions.setAttribute("role", "toolbar");
+      actions.setAttribute("aria-label", "\u5173\u95ED\u786E\u8BA4\u64CD\u4F5C\u680F");
+      actions.addEventListener("keydown", (e) => {
+        var _a2, _b, _c;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          const btns = Array.from(actions.querySelectorAll("button:not([disabled])"));
+          if (!btns.length) return;
+          const idx = btns.indexOf(document.activeElement);
+          if (idx === -1) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+          (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+          return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+          const btns = Array.from(actions.querySelectorAll("button:not([disabled])"));
+          if (!btns.length) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Home") (_b = btns[0]) == null ? void 0 : _b.focus();
+          else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+        }
+      });
       let settled = false;
       const cancelClose = () => {
         settled = true;
@@ -32730,12 +32817,15 @@ ${progress.progressBar}`);
       cancel.className = "b3-button b3-button--cancel";
       cancel.dataset.xlcControl = "discovery.close.cancel";
       cancel.textContent = this.tx("discoveryCloseCancel");
+      cancel.setAttribute("aria-label", this.tx("discoveryCloseCancel"));
       cancel.addEventListener("click", cancelClose);
       const confirm3 = document.createElement("button");
       confirm3.type = "submit";
       confirm3.className = "b3-button b3-button--text";
       confirm3.dataset.xlcControl = "discovery.close.confirm";
       confirm3.textContent = this.tx("discoveryCloseConfirm");
+      confirm3.setAttribute("aria-label", this.tx("discoveryCloseConfirm"));
+      actions.append(cancel, confirm3);
       actions.append(cancel, confirm3);
       form.append(warning, error, actions);
       body.appendChild(form);
@@ -32867,6 +32957,7 @@ ${progress.progressBar}`);
       this.closeButton.type = "button";
       this.closeButton.className = "b3-button xlc-btn-ghost";
       this.closeButton.textContent = this.tx("discoveryClose");
+      this.closeButton.setAttribute("aria-label", this.tx("discoveryClose"));
       this.closeButton.dataset.xlcDiscoveryAction = "close";
       this.closeButton.addEventListener("click", () => this.close());
       head.appendChild(this.closeButton);
@@ -32889,6 +32980,7 @@ ${progress.progressBar}`);
       this.scanButton.type = "button";
       this.scanButton.className = "b3-button xlc-btn-ghost";
       this.scanButton.textContent = this.tx("discoveryCancelScan");
+      this.scanButton.setAttribute("aria-label", this.tx("discoveryCancelScan"));
       this.scanButton.dataset.xlcDiscoveryAction = "cancel-scan";
       this.scanButton.addEventListener("click", () => {
         if (this.scanState === "scanning") this.cancelScan();
@@ -32898,6 +32990,8 @@ ${progress.progressBar}`);
       root.appendChild(statusRow);
       const filters = document.createElement("div");
       filters.className = "xlc-discovery-filters";
+      filters.setAttribute("role", "toolbar");
+      filters.setAttribute("aria-label", "\u53D1\u73B0\u7B5B\u9009\u5DE5\u5177\u680F");
       const filterLabel = document.createElement("span");
       filterLabel.className = "xlc-form-label";
       filterLabel.textContent = this.tx("discoveryFilter");
@@ -32976,6 +33070,7 @@ ${progress.progressBar}`);
         this.saveViewButton.className = "b3-button xlc-btn-ghost";
         this.saveViewButton.dataset.xlcDiscoveryAction = "save-view";
         this.saveViewButton.textContent = this.tx("discoverySaveView");
+        this.saveViewButton.setAttribute("aria-label", this.tx("discoverySaveView"));
         this.saveViewButton.addEventListener("click", () => this.saveCurrentView());
         filters.appendChild(this.saveViewButton);
       }
@@ -32984,6 +33079,7 @@ ${progress.progressBar}`);
       this.selectFilteredButton.className = "b3-button xlc-btn-ghost";
       this.selectFilteredButton.dataset.xlcDiscoveryAction = "select-filtered";
       this.selectFilteredButton.setAttribute("aria-pressed", "false");
+      this.selectFilteredButton.setAttribute("aria-label", this.tx("discoverySelectFiltered", "0"));
       this.selectFilteredButton.addEventListener("click", () => this.toggleFilteredSelection());
       filters.appendChild(this.selectFilteredButton);
       root.appendChild(filters);
@@ -33098,14 +33194,43 @@ ${progress.progressBar}`);
       root.appendChild(content);
       const footer = document.createElement("div");
       footer.className = "xlc-discovery-footer";
+      footer.setAttribute("role", "toolbar");
+      footer.setAttribute("aria-label", "\u53D1\u73B0\u64CD\u4F5C\u680F");
+      footer.addEventListener("keydown", (e) => {
+        var _a2, _b2, _c2;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          const btns = Array.from(footer.querySelectorAll("button:not([disabled]):not([style*='display: none']), input[type='checkbox']"));
+          if (!btns.length) return;
+          const idx = btns.indexOf(document.activeElement);
+          if (idx === -1) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+          (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+          return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+          const btns = Array.from(footer.querySelectorAll("button:not([disabled]):not([style*='display: none']), input[type='checkbox']"));
+          if (!btns.length) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Home") (_b2 = btns[0]) == null ? void 0 : _b2.focus();
+          else (_c2 = btns[btns.length - 1]) == null ? void 0 : _c2.focus();
+        }
+      });
       this.selectedLabel = document.createElement("span");
-      this.selectedLabel.className = "xlc-form-hint";
+      this.selectedLabel.className = "xlc-form-hint xlc-discovery-selected-label";
+      this.selectedLabel.setAttribute("role", "status");
+      this.selectedLabel.setAttribute("aria-live", "polite");
+      this.selectedLabel.setAttribute("aria-label", "\u5DF2\u9009\u5019\u9009\u6761\u76EE\u7EDF\u8BA1");
       footer.appendChild(this.selectedLabel);
       const forceLabel = document.createElement("label");
       forceLabel.className = "xlc-discovery-force";
       this.forceSameContent = document.createElement("input");
       this.forceSameContent.type = "checkbox";
       this.forceSameContent.dataset.xlcControl = "discovery.allow-same-content";
+      this.forceSameContent.setAttribute("aria-label", this.tx("discoveryForceSameContent"));
       this.forceSameContent.addEventListener("change", () => this.renderList());
       forceLabel.appendChild(this.forceSameContent);
       const forceText = document.createElement("span");
@@ -33115,7 +33240,9 @@ ${progress.progressBar}`);
       this.addSelectedButton = document.createElement("button");
       this.addSelectedButton.type = "button";
       this.addSelectedButton.className = "b3-button xlc-btn-primary";
-      this.addSelectedButton.textContent = this.options.referenceOnly ? this.tx("discoverySyncView") : this.tx("discoveryAddSelected");
+      const addSelectedLabel = this.options.referenceOnly ? this.tx("discoverySyncView") : this.tx("discoveryAddSelected");
+      this.addSelectedButton.textContent = addSelectedLabel;
+      this.addSelectedButton.setAttribute("aria-label", addSelectedLabel);
       this.addSelectedButton.dataset.xlcDiscoveryAction = "add-selected";
       this.addSelectedButton.addEventListener("click", () => void this.addSelected());
       footer.appendChild(this.addSelectedButton);

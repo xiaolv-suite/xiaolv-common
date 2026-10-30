@@ -1035,8 +1035,14 @@
     .xlc-empty-action {
       margin-top: var(--xlc-space-3);
       max-width: 100%;
+      min-height: 28px;
       white-space: normal;
       overflow-wrap: anywhere;
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
     }
   }
 
@@ -1363,6 +1369,7 @@
 
     .xlc-footer-count {
       font-variant-numeric: tabular-nums;
+      letter-spacing: -0.01em;
       white-space: nowrap;
     }
 
@@ -1384,24 +1391,20 @@
       cursor: default;
     }
 
-    .xlc-footer-gear {
+    :is(.xlc-footer-gear, .xlc-footer-guide) {
       border: none;
       background: transparent;
       color: var(--b3-theme-on-surface);
       font-size: var(--xlc-font-xs);
       padding: var(--xlc-space-0-5) var(--xlc-space-2);
       min-height: 26px;
+      min-width: 24px;
       white-space: nowrap;
-    }
 
-    .xlc-footer-guide {
-      border: none;
-      background: transparent;
-      color: var(--b3-theme-on-surface);
-      font-size: var(--xlc-font-xs);
-      padding: var(--xlc-space-0-5) var(--xlc-space-2);
-      min-height: 26px;
-      white-space: nowrap;
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
     }
   }
 
@@ -3612,7 +3615,13 @@
   .xlc-discovery-head > [data-xlc-discovery-action='close'] {
     flex: 0 0 auto;
     min-width: 44px;
+    min-height: 28px;
     white-space: nowrap;
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: 1px;
+    }
   }
 
   .xlc-discovery-heading .xlc-form-title {
@@ -3964,6 +3973,20 @@
     flex-wrap: wrap;
     justify-content: flex-end;
     padding-top: var(--xlc-space-0-5);
+
+    .xlc-discovery-selected-label {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.01em;
+    }
+
+    .b3-button {
+      min-height: 28px;
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
   }
 
   .xlc-discovery-footer > .xlc-form-hint { margin-right: auto; }
@@ -5253,7 +5276,11 @@
   .xlc-draft-resume-banner .b3-button,
   .xlc-code-banner,
   .xlc-quicklook-close,
-  .xlc-menu-preview {
+  .xlc-menu-preview,
+  .xlc-empty-action,
+  .xlc-footer-gear,
+  .xlc-footer-guide,
+  .xlc-discovery-footer .b3-button {
     transition: none !important;
     animation: none !important;
   }

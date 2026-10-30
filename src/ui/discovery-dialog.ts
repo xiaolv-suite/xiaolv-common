@@ -434,6 +434,30 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         error.setAttribute("role", "alert");
         const actions = document.createElement("div");
         actions.className = "xlc-form-actions";
+        actions.setAttribute("role", "toolbar");
+        actions.setAttribute("aria-label", "关闭确认操作栏");
+        actions.addEventListener("keydown", (e: any) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                const btns = Array.from(actions.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
+                if (!btns.length) return;
+                const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                if (idx === -1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                btns[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                const btns = Array.from(actions.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
+                if (!btns.length) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") btns[0]?.focus();
+                else btns[btns.length - 1]?.focus();
+            }
+        });
         let settled = false;
         const cancelClose = () => {
             settled = true;
@@ -444,12 +468,14 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         cancel.className = "b3-button b3-button--cancel";
         cancel.dataset.xlcControl = "discovery.close.cancel";
         cancel.textContent = this.tx("discoveryCloseCancel");
+        cancel.setAttribute("aria-label", this.tx("discoveryCloseCancel"));
         cancel.addEventListener("click", cancelClose);
         const confirm = document.createElement("button");
         confirm.type = "submit";
         confirm.className = "b3-button b3-button--text";
         confirm.dataset.xlcControl = "discovery.close.confirm";
         confirm.textContent = this.tx("discoveryCloseConfirm");
+        confirm.setAttribute("aria-label", this.tx("discoveryCloseConfirm"));
         actions.append(cancel, confirm);
         form.append(warning, error, actions);
         body.appendChild(form);
@@ -579,6 +605,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.closeButton.type = "button";
         this.closeButton.className = "b3-button xlc-btn-ghost";
         this.closeButton.textContent = this.tx("discoveryClose");
+        this.closeButton.setAttribute("aria-label", this.tx("discoveryClose"));
         this.closeButton.dataset.xlcDiscoveryAction = "close";
         this.closeButton.addEventListener("click", () => this.close());
         head.appendChild(this.closeButton);
@@ -603,6 +630,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.scanButton.type = "button";
         this.scanButton.className = "b3-button xlc-btn-ghost";
         this.scanButton.textContent = this.tx("discoveryCancelScan");
+        this.scanButton.setAttribute("aria-label", this.tx("discoveryCancelScan"));
         this.scanButton.dataset.xlcDiscoveryAction = "cancel-scan";
         this.scanButton.addEventListener("click", () => {
             if (this.scanState === "scanning") this.cancelScan();
@@ -613,6 +641,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
 
         const filters = document.createElement("div");
         filters.className = "xlc-discovery-filters";
+        filters.setAttribute("role", "toolbar");
+        filters.setAttribute("aria-label", "发现筛选工具栏");
         const filterLabel = document.createElement("span");
         filterLabel.className = "xlc-form-label";
         filterLabel.textContent = this.tx("discoveryFilter");
@@ -687,6 +717,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             this.saveViewButton.className = "b3-button xlc-btn-ghost";
             this.saveViewButton.dataset.xlcDiscoveryAction = "save-view";
             this.saveViewButton.textContent = this.tx("discoverySaveView");
+            this.saveViewButton.setAttribute("aria-label", this.tx("discoverySaveView"));
             this.saveViewButton.addEventListener("click", () => this.saveCurrentView());
             filters.appendChild(this.saveViewButton);
         }
@@ -695,6 +726,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.selectFilteredButton.className = "b3-button xlc-btn-ghost";
         this.selectFilteredButton.dataset.xlcDiscoveryAction = "select-filtered";
         this.selectFilteredButton.setAttribute("aria-pressed", "false");
+        this.selectFilteredButton.setAttribute("aria-label", this.tx("discoverySelectFiltered", "0"));
         this.selectFilteredButton.addEventListener("click", () => this.toggleFilteredSelection());
         filters.appendChild(this.selectFilteredButton);
         root.appendChild(filters);
@@ -811,14 +843,42 @@ export class DiscoveryDialog implements DiscoveryDialogController {
 
         const footer = document.createElement("div");
         footer.className = "xlc-discovery-footer";
+        footer.setAttribute("role", "toolbar");
+        footer.setAttribute("aria-label", "发现操作栏");
+        footer.addEventListener("keydown", (e: any) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                const btns = Array.from(footer.querySelectorAll<HTMLElement>("button:not([disabled]):not([style*='display: none']), input[type='checkbox']"));
+                if (!btns.length) return;
+                const idx = btns.indexOf(document.activeElement as HTMLElement);
+                if (idx === -1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                btns[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                const btns = Array.from(footer.querySelectorAll<HTMLElement>("button:not([disabled]):not([style*='display: none']), input[type='checkbox']"));
+                if (!btns.length) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") btns[0]?.focus();
+                else btns[btns.length - 1]?.focus();
+            }
+        });
         this.selectedLabel = document.createElement("span");
-        this.selectedLabel.className = "xlc-form-hint";
+        this.selectedLabel.className = "xlc-form-hint xlc-discovery-selected-label";
+        this.selectedLabel.setAttribute("role", "status");
+        this.selectedLabel.setAttribute("aria-live", "polite");
+        this.selectedLabel.setAttribute("aria-label", "已选候选条目统计");
         footer.appendChild(this.selectedLabel);
         const forceLabel = document.createElement("label");
         forceLabel.className = "xlc-discovery-force";
         this.forceSameContent = document.createElement("input");
         this.forceSameContent.type = "checkbox";
         this.forceSameContent.dataset.xlcControl = "discovery.allow-same-content";
+        this.forceSameContent.setAttribute("aria-label", this.tx("discoveryForceSameContent"));
         this.forceSameContent.addEventListener("change", () => this.renderList());
         forceLabel.appendChild(this.forceSameContent);
         const forceText = document.createElement("span");
@@ -828,7 +888,9 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.addSelectedButton = document.createElement("button");
         this.addSelectedButton.type = "button";
         this.addSelectedButton.className = "b3-button xlc-btn-primary";
-        this.addSelectedButton.textContent = this.options.referenceOnly ? this.tx("discoverySyncView") : this.tx("discoveryAddSelected");
+        const addSelectedLabel = this.options.referenceOnly ? this.tx("discoverySyncView") : this.tx("discoveryAddSelected");
+        this.addSelectedButton.textContent = addSelectedLabel;
+        this.addSelectedButton.setAttribute("aria-label", addSelectedLabel);
         this.addSelectedButton.dataset.xlcDiscoveryAction = "add-selected";
         this.addSelectedButton.addEventListener("click", () => void this.addSelected());
         footer.appendChild(this.addSelectedButton);

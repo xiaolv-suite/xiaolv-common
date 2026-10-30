@@ -842,9 +842,35 @@ export class CommonSearchDialog {
         // 底栏（原型：左计数 / 右真源声明 + 设置入口；移动端=操作钮行 + 点按提示）
         const footer = document.createElement("div");
         footer.className = "xlc-footer";
+        footer.setAttribute("role", "toolbar");
+        footer.setAttribute("aria-label", "主弹窗底栏工具栏");
+        footer.addEventListener("keydown", (e: any) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                const btns = Array.from(footer.querySelectorAll<HTMLButtonElement>("button:not([disabled]):not([style*='display: none'])"));
+                if (!btns.length) return;
+                const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                if (idx === -1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                btns[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                const btns = Array.from(footer.querySelectorAll<HTMLButtonElement>("button:not([disabled]):not([style*='display: none'])"));
+                if (!btns.length) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") btns[0]?.focus();
+                else btns[btns.length - 1]?.focus();
+            }
+        });
         const count = document.createElement("span");
         count.className = "xlc-footer-count";
+        count.setAttribute("role", "status");
         count.setAttribute("aria-live", "polite");
+        count.setAttribute("aria-label", "条目统计信息");
         if (isMobile) {
             // 操作钮行（原型屏 7：＋新建 / 插入选中；44px 命中）
             const footBtns = document.createElement("div");
@@ -853,6 +879,7 @@ export class CommonSearchDialog {
             newBtn.className = "b3-button";
             newBtn.dataset.xlcControl = "search.new";
             newBtn.textContent = this.deps.t("quickNew");
+            newBtn.setAttribute("aria-label", this.deps.t("quickNew"));
             newBtn.addEventListener("click", () => this.deps.newItem());
             footBtns.appendChild(newBtn);
             const insertBtn = document.createElement("button");
@@ -860,6 +887,8 @@ export class CommonSearchDialog {
             insertBtn.dataset.xlcControl = "preview.mobile-primary";
             insertBtn.textContent = this.deps.t(this.mobilePrimaryIsCopy() ? "copy" : "quickInsertSelected");
             insertBtn.disabled = true;
+            const insertLabel = this.deps.t(this.mobilePrimaryIsCopy() ? "copy" : "quickInsertSelected");
+            insertBtn.setAttribute("aria-label", insertLabel);
             if (this.mobilePrimaryIsCopy()) {
                 insertBtn.title = this.deps.t("insertMobileActionHint");
                 insertBtn.setAttribute("aria-label", this.deps.t("insertMobileActionHint"));
@@ -891,6 +920,7 @@ export class CommonSearchDialog {
         guide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-guide";
         guide.dataset.xlcControl = "footer.help";
         guide.textContent = "ⓘ " + this.deps.t("usageGuideBtn");
+        guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
         guide.addEventListener("click", () => this.openUsageGuide());
         footer.appendChild(guide);
         // 设置入口双端可达（移动端无顶栏/命令面板，此处是唯一设置路径）
@@ -898,6 +928,7 @@ export class CommonSearchDialog {
         gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";
         gear.dataset.xlcControl = "footer.settings";
         gear.textContent = "⚙ " + this.deps.t("openSettings");
+        gear.setAttribute("aria-label", this.deps.t("openSettings"));
         gear.addEventListener("click", () => {
             this.destroy();
             this.deps.openSetup();
@@ -2163,6 +2194,31 @@ export class CommonSearchDialog {
         if (this.results.length === 0 && this.providerRows.length === 0 && this.emptyMessage) {
             const empty = document.createElement("div");
             empty.className = "xlc-empty";
+            empty.setAttribute("role", "status");
+            empty.setAttribute("aria-live", "polite");
+            empty.setAttribute("aria-label", "搜索结果为空提示");
+            empty.addEventListener("keydown", (e: any) => {
+                if (e.isComposing || e.keyCode === 229) return;
+                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                    const btns = Array.from(empty.querySelectorAll<HTMLButtonElement>("button.xlc-empty-action:not([disabled])"));
+                    if (!btns.length) return;
+                    const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                    if (idx === -1) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                    btns[nextIdx]?.focus();
+                    return;
+                }
+                if (e.key === "Home" || e.key === "End") {
+                    const btns = Array.from(empty.querySelectorAll<HTMLButtonElement>("button.xlc-empty-action:not([disabled])"));
+                    if (!btns.length) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.key === "Home") btns[0]?.focus();
+                    else btns[btns.length - 1]?.focus();
+                }
+            });
             const icon = document.createElement("div");
             icon.className = "xlc-empty-icon";
             icon.textContent = "✦";
@@ -2177,6 +2233,7 @@ export class CommonSearchDialog {
                 retry.className = "b3-button xlc-btn-primary xlc-empty-action";
                 retry.dataset.xlcControl = "access.retry";
                 retry.textContent = this.deps.t("retry");
+                retry.setAttribute("aria-label", this.deps.t("retry"));
                 retry.addEventListener("click", () => {
                     this.accessIssueMessage = null;
                     this.emptyMessage = "";
@@ -2230,6 +2287,7 @@ export class CommonSearchDialog {
                 guide.dataset.xlcAction = "help";
                 guide.dataset.xlcControl = "empty.help";
                 guide.textContent = "ⓘ " + this.deps.t("usageGuideBtn");
+                guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
                 guide.addEventListener("click", () => this.openUsageGuide());
                 empty.appendChild(guide);
             }
@@ -2240,6 +2298,7 @@ export class CommonSearchDialog {
                 clear.dataset.xlcAction = "clear-filters";
                 clear.dataset.xlcControl = "empty.clear-filters";
                 clear.textContent = this.deps.t("clearFilters");
+                clear.setAttribute("aria-label", this.deps.t("clearFilters"));
                 clear.addEventListener("click", () => {
                     this.deps.setFilters({type: "", tag: "", category: ""});
                     this.dialog?.element.querySelectorAll<HTMLSelectElement>(".xlc-type-select, .xlc-tag-select, .xlc-category-select")
@@ -2254,6 +2313,7 @@ export class CommonSearchDialog {
                 clearScopeBtn.type = "button";
                 clearScopeBtn.className = "b3-button xlc-btn-primary xlc-empty-action";
                 clearScopeBtn.textContent = "🔍 清除路径限定，在全库无限制搜索 (Alt+⌫)";
+                clearScopeBtn.setAttribute("aria-label", "清除路径限定，在全库无限制搜索");
                 clearScopeBtn.addEventListener("click", () => {
                     const input = this.dialog?.element.querySelector<HTMLInputElement>(".xlc-search-input");
                     if (input) {
