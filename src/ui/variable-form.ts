@@ -4540,5 +4540,13 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
     });
     bar.appendChild(jsonKeysBtn);
 
+    // WCAG 2.2 强化：确保宏变量与文本格式化工具栏中每个操作按钮均拥有精准的 aria-label
+    bar.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+        if (!btn.getAttribute("aria-label")) {
+            const label = btn.title || btn.textContent?.replace(/^✦\s*/, "") || "文本格式化动作";
+            btn.setAttribute("aria-label", label);
+        }
+    });
+
     return bar;
 }

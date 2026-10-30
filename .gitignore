@@ -11,3 +11,4 @@ tests/.build/
 prep-r*.tmp
 .jeikcode/codegraph/
 .zcode/
+.tasks/

@@ -2897,6 +2897,10 @@ export class CommonSearchDialog {
                 const readingSpan = document.createElement("span");
                 readingSpan.className = "xlc-pane-reading-metrics";
                 readingSpan.dataset.xlcControl = "preview.reading-metrics";
+                if (typeof readingSpan.setAttribute === "function") {
+                    readingSpan.setAttribute("role", "status");
+                    readingSpan.setAttribute("aria-label", `阅读度量：${formatReadingMetrics(metrics)}`);
+                }
                 readingSpan.textContent = (fields.length > 0 || snippets.length > 0 || hasCursor ? " · " : "") + formatReadingMetrics(metrics);
                 paneVars.appendChild(readingSpan);
             }

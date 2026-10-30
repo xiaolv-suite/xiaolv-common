@@ -1268,6 +1268,8 @@
       font-size: var(--xlc-font-2xs);
       opacity: 0.85;
       margin-left: auto;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.01em;
     }
   }
 
@@ -4962,6 +4964,20 @@
       }
     }
   }
+
+  .xlc-form-actions {
+    margin-top: var(--xlc-space-3);
+
+    .b3-button {
+      min-height: 28px;
+      padding: var(--xlc-space-1) var(--xlc-space-3);
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
+  }
 }
 
 .xlc-wizard-preview-box {
@@ -4975,6 +4991,7 @@
   color: var(--xlc-ink);
   font-size: var(--xlc-font-xs);
   line-height: var(--xlc-leading-normal);
+  font-variant-numeric: tabular-nums;
 
   &:focus-visible {
     outline: 2px solid var(--xlc-accent);
@@ -5165,7 +5182,8 @@
   .xlc-dock-menu-item,
   .xlc-quick-edit-actions .b3-button,
   .xlc-export-sanitizer-actions .b3-button,
-  .xlc-sync-diff-actions .b3-button {
+  .xlc-sync-diff-actions .b3-button,
+  .xlc-wizard-mapping-row .b3-button {
     transition: none !important;
     animation: none !important;
   }

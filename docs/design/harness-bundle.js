@@ -13968,6 +13968,13 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
       }
     });
     bar.appendChild(jsonKeysBtn);
+    bar.querySelectorAll("button").forEach((btn) => {
+      var _a;
+      if (!btn.getAttribute("aria-label")) {
+        const label = btn.title || ((_a = btn.textContent) == null ? void 0 : _a.replace(/^✦\s*/, "")) || "\u6587\u672C\u683C\u5F0F\u5316\u52A8\u4F5C";
+        btn.setAttribute("aria-label", label);
+      }
+    });
     return bar;
   }
   var import_siyuan, TYPE_BADGES;
@@ -17760,9 +17767,16 @@ ${finalHtml}
     btnRow.className = "xlc-form-actions";
     btnRow.style.justifyContent = "flex-start";
     btnRow.style.gap = "8px";
+    if (typeof btnRow.setAttribute === "function") {
+      btnRow.setAttribute("role", "toolbar");
+      btnRow.setAttribute("aria-label", "\u667A\u80FD\u63A8\u65AD\u5DE5\u5177\u680F");
+    }
     const autoBtn = document.createElement("button");
     autoBtn.className = "b3-button b3-button--secondary";
     autoBtn.textContent = "\u2728 " + t("autoInfer");
+    if (typeof autoBtn.setAttribute === "function") {
+      autoBtn.setAttribute("aria-label", "\u4E00\u952E\u667A\u80FD\u63A8\u65AD\u8868\u5934\u6620\u5C04");
+    }
     autoBtn.addEventListener("click", () => {
       const inferred = inferColumnMapping(state.grid);
       state.mapping.titleIndex = inferred.titleIndex;
@@ -17788,9 +17802,16 @@ ${finalHtml}
     foot.className = "xlc-form-actions";
     foot.style.justifyContent = "flex-end";
     foot.style.gap = "8px";
+    if (typeof foot.setAttribute === "function") {
+      foot.setAttribute("role", "toolbar");
+      foot.setAttribute("aria-label", "\u5BFC\u5165\u5411\u5BFC\u64CD\u4F5C\u680F");
+    }
     const cancelBtn = document.createElement("button");
     cancelBtn.className = "b3-button";
     cancelBtn.textContent = t("cancel");
+    if (typeof cancelBtn.setAttribute === "function") {
+      cancelBtn.setAttribute("aria-label", t("cancel") || "\u53D6\u6D88\u5BFC\u5165");
+    }
     cancelBtn.addEventListener("click", () => {
       dialog.destroy();
       release();
@@ -17800,6 +17821,9 @@ ${finalHtml}
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.textContent = t("setupNext");
     nextBtn.disabled = true;
+    if (typeof nextBtn.setAttribute === "function") {
+      nextBtn.setAttribute("aria-label", t("setupNext") || "\u4E0B\u4E00\u6B65\uFF0C\u914D\u7F6E\u5BFC\u5165\u7B56\u7565");
+    }
     nextBtn.addEventListener("click", () => {
       if (isSubmitting || nextBtn.disabled || !parsedItems.length || parsedText !== state.rawText) return;
       isSubmitting = true;
@@ -17818,6 +17842,26 @@ ${finalHtml}
           );
         });
       });
+    });
+    foot.addEventListener("keydown", (e) => {
+      var _a, _b, _c, _d;
+      const buttons = [cancelBtn, nextBtn].filter((b) => !b.disabled);
+      if (buttons.length <= 1) return;
+      const curIdx = buttons.indexOf(document.activeElement);
+      if (curIdx === -1) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        (_a = buttons[(curIdx + 1) % buttons.length]) == null ? void 0 : _a.focus();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        (_b = buttons[(curIdx - 1 + buttons.length) % buttons.length]) == null ? void 0 : _b.focus();
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        (_c = buttons[0]) == null ? void 0 : _c.focus();
+      } else if (e.key === "End") {
+        e.preventDefault();
+        (_d = buttons[buttons.length - 1]) == null ? void 0 : _d.focus();
+      }
     });
     root.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
@@ -28561,6 +28605,10 @@ fi`;
           const readingSpan = document.createElement("span");
           readingSpan.className = "xlc-pane-reading-metrics";
           readingSpan.dataset.xlcControl = "preview.reading-metrics";
+          if (typeof readingSpan.setAttribute === "function") {
+            readingSpan.setAttribute("role", "status");
+            readingSpan.setAttribute("aria-label", `\u9605\u8BFB\u5EA6\u91CF\uFF1A${formatReadingMetrics(metrics)}`);
+          }
           readingSpan.textContent = (fields.length > 0 || snippets.length > 0 || hasCursor ? " \xB7 " : "") + formatReadingMetrics(metrics);
           paneVars.appendChild(readingSpan);
         }

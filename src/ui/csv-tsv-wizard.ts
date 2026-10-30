@@ -163,10 +163,17 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     btnRow.className = "xlc-form-actions";
     btnRow.style.justifyContent = "flex-start";
     btnRow.style.gap = "8px";
+    if (typeof btnRow.setAttribute === "function") {
+        btnRow.setAttribute("role", "toolbar");
+        btnRow.setAttribute("aria-label", "智能推断工具栏");
+    }
 
     const autoBtn = document.createElement("button");
     autoBtn.className = "b3-button b3-button--secondary";
     autoBtn.textContent = "✨ " + t("autoInfer");
+    if (typeof autoBtn.setAttribute === "function") {
+        autoBtn.setAttribute("aria-label", "一键智能推断表头映射");
+    }
     autoBtn.addEventListener("click", () => {
         const inferred = inferColumnMapping(state.grid);
         state.mapping.titleIndex = inferred.titleIndex;
@@ -197,10 +204,17 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     foot.className = "xlc-form-actions";
     foot.style.justifyContent = "flex-end";
     foot.style.gap = "8px";
+    if (typeof foot.setAttribute === "function") {
+        foot.setAttribute("role", "toolbar");
+        foot.setAttribute("aria-label", "导入向导操作栏");
+    }
 
     const cancelBtn = document.createElement("button");
     cancelBtn.className = "b3-button";
     cancelBtn.textContent = t("cancel");
+    if (typeof cancelBtn.setAttribute === "function") {
+        cancelBtn.setAttribute("aria-label", t("cancel") || "取消导入");
+    }
     cancelBtn.addEventListener("click", () => {
         dialog.destroy();
         release();
@@ -211,6 +225,9 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.textContent = t("setupNext");
     nextBtn.disabled = true;
+    if (typeof nextBtn.setAttribute === "function") {
+        nextBtn.setAttribute("aria-label", t("setupNext") || "下一步，配置导入策略");
+    }
     nextBtn.addEventListener("click", () => {
         if (isSubmitting || nextBtn.disabled || !parsedItems.length || parsedText !== state.rawText) return;
         isSubmitting = true;
@@ -229,6 +246,26 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
                 );
             });
         });
+    });
+
+    foot.addEventListener("keydown", (e: any) => {
+        const buttons = [cancelBtn, nextBtn].filter((b) => !b.disabled);
+        if (buttons.length <= 1) return;
+        const curIdx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        if (curIdx === -1) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+            e.preventDefault();
+            buttons[(curIdx + 1) % buttons.length]?.focus();
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            buttons[(curIdx - 1 + buttons.length) % buttons.length]?.focus();
+        } else if (e.key === "Home") {
+            e.preventDefault();
+            buttons[0]?.focus();
+        } else if (e.key === "End") {
+            e.preventDefault();
+            buttons[buttons.length - 1]?.focus();
+        }
     });
 
     root.addEventListener("keydown", (e) => {
