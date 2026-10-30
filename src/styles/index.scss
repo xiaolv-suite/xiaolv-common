@@ -1462,6 +1462,11 @@
 
       // 占位（暂无预览 / AI 处理中）降调，真结果恢复主文字色（R109）
       &--muted { color: var(--b3-theme-on-surface); }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: -1px;
+      }
     }
 
     // 内联文档搜索（插入到指定文档）：菜单内无 .xlc-form 作用域，这里补齐输入观感
@@ -3443,12 +3448,45 @@
   .xlc-quicklook-meta {
     color: var(--xlc-muted);
     font-size: var(--xlc-font-2xs);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
 
   .xlc-quicklook-hints {
     flex: 0 0 auto;
     color: var(--xlc-muted);
     font-size: var(--xlc-font-2xs);
+  }
+
+  .xlc-quicklook-close {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--xlc-muted);
+    border-radius: var(--xlc-radius-sm);
+    cursor: pointer;
+    font-size: var(--xlc-font-md);
+    flex-shrink: 0;
+    transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
+                color var(--xlc-dur-fast) var(--xlc-ease);
+
+    &:hover {
+      background: var(--xlc-soft);
+      color: var(--xlc-ink);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: 1px;
+    }
   }
 
   .xlc-quicklook-body {
@@ -5213,7 +5251,9 @@
   .xlc-wizard-mapping-row .b3-button,
   .xlc-sugrow-adopt,
   .xlc-draft-resume-banner .b3-button,
-  .xlc-code-banner {
+  .xlc-code-banner,
+  .xlc-quicklook-close,
+  .xlc-menu-preview {
     transition: none !important;
     animation: none !important;
   }

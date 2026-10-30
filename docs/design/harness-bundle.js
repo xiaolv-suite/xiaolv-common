@@ -29190,6 +29190,9 @@ fi`;
       btn.type = "button";
       btn.className = cls;
       btn.setAttribute("role", "menuitem");
+      if (typeof btn.setAttribute === "function") {
+        btn.setAttribute("aria-label", label);
+      }
       const ic = document.createElement("span");
       ic.className = "xlc-menu-ic";
       ic.textContent = icon;
@@ -29228,6 +29231,11 @@ fi`;
         appendMediaHint();
         const previewBox = document.createElement("pre");
         previewBox.className = "xlc-menu-preview xlc-menu-preview--muted";
+        previewBox.tabIndex = 0;
+        if (typeof previewBox.setAttribute === "function") {
+          previewBox.setAttribute("role", "region");
+          previewBox.setAttribute("aria-label", "\u539F\u6587\u6458\u8981\u9884\u89C8");
+        }
         previewBox.textContent = this.deps.t("previewUnavailable");
         void this.deps.preview(entry.id).then((text) => {
           if (text) {
@@ -29239,6 +29247,10 @@ fi`;
         });
         const sec1 = document.createElement("div");
         sec1.className = "xlc-menu-sec";
+        if (typeof sec1.setAttribute === "function") {
+          sec1.setAttribute("role", "group");
+          sec1.setAttribute("aria-label", "\u4E3B\u8981\u64CD\u4F5C");
+        }
         const addAction = (icon, label, run, cls = "xlc-menu-item", destroyBeforeRun = true) => {
           sec1.appendChild(this.menuButton(icon, label, cls, async () => {
             var _a3, _b3, _c3;
@@ -29293,6 +29305,10 @@ fi`;
         if (this.deps.aiEnabled()) {
           const secAi = document.createElement("div");
           secAi.className = "xlc-menu-sec xlc-menu-sec--ai";
+          if (typeof secAi.setAttribute === "function") {
+            secAi.setAttribute("role", "group");
+            secAi.setAttribute("aria-label", "AI\u667A\u80FD\u53D8\u6362");
+          }
           const openTransform = (transformLabel, run) => {
             const gen = ++this.transformSeq;
             rebuild(() => buildTransformView(entry.title + " \xB7 " + transformLabel, transformLabel));
@@ -29312,6 +29328,10 @@ fi`;
         }
         const sec2 = document.createElement("div");
         sec2.className = "xlc-menu-sec";
+        if (typeof sec2.setAttribute === "function") {
+          sec2.setAttribute("role", "group");
+          sec2.setAttribute("aria-label", "\u6269\u5C55\u64CD\u4F5C");
+        }
         const addSilent = (icon, label, run, cls = "xlc-menu-item", title) => {
           const btn = this.menuButton(icon, label, cls, async () => {
             var _a3;
@@ -31809,16 +31829,37 @@ ${progress.progressBar}`);
       card.className = "xlc-quicklook-card";
       const head = document.createElement("div");
       head.className = "xlc-quicklook-head";
+      if (typeof head.setAttribute === "function") {
+        head.setAttribute("role", "toolbar");
+        head.setAttribute("aria-label", "\u6781\u901F\u9884\u89C8\u6807\u9898\u680F");
+      }
       const title = document.createElement("strong");
       title.className = "xlc-quicklook-title";
       title.textContent = entry.title || "";
       const meta = document.createElement("span");
       meta.className = "xlc-quicklook-meta";
+      if (typeof meta.setAttribute === "function") {
+        meta.setAttribute("role", "status");
+        meta.setAttribute("aria-label", `\u6761\u76EE\u5143\u6570\u636E\uFF1A${entry.itemType}`);
+      }
       meta.textContent = `${entry.itemType}${entry.varCount ? ` \xB7 {${entry.varCount}} \u53D8\u91CF` : ""}${entry.alias ? ` \xB7 \u522B\u540D: ${entry.alias}` : ""}`;
       const hints = document.createElement("span");
       hints.className = "xlc-quicklook-hints";
+      if (typeof hints.setAttribute === "function") {
+        hints.setAttribute("role", "note");
+        hints.setAttribute("aria-label", "\u64CD\u4F5C\u63D0\u793A");
+      }
       hints.textContent = entry.isOmni ? "Space / Esc \u5173\u95ED\u3000Enter \u63D2\u5165\u3000Alt+S \u6536\u5F55\u5230\u5E38\u7528\u5E93" : "Space / Esc \u5173\u95ED\u3000Enter \u63D2\u5165\u3000Alt+C \u590D\u5236";
-      head.append(title, meta, hints);
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "b3-button b3-button--text xlc-quicklook-close";
+      closeBtn.textContent = "\xD7";
+      closeBtn.title = "\u5173\u95ED\u6781\u901F\u9884\u89C8 (Esc / Space)";
+      if (typeof closeBtn.setAttribute === "function") {
+        closeBtn.setAttribute("aria-label", "\u5173\u95ED\u6781\u901F\u9884\u89C8");
+      }
+      closeBtn.addEventListener("click", () => this.closeQuickLook());
+      head.append(title, meta, hints, closeBtn);
       const body = document.createElement("div");
       body.className = "xlc-quicklook-body";
       body.tabIndex = 0;

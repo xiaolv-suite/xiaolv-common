@@ -3426,6 +3426,9 @@ export class CommonSearchDialog {
         btn.type = "button";
         btn.className = cls;
         btn.setAttribute("role", "menuitem");
+        if (typeof btn.setAttribute === "function") {
+            btn.setAttribute("aria-label", label);
+        }
         const ic = document.createElement("span");
         ic.className = "xlc-menu-ic";
         ic.textContent = icon;
@@ -3466,6 +3469,11 @@ export class CommonSearchDialog {
             // 预览盒（原文摘要）：原型屏 2 置于动作分区之后（先见动作，预览兜底）；占位降调
             const previewBox = document.createElement("pre");
             previewBox.className = "xlc-menu-preview xlc-menu-preview--muted";
+            previewBox.tabIndex = 0;
+            if (typeof previewBox.setAttribute === "function") {
+                previewBox.setAttribute("role", "region");
+                previewBox.setAttribute("aria-label", "原文摘要预览");
+            }
             previewBox.textContent = this.deps.t("previewUnavailable");
             void this.deps.preview(entry.id).then((text) => {
                 if (text) {
@@ -3478,6 +3486,10 @@ export class CommonSearchDialog {
 
             const sec1 = document.createElement("div");
             sec1.className = "xlc-menu-sec";
+            if (typeof sec1.setAttribute === "function") {
+                sec1.setAttribute("role", "group");
+                sec1.setAttribute("aria-label", "主要操作");
+            }
             const addAction = (icon: string, label: string, run: () => Promise<unknown>, cls = "xlc-menu-item", destroyBeforeRun = true): void => {
                 sec1.appendChild(this.menuButton(icon, label, cls, async () => {
                     const execution = run();
@@ -3544,6 +3556,10 @@ export class CommonSearchDialog {
             if (this.deps.aiEnabled()) {
                 const secAi = document.createElement("div");
                 secAi.className = "xlc-menu-sec xlc-menu-sec--ai";
+                if (typeof secAi.setAttribute === "function") {
+                    secAi.setAttribute("role", "group");
+                    secAi.setAttribute("aria-label", "AI智能变换");
+                }
                 const openTransform = (transformLabel: string, run: () => Promise<{ok: true; text: string} | {ok: false; message: string}>): void => {
                     const gen = ++this.transformSeq; // 代次守卫：慢的旧变换不得覆盖新视图（R138）
                     rebuild(() => buildTransformView(entry.title + " · " + transformLabel, transformLabel));
@@ -3564,6 +3580,10 @@ export class CommonSearchDialog {
 
             const sec2 = document.createElement("div");
             sec2.className = "xlc-menu-sec";
+            if (typeof sec2.setAttribute === "function") {
+                sec2.setAttribute("role", "group");
+                sec2.setAttribute("aria-label", "扩展操作");
+            }
             const addSilent = (icon: string, label: string, run: () => Promise<unknown> | void, cls = "xlc-menu-item", title?: string): HTMLButtonElement => {
                 const btn = this.menuButton(icon, label, cls, async () => {
                     // 统一走 menuDismiss：document 监听必须摘除、账目不被错清（此前 menu.remove() 泄漏监听，
@@ -5938,18 +5958,41 @@ export class CommonSearchDialog {
 
         const head = document.createElement("div");
         head.className = "xlc-quicklook-head";
+        if (typeof head.setAttribute === "function") {
+            head.setAttribute("role", "toolbar");
+            head.setAttribute("aria-label", "极速预览标题栏");
+        }
         const title = document.createElement("strong");
         title.className = "xlc-quicklook-title";
         title.textContent = entry.title || "";
         const meta = document.createElement("span");
         meta.className = "xlc-quicklook-meta";
+        if (typeof meta.setAttribute === "function") {
+            meta.setAttribute("role", "status");
+            meta.setAttribute("aria-label", `条目元数据：${entry.itemType}`);
+        }
         meta.textContent = `${entry.itemType}${entry.varCount ? ` · {${entry.varCount}} 变量` : ""}${entry.alias ? ` · 别名: ${entry.alias}` : ""}`;
         const hints = document.createElement("span");
         hints.className = "xlc-quicklook-hints";
+        if (typeof hints.setAttribute === "function") {
+            hints.setAttribute("role", "note");
+            hints.setAttribute("aria-label", "操作提示");
+        }
         hints.textContent = entry.isOmni
             ? "Space / Esc 关闭　Enter 插入　Alt+S 收录到常用库"
             : "Space / Esc 关闭　Enter 插入　Alt+C 复制";
-        head.append(title, meta, hints);
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "b3-button b3-button--text xlc-quicklook-close";
+        closeBtn.textContent = "×";
+        closeBtn.title = "关闭极速预览 (Esc / Space)";
+        if (typeof closeBtn.setAttribute === "function") {
+            closeBtn.setAttribute("aria-label", "关闭极速预览");
+        }
+        closeBtn.addEventListener("click", () => this.closeQuickLook());
+
+        head.append(title, meta, hints, closeBtn);
 
         const body = document.createElement("div");
         body.className = "xlc-quicklook-body";
