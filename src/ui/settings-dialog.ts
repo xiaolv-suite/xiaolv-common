@@ -1758,10 +1758,14 @@ function buildSavedViewsSection(ctx: SettingsUiContext, root: HTMLElement, befor
             return;
         }
         for (const view of views) {
+            const pieces = [`#${view.tag}`, scopeLabel(view.scope)];
+            if (view.pathLabel) pieces.push(view.pathLabel);
+
             const row = document.createElement("div");
             row.className = "xlc-setting-row xlc-saved-view-row";
             row.dataset.xlcSavedViewId = view.id;
             row.setAttribute("role", "listitem");
+            row.setAttribute("aria-label", `${view.name} · ${pieces.join(" · ")}`);
 
             const text = document.createElement("span");
             text.className = "xlc-setting-text";
@@ -1771,8 +1775,6 @@ function buildSavedViewsSection(ctx: SettingsUiContext, root: HTMLElement, befor
             text.appendChild(name);
             const meta = document.createElement("span");
             meta.className = "xlc-setting-sub xlc-saved-view-meta";
-            const pieces = [`#${view.tag}`, scopeLabel(view.scope)];
-            if (view.pathLabel) pieces.push(view.pathLabel);
             meta.textContent = pieces.join(" · ");
             text.appendChild(meta);
             row.appendChild(text);
@@ -1784,6 +1786,7 @@ function buildSavedViewsSection(ctx: SettingsUiContext, root: HTMLElement, befor
             open.className = "b3-button xlc-btn-ghost";
             open.dataset.xlcControl = "settings.saved-view.open";
             open.textContent = t("savedViewsOpen");
+            open.setAttribute("aria-label", `${t("savedViewsOpen")}：${view.name}`);
             open.disabled = !ctx.openSavedDiscoveryView;
             open.addEventListener("click", () => {
                 if (!ctx.openSavedDiscoveryView) return;
@@ -1797,6 +1800,7 @@ function buildSavedViewsSection(ctx: SettingsUiContext, root: HTMLElement, befor
             remove.className = "b3-button xlc-btn-ghost";
             remove.dataset.xlcControl = "settings.saved-view.delete";
             remove.textContent = t("savedViewsDelete");
+            remove.setAttribute("aria-label", `${t("savedViewsDelete")}：${view.name}`);
             remove.addEventListener("click", () => {
                 confirm("⚠️ " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
                     if (ctx.deleteSavedDiscoveryView) {
@@ -2206,14 +2210,40 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
         }
     };
     const dataBtns = document.createElement("div");
+    dataBtns.className = "xlc-settings-data-actions";
+    dataBtns.setAttribute("role", "toolbar");
+    dataBtns.setAttribute("aria-label", t("dataSection"));
     dataBtns.style.display = "flex";
     dataBtns.style.gap = "8px";
     dataBtns.style.flexWrap = "wrap";
+    dataBtns.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const btns = Array.from(dataBtns.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
+            if (!btns.length) return;
+            const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+            btns[nextIdx]?.focus();
+            return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+            const btns = Array.from(dataBtns.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
+            if (!btns.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Home") btns[0]?.focus();
+            else btns[btns.length - 1]?.focus();
+        }
+    });
     const mkBtn = (label: string, onClick?: () => void, control?: string): HTMLButtonElement => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "b3-button";
         btn.textContent = label;
+        btn.setAttribute("aria-label", label);
         if (control) btn.dataset.xlcControl = control;
         if (onClick) btn.addEventListener("click", onClick);
         dataBtns.appendChild(btn);

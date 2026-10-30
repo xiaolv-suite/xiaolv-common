@@ -1314,6 +1314,15 @@
     padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-3);
     flex-wrap: wrap;
 
+    .b3-button {
+      min-height: 24px;
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
+
     .xlc-foot-spacer { flex: 1; }
   }
 
@@ -1751,6 +1760,17 @@
     &[data-state="error"] { border-color: color-mix(in srgb, var(--xlc-badge-warn) 40%, var(--b3-border-color)); background: color-mix(in srgb, var(--xlc-badge-warn) 8%, var(--b3-theme-background)); }
     .xlc-form-hint, .xlc-form-error { flex: 1 1 180px; overflow-wrap: anywhere; }
     .xlc-operation-retry { flex: 0 0 auto; margin-left: auto; }
+  }
+
+  .xlc-settings-data-actions {
+    .b3-button {
+      min-height: 24px;
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
   }
 
   .xlc-ai-failure {

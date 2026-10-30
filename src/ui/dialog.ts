@@ -800,6 +800,8 @@ export class CommonSearchDialog {
         if (!isMobile) {
             const pane = document.createElement("div");
             pane.className = "xlc-pane";
+            pane.setAttribute("role", "complementary");
+            pane.setAttribute("aria-label", "详情侧边窗格");
             pane.appendChild(this.buildPaneHead());
             // 元数据行（R108，Raycast Detail.Metadata 惯例：结构化信息进详情面板，行保持克制）
             const paneMeta = document.createElement("div");
@@ -827,6 +829,8 @@ export class CommonSearchDialog {
             const paneBody = document.createElement("div");
             paneBody.className = "xlc-pane-body xlc-pane-body--muted";
             paneBody.tabIndex = 0;
+            paneBody.setAttribute("role", "region");
+            paneBody.setAttribute("aria-label", "条目详情预览");
             paneBody.textContent = this.deps.t("previewUnavailable");
             pane.appendChild(paneBody);
             pane.appendChild(this.buildPaneFoot());
@@ -1025,6 +1029,8 @@ export class CommonSearchDialog {
         const strip = document.createElement("div");
         strip.className = "xlc-metrics-strip";
         strip.dataset.xlcControl = "metrics.strip";
+        strip.setAttribute("role", "region");
+        strip.setAttribute("aria-label", "关键指标概览");
 
         const makeItem = (key: string, label: string, initialValue: string = "0") => {
             const item = document.createElement("div");
@@ -1092,11 +1098,36 @@ export class CommonSearchDialog {
     private buildPaneFoot(): HTMLElement {
         const foot = document.createElement("div");
         foot.className = "xlc-pane-foot";
+        foot.setAttribute("role", "toolbar");
+        foot.setAttribute("aria-label", "详情动作操作栏");
+        foot.addEventListener("keydown", (e) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                const btns = Array.from(foot.querySelectorAll<HTMLButtonElement>("button:not([disabled]):not([style*='display: none'])"));
+                if (!btns.length) return;
+                const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                if (idx === -1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                btns[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                const btns = Array.from(foot.querySelectorAll<HTMLButtonElement>("button:not([disabled]):not([style*='display: none'])"));
+                if (!btns.length) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") btns[0]?.focus();
+                else btns[btns.length - 1]?.focus();
+            }
+        });
         const insert = document.createElement("button");
         insert.className = "b3-button xlc-btn-primary";
         insert.textContent = this.deps.t("insert");
         insert.dataset.xlcPaneAct = "insert";
         insert.dataset.xlcControl = "preview.insert";
+        insert.setAttribute("aria-label", this.deps.t("insert"));
         insert.addEventListener("click", () => {
             // 提供方行激活：插入的是 payload（与 Enter 键路径一致），不是库条目（R138 错位修复）
             if (this.activeProvider >= 0) {
@@ -1112,6 +1143,7 @@ export class CommonSearchDialog {
         copy.textContent = this.deps.t("copy");
         copy.dataset.xlcPaneAct = "copy";
         copy.dataset.xlcControl = "preview.copy";
+        copy.setAttribute("aria-label", this.deps.t("copy"));
         copy.addEventListener("click", () => {
             if (this.activeProvider >= 0) {
                 const row = this.providerRows[this.activeProvider];
@@ -1127,6 +1159,7 @@ export class CommonSearchDialog {
         aiBtn.textContent = "✦ " + this.deps.t("aiTransform");
         aiBtn.dataset.xlcPaneAct = "ai";
         aiBtn.dataset.xlcControl = "preview.ai";
+        aiBtn.setAttribute("aria-label", "AI 变换动作菜单");
         aiBtn.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
             if (entry) void this.showActionMenu(entry);
@@ -1139,6 +1172,7 @@ export class CommonSearchDialog {
         embedBtn.title = "作为思源原生嵌入块插入（源变动时多处自动同步更新，Shift+Enter）";
         embedBtn.dataset.xlcPaneAct = "embed";
         embedBtn.dataset.xlcControl = "preview.embed";
+        embedBtn.setAttribute("aria-label", embedBtn.title);
         embedBtn.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
             if (entry) {
@@ -1160,6 +1194,7 @@ export class CommonSearchDialog {
         refBtn.title = "作为思源原生块引用插入（Alt+Enter）";
         refBtn.dataset.xlcPaneAct = "ref";
         refBtn.dataset.xlcControl = "preview.ref";
+        refBtn.setAttribute("aria-label", refBtn.title);
         refBtn.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
             if (entry) {
@@ -1181,6 +1216,7 @@ export class CommonSearchDialog {
         source.textContent = this.deps.t("openSource");
         source.dataset.xlcPaneAct = "source";
         source.dataset.xlcControl = "preview.source";
+        source.setAttribute("aria-label", this.deps.t("openSource"));
         source.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
             if (entry) {
@@ -1196,6 +1232,7 @@ export class CommonSearchDialog {
         edit.textContent = this.deps.t("edit");
         edit.dataset.xlcPaneAct = "edit";
         edit.dataset.xlcControl = "preview.edit";
+        edit.setAttribute("aria-label", this.deps.t("edit"));
         edit.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
             if (entry) {

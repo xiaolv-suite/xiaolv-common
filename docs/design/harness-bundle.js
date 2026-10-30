@@ -23611,10 +23611,13 @@ ${exception.mark.snippet}`;
         return;
       }
       for (const view of views) {
+        const pieces = [`#${view.tag}`, scopeLabel(view.scope)];
+        if (view.pathLabel) pieces.push(view.pathLabel);
         const row = document.createElement("div");
         row.className = "xlc-setting-row xlc-saved-view-row";
         row.dataset.xlcSavedViewId = view.id;
         row.setAttribute("role", "listitem");
+        row.setAttribute("aria-label", `${view.name} \xB7 ${pieces.join(" \xB7 ")}`);
         const text = document.createElement("span");
         text.className = "xlc-setting-text";
         const name = document.createElement("strong");
@@ -23623,8 +23626,6 @@ ${exception.mark.snippet}`;
         text.appendChild(name);
         const meta = document.createElement("span");
         meta.className = "xlc-setting-sub xlc-saved-view-meta";
-        const pieces = [`#${view.tag}`, scopeLabel(view.scope)];
-        if (view.pathLabel) pieces.push(view.pathLabel);
         meta.textContent = pieces.join(" \xB7 ");
         text.appendChild(meta);
         row.appendChild(text);
@@ -23635,6 +23636,7 @@ ${exception.mark.snippet}`;
         open.className = "b3-button xlc-btn-ghost";
         open.dataset.xlcControl = "settings.saved-view.open";
         open.textContent = t("savedViewsOpen");
+        open.setAttribute("aria-label", `${t("savedViewsOpen")}\uFF1A${view.name}`);
         open.disabled = !ctx.openSavedDiscoveryView;
         open.addEventListener("click", () => {
           if (!ctx.openSavedDiscoveryView) return;
@@ -23647,6 +23649,7 @@ ${exception.mark.snippet}`;
         remove.className = "b3-button xlc-btn-ghost";
         remove.dataset.xlcControl = "settings.saved-view.delete";
         remove.textContent = t("savedViewsDelete");
+        remove.setAttribute("aria-label", `${t("savedViewsDelete")}\uFF1A${view.name}`);
         remove.addEventListener("click", () => {
           (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
             var _a;
@@ -24005,14 +24008,41 @@ fi`;
       }
     };
     const dataBtns = document.createElement("div");
+    dataBtns.className = "xlc-settings-data-actions";
+    dataBtns.setAttribute("role", "toolbar");
+    dataBtns.setAttribute("aria-label", t("dataSection"));
     dataBtns.style.display = "flex";
     dataBtns.style.gap = "8px";
     dataBtns.style.flexWrap = "wrap";
+    dataBtns.addEventListener("keydown", (e) => {
+      var _a, _b, _c;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const btns = Array.from(dataBtns.querySelectorAll("button:not([disabled])"));
+        if (!btns.length) return;
+        const idx = btns.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+        (_a = btns[nextIdx]) == null ? void 0 : _a.focus();
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        const btns = Array.from(dataBtns.querySelectorAll("button:not([disabled])"));
+        if (!btns.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Home") (_b = btns[0]) == null ? void 0 : _b.focus();
+        else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+      }
+    });
     const mkBtn = (label, onClick, control) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "b3-button";
       btn.textContent = label;
+      btn.setAttribute("aria-label", label);
       if (control) btn.dataset.xlcControl = control;
       if (onClick) btn.addEventListener("click", onClick);
       dataBtns.appendChild(btn);
@@ -26423,6 +26453,8 @@ fi`;
       if (!isMobile) {
         const pane = document.createElement("div");
         pane.className = "xlc-pane";
+        pane.setAttribute("role", "complementary");
+        pane.setAttribute("aria-label", "\u8BE6\u60C5\u4FA7\u8FB9\u7A97\u683C");
         pane.appendChild(this.buildPaneHead());
         const paneMeta = document.createElement("div");
         paneMeta.className = "xlc-pane-meta";
@@ -26448,6 +26480,8 @@ fi`;
         const paneBody = document.createElement("div");
         paneBody.className = "xlc-pane-body xlc-pane-body--muted";
         paneBody.tabIndex = 0;
+        paneBody.setAttribute("role", "region");
+        paneBody.setAttribute("aria-label", "\u6761\u76EE\u8BE6\u60C5\u9884\u89C8");
         paneBody.textContent = this.deps.t("previewUnavailable");
         pane.appendChild(paneBody);
         pane.appendChild(this.buildPaneFoot());
@@ -26636,6 +26670,8 @@ fi`;
       const strip = document.createElement("div");
       strip.className = "xlc-metrics-strip";
       strip.dataset.xlcControl = "metrics.strip";
+      strip.setAttribute("role", "region");
+      strip.setAttribute("aria-label", "\u5173\u952E\u6307\u6807\u6982\u89C8");
       const makeItem = (key, label, initialValue = "0") => {
         const item = document.createElement("div");
         item.className = "xlc-metric-item";
@@ -26696,11 +26732,37 @@ fi`;
     buildPaneFoot() {
       const foot = document.createElement("div");
       foot.className = "xlc-pane-foot";
+      foot.setAttribute("role", "toolbar");
+      foot.setAttribute("aria-label", "\u8BE6\u60C5\u52A8\u4F5C\u64CD\u4F5C\u680F");
+      foot.addEventListener("keydown", (e) => {
+        var _a, _b, _c;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          const btns = Array.from(foot.querySelectorAll("button:not([disabled]):not([style*='display: none'])"));
+          if (!btns.length) return;
+          const idx = btns.indexOf(document.activeElement);
+          if (idx === -1) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+          (_a = btns[nextIdx]) == null ? void 0 : _a.focus();
+          return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+          const btns = Array.from(foot.querySelectorAll("button:not([disabled]):not([style*='display: none'])"));
+          if (!btns.length) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Home") (_b = btns[0]) == null ? void 0 : _b.focus();
+          else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+        }
+      });
       const insert = document.createElement("button");
       insert.className = "b3-button xlc-btn-primary";
       insert.textContent = this.deps.t("insert");
       insert.dataset.xlcPaneAct = "insert";
       insert.dataset.xlcControl = "preview.insert";
+      insert.setAttribute("aria-label", this.deps.t("insert"));
       insert.addEventListener("click", () => {
         var _a;
         if (this.activeProvider >= 0) {
@@ -26716,6 +26778,7 @@ fi`;
       copy.textContent = this.deps.t("copy");
       copy.dataset.xlcPaneAct = "copy";
       copy.dataset.xlcControl = "preview.copy";
+      copy.setAttribute("aria-label", this.deps.t("copy"));
       copy.addEventListener("click", () => {
         if (this.activeProvider >= 0) {
           const row = this.providerRows[this.activeProvider];
@@ -26730,6 +26793,7 @@ fi`;
       aiBtn.textContent = "\u2726 " + this.deps.t("aiTransform");
       aiBtn.dataset.xlcPaneAct = "ai";
       aiBtn.dataset.xlcControl = "preview.ai";
+      aiBtn.setAttribute("aria-label", "AI \u53D8\u6362\u52A8\u4F5C\u83DC\u5355");
       aiBtn.addEventListener("click", () => {
         const entry = this.results[this.activeIndex];
         if (entry) void this.showActionMenu(entry);
@@ -26740,6 +26804,7 @@ fi`;
       embedBtn.title = "\u4F5C\u4E3A\u601D\u6E90\u539F\u751F\u5D4C\u5165\u5757\u63D2\u5165\uFF08\u6E90\u53D8\u52A8\u65F6\u591A\u5904\u81EA\u52A8\u540C\u6B65\u66F4\u65B0\uFF0CShift+Enter\uFF09";
       embedBtn.dataset.xlcPaneAct = "embed";
       embedBtn.dataset.xlcControl = "preview.embed";
+      embedBtn.setAttribute("aria-label", embedBtn.title);
       embedBtn.addEventListener("click", () => {
         var _a, _b, _c, _d;
         const entry = this.results[this.activeIndex];
@@ -26760,6 +26825,7 @@ fi`;
       refBtn.title = "\u4F5C\u4E3A\u601D\u6E90\u539F\u751F\u5757\u5F15\u7528\u63D2\u5165\uFF08Alt+Enter\uFF09";
       refBtn.dataset.xlcPaneAct = "ref";
       refBtn.dataset.xlcControl = "preview.ref";
+      refBtn.setAttribute("aria-label", refBtn.title);
       refBtn.addEventListener("click", () => {
         var _a, _b, _c, _d;
         const entry = this.results[this.activeIndex];
@@ -26781,6 +26847,7 @@ fi`;
       source.textContent = this.deps.t("openSource");
       source.dataset.xlcPaneAct = "source";
       source.dataset.xlcControl = "preview.source";
+      source.setAttribute("aria-label", this.deps.t("openSource"));
       source.addEventListener("click", () => {
         const entry = this.results[this.activeIndex];
         if (entry) {
@@ -26796,6 +26863,7 @@ fi`;
       edit.textContent = this.deps.t("edit");
       edit.dataset.xlcPaneAct = "edit";
       edit.dataset.xlcControl = "preview.edit";
+      edit.setAttribute("aria-label", this.deps.t("edit"));
       edit.addEventListener("click", () => {
         const entry = this.results[this.activeIndex];
         if (entry) {
