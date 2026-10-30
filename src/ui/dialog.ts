@@ -419,6 +419,30 @@ export class CommonSearchDialog {
                 return;
             }
             historyBar.replaceChildren();
+            historyBar.setAttribute("role", "toolbar");
+            historyBar.setAttribute("aria-label", "搜索历史");
+            historyBar.addEventListener("keydown", (e) => {
+                if (e.isComposing || e.keyCode === 229) return;
+                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                    const btns = Array.from(historyBar.querySelectorAll<HTMLButtonElement>("button"));
+                    if (!btns.length) return;
+                    const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                    if (idx === -1) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                    btns[nextIdx]?.focus();
+                    return;
+                }
+                if (e.key === "Home" || e.key === "End") {
+                    const btns = Array.from(historyBar.querySelectorAll<HTMLButtonElement>("button"));
+                    if (!btns.length) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.key === "Home") btns[0]?.focus();
+                    else btns[btns.length - 1]?.focus();
+                }
+            });
             const lbl = document.createElement("span");
             lbl.className = "xlc-history-label";
             lbl.textContent = "🕐 历史:";
@@ -430,6 +454,7 @@ export class CommonSearchDialog {
                 pill.className = "xlc-history-pill";
                 pill.textContent = word;
                 pill.title = `点击检索「${word}」`;
+                pill.setAttribute("aria-label", pill.title);
                 pill.addEventListener("click", () => {
                     input.value = word;
                     input.dispatchEvent(new Event("input", {bubbles: true}));
@@ -449,6 +474,7 @@ export class CommonSearchDialog {
                 clearBtn.className = "xlc-history-clear";
                 clearBtn.textContent = "清空";
                 clearBtn.title = "清空搜索历史";
+                clearBtn.setAttribute("aria-label", clearBtn.title);
                 clearBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
                     this.deps.clearRecentQueries?.();
@@ -1341,6 +1367,30 @@ export class CommonSearchDialog {
         const quickPillsHost = this.dialog?.element.querySelector<HTMLElement>(".xlc-quick-filter-pills");
         if (quickPillsHost) {
             quickPillsHost.replaceChildren();
+            quickPillsHost.setAttribute("role", "toolbar");
+            quickPillsHost.setAttribute("aria-label", "常用标签筛选");
+            quickPillsHost.addEventListener("keydown", (e) => {
+                if (e.isComposing || e.keyCode === 229) return;
+                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                    const btns = Array.from(quickPillsHost.querySelectorAll<HTMLButtonElement>(".xlc-quick-pill"));
+                    if (!btns.length) return;
+                    const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                    if (idx === -1) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                    btns[nextIdx]?.focus();
+                    return;
+                }
+                if (e.key === "Home" || e.key === "End") {
+                    const btns = Array.from(quickPillsHost.querySelectorAll<HTMLButtonElement>(".xlc-quick-pill"));
+                    if (!btns.length) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.key === "Home") btns[0]?.focus();
+                    else btns[btns.length - 1]?.focus();
+                }
+            });
             const topTags = tags.filter(Boolean).slice(0, 6);
             if (topTags.length > 0) {
                 const label = document.createElement("span");
@@ -1353,6 +1403,9 @@ export class CommonSearchDialog {
                     btn.type = "button";
                     const isSelected = nextTag === t;
                     btn.className = "xlc-quick-pill" + (isSelected ? " xlc-quick-pill--on" : "");
+                    btn.setAttribute("role", "button");
+                    btn.setAttribute("aria-pressed", isSelected ? "true" : "false");
+                    btn.setAttribute("aria-label", isSelected ? `清除 #${t} 过滤` : `按 #${t} 过滤`);
                     btn.textContent = `#${t}`;
                     btn.title = isSelected ? `清除 #${t} 过滤` : `按 #${t} 过滤`;
                     btn.addEventListener("click", () => {

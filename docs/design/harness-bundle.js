@@ -25484,6 +25484,11 @@ fi`;
       container.appendChild(banner);
       const pre = doc.createElement("pre");
       pre.className = "xlc-preview-code";
+      pre.tabIndex = 0;
+      if (typeof pre.setAttribute === "function") {
+        pre.setAttribute("role", "region");
+        pre.setAttribute("aria-label", "\u4EE3\u7801\u9884\u89C8");
+      }
       const codeEl = doc.createElement("code");
       for (let idx = 0; idx < lines.length; idx++) {
         const lineStr = (_a = lines[idx]) != null ? _a : "";
@@ -25524,6 +25529,11 @@ fi`;
       if (block.type === "code-fence") {
         const pre = doc.createElement("pre");
         pre.className = "xlc-preview-code xlc-preview-code--inline";
+        pre.tabIndex = 0;
+        if (typeof pre.setAttribute === "function") {
+          pre.setAttribute("role", "region");
+          pre.setAttribute("aria-label", "\u4EE3\u7801\u5757\u9884\u89C8");
+        }
         const codeEl = doc.createElement("code");
         const cLines = block.rawText.split(/\r?\n/);
         for (const cl of cLines) {
@@ -25549,6 +25559,11 @@ fi`;
       if (block.type === "table" && block.tableHeader) {
         const wrap = doc.createElement("div");
         wrap.className = "xlc-md-table-wrap";
+        wrap.tabIndex = 0;
+        if (typeof wrap.setAttribute === "function") {
+          wrap.setAttribute("role", "region");
+          wrap.setAttribute("aria-label", "\u8868\u683C\u5185\u5BB9\u9884\u89C8");
+        }
         const table = doc.createElement("table");
         table.className = "xlc-md-table";
         const thead = doc.createElement("thead");
@@ -25589,6 +25604,10 @@ fi`;
         const card = doc.createElement("div");
         const cType = (block.calloutType || "NOTE").toLowerCase();
         card.className = `xlc-md-callout xlc-md-callout--${cType}`;
+        if (typeof card.setAttribute === "function") {
+          card.setAttribute("role", "note");
+          card.setAttribute("aria-label", `${block.calloutTitle || block.calloutType || "NOTE"} \u63D0\u793A\u5361\u7247`);
+        }
         const head = doc.createElement("div");
         head.className = "xlc-md-callout-header";
         const iconSpan = doc.createElement("span");
@@ -25684,6 +25703,9 @@ fi`;
         checkbox.className = "b3-switch xlc-md-task-checkbox";
         checkbox.checked = Boolean(block.isDone);
         checkbox.disabled = true;
+        if (typeof checkbox.setAttribute === "function") {
+          checkbox.setAttribute("aria-label", block.rawText.slice(0, 40) || "\u4EFB\u52A1\u5F85\u529E\u72B6\u6001");
+        }
         el.appendChild(checkbox);
       } else {
         el = doc.createElement("p");
@@ -25713,6 +25735,9 @@ fi`;
           linkSpan.textContent = inline.text;
           if (inline.url) {
             linkSpan.title = inline.url;
+            if (typeof linkSpan.setAttribute === "function") {
+              linkSpan.setAttribute("aria-label", `${inline.text} (\u94FE\u63A5\u76EE\u6807: ${inline.url})`);
+            }
           }
           el.appendChild(linkSpan);
         }
@@ -26010,6 +26035,31 @@ fi`;
           return;
         }
         historyBar.replaceChildren();
+        historyBar.setAttribute("role", "toolbar");
+        historyBar.setAttribute("aria-label", "\u641C\u7D22\u5386\u53F2");
+        historyBar.addEventListener("keydown", (e) => {
+          var _a3, _b3, _c3;
+          if (e.isComposing || e.keyCode === 229) return;
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const btns = Array.from(historyBar.querySelectorAll("button"));
+            if (!btns.length) return;
+            const idx = btns.indexOf(document.activeElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+            (_a3 = btns[nextIdx]) == null ? void 0 : _a3.focus();
+            return;
+          }
+          if (e.key === "Home" || e.key === "End") {
+            const btns = Array.from(historyBar.querySelectorAll("button"));
+            if (!btns.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Home") (_b3 = btns[0]) == null ? void 0 : _b3.focus();
+            else (_c3 = btns[btns.length - 1]) == null ? void 0 : _c3.focus();
+          }
+        });
         const lbl = document.createElement("span");
         lbl.className = "xlc-history-label";
         lbl.textContent = "\u{1F550} \u5386\u53F2:";
@@ -26020,6 +26070,7 @@ fi`;
           pill.className = "xlc-history-pill";
           pill.textContent = word;
           pill.title = `\u70B9\u51FB\u68C0\u7D22\u300C${word}\u300D`;
+          pill.setAttribute("aria-label", pill.title);
           pill.addEventListener("click", () => {
             input.value = word;
             input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -26038,6 +26089,7 @@ fi`;
           clearBtn2.className = "xlc-history-clear";
           clearBtn2.textContent = "\u6E05\u7A7A";
           clearBtn2.title = "\u6E05\u7A7A\u641C\u7D22\u5386\u53F2";
+          clearBtn2.setAttribute("aria-label", clearBtn2.title);
           clearBtn2.addEventListener("click", (e) => {
             var _a3, _b3;
             e.stopPropagation();
@@ -26870,6 +26922,31 @@ fi`;
       const quickPillsHost = (_c = this.dialog) == null ? void 0 : _c.element.querySelector(".xlc-quick-filter-pills");
       if (quickPillsHost) {
         quickPillsHost.replaceChildren();
+        quickPillsHost.setAttribute("role", "toolbar");
+        quickPillsHost.setAttribute("aria-label", "\u5E38\u7528\u6807\u7B7E\u7B5B\u9009");
+        quickPillsHost.addEventListener("keydown", (e) => {
+          var _a2, _b2, _c2;
+          if (e.isComposing || e.keyCode === 229) return;
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const btns = Array.from(quickPillsHost.querySelectorAll(".xlc-quick-pill"));
+            if (!btns.length) return;
+            const idx = btns.indexOf(document.activeElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+            (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+            return;
+          }
+          if (e.key === "Home" || e.key === "End") {
+            const btns = Array.from(quickPillsHost.querySelectorAll(".xlc-quick-pill"));
+            if (!btns.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Home") (_b2 = btns[0]) == null ? void 0 : _b2.focus();
+            else (_c2 = btns[btns.length - 1]) == null ? void 0 : _c2.focus();
+          }
+        });
         const topTags = tags.filter(Boolean).slice(0, 6);
         if (topTags.length > 0) {
           const label = document.createElement("span");
@@ -26881,6 +26958,9 @@ fi`;
             btn.type = "button";
             const isSelected = nextTag === t;
             btn.className = "xlc-quick-pill" + (isSelected ? " xlc-quick-pill--on" : "");
+            btn.setAttribute("role", "button");
+            btn.setAttribute("aria-pressed", isSelected ? "true" : "false");
+            btn.setAttribute("aria-label", isSelected ? `\u6E05\u9664 #${t} \u8FC7\u6EE4` : `\u6309 #${t} \u8FC7\u6EE4`);
             btn.textContent = `#${t}`;
             btn.title = isSelected ? `\u6E05\u9664 #${t} \u8FC7\u6EE4` : `\u6309 #${t} \u8FC7\u6EE4`;
             btn.addEventListener("click", () => {

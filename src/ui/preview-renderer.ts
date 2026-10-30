@@ -485,6 +485,11 @@ export function renderSafePreview(
         // 代码主体
         const pre = doc.createElement("pre");
         pre.className = "xlc-preview-code";
+        pre.tabIndex = 0;
+        if (typeof pre.setAttribute === "function") {
+            pre.setAttribute("role", "region");
+            pre.setAttribute("aria-label", "代码预览");
+        }
         const codeEl = doc.createElement("code");
 
         for (let idx = 0; idx < lines.length; idx++) {
@@ -537,6 +542,11 @@ export function renderSafePreview(
         if (block.type === "code-fence") {
             const pre = doc.createElement("pre");
             pre.className = "xlc-preview-code xlc-preview-code--inline";
+            pre.tabIndex = 0;
+            if (typeof pre.setAttribute === "function") {
+                pre.setAttribute("role", "region");
+                pre.setAttribute("aria-label", "代码块预览");
+            }
             const codeEl = doc.createElement("code");
             const cLines = block.rawText.split(/\r?\n/);
             for (const cl of cLines) {
@@ -563,6 +573,11 @@ export function renderSafePreview(
         if (block.type === "table" && block.tableHeader) {
             const wrap = doc.createElement("div");
             wrap.className = "xlc-md-table-wrap";
+            wrap.tabIndex = 0;
+            if (typeof wrap.setAttribute === "function") {
+                wrap.setAttribute("role", "region");
+                wrap.setAttribute("aria-label", "表格内容预览");
+            }
             const table = doc.createElement("table");
             table.className = "xlc-md-table";
 
@@ -604,6 +619,10 @@ export function renderSafePreview(
             const card = doc.createElement("div");
             const cType = (block.calloutType || "NOTE").toLowerCase();
             card.className = `xlc-md-callout xlc-md-callout--${cType}`;
+            if (typeof card.setAttribute === "function") {
+                card.setAttribute("role", "note");
+                card.setAttribute("aria-label", `${block.calloutTitle || block.calloutType || "NOTE"} 提示卡片`);
+            }
 
             const head = doc.createElement("div");
             head.className = "xlc-md-callout-header";
@@ -706,6 +725,9 @@ export function renderSafePreview(
             checkbox.className = "b3-switch xlc-md-task-checkbox";
             checkbox.checked = Boolean(block.isDone);
             checkbox.disabled = true;
+            if (typeof checkbox.setAttribute === "function") {
+                checkbox.setAttribute("aria-label", block.rawText.slice(0, 40) || "任务待办状态");
+            }
             el.appendChild(checkbox);
         } else {
             el = doc.createElement("p");
@@ -737,6 +759,9 @@ export function renderSafePreview(
                 linkSpan.textContent = inline.text;
                 if (inline.url) {
                     linkSpan.title = inline.url;
+                    if (typeof linkSpan.setAttribute === "function") {
+                        linkSpan.setAttribute("aria-label", `${inline.text} (链接目标: ${inline.url})`);
+                    }
                 }
                 el.appendChild(linkSpan);
             }

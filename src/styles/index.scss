@@ -265,6 +265,7 @@
     .xlc-history-pill {
       display: inline-flex;
       align-items: center;
+      min-height: 24px;
       background-color: var(--b3-theme-surface);
       border: 1px solid var(--b3-border-color);
       color: var(--b3-theme-on-surface);
@@ -282,6 +283,11 @@
         background-color: var(--xlc-lavender);
         border-color: var(--b3-theme-primary);
         color: var(--b3-theme-primary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
       }
     }
 
@@ -629,6 +635,7 @@
     .xlc-quick-pill {
       display: inline-flex;
       align-items: center;
+      min-height: 24px;
       font-size: var(--xlc-font-2xs);
       padding: 1px 7px;
       border-radius: var(--b3-border-radius);
@@ -644,6 +651,11 @@
       &:hover {
         border-color: var(--b3-theme-primary);
         color: var(--b3-theme-primary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
       }
 
       &--on {

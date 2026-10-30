@@ -825,6 +825,11 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     overflow-x: auto;
     white-space: pre;
 
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: -1px;
+    }
+
     &--inline {
       margin: var(--xlc-space-2) 0;
     }
@@ -944,6 +949,11 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     margin: var(--xlc-space-2) 0;
     max-width: 100%;
     overflow-x: auto;
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: 1px;
+    }
   }
   .xlc-md-table {
     width: 100%;
@@ -970,6 +980,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     color: var(--xlc-accent);
     text-decoration: underline;
     text-underline-offset: 2px;
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: 1px;
+      border-radius: var(--xlc-radius-xs);
+    }
   }
 
   .xlc-md-hr {
