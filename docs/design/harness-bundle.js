@@ -14795,11 +14795,15 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           const field = (label, value, isArea, cls, parent) => {
             const wrap = document.createElement("label");
             wrap.className = "xlc-form-field";
+            const fieldId = `xlc-capture-field-${cls.replace(/[^a-z0-9_-]/gi, "_")}`;
+            wrap.htmlFor = fieldId;
             const cap = document.createElement("span");
             cap.className = "xlc-form-label";
             cap.textContent = label;
             wrap.appendChild(cap);
             const inputEl = isArea ? document.createElement("textarea") : document.createElement("input");
+            inputEl.id = fieldId;
+            inputEl.setAttribute("aria-label", label);
             if (isArea) {
               inputEl.rows = 6;
               inputEl.style.resize = "vertical";
@@ -14816,13 +14820,17 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           metaRow.className = "xlc-form-row";
           const typeWrap = document.createElement("label");
           typeWrap.className = "xlc-form-field xlc-form-field--fixed";
+          const typeSelectId = "xlc-capture-field-type";
+          typeWrap.htmlFor = typeSelectId;
           const typeLabel2 = document.createElement("span");
           typeLabel2.className = "xlc-form-label";
           typeLabel2.textContent = t("type");
           typeWrap.appendChild(typeLabel2);
           const typeSelect = document.createElement("select");
+          typeSelect.id = typeSelectId;
           typeSelect.className = "b3-select xlc-form-type";
           typeSelect.dataset.xlcControl = "capture.type";
+          typeSelect.setAttribute("aria-label", t("type"));
           for (const it of ["text", "markdown", "url", "code", "image", "asset", "blockref", "structure"]) {
             const opt = document.createElement("option");
             opt.value = it;
@@ -14890,6 +14898,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
               pill.className = "xlc-quick-pill";
               pill.textContent = rec;
               pill.title = `\u70B9\u51FB\u586B\u5165\u63A8\u8350\u522B\u540D\u300C${rec}\u300D`;
+              pill.setAttribute("aria-label", pill.title);
               pill.addEventListener("click", () => {
                 aliasEl.value = rec;
                 aliasEl.dispatchEvent(new Event("input", { bubbles: true }));
@@ -14946,6 +14955,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
               pill.className = "xlc-quick-pill";
               pill.textContent = "+" + tag;
               pill.title = `\u70B9\u51FB\u8FFD\u52A0\u6807\u7B7E\u300C${tag}\u300D`;
+              pill.setAttribute("aria-label", pill.title);
               pill.addEventListener("click", () => {
                 const cur = tagsEl.value.trim();
                 const tagList = cur ? cur.split(/[,，;；、\s]+/).filter(Boolean) : [];
@@ -32312,7 +32322,7 @@ ${progress.progressBar}`);
       filters.appendChild(this.filterTag);
       this.tagFacets = document.createElement("div");
       this.tagFacets.className = "xlc-discovery-tag-facets";
-      this.tagFacets.setAttribute("role", "group");
+      this.tagFacets.setAttribute("role", "toolbar");
       this.tagFacets.setAttribute("aria-label", this.tx("discoveryTagFacets"));
       filters.appendChild(this.tagFacets);
       if (this.deps.onSaveView) {
@@ -32434,6 +32444,9 @@ ${progress.progressBar}`);
       pane.appendChild(candidateCategoryRow);
       this.preview = document.createElement("pre");
       this.preview.className = "xlc-discovery-preview-body";
+      this.preview.tabIndex = 0;
+      this.preview.setAttribute("role", "region");
+      this.preview.setAttribute("aria-label", this.tx("discoveryPreviewTitle"));
       this.preview.textContent = this.tx("discoveryPreviewEmpty");
       pane.appendChild(this.preview);
       content.appendChild(pane);
@@ -32469,6 +32482,14 @@ ${progress.progressBar}`);
       this.receipt.setAttribute("aria-atomic", "true");
       this.receipt.style.display = "none";
       root.appendChild(this.receipt);
+      root.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          if (e.repeat || this.actionBusy || !this.addSelectedButton || this.addSelectedButton.disabled) return;
+          e.preventDefault();
+          this.addSelectedButton.click();
+        }
+      });
       this.setScanningState(false);
       this.renderList();
     }
@@ -32918,7 +32939,27 @@ ${progress.progressBar}`);
           void this.selectCandidate(candidate.key);
         });
         row.addEventListener("keydown", (event) => {
+          var _a2, _b, _c;
           if (event.isComposing || event.keyCode === 229) return;
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            const rows = Array.from(list.querySelectorAll(".xlc-discovery-row"));
+            if (!rows.length) return;
+            const idx = rows.indexOf(row);
+            event.preventDefault();
+            event.stopPropagation();
+            const nextIdx = event.key === "ArrowDown" ? Math.min(idx + 1, rows.length - 1) : Math.max(0, idx - 1);
+            (_a2 = rows[nextIdx]) == null ? void 0 : _a2.focus();
+            return;
+          }
+          if (event.key === "Home" || event.key === "End") {
+            const rows = Array.from(list.querySelectorAll(".xlc-discovery-row"));
+            if (!rows.length) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.key === "Home") (_b = rows[0]) == null ? void 0 : _b.focus();
+            else (_c = rows[rows.length - 1]) == null ? void 0 : _c.focus();
+            return;
+          }
           if (event.target !== row || event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
           void this.selectCandidate(candidate.key);
@@ -32984,6 +33025,7 @@ ${progress.progressBar}`);
         previous.className = "b3-button xlc-btn-ghost";
         previous.dataset.xlcControl = "discovery.page.previous";
         previous.textContent = this.tx("discoveryPreviousPage");
+        previous.setAttribute("aria-label", this.tx("discoveryPreviousPage"));
         previous.disabled = this.page === 0 || this.actionBusy;
         previous.addEventListener("click", () => this.changePage(-1, "previous"));
         pageLabel.textContent = this.tx("discoveryResultsPage", String(this.page + 1), String(pages));
@@ -32992,6 +33034,7 @@ ${progress.progressBar}`);
         next.className = "b3-button xlc-btn-ghost";
         next.dataset.xlcControl = "discovery.page.next";
         next.textContent = this.tx("discoveryNextPage");
+        next.setAttribute("aria-label", this.tx("discoveryNextPage"));
         next.disabled = this.page >= pages - 1 || this.actionBusy;
         next.addEventListener("click", () => this.changePage(1, "next"));
         pager.append(previous, pageLabel, next);
@@ -33032,6 +33075,28 @@ ${progress.progressBar}`);
           this.page = 0;
           this.renderList();
           (_a = this.filterTag) == null ? void 0 : _a.focus();
+        });
+        button.addEventListener("keydown", (e) => {
+          var _a, _b, _c;
+          if (e.isComposing || e.keyCode === 229) return;
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            e.preventDefault();
+            e.stopPropagation();
+            const buttons = Array.from(host.querySelectorAll(".xlc-tag-facet"));
+            if (!buttons.length) return;
+            const idx = buttons.indexOf(button);
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % buttons.length : (idx - 1 + buttons.length) % buttons.length;
+            (_a = buttons[nextIdx]) == null ? void 0 : _a.focus();
+            return;
+          }
+          if (e.key === "Home" || e.key === "End") {
+            e.preventDefault();
+            e.stopPropagation();
+            const buttons = Array.from(host.querySelectorAll(".xlc-tag-facet"));
+            if (!buttons.length) return;
+            if (e.key === "Home") (_b = buttons[0]) == null ? void 0 : _b.focus();
+            else (_c = buttons[buttons.length - 1]) == null ? void 0 : _c.focus();
+          }
         });
         host.appendChild(button);
       }

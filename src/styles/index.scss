@@ -1689,6 +1689,8 @@
     .xlc-quick-pill {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      min-height: 24px;
       border: 1px solid var(--b3-border-color);
       background-color: var(--b3-theme-surface);
       color: var(--b3-theme-on-surface);
@@ -1704,6 +1706,15 @@
         background-color: var(--xlc-list-selected, rgba(53, 117, 240, 0.12));
         color: var(--b3-theme-primary);
         transform: scale(1.03);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+
+      &:active {
+        transform: scale(0.97);
       }
     }
   }
@@ -3592,6 +3603,12 @@
     font-size: var(--xlc-font-xs);
     white-space: normal;
     overflow-wrap: anywhere;
+    transition: background-color var(--xlc-dur-fast) var(--xlc-ease), border-color var(--xlc-dur-fast) var(--xlc-ease);
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: 1px;
+    }
   }
 
   .xlc-tag-facet[aria-pressed="true"] {
@@ -3673,6 +3690,11 @@
     padding: var(--xlc-space-2) var(--xlc-space-1);
     border-top: 1px solid var(--b3-border-color);
     background: var(--b3-theme-background);
+
+    .xlc-discovery-page-label {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
   }
 
   .xlc-discovery-row {
@@ -3689,7 +3711,7 @@
   .xlc-discovery-row--active { background: var(--b3-list-hover); }
 
   .xlc-discovery-row:focus-visible {
-    outline: 2px solid var(--b3-theme-primary);
+    outline: 2px solid var(--xlc-accent);
     outline-offset: -2px;
   }
 
@@ -3786,6 +3808,11 @@
     line-height: var(--xlc-leading-normal);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: -2px;
+    }
   }
 
   .xlc-discovery-footer {
@@ -5002,7 +5029,10 @@
   .xlc-pane,
   .xlc-pane--collapsed,
   .xlc-settings-nav-pill,
-  .xlc-metrics-strip {
+  .xlc-metrics-strip,
+  .xlc-discovery-row,
+  .xlc-tag-facet,
+  .xlc-quick-pill {
     transition: none !important;
     animation: none !important;
   }

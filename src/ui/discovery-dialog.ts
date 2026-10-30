@@ -678,7 +678,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         filters.appendChild(this.filterTag);
         this.tagFacets = document.createElement("div");
         this.tagFacets.className = "xlc-discovery-tag-facets";
-        this.tagFacets.setAttribute("role", "group");
+        this.tagFacets.setAttribute("role", "toolbar");
         this.tagFacets.setAttribute("aria-label", this.tx("discoveryTagFacets"));
         filters.appendChild(this.tagFacets);
         if (this.deps.onSaveView) {
@@ -801,6 +801,9 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         pane.appendChild(candidateCategoryRow);
         this.preview = document.createElement("pre");
         this.preview.className = "xlc-discovery-preview-body";
+        this.preview.tabIndex = 0;
+        this.preview.setAttribute("role", "region");
+        this.preview.setAttribute("aria-label", this.tx("discoveryPreviewTitle"));
         this.preview.textContent = this.tx("discoveryPreviewEmpty");
         pane.appendChild(this.preview);
         content.appendChild(pane);
@@ -838,6 +841,16 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.receipt.setAttribute("aria-atomic", "true");
         this.receipt.style.display = "none";
         root.appendChild(this.receipt);
+
+        root.addEventListener("keydown", (e) => {
+            if (e.isComposing || (e as KeyboardEvent).keyCode === 229) return;
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                if (e.repeat || this.actionBusy || !this.addSelectedButton || this.addSelectedButton.disabled) return;
+                e.preventDefault();
+                this.addSelectedButton.click();
+            }
+        });
+
         this.setScanningState(false);
         this.renderList();
     }
@@ -1330,6 +1343,27 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             });
             row.addEventListener("keydown", (event) => {
                 if (event.isComposing || event.keyCode === 229) return;
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    const rows = Array.from(list.querySelectorAll<HTMLElement>(".xlc-discovery-row"));
+                    if (!rows.length) return;
+                    const idx = rows.indexOf(row);
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const nextIdx = event.key === "ArrowDown"
+                        ? Math.min(idx + 1, rows.length - 1)
+                        : Math.max(0, idx - 1);
+                    rows[nextIdx]?.focus();
+                    return;
+                }
+                if (event.key === "Home" || event.key === "End") {
+                    const rows = Array.from(list.querySelectorAll<HTMLElement>(".xlc-discovery-row"));
+                    if (!rows.length) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (event.key === "Home") rows[0]?.focus();
+                    else rows[rows.length - 1]?.focus();
+                    return;
+                }
                 if (event.target !== row || (event.key !== "Enter" && event.key !== " ")) return;
                 event.preventDefault();
                 void this.selectCandidate(candidate.key);
@@ -1396,6 +1430,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             previous.className = "b3-button xlc-btn-ghost";
             previous.dataset.xlcControl = "discovery.page.previous";
             previous.textContent = this.tx("discoveryPreviousPage");
+            previous.setAttribute("aria-label", this.tx("discoveryPreviousPage"));
             previous.disabled = this.page === 0 || this.actionBusy;
             previous.addEventListener("click", () => this.changePage(-1, "previous"));
             pageLabel.textContent = this.tx("discoveryResultsPage", String(this.page + 1), String(pages));
@@ -1404,6 +1439,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             next.className = "b3-button xlc-btn-ghost";
             next.dataset.xlcControl = "discovery.page.next";
             next.textContent = this.tx("discoveryNextPage");
+            next.setAttribute("aria-label", this.tx("discoveryNextPage"));
             next.disabled = this.page >= pages - 1 || this.actionBusy;
             next.addEventListener("click", () => this.changePage(1, "next"));
             pager.append(previous, pageLabel, next);
@@ -1447,6 +1483,27 @@ export class DiscoveryDialog implements DiscoveryDialogController {
                 this.page = 0;
                 this.renderList();
                 this.filterTag?.focus();
+            });
+            button.addEventListener("keydown", (e) => {
+                if (e.isComposing || e.keyCode === 229) return;
+                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>(".xlc-tag-facet"));
+                    if (!buttons.length) return;
+                    const idx = buttons.indexOf(button);
+                    const nextIdx = e.key === "ArrowRight" ? (idx + 1) % buttons.length : (idx - 1 + buttons.length) % buttons.length;
+                    buttons[nextIdx]?.focus();
+                    return;
+                }
+                if (e.key === "Home" || e.key === "End") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>(".xlc-tag-facet"));
+                    if (!buttons.length) return;
+                    if (e.key === "Home") buttons[0]?.focus();
+                    else buttons[buttons.length - 1]?.focus();
+                }
             });
             host.appendChild(button);
         }

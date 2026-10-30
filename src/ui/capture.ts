@@ -454,6 +454,8 @@ export class CaptureDialog {
         const field = (label: string, value: string, isArea: boolean, cls: string, parent?: HTMLElement): HTMLInputElement | HTMLTextAreaElement => {
             const wrap = document.createElement("label");
             wrap.className = "xlc-form-field";
+            const fieldId = `xlc-capture-field-${cls.replace(/[^a-z0-9_-]/gi, "_")}`;
+            wrap.htmlFor = fieldId;
             const cap = document.createElement("span");
             cap.className = "xlc-form-label";
             cap.textContent = label;
@@ -461,6 +463,8 @@ export class CaptureDialog {
             const inputEl = isArea
                 ? document.createElement("textarea")
                 : document.createElement("input");
+            inputEl.id = fieldId;
+            inputEl.setAttribute("aria-label", label);
             if (isArea) {
                 (inputEl as HTMLTextAreaElement).rows = 6;
                 inputEl.style.resize = "vertical";
@@ -479,13 +483,17 @@ export class CaptureDialog {
         metaRow.className = "xlc-form-row";
         const typeWrap = document.createElement("label");
         typeWrap.className = "xlc-form-field xlc-form-field--fixed";
+        const typeSelectId = "xlc-capture-field-type";
+        typeWrap.htmlFor = typeSelectId;
         const typeLabel = document.createElement("span");
         typeLabel.className = "xlc-form-label";
         typeLabel.textContent = t("type");
         typeWrap.appendChild(typeLabel);
         const typeSelect = document.createElement("select");
+        typeSelect.id = typeSelectId;
         typeSelect.className = "b3-select xlc-form-type";
         typeSelect.dataset.xlcControl = "capture.type";
+        typeSelect.setAttribute("aria-label", t("type"));
         for (const it of ["text", "markdown", "url", "code", "image", "asset", "blockref", "structure"] as ItemType[]) {
             const opt = document.createElement("option");
             opt.value = it;
@@ -558,6 +566,7 @@ export class CaptureDialog {
                 pill.className = "xlc-quick-pill";
                 pill.textContent = rec;
                 pill.title = `点击填入推荐别名「${rec}」`;
+                pill.setAttribute("aria-label", pill.title);
                 pill.addEventListener("click", () => {
                     (aliasEl as HTMLInputElement).value = rec;
                     (aliasEl as HTMLInputElement).dispatchEvent(new Event("input", {bubbles: true}));
@@ -620,6 +629,7 @@ export class CaptureDialog {
                 pill.className = "xlc-quick-pill";
                 pill.textContent = "+" + tag;
                 pill.title = `点击追加标签「${tag}」`;
+                pill.setAttribute("aria-label", pill.title);
                 pill.addEventListener("click", () => {
                     const cur = (tagsEl as HTMLInputElement).value.trim();
                     const tagList = cur ? cur.split(/[,，;；、\s]+/).filter(Boolean) : [];
