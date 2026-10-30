@@ -2476,6 +2476,11 @@
     flex-direction: column;
     gap: var(--xlc-space-3);
     padding: var(--xlc-space-0-5); // 防字段聚焦描边被 overflow 裁切
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: -1px;
+    }
   }
 
   .xlc-varform-head {
@@ -2669,6 +2674,11 @@
       white-space: pre-wrap;
       word-break: break-word;
       user-select: text;
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
     }
   }
 
@@ -2702,6 +2712,7 @@
     font-family: var(--mono, ui-monospace, monospace);
     font-size: var(--xlc-font-xs);
     line-height: var(--xlc-line-control);
+    min-height: 24px;
     padding: var(--xlc-space-0-5) var(--xlc-space-2);
     border: 1px solid rgba(150, 105, 224, .35);
     border-radius: var(--xlc-radius-pill);
@@ -2716,7 +2727,7 @@
     &:active { transform: scale(.97); }
 
     &:focus-visible {
-      outline: 2px solid var(--b3-theme-primary);
+      outline: 2px solid var(--xlc-accent);
       outline-offset: 1px;
     }
   }
@@ -5072,7 +5083,8 @@
   .xlc-discovery-row,
   .xlc-tag-facet,
   .xlc-quick-pill,
-  .xlc-policy {
+  .xlc-policy,
+  .xlc-varbtn {
     transition: none !important;
     animation: none !important;
   }

@@ -125,9 +125,14 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     const inputs: Array<HTMLInputElement | HTMLTextAreaElement> = [];
     const fieldsWrap = document.createElement("div");
     fieldsWrap.className = "xlc-varform-fields";
+    fieldsWrap.tabIndex = 0;
+    fieldsWrap.setAttribute("role", "region");
+    fieldsWrap.setAttribute("aria-label", "变量输入表单");
     for (const [fieldIndex, field] of options.fields.entries()) {
         const wrap = document.createElement("label");
         wrap.className = "xlc-varform-field";
+        const inputId = `xlc-var-input-${fieldIndex}`;
+        wrap.htmlFor = inputId;
         const label = document.createElement("span");
         label.className = "xlc-varform-label";
         label.textContent = field.name;
@@ -139,6 +144,8 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         const input = field.kind === "textarea"
             ? document.createElement("textarea")
             : document.createElement("input");
+        input.id = inputId;
+        input.setAttribute("aria-label", `${field.name} (${askFieldTag(field)})`);
         input.className = "b3-text-field";
         if (field.kind === "textarea") {
             (input as HTMLTextAreaElement).rows = 3;
@@ -304,6 +311,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
 
         previewBox = document.createElement("div");
         previewBox.className = "xlc-varform-preview";
+        previewBox.tabIndex = 0;
         previewBox.setAttribute("role", "region");
         previewBox.setAttribute("aria-label", "实时展开预览");
 
@@ -350,6 +358,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     presetSelect.style.flex = "1";
     presetSelect.style.fontSize = "12px";
     presetSelect.dataset.xlcControl = "variable.preset-select";
+    presetSelect.setAttribute("aria-label", "预设方案选择");
 
     const defaultOpt = document.createElement("option");
     defaultOpt.value = "";
@@ -388,6 +397,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     savePresetBtn.className = "b3-button b3-button--text";
     savePresetBtn.style.fontSize = "12px";
     savePresetBtn.textContent = "💾 存为预设";
+    savePresetBtn.setAttribute("aria-label", "存为预设方案");
     savePresetBtn.dataset.xlcControl = "variable.save-preset";
     savePresetBtn.addEventListener("click", () => {
         const name = (typeof window !== "undefined" && typeof window.prompt === "function")
@@ -409,6 +419,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     deletePresetBtn.style.fontSize = "12px";
     deletePresetBtn.textContent = "🗑";
     deletePresetBtn.title = "删除当前选中的预设方案";
+    deletePresetBtn.setAttribute("aria-label", deletePresetBtn.title);
     deletePresetBtn.dataset.xlcControl = "variable.delete-preset";
     deletePresetBtn.addEventListener("click", () => {
         const selectedScheme = presetSelect.value;
@@ -441,6 +452,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     resetBtn.dataset.xlcControl = "variable.reset-defaults";
     resetBtn.textContent = "↺ " + (t("resetDefaults") || "恢复默认");
     resetBtn.title = "清空当前输入，恢复所有字段到模板初始默认值";
+    resetBtn.setAttribute("aria-label", resetBtn.title);
     resetBtn.addEventListener("click", () => {
         for (const input of inputs) {
             const name = input.dataset.xlcVarField ?? "";
@@ -459,6 +471,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         copyBtn.dataset.xlcControl = "variable.copy";
         copyBtn.textContent = "⧉ " + (t("copy") || "复制");
         copyBtn.title = "将填入变量后的展开结果复制到剪贴板并关闭 (Alt+C)";
+        copyBtn.setAttribute("aria-label", copyBtn.title);
         copyBtn.addEventListener("click", () => {
             if (liveDebounceTimer) clearTimeout(liveDebounceTimer);
             if (settled) return;
@@ -569,6 +582,30 @@ export function openVariableFillCard(options: VariableFillOptions): void {
 export function buildVariableBar(t: (key: string, ...args: string[]) => string, getTarget: () => HTMLTextAreaElement): HTMLElement {
     const bar = document.createElement("div");
     bar.className = "xlc-varbar";
+    bar.setAttribute("role", "toolbar");
+    bar.setAttribute("aria-label", t("insertVariable"));
+    bar.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const btns = Array.from(bar.querySelectorAll<HTMLButtonElement>("button"));
+            if (!btns.length) return;
+            const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+            btns[nextIdx]?.focus();
+            return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+            const btns = Array.from(bar.querySelectorAll<HTMLButtonElement>("button"));
+            if (!btns.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Home") btns[0]?.focus();
+            else btns[btns.length - 1]?.focus();
+        }
+    });
     const cap = document.createElement("span");
     cap.className = "xlc-varbar-cap";
     cap.textContent = t("insertVariable");
@@ -657,6 +694,8 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         btn.className = "xlc-varbtn";
         btn.dataset.xlcControl = `capture.variable.${snippet.id}`;
         btn.textContent = snippet.text;
+        btn.setAttribute("aria-label", `插入宏变量: ${snippet.text}`);
+        btn.title = `点击插入 ${snippet.text}`;
         btn.addEventListener("click", () => {
             const el = getTarget();
             const start = el.selectionStart ?? el.value.length;

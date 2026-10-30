@@ -75,5 +75,5 @@ test("UI/UX Pro Max · 策略卡与设置交互样式令牌化收拢与高对比
     assert.match(indexScss, /\.xlc-health-issues\s*\{[\s\S]*?&:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--xlc-accent\);/);
 
     // 3. prefers-reduced-motion 涵盖 .xlc-policy
-    assert.match(indexScss, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.xlc-policy\s*\{[\s\S]*?transition:\s*none !important;/);
+    assert.match(indexScss, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.xlc-policy[\s\S]*?transition:\s*none !important;/);
 });

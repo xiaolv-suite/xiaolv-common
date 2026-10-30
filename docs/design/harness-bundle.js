@@ -9600,9 +9600,14 @@ ${codeText}`;
     const inputs = [];
     const fieldsWrap = document.createElement("div");
     fieldsWrap.className = "xlc-varform-fields";
+    fieldsWrap.tabIndex = 0;
+    fieldsWrap.setAttribute("role", "region");
+    fieldsWrap.setAttribute("aria-label", "\u53D8\u91CF\u8F93\u5165\u8868\u5355");
     for (const [fieldIndex, field] of options.fields.entries()) {
       const wrap = document.createElement("label");
       wrap.className = "xlc-varform-field";
+      const inputId = `xlc-var-input-${fieldIndex}`;
+      wrap.htmlFor = inputId;
       const label = document.createElement("span");
       label.className = "xlc-varform-label";
       label.textContent = field.name;
@@ -9612,6 +9617,8 @@ ${codeText}`;
       label.appendChild(tag);
       wrap.appendChild(label);
       const input = field.kind === "textarea" ? document.createElement("textarea") : document.createElement("input");
+      input.id = inputId;
+      input.setAttribute("aria-label", `${field.name} (${askFieldTag(field)})`);
       input.className = "b3-text-field";
       if (field.kind === "textarea") {
         input.rows = 3;
@@ -9762,6 +9769,7 @@ ${codeText}`;
       previewHead.textContent = "\u{1F50D} \u5B9E\u65F6\u5C55\u5F00\u9884\u89C8\uFF1A";
       previewBox = document.createElement("div");
       previewBox.className = "xlc-varform-preview";
+      previewBox.tabIndex = 0;
       previewBox.setAttribute("role", "region");
       previewBox.setAttribute("aria-label", "\u5B9E\u65F6\u5C55\u5F00\u9884\u89C8");
       previewWrap.append(previewHead, previewBox);
@@ -9798,6 +9806,7 @@ ${codeText}`;
     presetSelect.style.flex = "1";
     presetSelect.style.fontSize = "12px";
     presetSelect.dataset.xlcControl = "variable.preset-select";
+    presetSelect.setAttribute("aria-label", "\u9884\u8BBE\u65B9\u6848\u9009\u62E9");
     const defaultOpt = document.createElement("option");
     defaultOpt.value = "";
     defaultOpt.textContent = "-- \u9009\u62E9\u9884\u8BBE\u65B9\u6848 --";
@@ -9833,6 +9842,7 @@ ${codeText}`;
     savePresetBtn.className = "b3-button b3-button--text";
     savePresetBtn.style.fontSize = "12px";
     savePresetBtn.textContent = "\u{1F4BE} \u5B58\u4E3A\u9884\u8BBE";
+    savePresetBtn.setAttribute("aria-label", "\u5B58\u4E3A\u9884\u8BBE\u65B9\u6848");
     savePresetBtn.dataset.xlcControl = "variable.save-preset";
     savePresetBtn.addEventListener("click", () => {
       var _a2;
@@ -9852,6 +9862,7 @@ ${codeText}`;
     deletePresetBtn.style.fontSize = "12px";
     deletePresetBtn.textContent = "\u{1F5D1}";
     deletePresetBtn.title = "\u5220\u9664\u5F53\u524D\u9009\u4E2D\u7684\u9884\u8BBE\u65B9\u6848";
+    deletePresetBtn.setAttribute("aria-label", deletePresetBtn.title);
     deletePresetBtn.dataset.xlcControl = "variable.delete-preset";
     deletePresetBtn.addEventListener("click", () => {
       var _a2;
@@ -9881,6 +9892,7 @@ ${codeText}`;
     resetBtn.dataset.xlcControl = "variable.reset-defaults";
     resetBtn.textContent = "\u21BA " + (t("resetDefaults") || "\u6062\u590D\u9ED8\u8BA4");
     resetBtn.title = "\u6E05\u7A7A\u5F53\u524D\u8F93\u5165\uFF0C\u6062\u590D\u6240\u6709\u5B57\u6BB5\u5230\u6A21\u677F\u521D\u59CB\u9ED8\u8BA4\u503C";
+    resetBtn.setAttribute("aria-label", resetBtn.title);
     resetBtn.addEventListener("click", () => {
       var _a2, _b2;
       for (const input of inputs) {
@@ -9899,6 +9911,7 @@ ${codeText}`;
       copyBtn.dataset.xlcControl = "variable.copy";
       copyBtn.textContent = "\u29C9 " + (t("copy") || "\u590D\u5236");
       copyBtn.title = "\u5C06\u586B\u5165\u53D8\u91CF\u540E\u7684\u5C55\u5F00\u7ED3\u679C\u590D\u5236\u5230\u526A\u8D34\u677F\u5E76\u5173\u95ED (Alt+C)";
+      copyBtn.setAttribute("aria-label", copyBtn.title);
       copyBtn.addEventListener("click", () => {
         var _a2;
         if (liveDebounceTimer) clearTimeout(liveDebounceTimer);
@@ -9997,6 +10010,31 @@ ${codeText}`;
   function buildVariableBar(t, getTarget) {
     const bar = document.createElement("div");
     bar.className = "xlc-varbar";
+    bar.setAttribute("role", "toolbar");
+    bar.setAttribute("aria-label", t("insertVariable"));
+    bar.addEventListener("keydown", (e) => {
+      var _a, _b, _c;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const btns = Array.from(bar.querySelectorAll("button"));
+        if (!btns.length) return;
+        const idx = btns.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+        (_a = btns[nextIdx]) == null ? void 0 : _a.focus();
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        const btns = Array.from(bar.querySelectorAll("button"));
+        if (!btns.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Home") (_b = btns[0]) == null ? void 0 : _b.focus();
+        else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+      }
+    });
     const cap = document.createElement("span");
     cap.className = "xlc-varbar-cap";
     cap.textContent = t("insertVariable");
@@ -10085,6 +10123,8 @@ ${codeText}`;
       btn.className = "xlc-varbtn";
       btn.dataset.xlcControl = `capture.variable.${snippet.id}`;
       btn.textContent = snippet.text;
+      btn.setAttribute("aria-label", `\u63D2\u5165\u5B8F\u53D8\u91CF: ${snippet.text}`);
+      btn.title = `\u70B9\u51FB\u63D2\u5165 ${snippet.text}`;
       btn.addEventListener("click", () => {
         var _a, _b;
         const el = getTarget();
