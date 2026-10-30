@@ -14908,6 +14908,10 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           contentWrap.appendChild(multiBlockHint);
           const counterEl = document.createElement("span");
           counterEl.className = "xlc-form-counter";
+          if (typeof counterEl.setAttribute === "function") {
+            counterEl.setAttribute("role", "status");
+            counterEl.setAttribute("aria-live", "polite");
+          }
           counterEl.textContent = `${contentEl.value.length} / ${LIMITS.contentChars}`;
           contentWrap.appendChild(counterEl);
           const varbar = buildVariableBar(t, () => contentEl);
@@ -14996,6 +15000,30 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           if (existingTags.length > 0) {
             const tagPillsWrap = document.createElement("div");
             tagPillsWrap.className = "xlc-capture-quick-tags";
+            if (typeof tagPillsWrap.setAttribute === "function") {
+              tagPillsWrap.setAttribute("role", "toolbar");
+              tagPillsWrap.setAttribute("aria-label", "\u5E38\u7528\u6807\u7B7E\u5FEB\u6377\u586B\u5145\u680F");
+            }
+            tagPillsWrap.addEventListener("keydown", (e) => {
+              var _a2, _b2, _c2, _d2;
+              const pills = Array.from(tagPillsWrap.querySelectorAll(".xlc-quick-pill"));
+              if (pills.length <= 1) return;
+              const curIdx = pills.indexOf(document.activeElement);
+              if (curIdx === -1) return;
+              if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                (_a2 = pills[(curIdx + 1) % pills.length]) == null ? void 0 : _a2.focus();
+              } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                (_b2 = pills[(curIdx - 1 + pills.length) % pills.length]) == null ? void 0 : _b2.focus();
+              } else if (e.key === "Home") {
+                e.preventDefault();
+                (_c2 = pills[0]) == null ? void 0 : _c2.focus();
+              } else if (e.key === "End") {
+                e.preventDefault();
+                (_d2 = pills[pills.length - 1]) == null ? void 0 : _d2.focus();
+              }
+            });
             for (const tag of existingTags) {
               const pill = document.createElement("button");
               pill.type = "button";
@@ -15042,6 +15070,10 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
             const draft = _CaptureDialog.sessionDraft;
             const draftBanner = document.createElement("div");
             draftBanner.className = "xlc-draft-resume-banner";
+            if (typeof draftBanner.setAttribute === "function") {
+              draftBanner.setAttribute("role", "region");
+              draftBanner.setAttribute("aria-label", "\u672A\u4FDD\u5B58\u8349\u7A3F\u63D0\u793A");
+            }
             draftBanner.style.display = "flex";
             draftBanner.style.alignItems = "center";
             draftBanner.style.justifyContent = "space-between";
@@ -15057,11 +15089,18 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
             const btnWrap = document.createElement("div");
             btnWrap.style.display = "flex";
             btnWrap.style.gap = "6px";
+            if (typeof btnWrap.setAttribute === "function") {
+              btnWrap.setAttribute("role", "toolbar");
+              btnWrap.setAttribute("aria-label", "\u8349\u7A3F\u64CD\u4F5C\u680F");
+            }
             const resumeBtn = document.createElement("button");
             resumeBtn.type = "button";
             resumeBtn.className = "b3-button b3-button--text";
             resumeBtn.style.padding = "2px 8px";
             resumeBtn.textContent = "\u6062\u590D\u8349\u7A3F";
+            if (typeof resumeBtn.setAttribute === "function") {
+              resumeBtn.setAttribute("aria-label", "\u6062\u590D\u4E0A\u6B21\u672A\u4FDD\u5B58\u7684\u5185\u5BB9\u8349\u7A3F");
+            }
             resumeBtn.addEventListener("click", () => {
               if (contentElRef) {
                 contentElRef.value = draft.content;
@@ -15084,6 +15123,9 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
             discardBtn.className = "b3-button b3-button--text";
             discardBtn.style.padding = "2px 8px";
             discardBtn.textContent = "\u653E\u5F03";
+            if (typeof discardBtn.setAttribute === "function") {
+              discardBtn.setAttribute("aria-label", "\u653E\u5F03\u8349\u7A3F");
+            }
             discardBtn.addEventListener("click", () => {
               _CaptureDialog.sessionDraft = null;
               draftBanner.remove();
@@ -15137,11 +15179,18 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           const sugrow = document.createElement("div");
           sugrow.className = "xlc-sugrow";
           sugrow.style.display = "none";
+          if (typeof sugrow.setAttribute === "function") {
+            sugrow.setAttribute("role", "region");
+            sugrow.setAttribute("aria-label", "AI\u6574\u7406\u5EFA\u8BAE\u680F");
+          }
           const sugText = document.createElement("span");
           sugrow.appendChild(sugText);
           const adoptBtn = document.createElement("button");
           adoptBtn.className = "xlc-sugrow-adopt";
           adoptBtn.dataset.xlcControl = "capture.ai.suggestion.adopt";
+          if (typeof adoptBtn.setAttribute === "function") {
+            adoptBtn.setAttribute("aria-label", t("adoptAll") || "\u4E00\u952E\u91C7\u7EB3\u6240\u6709\u5EFA\u8BAE");
+          }
           let suggestions = {};
           const applySuggestions = () => {
             var _a2;
@@ -15346,10 +15395,17 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           }
           const actions = document.createElement("div");
           actions.className = "xlc-form-actions";
+          if (typeof actions.setAttribute === "function") {
+            actions.setAttribute("role", "toolbar");
+            actions.setAttribute("aria-label", "\u6355\u83B7\u8868\u5355\u64CD\u4F5C\u680F");
+          }
           const cancelBtn = document.createElement("button");
           cancelBtn.className = "b3-button";
           cancelBtn.dataset.xlcControl = "capture.cancel";
           cancelBtn.textContent = t("cancel");
+          if (typeof cancelBtn.setAttribute === "function") {
+            cancelBtn.setAttribute("aria-label", t("cancel") || "\u53D6\u6D88\u65B0\u5EFA");
+          }
           cancelBtn.addEventListener("click", () => {
             closed = true;
             ++tidySeq;
@@ -15360,6 +15416,29 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           saveBtn.className = "b3-button xlc-btn-primary";
           saveBtn.dataset.xlcControl = "capture.save";
           saveBtn.textContent = t("save");
+          if (typeof saveBtn.setAttribute === "function") {
+            saveBtn.setAttribute("aria-label", t("save") || "\u4FDD\u5B58\u5E38\u7528\u8BED");
+          }
+          actions.addEventListener("keydown", (e) => {
+            var _a2, _b2, _c2, _d2;
+            const buttons = [cancelBtn, saveBtn].filter((b) => !b.disabled);
+            if (buttons.length <= 1) return;
+            const curIdx = buttons.indexOf(document.activeElement);
+            if (curIdx === -1) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+              e.preventDefault();
+              (_a2 = buttons[(curIdx + 1) % buttons.length]) == null ? void 0 : _a2.focus();
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+              e.preventDefault();
+              (_b2 = buttons[(curIdx - 1 + buttons.length) % buttons.length]) == null ? void 0 : _b2.focus();
+            } else if (e.key === "Home") {
+              e.preventDefault();
+              (_c2 = buttons[0]) == null ? void 0 : _c2.focus();
+            } else if (e.key === "End") {
+              e.preventDefault();
+              (_d2 = buttons[buttons.length - 1]) == null ? void 0 : _d2.focus();
+            }
+          });
           const submitOnEnter = (el) => {
             el.addEventListener("keydown", (ev) => {
               if (ev.isComposing || ev.keyCode === 229 || ev.repeat) return;

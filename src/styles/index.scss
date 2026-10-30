@@ -1744,6 +1744,28 @@
     }
   }
 
+  .xlc-draft-resume-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--xlc-warm);
+    color: var(--xlc-warm-ink);
+    border-radius: var(--xlc-radius-sm);
+    font-size: var(--xlc-font-sm);
+    margin-bottom: 8px;
+
+    .b3-button {
+      min-height: 24px;
+      padding: var(--xlc-space-0-5) var(--xlc-space-2);
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
+  }
+
   // 设置数据动作的统一反馈槽：不会因 toast 消失而让用户失去上下文，
   // 错误态与重试按钮保持同一行并允许长错误换行。
   .xlc-operation-status {
@@ -1949,7 +1971,7 @@
       font-size: var(--xlc-font-sm);
       font-family: inherit;
       line-height: var(--xlc-line-control);
-      min-height: 22px;
+      min-height: 24px;
       cursor: pointer;
       transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
                   transform var(--xlc-dur-fast) var(--xlc-ease);
@@ -1957,6 +1979,11 @@
       &:hover { background-color: var(--xlc-ai-tint-strong); }
 
       &:active { transform: scale(.97); }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
     }
   }
 
@@ -5183,7 +5210,9 @@
   .xlc-quick-edit-actions .b3-button,
   .xlc-export-sanitizer-actions .b3-button,
   .xlc-sync-diff-actions .b3-button,
-  .xlc-wizard-mapping-row .b3-button {
+  .xlc-wizard-mapping-row .b3-button,
+  .xlc-sugrow-adopt,
+  .xlc-draft-resume-banner .b3-button {
     transition: none !important;
     animation: none !important;
   }

@@ -525,6 +525,10 @@ export class CaptureDialog {
         contentWrap.appendChild(multiBlockHint);
         const counterEl = document.createElement("span");
         counterEl.className = "xlc-form-counter";
+        if (typeof counterEl.setAttribute === "function") {
+            counterEl.setAttribute("role", "status");
+            counterEl.setAttribute("aria-live", "polite");
+        }
         counterEl.textContent = `${(contentEl as HTMLTextAreaElement).value.length} / ${LIMITS.contentChars}`;
         contentWrap.appendChild(counterEl);
         // 变量快捷插入条（F1 捕获侧，原型屏 3）：点选在内容光标处插入变量语法
@@ -623,6 +627,29 @@ export class CaptureDialog {
         if (existingTags.length > 0) {
             const tagPillsWrap = document.createElement("div");
             tagPillsWrap.className = "xlc-capture-quick-tags";
+            if (typeof tagPillsWrap.setAttribute === "function") {
+                tagPillsWrap.setAttribute("role", "toolbar");
+                tagPillsWrap.setAttribute("aria-label", "常用标签快捷填充栏");
+            }
+            tagPillsWrap.addEventListener("keydown", (e: any) => {
+                const pills = Array.from(tagPillsWrap.querySelectorAll<HTMLButtonElement>(".xlc-quick-pill"));
+                if (pills.length <= 1) return;
+                const curIdx = pills.indexOf(document.activeElement as HTMLButtonElement);
+                if (curIdx === -1) return;
+                if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                    e.preventDefault();
+                    pills[(curIdx + 1) % pills.length]?.focus();
+                } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    pills[(curIdx - 1 + pills.length) % pills.length]?.focus();
+                } else if (e.key === "Home") {
+                    e.preventDefault();
+                    pills[0]?.focus();
+                } else if (e.key === "End") {
+                    e.preventDefault();
+                    pills[pills.length - 1]?.focus();
+                }
+            });
             for (const tag of existingTags) {
                 const pill = document.createElement("button");
                 pill.type = "button";
@@ -674,6 +701,10 @@ export class CaptureDialog {
             const draft = CaptureDialog.sessionDraft;
             const draftBanner = document.createElement("div");
             draftBanner.className = "xlc-draft-resume-banner";
+            if (typeof draftBanner.setAttribute === "function") {
+                draftBanner.setAttribute("role", "region");
+                draftBanner.setAttribute("aria-label", "未保存草稿提示");
+            }
             draftBanner.style.display = "flex";
             draftBanner.style.alignItems = "center";
             draftBanner.style.justifyContent = "space-between";
@@ -691,12 +722,19 @@ export class CaptureDialog {
             const btnWrap = document.createElement("div");
             btnWrap.style.display = "flex";
             btnWrap.style.gap = "6px";
+            if (typeof btnWrap.setAttribute === "function") {
+                btnWrap.setAttribute("role", "toolbar");
+                btnWrap.setAttribute("aria-label", "草稿操作栏");
+            }
 
             const resumeBtn = document.createElement("button");
             resumeBtn.type = "button";
             resumeBtn.className = "b3-button b3-button--text";
             resumeBtn.style.padding = "2px 8px";
             resumeBtn.textContent = "恢复草稿";
+            if (typeof resumeBtn.setAttribute === "function") {
+                resumeBtn.setAttribute("aria-label", "恢复上次未保存的内容草稿");
+            }
             resumeBtn.addEventListener("click", () => {
                 if (contentElRef) {
                     contentElRef.value = draft.content;
@@ -720,6 +758,9 @@ export class CaptureDialog {
             discardBtn.className = "b3-button b3-button--text";
             discardBtn.style.padding = "2px 8px";
             discardBtn.textContent = "放弃";
+            if (typeof discardBtn.setAttribute === "function") {
+                discardBtn.setAttribute("aria-label", "放弃草稿");
+            }
             discardBtn.addEventListener("click", () => {
                 CaptureDialog.sessionDraft = null;
                 draftBanner.remove();
@@ -783,11 +824,18 @@ export class CaptureDialog {
         const sugrow = document.createElement("div");
         sugrow.className = "xlc-sugrow";
         sugrow.style.display = "none";
+        if (typeof sugrow.setAttribute === "function") {
+            sugrow.setAttribute("role", "region");
+            sugrow.setAttribute("aria-label", "AI整理建议栏");
+        }
         const sugText = document.createElement("span");
         sugrow.appendChild(sugText);
         const adoptBtn = document.createElement("button");
         adoptBtn.className = "xlc-sugrow-adopt";
         adoptBtn.dataset.xlcControl = "capture.ai.suggestion.adopt";
+        if (typeof adoptBtn.setAttribute === "function") {
+            adoptBtn.setAttribute("aria-label", t("adoptAll") || "一键采纳所有建议");
+        }
         let suggestions: {title?: string; alias?: string; tags?: string[]; category?: string} = {};
         const applySuggestions = (): void => {
             if (closed || Object.keys(suggestions).length === 0) return;
@@ -995,10 +1043,17 @@ export class CaptureDialog {
 
         const actions = document.createElement("div");
         actions.className = "xlc-form-actions";
+        if (typeof actions.setAttribute === "function") {
+            actions.setAttribute("role", "toolbar");
+            actions.setAttribute("aria-label", "捕获表单操作栏");
+        }
         const cancelBtn = document.createElement("button");
         cancelBtn.className = "b3-button";
         cancelBtn.dataset.xlcControl = "capture.cancel";
         cancelBtn.textContent = t("cancel");
+        if (typeof cancelBtn.setAttribute === "function") {
+            cancelBtn.setAttribute("aria-label", t("cancel") || "取消新建");
+        }
         cancelBtn.addEventListener("click", () => {
             closed = true;
             ++tidySeq;
@@ -1009,6 +1064,29 @@ export class CaptureDialog {
         saveBtn.className = "b3-button xlc-btn-primary";
         saveBtn.dataset.xlcControl = "capture.save";
         saveBtn.textContent = t("save");
+        if (typeof saveBtn.setAttribute === "function") {
+            saveBtn.setAttribute("aria-label", t("save") || "保存常用语");
+        }
+
+        actions.addEventListener("keydown", (e: any) => {
+            const buttons = [cancelBtn, saveBtn].filter((b) => !b.disabled);
+            if (buttons.length <= 1) return;
+            const curIdx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            if (curIdx === -1) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                buttons[(curIdx + 1) % buttons.length]?.focus();
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                buttons[(curIdx - 1 + buttons.length) % buttons.length]?.focus();
+            } else if (e.key === "Home") {
+                e.preventDefault();
+                buttons[0]?.focus();
+            } else if (e.key === "End") {
+                e.preventDefault();
+                buttons[buttons.length - 1]?.focus();
+            }
+        });
         // 单行输入 Enter 提交（内容 textarea 换行合法，不绑）
         const submitOnEnter = (el: HTMLInputElement): void => {
             el.addEventListener("keydown", (ev) => {
