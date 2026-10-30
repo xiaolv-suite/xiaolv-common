@@ -25834,6 +25834,10 @@ fi`;
       banner.appendChild(langBadge);
       const countBadge = doc.createElement("span");
       countBadge.className = "xlc-code-lines";
+      if (typeof countBadge.setAttribute === "function") {
+        countBadge.setAttribute("role", "status");
+        countBadge.setAttribute("aria-label", `\u4EE3\u7801\u884C\u6570\uFF1A${lines.length} \u884C`);
+      }
       countBadge.textContent = `${lines.length} \u884C`;
       banner.appendChild(countBadge);
       container.appendChild(banner);
@@ -27928,6 +27932,10 @@ fi`;
       if (useCount > 0) {
         const useSpan = document.createElement("span");
         useSpan.className = "xlc-row-usecount";
+        if (typeof useSpan.setAttribute === "function") {
+          useSpan.setAttribute("role", "status");
+          useSpan.setAttribute("aria-label", this.deps.t("useCount", String(useCount)));
+        }
         useSpan.textContent = (shownTags.length > 0 || entry.summary ? " \xB7 " : "") + this.deps.t("useCount", String(useCount));
         meta.appendChild(useSpan);
       }

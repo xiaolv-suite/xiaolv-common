@@ -477,6 +477,10 @@ export function renderSafePreview(
 
         const countBadge = doc.createElement("span");
         countBadge.className = "xlc-code-lines";
+        if (typeof countBadge.setAttribute === "function") {
+            countBadge.setAttribute("role", "status");
+            countBadge.setAttribute("aria-label", `代码行数：${lines.length} 行`);
+        }
         countBadge.textContent = `${lines.length} 行`;
         banner.appendChild(countBadge);
 

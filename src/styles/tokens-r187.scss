@@ -810,6 +810,8 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   .xlc-code-lines {
     font-size: var(--xlc-font-xs);
     color: var(--xlc-muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
 
   .xlc-preview-code {

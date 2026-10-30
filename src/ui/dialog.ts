@@ -2068,6 +2068,10 @@ export class CommonSearchDialog {
         if (useCount > 0) {
             const useSpan = document.createElement("span");
             useSpan.className = "xlc-row-usecount";
+            if (typeof useSpan.setAttribute === "function") {
+                useSpan.setAttribute("role", "status");
+                useSpan.setAttribute("aria-label", this.deps.t("useCount", String(useCount)));
+            }
             useSpan.textContent = (shownTags.length > 0 || entry.summary ? " · " : "") + this.deps.t("useCount", String(useCount));
             meta.appendChild(useSpan);
         }
