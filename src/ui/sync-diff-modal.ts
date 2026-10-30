@@ -180,29 +180,30 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
     // 渲染骨架
     const renderSummaryHeaderHtml = (report: LibraryDiffReport, activeFilter?: string | null): string => {
         const isAct = (s: string | null) => (activeFilter === s ? "xlc-summary-card--active" : "");
+        const isPress = (s: string | null) => (activeFilter === s ? "true" : "false");
         return `
             <div class="xlc-sync-summary-cards">
-                <div class="xlc-summary-card ${isAct(null)}" data-status="" role="button" tabindex="0" title="点击查看全部明细">
+                <div class="xlc-summary-card ${isAct(null)}" data-status="" role="button" tabindex="0" aria-pressed="${isPress(null)}" title="点击查看全部明细">
                     <span class="xlc-card-label">总计对比</span>
                     <span class="xlc-card-value">${report.totalLocal} / ${report.totalRemote}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-identical ${isAct("identical")}" data-status="identical" role="button" tabindex="0" title="点击仅筛选一致项">
+                <div class="xlc-summary-card xlc-card-identical ${isAct("identical")}" data-status="identical" role="button" tabindex="0" aria-pressed="${isPress("identical")}" title="点击仅筛选一致项">
                     <span class="xlc-card-label">一致项</span>
                     <span class="xlc-card-value">${report.identicalCount}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-added ${isAct("added")}" data-status="added" role="button" tabindex="0" title="点击仅筛选远端新增">
+                <div class="xlc-summary-card xlc-card-added ${isAct("added")}" data-status="added" role="button" tabindex="0" aria-pressed="${isPress("added")}" title="点击仅筛选远端新增">
                     <span class="xlc-card-label">远端新增</span>
                     <span class="xlc-card-value">${report.addedCount}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-modified ${isAct("modified")}" data-status="modified" role="button" tabindex="0" title="点击仅筛选字段变动">
+                <div class="xlc-summary-card xlc-card-modified ${isAct("modified")}" data-status="modified" role="button" tabindex="0" aria-pressed="${isPress("modified")}" title="点击仅筛选字段变动">
                     <span class="xlc-card-label">字段变动</span>
                     <span class="xlc-card-value">${report.modifiedCount}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-conflict ${isAct("conflict")}" data-status="conflict" role="button" tabindex="0" title="点击仅筛选冲突项">
+                <div class="xlc-summary-card xlc-card-conflict ${isAct("conflict")}" data-status="conflict" role="button" tabindex="0" aria-pressed="${isPress("conflict")}" title="点击仅筛选冲突项">
                     <span class="xlc-card-label">冲突待解</span>
                     <span class="xlc-card-value">${report.conflictCount}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-removed ${isAct("removed")}" data-status="removed" role="button" tabindex="0" title="点击仅筛选远端缺失">
+                <div class="xlc-summary-card xlc-card-removed ${isAct("removed")}" data-status="removed" role="button" tabindex="0" aria-pressed="${isPress("removed")}" title="点击仅筛选远端缺失">
                     <span class="xlc-card-label">远端缺失</span>
                     <span class="xlc-card-value">${report.removedCount}</span>
                 </div>
@@ -420,14 +421,23 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
         // 绑定状态卡片点击筛选事件（G45）
         const cards = container.querySelectorAll<HTMLElement>(".xlc-summary-card");
         cards.forEach((card) => {
-            card.addEventListener("click", () => {
+            const toggleCard = () => {
                 const status = card.dataset.status || null;
                 currentStatusFilter = currentStatusFilter === status ? null : status;
                 cards.forEach((c) => {
                     const cStat = c.dataset.status || null;
-                    c.classList.toggle("xlc-summary-card--active", cStat === currentStatusFilter);
+                    const isAct = cStat === currentStatusFilter;
+                    c.classList.toggle("xlc-summary-card--active", isAct);
+                    c.setAttribute("aria-pressed", isAct ? "true" : "false");
                 });
                 updateView();
+            };
+            card.addEventListener("click", toggleCard);
+            card.addEventListener("keydown", (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggleCard();
+                }
             });
         });
 

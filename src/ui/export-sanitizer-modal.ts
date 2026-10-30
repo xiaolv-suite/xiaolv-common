@@ -83,38 +83,38 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
         <div class="b3-dialog__header xlc-export-sanitizer-header">
             <div class="b3-dialog__title xlc-form-title">导出安全脱敏选项</div>
         </div>
-        <div class="xlc-export-sanitizer-form xlc-form" style="display:flex; flex-direction:column; gap:12px; padding:8px 0;">
+        <div class="xlc-export-sanitizer-form xlc-form">
             <div class="b3-label">
                 <div class="fn__flex">
                     <span class="fn__flex-1 xlc-form-label">脱敏策略模式</span>
-                    <select class="b3-select xlc-export-sanitizer-mode">
+                    <select class="b3-select xlc-export-sanitizer-mode" aria-label="脱敏策略模式">
                         <option value="mask" ${mode === "mask" ? "selected" : ""}>掩码替换 (例如 138****0000)</option>
                         <option value="placeholder" ${mode === "placeholder" ? "selected" : ""}>变量化占位符 (例如 {{xlc:ask:手机号}})</option>
                     </select>
                 </div>
             </div>
-            <div class="b3-label fn__flex">
+            <label class="b3-label fn__flex xlc-sanitizer-checkbox-row">
                 <span class="fn__flex-1 xlc-form-label">过滤大陆 11 位手机号码</span>
-                <input type="checkbox" class="b3-switch xlc-export-sanitizer-phone" ${sanitizePhones ? "checked" : ""} />
-            </div>
-            <div class="b3-label fn__flex">
+                <input type="checkbox" class="b3-switch xlc-export-sanitizer-phone" aria-label="过滤大陆 11 位手机号码" ${sanitizePhones ? "checked" : ""} />
+            </label>
+            <label class="b3-label fn__flex xlc-sanitizer-checkbox-row">
                 <span class="fn__flex-1 xlc-form-label">过滤电子邮箱地址</span>
-                <input type="checkbox" class="b3-switch xlc-export-sanitizer-email" ${sanitizeEmails ? "checked" : ""} />
-            </div>
-            <div class="b3-label fn__flex">
+                <input type="checkbox" class="b3-switch xlc-export-sanitizer-email" aria-label="过滤电子邮箱地址" ${sanitizeEmails ? "checked" : ""} />
+            </label>
+            <label class="b3-label fn__flex xlc-sanitizer-checkbox-row">
                 <span class="fn__flex-1 xlc-form-label">过滤 18 位身份证号码</span>
-                <input type="checkbox" class="b3-switch xlc-export-sanitizer-idcard" ${sanitizeIdCards ? "checked" : ""} />
-            </div>
-            <div class="b3-label fn__flex">
+                <input type="checkbox" class="b3-switch xlc-export-sanitizer-idcard" aria-label="过滤 18 位身份证号码" ${sanitizeIdCards ? "checked" : ""} />
+            </label>
+            <label class="b3-label fn__flex xlc-sanitizer-checkbox-row">
                 <span class="fn__flex-1 xlc-form-label">过滤 API 密钥与 Bearer Token</span>
-                <input type="checkbox" class="b3-switch xlc-export-sanitizer-token" ${sanitizeTokens ? "checked" : ""} />
-            </div>
-            <div class="b3-label" style="display:flex; flex-direction:column; gap:4px;">
+                <input type="checkbox" class="b3-switch xlc-export-sanitizer-token" aria-label="过滤 API 密钥与 Bearer Token" ${sanitizeTokens ? "checked" : ""} />
+            </label>
+            <div class="b3-label xlc-sanitizer-custom-block">
                 <span class="xlc-form-label">自定义字面替换词典（每行 原始词=替换词）</span>
-                <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" placeholder="内部IP=10.0.0.x&#10;核心客户=保密客户">${escapeHtml(customText)}</textarea>
+                <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" aria-label="自定义字面替换词典" placeholder="内部IP=10.0.0.x&#10;核心客户=保密客户">${escapeHtml(customText)}</textarea>
             </div>
         </div>
-        <div class="b3-dialog__action xlc-form-actions" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 0 0 0;">
+        <div class="b3-dialog__action xlc-form-actions xlc-export-sanitizer-actions">
             <button class="b3-button b3-button--cancel">取消</button>
             <button class="b3-button b3-button--primary xlc-btn-primary">保存脱敏配置</button>
         </div>
@@ -138,10 +138,10 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
                 for (const line of customArea.value.split("\n")) {
                     const trimmed = line.trim();
                     if (!trimmed || trimmed.startsWith("#")) continue;
-                    const idx = trimmed.indexOf("=");
-                    if (idx > 0) {
-                        const k = trimmed.slice(0, idx).trim();
-                        const v = trimmed.slice(idx + 1).trim();
+                    const eqIdx = trimmed.indexOf("=");
+                    if (eqIdx > 0) {
+                        const k = trimmed.slice(0, eqIdx).trim();
+                        const v = trimmed.slice(eqIdx + 1).trim();
                         if (k) customMap[k] = v;
                     }
                 }
@@ -163,12 +163,22 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
         });
 
         let confirmed = false;
-        const confirmBtn = container.querySelector(".b3-button--primary");
-        confirmBtn?.addEventListener("click", () => {
+        const confirmBtn = container.querySelector(".b3-button--primary") as HTMLButtonElement | null;
+        const doConfirm = () => {
             if (confirmed) return;
             confirmed = true;
             const opts = parseOptions();
             props.onConfirm?.(opts);
+        };
+        confirmBtn?.addEventListener("click", doConfirm);
+
+        container.addEventListener("keydown", (e) => {
+            if (e.isComposing || (e as KeyboardEvent).keyCode === 229) return;
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                if (e.repeat) return;
+                e.preventDefault();
+                doConfirm();
+            }
         });
 
         return {

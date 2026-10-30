@@ -9676,17 +9676,22 @@ ${codeText}`;
         for (const opt of field.options) {
           const optBtn = document.createElement("button");
           optBtn.type = "button";
-          optBtn.className = "xlc-multi-option-pill" + (currentSelected.has(opt) ? " xlc-multi-option-pill--selected" : "");
+          const isSelected = currentSelected.has(opt);
+          optBtn.className = "xlc-multi-option-pill" + (isSelected ? " xlc-multi-option-pill--selected" : "");
           optBtn.textContent = opt;
           optBtn.title = `\u70B9\u51FB\u5207\u6362\u9009\u4E2D "${opt}"`;
+          optBtn.setAttribute("aria-label", optBtn.title);
+          optBtn.setAttribute("aria-pressed", isSelected ? "true" : "false");
           optBtn.addEventListener("click", (e) => {
             e.preventDefault();
             if (currentSelected.has(opt)) {
               currentSelected.delete(opt);
               optBtn.classList.remove("xlc-multi-option-pill--selected");
+              optBtn.setAttribute("aria-pressed", "false");
             } else {
               currentSelected.add(opt);
               optBtn.classList.add("xlc-multi-option-pill--selected");
+              optBtn.setAttribute("aria-pressed", "true");
             }
             updateMultiVal();
           });
@@ -9708,15 +9713,20 @@ ${codeText}`;
         pillsWrap.className = "xlc-varform-quick-options";
         const syncPills = () => {
           pillsWrap.querySelectorAll(".xlc-quick-option-pill").forEach((pill) => {
-            pill.classList.toggle("xlc-quick-option-pill--selected", pill.textContent === input.value);
+            const isPicked = pill.textContent === input.value;
+            pill.classList.toggle("xlc-quick-option-pill--selected", isPicked);
+            pill.setAttribute("aria-pressed", isPicked ? "true" : "false");
           });
         };
         for (const opt of Array.from(candidateOptions).slice(0, 8)) {
           const optBtn = document.createElement("button");
           optBtn.type = "button";
-          optBtn.className = "xlc-quick-option-pill" + (input.value === opt ? " xlc-quick-option-pill--selected" : "");
+          const isPicked = input.value === opt;
+          optBtn.className = "xlc-quick-option-pill" + (isPicked ? " xlc-quick-option-pill--selected" : "");
           optBtn.textContent = opt;
           optBtn.title = `\u70B9\u51FB\u586B\u5165 "${opt}"`;
+          optBtn.setAttribute("aria-label", optBtn.title);
+          optBtn.setAttribute("aria-pressed", isPicked ? "true" : "false");
           optBtn.addEventListener("click", (e) => {
             e.preventDefault();
             input.value = opt;
@@ -18183,38 +18193,38 @@ ${finalHtml}
         <div class="b3-dialog__header xlc-export-sanitizer-header">
             <div class="b3-dialog__title xlc-form-title">\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879</div>
         </div>
-        <div class="xlc-export-sanitizer-form xlc-form" style="display:flex; flex-direction:column; gap:12px; padding:8px 0;">
+        <div class="xlc-export-sanitizer-form xlc-form">
             <div class="b3-label">
                 <div class="fn__flex">
                     <span class="fn__flex-1 xlc-form-label">\u8131\u654F\u7B56\u7565\u6A21\u5F0F</span>
-                    <select class="b3-select xlc-export-sanitizer-mode">
+                    <select class="b3-select xlc-export-sanitizer-mode" aria-label="\u8131\u654F\u7B56\u7565\u6A21\u5F0F">
                         <option value="mask" ${mode === "mask" ? "selected" : ""}>\u63A9\u7801\u66FF\u6362 (\u4F8B\u5982 138****0000)</option>
                         <option value="placeholder" ${mode === "placeholder" ? "selected" : ""}>\u53D8\u91CF\u5316\u5360\u4F4D\u7B26 (\u4F8B\u5982 {{xlc:ask:\u624B\u673A\u53F7}})</option>
                     </select>
                 </div>
             </div>
-            <div class="b3-label fn__flex">
+            <label class="b3-label fn__flex xlc-sanitizer-checkbox-row">
                 <span class="fn__flex-1 xlc-form-label">\u8FC7\u6EE4\u5927\u9646 11 \u4F4D\u624B\u673A\u53F7\u7801</span>
-                <input type="checkbox" class="b3-switch xlc-export-sanitizer-phone" ${sanitizePhones ? "checked" : ""} />
-            </div>
-            <div class="b3-label fn__flex">
+                <input type="checkbox" class="b3-switch xlc-export-sanitizer-phone" aria-label="\u8FC7\u6EE4\u5927\u9646 11 \u4F4D\u624B\u673A\u53F7\u7801" ${sanitizePhones ? "checked" : ""} />
+            </label>
+            <label class="b3-label fn__flex xlc-sanitizer-checkbox-row">
                 <span class="fn__flex-1 xlc-form-label">\u8FC7\u6EE4\u7535\u5B50\u90AE\u7BB1\u5730\u5740</span>
-                <input type="checkbox" class="b3-switch xlc-export-sanitizer-email" ${sanitizeEmails ? "checked" : ""} />
-            </div>
-            <div class="b3-label fn__flex">
+                <input type="checkbox" class="b3-switch xlc-export-sanitizer-email" aria-label="\u8FC7\u6EE4\u7535\u5B50\u90AE\u7BB1\u5730\u5740" ${sanitizeEmails ? "checked" : ""} />
+            </label>
+            <label class="b3-label fn__flex xlc-sanitizer-checkbox-row">
                 <span class="fn__flex-1 xlc-form-label">\u8FC7\u6EE4 18 \u4F4D\u8EAB\u4EFD\u8BC1\u53F7\u7801</span>
-                <input type="checkbox" class="b3-switch xlc-export-sanitizer-idcard" ${sanitizeIdCards ? "checked" : ""} />
-            </div>
-            <div class="b3-label fn__flex">
+                <input type="checkbox" class="b3-switch xlc-export-sanitizer-idcard" aria-label="\u8FC7\u6EE4 18 \u4F4D\u8EAB\u4EFD\u8BC1\u53F7\u7801" ${sanitizeIdCards ? "checked" : ""} />
+            </label>
+            <label class="b3-label fn__flex xlc-sanitizer-checkbox-row">
                 <span class="fn__flex-1 xlc-form-label">\u8FC7\u6EE4 API \u5BC6\u94A5\u4E0E Bearer Token</span>
-                <input type="checkbox" class="b3-switch xlc-export-sanitizer-token" ${sanitizeTokens ? "checked" : ""} />
-            </div>
-            <div class="b3-label" style="display:flex; flex-direction:column; gap:4px;">
+                <input type="checkbox" class="b3-switch xlc-export-sanitizer-token" aria-label="\u8FC7\u6EE4 API \u5BC6\u94A5\u4E0E Bearer Token" ${sanitizeTokens ? "checked" : ""} />
+            </label>
+            <div class="b3-label xlc-sanitizer-custom-block">
                 <span class="xlc-form-label">\u81EA\u5B9A\u4E49\u5B57\u9762\u66FF\u6362\u8BCD\u5178\uFF08\u6BCF\u884C \u539F\u59CB\u8BCD=\u66FF\u6362\u8BCD\uFF09</span>
-                <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" placeholder="\u5185\u90E8IP=10.0.0.x&#10;\u6838\u5FC3\u5BA2\u6237=\u4FDD\u5BC6\u5BA2\u6237">${escapeHtml(customText)}</textarea>
+                <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" aria-label="\u81EA\u5B9A\u4E49\u5B57\u9762\u66FF\u6362\u8BCD\u5178" placeholder="\u5185\u90E8IP=10.0.0.x&#10;\u6838\u5FC3\u5BA2\u6237=\u4FDD\u5BC6\u5BA2\u6237">${escapeHtml(customText)}</textarea>
             </div>
         </div>
-        <div class="b3-dialog__action xlc-form-actions" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 0 0 0;">
+        <div class="b3-dialog__action xlc-form-actions xlc-export-sanitizer-actions">
             <button class="b3-button b3-button--cancel">\u53D6\u6D88</button>
             <button class="b3-button b3-button--primary xlc-btn-primary">\u4FDD\u5B58\u8131\u654F\u914D\u7F6E</button>
         </div>
@@ -18236,10 +18246,10 @@ ${finalHtml}
           for (const line of customArea.value.split("\n")) {
             const trimmed = line.trim();
             if (!trimmed || trimmed.startsWith("#")) continue;
-            const idx = trimmed.indexOf("=");
-            if (idx > 0) {
-              const k = trimmed.slice(0, idx).trim();
-              const v = trimmed.slice(idx + 1).trim();
+            const eqIdx = trimmed.indexOf("=");
+            if (eqIdx > 0) {
+              const k = trimmed.slice(0, eqIdx).trim();
+              const v = trimmed.slice(eqIdx + 1).trim();
               if (k) customMap[k] = v;
             }
           }
@@ -18260,12 +18270,21 @@ ${finalHtml}
       });
       let confirmed = false;
       const confirmBtn2 = container.querySelector(".b3-button--primary");
-      confirmBtn2 == null ? void 0 : confirmBtn2.addEventListener("click", () => {
+      const doConfirm = () => {
         var _a2;
         if (confirmed) return;
         confirmed = true;
         const opts = parseOptions();
         (_a2 = props.onConfirm) == null ? void 0 : _a2.call(props, opts);
+      };
+      confirmBtn2 == null ? void 0 : confirmBtn2.addEventListener("click", doConfirm);
+      container.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          if (e.repeat) return;
+          e.preventDefault();
+          doConfirm();
+        }
       });
       return {
         element: container,
@@ -18930,29 +18949,30 @@ ${finalHtml}
     const isBrowser = typeof document !== "undefined" && typeof document.createElement === "function";
     const renderSummaryHeaderHtml = (report, activeFilter) => {
       const isAct = (s) => activeFilter === s ? "xlc-summary-card--active" : "";
+      const isPress = (s) => activeFilter === s ? "true" : "false";
       return `
             <div class="xlc-sync-summary-cards">
-                <div class="xlc-summary-card ${isAct(null)}" data-status="" role="button" tabindex="0" title="\u70B9\u51FB\u67E5\u770B\u5168\u90E8\u660E\u7EC6">
+                <div class="xlc-summary-card ${isAct(null)}" data-status="" role="button" tabindex="0" aria-pressed="${isPress(null)}" title="\u70B9\u51FB\u67E5\u770B\u5168\u90E8\u660E\u7EC6">
                     <span class="xlc-card-label">\u603B\u8BA1\u5BF9\u6BD4</span>
                     <span class="xlc-card-value">${report.totalLocal} / ${report.totalRemote}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-identical ${isAct("identical")}" data-status="identical" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u4E00\u81F4\u9879">
+                <div class="xlc-summary-card xlc-card-identical ${isAct("identical")}" data-status="identical" role="button" tabindex="0" aria-pressed="${isPress("identical")}" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u4E00\u81F4\u9879">
                     <span class="xlc-card-label">\u4E00\u81F4\u9879</span>
                     <span class="xlc-card-value">${report.identicalCount}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-added ${isAct("added")}" data-status="added" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u8FDC\u7AEF\u65B0\u589E">
+                <div class="xlc-summary-card xlc-card-added ${isAct("added")}" data-status="added" role="button" tabindex="0" aria-pressed="${isPress("added")}" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u8FDC\u7AEF\u65B0\u589E">
                     <span class="xlc-card-label">\u8FDC\u7AEF\u65B0\u589E</span>
                     <span class="xlc-card-value">${report.addedCount}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-modified ${isAct("modified")}" data-status="modified" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u5B57\u6BB5\u53D8\u52A8">
+                <div class="xlc-summary-card xlc-card-modified ${isAct("modified")}" data-status="modified" role="button" tabindex="0" aria-pressed="${isPress("modified")}" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u5B57\u6BB5\u53D8\u52A8">
                     <span class="xlc-card-label">\u5B57\u6BB5\u53D8\u52A8</span>
                     <span class="xlc-card-value">${report.modifiedCount}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-conflict ${isAct("conflict")}" data-status="conflict" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u51B2\u7A81\u9879">
+                <div class="xlc-summary-card xlc-card-conflict ${isAct("conflict")}" data-status="conflict" role="button" tabindex="0" aria-pressed="${isPress("conflict")}" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u51B2\u7A81\u9879">
                     <span class="xlc-card-label">\u51B2\u7A81\u5F85\u89E3</span>
                     <span class="xlc-card-value">${report.conflictCount}</span>
                 </div>
-                <div class="xlc-summary-card xlc-card-removed ${isAct("removed")}" data-status="removed" role="button" tabindex="0" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u8FDC\u7AEF\u7F3A\u5931">
+                <div class="xlc-summary-card xlc-card-removed ${isAct("removed")}" data-status="removed" role="button" tabindex="0" aria-pressed="${isPress("removed")}" title="\u70B9\u51FB\u4EC5\u7B5B\u9009\u8FDC\u7AEF\u7F3A\u5931">
                     <span class="xlc-card-label">\u8FDC\u7AEF\u7F3A\u5931</span>
                     <span class="xlc-card-value">${report.removedCount}</span>
                 </div>
@@ -19137,14 +19157,23 @@ ${finalHtml}
       };
       const cards = container.querySelectorAll(".xlc-summary-card");
       cards.forEach((card) => {
-        card.addEventListener("click", () => {
+        const toggleCard = () => {
           const status = card.dataset.status || null;
           currentStatusFilter = currentStatusFilter === status ? null : status;
           cards.forEach((c) => {
             const cStat = c.dataset.status || null;
-            c.classList.toggle("xlc-summary-card--active", cStat === currentStatusFilter);
+            const isAct = cStat === currentStatusFilter;
+            c.classList.toggle("xlc-summary-card--active", isAct);
+            c.setAttribute("aria-pressed", isAct ? "true" : "false");
           });
           updateView();
+        };
+        card.addEventListener("click", toggleCard);
+        card.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleCard();
+          }
         });
       });
       const strategySelect2 = container.querySelector(".xlc-sync-strategy-select");

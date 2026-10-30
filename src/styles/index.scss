@@ -2529,6 +2529,15 @@
           transform: scale(1.02);
         }
 
+        &:active {
+          transform: scale(0.96);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--xlc-accent);
+          outline-offset: 1px;
+        }
+
         &--selected {
           border-color: var(--xlc-lilac) !important;
           background-color: var(--xlc-lilac-soft) !important;
@@ -2563,6 +2572,15 @@
           background-color: var(--lv-brand-soft);
           color: var(--lv-brand);
           transform: scale(1.02);
+        }
+
+        &:active {
+          transform: scale(0.96);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--xlc-accent);
+          outline-offset: 1px;
         }
 
         &--selected {
@@ -3941,8 +3959,17 @@
         box-shadow: var(--xlc-shadow-md);
       }
 
+      &:active {
+        transform: scale(0.97);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+
       &--active {
-        border-color: var(--b3-theme-primary) !important;
+        border-color: var(--xlc-accent) !important;
         background-color: var(--xlc-lavender) !important;
         box-shadow: 0 0 0 2px var(--xlc-lavender) !important;
         font-weight: var(--xlc-weight-semibold);
@@ -3960,13 +3987,14 @@
         color: var(--xlc-ink);
         font-variant-numeric: tabular-nums;
         line-height: var(--xlc-leading-tight);
+        letter-spacing: -0.02em;
       }
 
-      &.xlc-card-identical .xlc-card-value { color: var(--b3-theme-primary); }
-      &.xlc-card-added .xlc-card-value { color: var(--xlc-success); }
+      &.xlc-card-identical .xlc-card-value { color: var(--xlc-data-accent); }
+      &.xlc-card-added .xlc-card-value { color: var(--xlc-data-accent); }
       &.xlc-card-modified .xlc-card-value { color: var(--xlc-info); }
       &.xlc-card-conflict .xlc-card-value { color: var(--xlc-danger); }
-      &.xlc-card-removed .xlc-card-value { color: var(--b3-theme-on-surface); opacity: 0.75; }
+      &.xlc-card-removed .xlc-card-value { color: var(--xlc-muted); opacity: 0.8; }
     }
   }
 
@@ -4796,6 +4824,32 @@
 .xlc-export-sanitizer-modal {
   width: 100%;
   box-sizing: border-box;
+
+  .xlc-export-sanitizer-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xlc-space-3);
+    padding: var(--xlc-space-2) 0;
+  }
+
+  .xlc-sanitizer-checkbox-row {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--xlc-dur-fast) var(--xlc-ease);
+  }
+
+  .xlc-sanitizer-custom-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xlc-space-1);
+  }
+
+  .xlc-export-sanitizer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xlc-space-2);
+    padding: var(--xlc-space-3) 0 0 0;
+  }
 
   .b3-label {
     padding: var(--xlc-space-2) 0;
