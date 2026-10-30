@@ -13,16 +13,16 @@ import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
 import {toErrorMessage} from "../model/errors";
-import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch} from "../model/search";
+import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch, findExactShortcodeMatch} from "../model/search";
 import {BatchTagCategoryPatch, BatchOperationReceipt} from "../model/batch-ops";
 import {InsertMode, buildBlockRef} from "../model/actions";
 import {TransformKind} from "../service/ai";
 import {ProviderRow} from "../model/provider-section";
-import {AskField, askFieldTag, hasCursorToken, listAskFields, listSnippetRefs, expandAsks, applyAskDefaults, stripCursorToken, stripAllVariables} from "../model/variables";
+import {AskField, askFieldTag, hasCursorToken, listAskFields, listSnippetRefs, expandAsks, applyAskDefaults, stripCursorToken, stripAllVariables, hasDynamicMacros, expandMacroPreview} from "../model/variables";
 import {openVariableFillCard} from "./variable-form";
 import {formatScopeFallbackQuery, shouldShowOmniSearchFallback, shouldShowScopeFallback, SearchScope} from "./empty-state";
 import {findPinyinMatches} from "../model/pinyin-tiny";
-import {renderSafePreview} from "./preview-renderer";
+import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
 import {renderWechatArticleHtml, writeRichClipboard} from "../model/clipboard";
@@ -2002,14 +2002,23 @@ export class CommonSearchDialog {
             surroundBadge.title = "支持选区包裹：插入时自动将当前选区文本嵌入此模板";
             title.appendChild(surroundBadge);
         }
-        // G27 / ADR 0080: 唯一别名精确匹配金色直达徽标
+        // G27 / ADR 0080 / TASK-20261031: 唯一简码或别名精确匹配金色直达徽标
         const cleanQuery = this.lastQueryText.trim().toLowerCase();
-        if (cleanQuery && entry.alias && entry.alias.trim().toLowerCase() === cleanQuery) {
+        const isShortcodeHit = Boolean(cleanQuery && entry.shortcode && (entry.shortcode.trim().toLowerCase() === cleanQuery || entry.shortcode.trim().toLowerCase() === ":" + cleanQuery));
+        const isAliasHit = Boolean(cleanQuery && entry.alias && entry.alias.trim().toLowerCase() === cleanQuery);
+        if (isShortcodeHit || isAliasHit) {
             const directBadge = document.createElement("span");
             directBadge.className = "xlc-badge xlc-badge--direct";
             directBadge.textContent = "⚡ Tab直达";
-            directBadge.title = "唯一别名精确匹配：按 Tab 或 Enter 极速插入";
+            directBadge.title = isShortcodeHit ? "简码唯一命中：按 Tab 或 Enter 极速插入" : "唯一别名精确匹配：按 Tab 或 Enter 极速插入";
             title.appendChild(directBadge);
+        }
+        if (entry.shortcode) {
+            const scBadge = document.createElement("span");
+            scBadge.className = "xlc-badge xlc-badge--shortcode";
+            scBadge.textContent = entry.shortcode;
+            scBadge.title = `简码：输入 ${entry.shortcode} 触发`;
+            title.appendChild(scBadge);
         }
         const titleText = document.createElement("span");
         titleText.className = "xlc-row-titletext";
@@ -3267,7 +3276,21 @@ export class CommonSearchDialog {
             paneBody.classList.toggle("xlc-pane-body--muted", finalText === this.deps.t("previewUnavailable"));
             if (text) {
                 try {
-                    renderSafePreview(paneBody, text, entry?.itemType);
+                    if (entry?.itemType !== "code" && hasDynamicMacros(text)) {
+                        const expanded = expandMacroPreview(text);
+                        renderDualMacroPreview(
+                            paneBody,
+                            text,
+                            expanded,
+                            entry?.itemType,
+                            {
+                                templateSource: this.deps.t("previewTemplateSource") || "模板源码",
+                                expandedEffect: this.deps.t("previewExpandedEffect") || "展开后真实效果",
+                            },
+                        );
+                    } else {
+                        renderSafePreview(paneBody, text, entry?.itemType);
+                    }
                 } catch {
                     paneBody.textContent = finalText;
                 }
@@ -5821,8 +5844,8 @@ export class CommonSearchDialog {
             // 搜索输入框按 Tab 时：
             const input = root.querySelector<HTMLInputElement>(".xlc-search-input");
             if (input && active === input && !e.shiftKey) {
-                // G27 / ADR 0080: 若输入框存在唯一精确别名匹配项，按 Tab 闪电直达插入
-                const exactMatch = findExactAliasMatch(this.results, input.value);
+                // G27 / ADR 0080 / TASK-20261031: 若输入框存在唯一精确简码或别名匹配项，按 Tab 闪电直达插入
+                const exactMatch = findExactShortcodeMatch(this.results, input.value) || findExactAliasMatch(this.results, input.value);
                 if (exactMatch && !this.primaryBusy && !this.varFormOpen) {
                     e.preventDefault();
                     await this.runPrimary(exactMatch);

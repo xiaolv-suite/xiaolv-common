@@ -19,6 +19,7 @@ export interface ExportedItem {
     itemType: string;
     title: string;
     alias: string;
+    shortcode?: string;
     tags: string[];
     category: string;
     /** 库块 kramdown（内容真源随包走；不导出插件侧车偏好） */
@@ -60,6 +61,7 @@ export function buildBundle(
             itemType: item.itemType,
             title: item.title,
             alias: item.alias,
+            ...(item.shortcode ? {shortcode: item.shortcode} : {}),
             tags: Array.isArray(item.tags) ? [...item.tags] : [],
             category: item.category,
             kramdown: body,
@@ -235,7 +237,7 @@ function normalizeExportedItem(raw: unknown): ExportedItem | null {
     if (typeof obj.kramdown !== "string" || obj.kramdown.length > LIMITS.contentChars) return null;
     if (!isItemType(obj.itemType)) return null;
     const sourceRaw = (obj.source ?? {}) as Record<string, unknown>;
-    const known = ["id", "itemType", "title", "alias", "tags", "category", "kramdown", "source", "url", "targetBlockId", "createdAt", "updatedAt"];
+    const known = ["id", "itemType", "title", "alias", "shortcode", "tags", "category", "kramdown", "source", "url", "targetBlockId", "createdAt", "updatedAt"];
     // null 原型：__proto__ 键进入扩展集合时成为自有属性而非原型操作（R144）
     const extensions: Record<string, unknown> = Object.create(null);
     for (const [k, v] of Object.entries(obj)) {
@@ -245,11 +247,13 @@ function normalizeExportedItem(raw: unknown): ExportedItem | null {
     const tags = Array.isArray(obj.tags) ? obj.tags.filter((t): t is string => typeof t === "string").slice(0, LIMITS.tags) : [];
     const url = str(obj.url, 2048);
     if (url && !isSafeHttpUrl(url)) return null;
+    const shortcode = str(obj.shortcode, LIMITS.shortcode);
     return {
         id: obj.id,
         itemType: obj.itemType,
         title: str(obj.title, LIMITS.title),
         alias: str(obj.alias, LIMITS.alias),
+        ...(shortcode ? {shortcode} : {}),
         tags,
         category: str(obj.category, LIMITS.category),
         kramdown: obj.kramdown,

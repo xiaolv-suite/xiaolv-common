@@ -128,6 +128,7 @@
         type: "custom-xlc-type",
         title: "custom-xlc-title",
         alias: "custom-xlc-alias",
+        shortcode: "custom-xlc-shortcode",
         tags: "custom-xlc-tags",
         category: "custom-xlc-category",
         srcDoc: "custom-xlc-src-doc",
@@ -144,6 +145,7 @@
       LIMITS = {
         title: 512,
         alias: 256,
+        shortcode: 64,
         tag: 64,
         tags: 32,
         category: 64,
@@ -278,6 +280,13 @@
     }
     return out;
   }
+  function cleanShortcode(v) {
+    if (typeof v !== "string") return "";
+    let s = v.trim();
+    if (!s) return "";
+    if (!s.startsWith(":")) s = ":" + s;
+    return cleanString(s.toLowerCase(), LIMITS.shortcode);
+  }
   function inferItemType(blockType, subtype, kramdown) {
     if (blockType === "c" || blockType === "code_block" || subtype === "code") return "code";
     if (blockType === "s" || blockType === "super") return "structure";
@@ -337,6 +346,7 @@
       itemType,
       title,
       alias: cleanString(attrs[ATTR.alias], LIMITS.alias),
+      ...cleanShortcode(attrs[ATTR.shortcode]) ? { shortcode: cleanShortcode(attrs[ATTR.shortcode]) } : {},
       tags,
       category: cleanString(attrs[ATTR.category], LIMITS.category),
       summary: deriveSummary(kramdown),
@@ -6767,204 +6777,6 @@ ${codeText}`;
     }
   });
 
-  // src/model/variables.ts
-  function parseAskField(rawName, rawOptions) {
-    var _a, _b, _c, _d;
-    let name = rawName.trim().slice(0, LIMITS.tag);
-    let defaultValue;
-    const eqIdx = name.indexOf("=");
-    if (eqIdx !== -1) {
-      defaultValue = name.slice(eqIdx + 1).trim().slice(0, LIMITS.askValueChars);
-      name = name.slice(0, eqIdx).trim().slice(0, LIMITS.tag);
-    }
-    if (!name) return null;
-    let isMulti = false;
-    let cleanRawOptions = rawOptions != null ? rawOptions : "";
-    if (cleanRawOptions.includes("|")) {
-      const parts = cleanRawOptions.split("|");
-      const suffix = (_b = (_a = parts[parts.length - 1]) == null ? void 0 : _a.trim().toLowerCase()) != null ? _b : "";
-      if (["multi", "multiple", "checkboxes", "mselect", "\u591A\u9009"].includes(suffix)) {
-        isMulti = true;
-        cleanRawOptions = parts.slice(0, parts.length - 1).join("|");
-      }
-    } else if (/^(?:multi|multiple|多选)\s*[:：]/i.test(cleanRawOptions)) {
-      isMulti = true;
-      cleanRawOptions = cleanRawOptions.replace(/^(?:multi|multiple|多选)\s*[:：]/i, "");
-    }
-    const options = cleanRawOptions.split(/[,，、]/).map((s) => s.trim().slice(0, LIMITS.tag)).filter(Boolean).slice(0, 16);
-    if (isMulti && options.length > 0) {
-      return { name, kind: "multi", options, ...defaultValue ? { defaultValue } : {} };
-    }
-    const firstOpt = (_d = (_c = options[0]) == null ? void 0 : _c.toLowerCase()) != null ? _d : "";
-    if (options.length === 1 && firstOpt === "date") return { name, kind: "date", options: [], ...defaultValue ? { defaultValue } : {} };
-    if (options.length === 1 && firstOpt === "textarea") return { name, kind: "textarea", options: [], ...defaultValue ? { defaultValue } : {} };
-    if (options.length === 1 && ["toggle", "checkbox", "switch", "bool", "\u5F00\u5173"].includes(firstOpt)) {
-      return { name, kind: "toggle", options: [], ...defaultValue ? { defaultValue } : {} };
-    }
-    if (options.length >= 2) return { name, kind: "select", options, ...defaultValue ? { defaultValue } : {} };
-    if (options.length === 1 && !defaultValue) {
-      defaultValue = options[0];
-    }
-    return { name, kind: "text", options: [], ...defaultValue ? { defaultValue } : {} };
-  }
-  function askFieldTag(field) {
-    const nameWithDef = field.defaultValue && field.kind === "text" && field.options.length === 0 ? `${field.name}=${field.defaultValue}` : field.name;
-    if (field.kind === "text") return field.defaultValue && field.options.length === 0 ? `{{xlc:ask:${nameWithDef}}}` : `{{xlc:ask:${field.name}}}`;
-    if (field.kind === "select") return `{{xlc:ask:${field.name}|${field.options.join(",")}}}`;
-    if (field.kind === "multi") return `{{xlc:ask:${field.name}|${field.options.join(",")}|multi}}`;
-    if (field.kind === "toggle") return field.defaultValue ? `{{xlc:ask:${field.name}=${field.defaultValue}|toggle}}` : `{{xlc:ask:${field.name}|toggle}}`;
-    return `{{xlc:ask:${field.name}|${field.kind}}}`;
-  }
-  function listAskFields(text) {
-    var _a;
-    if (!text) return [];
-    const fields = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const match of text.matchAll(ASK_PATTERN)) {
-      const field = parseAskField((_a = match[1]) != null ? _a : "", match[2]);
-      if (!field || seen.has(field.name)) continue;
-      seen.add(field.name);
-      fields.push(field);
-      if (fields.length >= 16) break;
-    }
-    return fields;
-  }
-  function countAskFields(text) {
-    return listAskFields(text).length;
-  }
-  function cleanFillValue(v) {
-    return (v != null ? v : "").trim().slice(0, LIMITS.askValueChars);
-  }
-  function expandAsks(text, fills) {
-    if (!text) return text;
-    return text.replace(ASK_PATTERN, (_match, rawName, rawOptions) => {
-      var _a, _b, _c;
-      const field = parseAskField(rawName, rawOptions);
-      if (!field) return _match;
-      if (field.kind === "toggle") {
-        if (Object.prototype.hasOwnProperty.call(fills, field.name)) {
-          const filled2 = (_b = (_a = fills[field.name]) == null ? void 0 : _a.trim()) != null ? _b : "";
-          if (filled2 === "" || filled2 === "false" || filled2 === "0" || filled2 === "\u5426") {
-            return "";
-          }
-          return cleanFillValue(filled2 === "true" || filled2 === "\u662F" ? field.defaultValue || "\u662F" : filled2);
-        }
-        if (field.defaultValue) return cleanFillValue(field.defaultValue);
-        return "";
-      }
-      const filled = Object.prototype.hasOwnProperty.call(fills, field.name) ? cleanFillValue((_c = fills[field.name]) != null ? _c : "") : "";
-      if (filled) return filled;
-      if (field.defaultValue) return cleanFillValue(field.defaultValue);
-      return `__${field.name}__`;
-    });
-  }
-  function applyAskDefaults(text) {
-    return expandAsks(text, {});
-  }
-  function stripCursorToken(text) {
-    return text.split(CURSOR_TOKEN).join("");
-  }
-  function hasCursorToken(text) {
-    return text.includes(CURSOR_TOKEN);
-  }
-  function listSnippetRefs(text) {
-    var _a;
-    if (!text || !text.includes("{{xlc:snippet:")) return [];
-    const titles = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const match of text.matchAll(SNIPPET_PATTERN)) {
-      const title = ((_a = match[1]) != null ? _a : "").trim().slice(0, LIMITS.title);
-      if (!title || seen.has(title)) continue;
-      seen.add(title);
-      titles.push(title);
-      if (titles.length >= 16) break;
-    }
-    return titles;
-  }
-  function stripAllVariables(text, useDefault = true) {
-    if (!text || !text.includes("{{xlc:")) return text != null ? text : "";
-    let res = text.replace(ASK_PATTERN, (_m, rawName, rawOptions) => {
-      const field = parseAskField(rawName, rawOptions);
-      if (!field) return "";
-      return useDefault && field.defaultValue ? field.defaultValue : "";
-    });
-    res = res.replace(/\{\{xlc:[^}]*\}\}/g, "");
-    return res;
-  }
-  var ASK_PATTERN, CURSOR_TOKEN, SNIPPET_PATTERN;
-  var init_variables = __esm({
-    "src/model/variables.ts"() {
-      "use strict";
-      init_constants();
-      ASK_PATTERN = /\{\{xlc:ask:([^|}]+)(?:\|([^}]*))?\}\}/g;
-      CURSOR_TOKEN = "{{xlc:cursor}}";
-      SNIPPET_PATTERN = /\{\{xlc:snippet:([^}]+)\}\}/g;
-    }
-  });
-
-  // src/model/template-wizard.ts
-  function autoParameterizeText(text) {
-    if (!text || !text.trim()) return { result: text != null ? text : "", suggestedCount: 0, suggestions: [] };
-    const suggestions = [];
-    let processed = text;
-    processed = processed.replace(/(?<!\d)(1[3-9]\d{9})(?!\d)/g, (match, _phone, offset) => {
-      suggestions.push({
-        original: match,
-        suggestedTag: "{{xlc:ask:\u624B\u673A\u53F7}}",
-        fieldLabel: "\u624B\u673A\u53F7",
-        index: offset
-      });
-      return "{{xlc:ask:\u624B\u673A\u53F7}}";
-    });
-    processed = processed.replace(/\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/g, (match, _email, offset) => {
-      suggestions.push({
-        original: match,
-        suggestedTag: "{{xlc:ask:\u90AE\u7BB1}}",
-        fieldLabel: "\u90AE\u7BB1",
-        index: offset
-      });
-      return "{{xlc:ask:\u90AE\u7BB1}}";
-    });
-    processed = processed.replace(/(?<!\d)(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)(?!\d)/g, (match, _date, offset) => {
-      suggestions.push({
-        original: match,
-        suggestedTag: "{{xlc:date}}",
-        fieldLabel: "\u5F53\u524D\u65E5\u671F",
-        index: offset
-      });
-      return "{{xlc:date}}";
-    });
-    processed = processed.replace(/([￥$]\s*\d+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?\s*元)/g, (match, _amount, offset) => {
-      suggestions.push({
-        original: match,
-        suggestedTag: "{{xlc:ask:\u91D1\u989D}}",
-        fieldLabel: "\u91D1\u989D",
-        index: offset
-      });
-      return "{{xlc:ask:\u91D1\u989D}}";
-    });
-    processed = processed.replace(/(尊敬的)?([^\s，,。\n]{1,4})(经理|总|老师|女士|先生|同学)(您好|你好)?/g, (match, prefix, _name, title, greeting, offset) => {
-      const replacement = `${prefix || ""}{{xlc:ask:\u59D3\u540D}}${title}${greeting || ""}`;
-      suggestions.push({
-        original: match,
-        suggestedTag: replacement,
-        fieldLabel: "\u59D3\u540D",
-        index: offset
-      });
-      return replacement;
-    });
-    return {
-      result: processed,
-      suggestedCount: suggestions.length,
-      suggestions
-    };
-  }
-  var init_template_wizard = __esm({
-    "src/model/template-wizard.ts"() {
-      "use strict";
-    }
-  });
-
   // src/model/calculator.ts
   function tokenize(expr) {
     const tokens = [];
@@ -7326,8 +7138,12 @@ ${codeText}`;
   function formatDateTime(date, pattern) {
     return pattern.replace(FORMAT_TOKEN_PATTERN, (token) => {
       var _a, _b;
+      if (token.startsWith("[") && token.endsWith("]")) {
+        return token.slice(1, -1);
+      }
       switch (token) {
         case "YYYY":
+        case "gggg":
           return String(date.getFullYear());
         case "YY":
           return String(date.getFullYear()).slice(-2);
@@ -7359,6 +7175,10 @@ ${codeText}`;
           return (_a = WEEKDAYS_FULL_ZH[date.getDay()]) != null ? _a : "";
         case "ddd":
           return (_b = WEEKDAYS_ZH[date.getDay()]) != null ? _b : "";
+        case "ww":
+          return pad(getIsoWeekNumber(date));
+        case "w":
+          return String(getIsoWeekNumber(date));
         case "A":
           return date.getHours() < 12 ? "\u4E0A\u5348" : "\u4E0B\u5348";
         case "a":
@@ -9450,10 +9270,27 @@ ${codeText}`;
   }
   function applyPlaceholders(text, now, enabled, doc) {
     if (!enabled || !text) return text;
-    return text.replace(PLACEHOLDER_PATTERN, (match, kind, arg) => {
+    let result = text.replace(PLACEHOLDER_PATTERN, (match, kind, arg) => {
       var _a;
       return (_a = resolvePlaceholder(kind, arg, now, doc)) != null ? _a : match;
     });
+    result = result.replace(/\{\{date([+-]\d{1,4}[dwmy])\}\}/g, (_match, offset) => {
+      var _a;
+      return (_a = resolveDateArg(now, offset)) != null ? _a : _match;
+    });
+    result = result.replace(/\{\{date:([^}]+)\}\}/g, (_match, formatPattern) => {
+      const trimmed = formatPattern.trim();
+      return resolveDateArg(now, trimmed) || formatDateTime(now, trimmed) || _match;
+    });
+    result = result.replace(/\{\{doc\.title\}\}/g, () => {
+      var _a;
+      return (_a = doc == null ? void 0 : doc.title) != null ? _a : "";
+    });
+    result = result.replace(/\{\{doc\.path\}\}/g, () => {
+      var _a;
+      return (_a = doc == null ? void 0 : doc.path) != null ? _a : "";
+    });
+    return result;
   }
   function listPlaceholders(text) {
     const kinds = [];
@@ -9523,7 +9360,7 @@ ${codeText}`;
         friday: 5,
         saturday: 6
       };
-      FORMAT_TOKEN_PATTERN = /YYYY|YY|MM|M|DD|D|HH|H|hh|h|mm|m|ss|s|dddd|ddd|A|a/g;
+      FORMAT_TOKEN_PATTERN = /YYYY|YY|gggg|MM|M|DD|D|HH|H|hh|h|mm|m|ss|s|dddd|ddd|ww|w|A|a|\[[^\]]*\]/g;
       UNAMBIGUOUS_CHARS = "23456789abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ";
       PWD_LOWER = "abcdefghjkmnpqrstuvwxyz";
       PWD_UPPER = "ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -9531,6 +9368,230 @@ ${codeText}`;
       PWD_SYMBOLS = "!@#$%^&*()_+~=";
       PWD_HEX = "0123456789abcdef";
       DANGEROUS_QUANTIFIER_PATTERN = /(\+|\*|\{\d+,?\d*\})\s*(\+|\*|\{\d+,?\d*\})|\([^)]*(\+|\*)[^)]*\)\s*(\+|\*)/;
+    }
+  });
+
+  // src/model/variables.ts
+  function parseAskField(rawName, rawOptions) {
+    var _a, _b, _c, _d;
+    let name = rawName.trim().slice(0, LIMITS.tag);
+    let defaultValue;
+    const eqIdx = name.indexOf("=");
+    if (eqIdx !== -1) {
+      defaultValue = name.slice(eqIdx + 1).trim().slice(0, LIMITS.askValueChars);
+      name = name.slice(0, eqIdx).trim().slice(0, LIMITS.tag);
+    }
+    if (!name) return null;
+    let isMulti = false;
+    let cleanRawOptions = rawOptions != null ? rawOptions : "";
+    if (cleanRawOptions.includes("|")) {
+      const parts = cleanRawOptions.split("|");
+      const suffix = (_b = (_a = parts[parts.length - 1]) == null ? void 0 : _a.trim().toLowerCase()) != null ? _b : "";
+      if (["multi", "multiple", "checkboxes", "mselect", "\u591A\u9009"].includes(suffix)) {
+        isMulti = true;
+        cleanRawOptions = parts.slice(0, parts.length - 1).join("|");
+      }
+    } else if (/^(?:multi|multiple|多选)\s*[:：]/i.test(cleanRawOptions)) {
+      isMulti = true;
+      cleanRawOptions = cleanRawOptions.replace(/^(?:multi|multiple|多选)\s*[:：]/i, "");
+    }
+    const options = cleanRawOptions.split(/[,，、|]/).map((s) => s.trim().slice(0, LIMITS.tag)).filter(Boolean).slice(0, 16);
+    if (isMulti && options.length > 0) {
+      return { name, kind: "multi", options, ...defaultValue ? { defaultValue } : {} };
+    }
+    const firstOpt = (_d = (_c = options[0]) == null ? void 0 : _c.toLowerCase()) != null ? _d : "";
+    if (options.length === 1 && firstOpt === "date") return { name, kind: "date", options: [], ...defaultValue ? { defaultValue } : {} };
+    if (options.length === 1 && firstOpt === "textarea") return { name, kind: "textarea", options: [], ...defaultValue ? { defaultValue } : {} };
+    if (options.length === 1 && ["toggle", "checkbox", "switch", "bool", "\u5F00\u5173"].includes(firstOpt)) {
+      return { name, kind: "toggle", options: [], ...defaultValue ? { defaultValue } : {} };
+    }
+    if (options.length >= 2) return { name, kind: "select", options, ...defaultValue ? { defaultValue } : {} };
+    if (options.length === 1 && !defaultValue) {
+      defaultValue = options[0];
+    }
+    return { name, kind: "text", options: [], ...defaultValue ? { defaultValue } : {} };
+  }
+  function askFieldTag(field) {
+    const nameWithDef = field.defaultValue && field.kind === "text" && field.options.length === 0 ? `${field.name}=${field.defaultValue}` : field.name;
+    if (field.kind === "text") return field.defaultValue && field.options.length === 0 ? `{{xlc:ask:${nameWithDef}}}` : `{{xlc:ask:${field.name}}}`;
+    if (field.kind === "select") return `{{xlc:ask:${field.name}|${field.options.join(",")}}}`;
+    if (field.kind === "multi") return `{{xlc:ask:${field.name}|${field.options.join(",")}|multi}}`;
+    if (field.kind === "toggle") return field.defaultValue ? `{{xlc:ask:${field.name}=${field.defaultValue}|toggle}}` : `{{xlc:ask:${field.name}|toggle}}`;
+    return `{{xlc:ask:${field.name}|${field.kind}}}`;
+  }
+  function listAskFields(text) {
+    var _a;
+    if (!text) return [];
+    const fields = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const match of text.matchAll(ASK_PATTERN)) {
+      const field = parseAskField((_a = match[1]) != null ? _a : "", match[2]);
+      if (!field || seen.has(field.name)) continue;
+      seen.add(field.name);
+      fields.push(field);
+      if (fields.length >= 16) break;
+    }
+    return fields;
+  }
+  function countAskFields(text) {
+    return listAskFields(text).length;
+  }
+  function cleanFillValue(v) {
+    return (v != null ? v : "").trim().slice(0, LIMITS.askValueChars);
+  }
+  function expandAsks(text, fills) {
+    if (!text) return text;
+    return text.replace(ASK_PATTERN, (_match, rawName, rawOptions) => {
+      var _a, _b, _c;
+      const field = parseAskField(rawName, rawOptions);
+      if (!field) return _match;
+      if (field.kind === "toggle") {
+        if (Object.prototype.hasOwnProperty.call(fills, field.name)) {
+          const filled2 = (_b = (_a = fills[field.name]) == null ? void 0 : _a.trim()) != null ? _b : "";
+          if (filled2 === "" || filled2 === "false" || filled2 === "0" || filled2 === "\u5426") {
+            return "";
+          }
+          return cleanFillValue(filled2 === "true" || filled2 === "\u662F" ? field.defaultValue || "\u662F" : filled2);
+        }
+        if (field.defaultValue) return cleanFillValue(field.defaultValue);
+        return "";
+      }
+      const filled = Object.prototype.hasOwnProperty.call(fills, field.name) ? cleanFillValue((_c = fills[field.name]) != null ? _c : "") : "";
+      if (filled) return filled;
+      if (field.defaultValue) return cleanFillValue(field.defaultValue);
+      return `__${field.name}__`;
+    });
+  }
+  function applyAskDefaults(text) {
+    return expandAsks(text, {});
+  }
+  function stripCursorToken(text) {
+    if (!text) return "";
+    return text.replace(/\{\{cursor\}\}|\{\{xlc:cursor\}\}|\$\|\$/g, "");
+  }
+  function hasCursorToken(text) {
+    if (!text) return false;
+    return text.includes("{{cursor}}") || text.includes("{{xlc:cursor}}") || text.includes("$|$");
+  }
+  function listSnippetRefs(text) {
+    var _a;
+    if (!text || !text.includes("{{xlc:snippet:")) return [];
+    const titles = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const match of text.matchAll(SNIPPET_PATTERN)) {
+      const title = ((_a = match[1]) != null ? _a : "").trim().slice(0, LIMITS.title);
+      if (!title || seen.has(title)) continue;
+      seen.add(title);
+      titles.push(title);
+      if (titles.length >= 16) break;
+    }
+    return titles;
+  }
+  function stripAllVariables(text, useDefault = true) {
+    if (!text) return "";
+    let res = text.replace(ASK_PATTERN, (_m, rawName, rawOptions) => {
+      const field = parseAskField(rawName, rawOptions);
+      if (!field) return "";
+      return useDefault && field.defaultValue ? field.defaultValue : "";
+    });
+    res = stripCursorToken(res);
+    res = res.replace(/\{\{(?:xlc:[^}]*|date[^}]*|time[^}]*|datetime[^}]*|doc\.[^}]*|clipboard)\}\}/g, "");
+    return res;
+  }
+  function hasDynamicMacros(text) {
+    if (!text) return false;
+    if (text.includes("$|$")) return true;
+    if (!text.includes("{{")) return false;
+    return hasCursorToken(text) || countAskFields(text) > 0 || /\{\{(?:xlc:|date|time|datetime|input:|select:|choice:|clipboard|cursor|doc\.)/i.test(text);
+  }
+  function expandMacroPreview(text, now = /* @__PURE__ */ new Date(), doc) {
+    if (!text) return "";
+    let out = expandAsks(text, {});
+    out = stripCursorToken(out);
+    out = applyPlaceholders(out, now, true, doc);
+    out = out.replace(/\{\{date\}\}/g, () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`);
+    out = out.replace(/\{\{time\}\}/g, () => `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    out = out.replace(/\{\{datetime\}\}/g, () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    out = out.replaceAll("{{xlc:clipboard}}", "\uFF08\u526A\u8D34\u677F\u5185\u5BB9\uFF09").replaceAll("{{clipboard}}", "\uFF08\u526A\u8D34\u677F\u5185\u5BB9\uFF09");
+    if (out.includes("{{xlc:checkin:today}}")) {
+      out = out.replaceAll("{{xlc:checkin:today}}", "\u2713 \u4ECA\u65E5\u6253\u5361\u5DF2\u5B8C\u6210");
+    }
+    if (out.includes("{{xlc:butler:today}}")) {
+      out = out.replaceAll("{{xlc:butler:today}}", "\u4ECA\u65E5\u4EE3\u529E\u4E00\u89C8\uFF1A\n1. \u56E2\u961F\u5468\u4F1A\n2. \u4EE3\u7801\u8BC4\u5BA1");
+    }
+    return out;
+  }
+  var ASK_PATTERN, SNIPPET_PATTERN;
+  var init_variables = __esm({
+    "src/model/variables.ts"() {
+      "use strict";
+      init_constants();
+      init_placeholders();
+      ASK_PATTERN = /\{\{(?:xlc:ask:|input:|select:|choice:)([^:|}]+)(?:[:|]([^}]*))?\}\}/g;
+      SNIPPET_PATTERN = /\{\{xlc:snippet:([^}]+)\}\}/g;
+    }
+  });
+
+  // src/model/template-wizard.ts
+  function autoParameterizeText(text) {
+    if (!text || !text.trim()) return { result: text != null ? text : "", suggestedCount: 0, suggestions: [] };
+    const suggestions = [];
+    let processed = text;
+    processed = processed.replace(/(?<!\d)(1[3-9]\d{9})(?!\d)/g, (match, _phone, offset) => {
+      suggestions.push({
+        original: match,
+        suggestedTag: "{{xlc:ask:\u624B\u673A\u53F7}}",
+        fieldLabel: "\u624B\u673A\u53F7",
+        index: offset
+      });
+      return "{{xlc:ask:\u624B\u673A\u53F7}}";
+    });
+    processed = processed.replace(/\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/g, (match, _email, offset) => {
+      suggestions.push({
+        original: match,
+        suggestedTag: "{{xlc:ask:\u90AE\u7BB1}}",
+        fieldLabel: "\u90AE\u7BB1",
+        index: offset
+      });
+      return "{{xlc:ask:\u90AE\u7BB1}}";
+    });
+    processed = processed.replace(/(?<!\d)(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)(?!\d)/g, (match, _date, offset) => {
+      suggestions.push({
+        original: match,
+        suggestedTag: "{{xlc:date}}",
+        fieldLabel: "\u5F53\u524D\u65E5\u671F",
+        index: offset
+      });
+      return "{{xlc:date}}";
+    });
+    processed = processed.replace(/([￥$]\s*\d+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?\s*元)/g, (match, _amount, offset) => {
+      suggestions.push({
+        original: match,
+        suggestedTag: "{{xlc:ask:\u91D1\u989D}}",
+        fieldLabel: "\u91D1\u989D",
+        index: offset
+      });
+      return "{{xlc:ask:\u91D1\u989D}}";
+    });
+    processed = processed.replace(/(尊敬的)?([^\s，,。\n]{1,4})(经理|总|老师|女士|先生|同学)(您好|你好)?/g, (match, prefix, _name, title, greeting, offset) => {
+      const replacement = `${prefix || ""}{{xlc:ask:\u59D3\u540D}}${title}${greeting || ""}`;
+      suggestions.push({
+        original: match,
+        suggestedTag: replacement,
+        fieldLabel: "\u59D3\u540D",
+        index: offset
+      });
+      return replacement;
+    });
+    return {
+      result: processed,
+      suggestedCount: suggestions.length,
+      suggestions
+    };
+  }
+  var init_template_wizard = __esm({
+    "src/model/template-wizard.ts"() {
+      "use strict";
     }
   });
 
@@ -14447,6 +14508,26 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
     }
     return matched;
   }
+  function findExactShortcodeMatch(entries, queryText) {
+    var _a;
+    const raw = (queryText != null ? queryText : "").trim().toLowerCase();
+    if (!raw) return null;
+    const clean = raw.startsWith(":") ? raw : ":" + raw;
+    let matched = null;
+    let matchCount = 0;
+    for (const entry of entries) {
+      const sc = ((_a = entry.shortcode) != null ? _a : "").trim().toLowerCase();
+      if (sc && (sc === clean || sc === raw)) {
+        matchCount++;
+        if (matchCount === 1) {
+          matched = entry;
+        } else {
+          return null;
+        }
+      }
+    }
+    return matched;
+  }
   var DEFAULT_RECENCY_HALF_LIFE_MS, SEARCH_TOKEN_DELIMITER;
   var init_search = __esm({
     "src/model/search.ts"() {
@@ -15932,6 +16013,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
         itemType: item.itemType,
         title: item.title,
         alias: item.alias,
+        ...item.shortcode ? { shortcode: item.shortcode } : {},
         tags: Array.isArray(item.tags) ? [...item.tags] : [],
         category: item.category,
         kramdown: body,
@@ -16067,7 +16149,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
     if (typeof obj.kramdown !== "string" || obj.kramdown.length > LIMITS.contentChars) return null;
     if (!isItemType(obj.itemType)) return null;
     const sourceRaw = (_a = obj.source) != null ? _a : {};
-    const known = ["id", "itemType", "title", "alias", "tags", "category", "kramdown", "source", "url", "targetBlockId", "createdAt", "updatedAt"];
+    const known = ["id", "itemType", "title", "alias", "shortcode", "tags", "category", "kramdown", "source", "url", "targetBlockId", "createdAt", "updatedAt"];
     const extensions = /* @__PURE__ */ Object.create(null);
     for (const [k, v] of Object.entries(obj)) {
       if (!known.includes(k)) extensions[k] = v;
@@ -16076,11 +16158,13 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
     const tags = Array.isArray(obj.tags) ? obj.tags.filter((t) => typeof t === "string").slice(0, LIMITS.tags) : [];
     const url = str(obj.url, 2048);
     if (url && !isSafeHttpUrl(url)) return null;
+    const shortcode = str(obj.shortcode, LIMITS.shortcode);
     return {
       id: obj.id,
       itemType: obj.itemType,
       title: str(obj.title, LIMITS.title),
       alias: str(obj.alias, LIMITS.alias),
+      ...shortcode ? { shortcode } : {},
       tags,
       category: str(obj.category, LIMITS.category),
       kramdown: obj.kramdown,
@@ -26280,6 +26364,76 @@ fi`;
       container.appendChild(el);
     }
   }
+  function renderDualMacroPreview(container, rawTemplateText, expandedText, itemType, labels = {}) {
+    const doc = container.ownerDocument || document;
+    container.textContent = "";
+    const dualWrap = doc.createElement("div");
+    dualWrap.className = "xlc-preview-dual";
+    if (typeof dualWrap.setAttribute === "function") {
+      dualWrap.setAttribute("role", "region");
+      dualWrap.setAttribute("aria-label", "\u5B8F\u6A21\u677F\u6E90\u7801\u4E0E\u5C55\u5F00\u6548\u679C\u53CC\u6001\u5B9E\u65F6\u9884\u89C8");
+    }
+    const sourceCard = doc.createElement("div");
+    sourceCard.className = "xlc-preview-card xlc-preview-card--source";
+    if (typeof sourceCard.setAttribute === "function") {
+      sourceCard.setAttribute("role", "region");
+      sourceCard.setAttribute("aria-label", labels.templateSource || "\u6A21\u677F\u6E90\u7801");
+    }
+    const sourceHead = doc.createElement("div");
+    sourceHead.className = "xlc-preview-card-head";
+    const sourceTitle = doc.createElement("span");
+    sourceTitle.className = "xlc-preview-card-title";
+    if (typeof sourceTitle.setAttribute === "function") {
+      sourceTitle.setAttribute("role", "heading");
+      sourceTitle.setAttribute("aria-level", "3");
+    }
+    sourceTitle.textContent = `\u{1F4DD} ${labels.templateSource || "\u6A21\u677F\u6E90\u7801"}`;
+    const sourceBadge = doc.createElement("span");
+    sourceBadge.className = "xlc-preview-card-pill";
+    sourceBadge.textContent = "RAW";
+    sourceHead.appendChild(sourceTitle);
+    sourceHead.appendChild(sourceBadge);
+    sourceCard.appendChild(sourceHead);
+    const sourcePre = doc.createElement("pre");
+    sourcePre.className = "xlc-preview-source-code";
+    sourcePre.tabIndex = 0;
+    if (typeof sourcePre.setAttribute === "function") {
+      sourcePre.setAttribute("role", "region");
+      sourcePre.setAttribute("aria-label", "\u6A21\u677F\u6E90\u7801\u6587\u672C");
+    }
+    const sourceCode = doc.createElement("code");
+    sourceCode.textContent = rawTemplateText;
+    sourcePre.appendChild(sourceCode);
+    sourceCard.appendChild(sourcePre);
+    dualWrap.appendChild(sourceCard);
+    const expandedCard = doc.createElement("div");
+    expandedCard.className = "xlc-preview-card xlc-preview-card--expanded";
+    if (typeof expandedCard.setAttribute === "function") {
+      expandedCard.setAttribute("role", "region");
+      expandedCard.setAttribute("aria-label", labels.expandedEffect || "\u5C55\u5F00\u540E\u771F\u5B9E\u6548\u679C");
+    }
+    const expandedHead = doc.createElement("div");
+    expandedHead.className = "xlc-preview-card-head";
+    const expandedTitle = doc.createElement("span");
+    expandedTitle.className = "xlc-preview-card-title";
+    if (typeof expandedTitle.setAttribute === "function") {
+      expandedTitle.setAttribute("role", "heading");
+      expandedTitle.setAttribute("aria-level", "3");
+    }
+    expandedTitle.textContent = `\u26A1 ${labels.expandedEffect || "\u5C55\u5F00\u540E\u771F\u5B9E\u6548\u679C"}`;
+    const expandedBadge = doc.createElement("span");
+    expandedBadge.className = "xlc-preview-card-pill xlc-preview-card-pill--live";
+    expandedBadge.textContent = "LIVE";
+    expandedHead.appendChild(expandedTitle);
+    expandedHead.appendChild(expandedBadge);
+    expandedCard.appendChild(expandedHead);
+    const expandedBody = doc.createElement("div");
+    expandedBody.className = "xlc-preview-expanded-body";
+    renderSafePreview(expandedBody, expandedText, itemType);
+    expandedCard.appendChild(expandedBody);
+    dualWrap.appendChild(expandedCard);
+    container.appendChild(dualWrap);
+  }
 
   // src/ui/dialog.ts
   init_hierarchy();
@@ -28048,12 +28202,21 @@ fi`;
         title.appendChild(surroundBadge);
       }
       const cleanQuery = this.lastQueryText.trim().toLowerCase();
-      if (cleanQuery && entry.alias && entry.alias.trim().toLowerCase() === cleanQuery) {
+      const isShortcodeHit = Boolean(cleanQuery && entry.shortcode && (entry.shortcode.trim().toLowerCase() === cleanQuery || entry.shortcode.trim().toLowerCase() === ":" + cleanQuery));
+      const isAliasHit = Boolean(cleanQuery && entry.alias && entry.alias.trim().toLowerCase() === cleanQuery);
+      if (isShortcodeHit || isAliasHit) {
         const directBadge = document.createElement("span");
         directBadge.className = "xlc-badge xlc-badge--direct";
         directBadge.textContent = "\u26A1 Tab\u76F4\u8FBE";
-        directBadge.title = "\u552F\u4E00\u522B\u540D\u7CBE\u786E\u5339\u914D\uFF1A\u6309 Tab \u6216 Enter \u6781\u901F\u63D2\u5165";
+        directBadge.title = isShortcodeHit ? "\u7B80\u7801\u552F\u4E00\u547D\u4E2D\uFF1A\u6309 Tab \u6216 Enter \u6781\u901F\u63D2\u5165" : "\u552F\u4E00\u522B\u540D\u7CBE\u786E\u5339\u914D\uFF1A\u6309 Tab \u6216 Enter \u6781\u901F\u63D2\u5165";
         title.appendChild(directBadge);
+      }
+      if (entry.shortcode) {
+        const scBadge = document.createElement("span");
+        scBadge.className = "xlc-badge xlc-badge--shortcode";
+        scBadge.textContent = entry.shortcode;
+        scBadge.title = `\u7B80\u7801\uFF1A\u8F93\u5165 ${entry.shortcode} \u89E6\u53D1`;
+        title.appendChild(scBadge);
       }
       const titleText = document.createElement("span");
       titleText.className = "xlc-row-titletext";
@@ -29226,7 +29389,21 @@ fi`;
         paneBody.classList.toggle("xlc-pane-body--muted", finalText === this.deps.t("previewUnavailable"));
         if (text) {
           try {
-            renderSafePreview(paneBody, text, entry == null ? void 0 : entry.itemType);
+            if ((entry == null ? void 0 : entry.itemType) !== "code" && hasDynamicMacros(text)) {
+              const expanded = expandMacroPreview(text);
+              renderDualMacroPreview(
+                paneBody,
+                text,
+                expanded,
+                entry == null ? void 0 : entry.itemType,
+                {
+                  templateSource: this.deps.t("previewTemplateSource") || "\u6A21\u677F\u6E90\u7801",
+                  expandedEffect: this.deps.t("previewExpandedEffect") || "\u5C55\u5F00\u540E\u771F\u5B9E\u6548\u679C"
+                }
+              );
+            } else {
+              renderSafePreview(paneBody, text, entry == null ? void 0 : entry.itemType);
+            }
           } catch {
             paneBody.textContent = finalText;
           }
@@ -31891,7 +32068,7 @@ ${progress.progressBar}`);
         const active2 = document.activeElement;
         const input2 = root.querySelector(".xlc-search-input");
         if (input2 && active2 === input2 && !e.shiftKey) {
-          const exactMatch = findExactAliasMatch(this.results, input2.value);
+          const exactMatch = findExactShortcodeMatch(this.results, input2.value) || findExactAliasMatch(this.results, input2.value);
           if (exactMatch && !this.primaryBusy && !this.varFormOpen) {
             e.preventDefault();
             await this.runPrimary(exactMatch);
@@ -34705,14 +34882,14 @@ ${details.join("\n")}` : ""}`;
         }
         const doc = docInfo ? { ...docInfo, selection: selectionText.slice(0, 4e3) } : selectionText ? { title: "", path: "", selection: selectionText.slice(0, 4e3) } : null;
         let output = applyPlaceholders(text, this.placeholders.now(), true, doc);
-        if (output.includes("{{xlc:clipboard}}") && this.placeholders.clipboard) {
+        if ((output.includes("{{xlc:clipboard}}") || output.includes("{{clipboard}}")) && this.placeholders.clipboard) {
           let clipboardText = "";
           try {
             clipboardText = (_b = await this.placeholders.clipboard()) != null ? _b : "";
           } catch {
             clipboardText = "";
           }
-          output = output.replaceAll("{{xlc:clipboard}}", clipboardText.slice(0, 4e3));
+          output = output.replaceAll("{{xlc:clipboard}}", clipboardText.slice(0, 4e3)).replaceAll("{{clipboard}}", clipboardText.slice(0, 4e3));
         }
         if (output.includes("{{xlc:checkin:today}}")) {
           const checkinSummaryText = await callBridge(
@@ -34986,6 +35163,7 @@ ${details.join("\n")}` : ""}`;
       itemType: item.itemType,
       title: item.title,
       alias: item.alias,
+      shortcode: item.shortcode,
       tags: item.tags,
       category: item.category,
       summary: item.summary,
@@ -35763,6 +35941,7 @@ ${details.join("\n")}` : ""}`;
       };
       if (input.title) attrs[ATTR.title] = input.title.slice(0, LIMITS.title);
       if (input.alias) attrs[ATTR.alias] = input.alias.slice(0, LIMITS.alias);
+      if (input.shortcode) attrs[ATTR.shortcode] = cleanShortcode(input.shortcode);
       if ((_c = input.tags) == null ? void 0 : _c.length) attrs[ATTR.tags] = input.tags.slice(0, LIMITS.tags).join(",");
       if (input.category) attrs[ATTR.category] = input.category.slice(0, LIMITS.category);
       if (input.url) {
@@ -35951,6 +36130,7 @@ ${details.join("\n")}` : ""}`;
       };
       if (patch.title !== void 0) attrs[ATTR.title] = patch.title.slice(0, LIMITS.title);
       if (patch.alias !== void 0) attrs[ATTR.alias] = patch.alias.slice(0, LIMITS.alias);
+      if (patch.shortcode !== void 0) attrs[ATTR.shortcode] = cleanShortcode(patch.shortcode);
       if (patch.tags !== void 0) attrs[ATTR.tags] = patch.tags.slice(0, LIMITS.tags).join(",");
       if (patch.category !== void 0) attrs[ATTR.category] = patch.category.slice(0, LIMITS.category);
       if (patch.url !== void 0) {
@@ -36360,6 +36540,8 @@ ${details.join("\n")}` : ""}`;
     providerUnavailable: "\u5185\u5BB9\u6765\u6E90 %s \u6682\u4E0D\u53EF\u7528",
     unknownType: "\u672A\u77E5\u7C7B\u578B",
     previewUnavailable: "\u6682\u65E0\u9884\u89C8",
+    previewTemplateSource: "\u6A21\u677F\u6E90\u7801",
+    previewExpandedEffect: "\u5C55\u5F00\u540E\u771F\u5B9E\u6548\u679C",
     previewNoResult: "\u9009\u62E9\u5DE6\u4FA7\u6761\u76EE\u540E\uFF0C\u8FD9\u91CC\u4F1A\u663E\u793A\u9884\u89C8",
     usageHint: "\u2191 \u2193 \u9009\u62E9 \xB7 Enter \u63D2\u5165 \xB7 Ctrl/\u2318 + Enter \u590D\u5236 \xB7 Alt + 1-9 \u5FEB\u901F\u63D2\u5165 \xB7 Esc \u5173\u95ED",
     usageHintMobile: "\u70B9\u6309\u9009\u62E9\u6761\u76EE\uFF0C\u518D\u70B9\u5E95\u680F\u4E3B\u6309\u94AE\u4F7F\u7528 \xB7 \u957F\u6309\u67E5\u770B\u64CD\u4F5C",

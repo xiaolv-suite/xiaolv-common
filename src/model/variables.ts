@@ -8,6 +8,7 @@
 // （深度 ≤3、环检测；此处只提供语法模式与光标/检测工具）。
 
 import {LIMITS} from "../constants";
+import {applyPlaceholders} from "./placeholders";
 
 export type AskFieldKind = "text" | "select" | "date" | "textarea" | "toggle" | "multi";
 
@@ -21,8 +22,8 @@ export interface AskField {
     defaultValue?: string;
 }
 
-// 名称禁 | 与 }；选项段不含 }。懒惰量防跨占位符误吞。
-const ASK_PATTERN = /\{\{xlc:ask:([^|}]+)(?:\|([^}]*))?\}\}/g;
+// 名称禁 | 与 }；选项段不含 }。支持 {{xlc:ask:...}} 及 Espanso / Templater 风格 {{input:...}}、{{select:...}}、{{choice:...}}。
+export const ASK_PATTERN = /\{\{(?:xlc:ask:|input:|select:|choice:)([^:|}]+)(?:[:|]([^}]*))?\}\}/g;
 
 export function parseAskField(rawName: string, rawOptions: string | undefined): AskField | null {
     let name = rawName.trim().slice(0, LIMITS.tag);
@@ -48,7 +49,7 @@ export function parseAskField(rawName: string, rawOptions: string | undefined): 
     }
 
     const options = cleanRawOptions
-        .split(/[,，、]/)
+        .split(/[,，、|]/)
         .map((s) => s.trim().slice(0, LIMITS.tag))
         .filter(Boolean)
         .slice(0, 16);
@@ -137,19 +138,55 @@ export function applyAskDefaults(text: string): string {
     return expandAsks(text, {});
 }
 
-/** {{xlc:cursor}} 光标落点标记：宿主官方 API 无法定位文内光标，插入时移除标记（光标自然落在插入内容之后）。 */
+/** {{cursor}} / {{xlc:cursor}} / $|$ 光标落点标记（对标 Espanso 与 Templater 核心体验） */
 export const CURSOR_TOKEN = "{{xlc:cursor}}";
+export const CURSOR_TOKENS = ["{{cursor}}", "{{xlc:cursor}}", "$|$"] as const;
+
+/** 剥离全部光标占位符标记 */
+export function stripCursorToken(text: string): string {
+    if (!text) return "";
+    return text.replace(/\{\{cursor\}\}|\{\{xlc:cursor\}\}|\$\|\$/g, "");
+}
+
+/** 检测文本中是否包含任何光标锚点 */
+export function hasCursorToken(text: string): boolean {
+    if (!text) return false;
+    return text.includes("{{cursor}}") || text.includes("{{xlc:cursor}}") || text.includes("$|$");
+}
+
+export interface CursorPositionResult {
+    text: string;
+    cursorOffset: number | null;
+}
+
+/**
+ * 提取并剥离光标锚点，计算首个光标位置偏移（对标 Espanso $|$ 与 {{cursor}}）
+ */
+export function extractCursorPosition(text: string): CursorPositionResult {
+    if (!text) return {text: "", cursorOffset: null};
+    let firstIdx = -1;
+    let matchedToken = "";
+    for (const token of CURSOR_TOKENS) {
+        const idx = text.indexOf(token);
+        if (idx !== -1 && (firstIdx === -1 || idx < firstIdx)) {
+            firstIdx = idx;
+            matchedToken = token;
+        }
+    }
+    if (firstIdx === -1) {
+        return {text, cursorOffset: null};
+    }
+    const before = text.slice(0, firstIdx);
+    const after = text.slice(firstIdx + matchedToken.length);
+    const cleanedAfter = after.replace(/\{\{cursor\}\}|\{\{xlc:cursor\}\}|\$\|\$/g, "");
+    return {
+        text: before + cleanedAfter,
+        cursorOffset: before.length,
+    };
+}
 
 /** 片段引用语法（F5）：标题不含 }；展开语义见 library.expandSnippetRefs */
 export const SNIPPET_PATTERN = /\{\{xlc:snippet:([^}]+)\}\}/g;
-
-export function stripCursorToken(text: string): string {
-    return text.split(CURSOR_TOKEN).join("");
-}
-
-export function hasCursorToken(text: string): boolean {
-    return text.includes(CURSOR_TOKEN);
-}
 
 export interface SnippetRefDiagnosis {
     /** 引用的所有片段标题（去重，保留首次出现顺序，最多 16 个） */
@@ -205,17 +242,65 @@ export function diagnoseSnippetRefs(
 }
 
 /**
- * 剥离所有 {{xlc:...}} 变量与宏标记，有默认值取默认值，无默认值剥离为空白（或保留字段名）
+ * 剥离所有变量与宏标记，有默认值取默认值，无默认值剥离为空白（或保留字段名）
  */
 export function stripAllVariables(text: string, useDefault = true): string {
-    if (!text || !text.includes("{{xlc:")) return text ?? "";
+    if (!text) return "";
     let res = text.replace(ASK_PATTERN, (_m, rawName: string, rawOptions?: string) => {
         const field = parseAskField(rawName, rawOptions);
         if (!field) return "";
         return useDefault && field.defaultValue ? field.defaultValue : "";
     });
-    // 剥离其他 {{xlc:date...}}, {{xlc:cursor}}, {{xlc:selection}} 等占位符
-    res = res.replace(/\{\{xlc:[^}]*\}\}/g, "");
+    // 剥离光标锚点与占位符
+    res = stripCursorToken(res);
+    res = res.replace(/\{\{(?:xlc:[^}]*|date[^}]*|time[^}]*|datetime[^}]*|doc\.[^}]*|clipboard)\}\}/g, "");
     return res;
+}
+
+/**
+ * 判断文本是否包含需要动态展开的宏（变量、占位符、日期偏移、光标锚点等）
+ */
+export function hasDynamicMacros(text: string): boolean {
+    if (!text) return false;
+    if (text.includes("$|$")) return true;
+    if (!text.includes("{{")) return false;
+    return (
+        hasCursorToken(text) ||
+        countAskFields(text) > 0 ||
+        /\{\{(?:xlc:|date|time|datetime|input:|select:|choice:|clipboard|cursor|doc\.)/i.test(text)
+    );
+}
+
+/**
+ * 展开宏预览真实效果（消除盲插焦虑）：
+ * 1. 变量用默认值或 __字段名__ 展开；
+ * 2. 占位符展开为真实日期、时间、文档信息；
+ * 3. 剪贴板/光标/生态宏安全示意化展开。
+ */
+export function expandMacroPreview(
+    text: string,
+    now: Date = new Date(),
+    doc?: {title: string; path: string} | null,
+): string {
+    if (!text) return "";
+    // 1. 展开交互式微表单字段（默认值或 __字段名__）
+    let out = expandAsks(text, {});
+    // 2. 剥离光标锚点
+    out = stripCursorToken(out);
+    // 3. 展开动态占位符（日期算术、时间、文档上下文、计算、UUID 等）
+    out = applyPlaceholders(out, now, true, doc);
+    out = out.replace(/\{\{date\}\}/g, () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`);
+    out = out.replace(/\{\{time\}\}/g, () => `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    out = out.replace(/\{\{datetime\}\}/g, () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    // 4. 替换剪贴板占位符为通用示意预览
+    out = out.replaceAll("{{xlc:clipboard}}", "（剪贴板内容）").replaceAll("{{clipboard}}", "（剪贴板内容）");
+    // 5. 替换生态宏占位符为示意内容
+    if (out.includes("{{xlc:checkin:today}}")) {
+        out = out.replaceAll("{{xlc:checkin:today}}", "✓ 今日打卡已完成");
+    }
+    if (out.includes("{{xlc:butler:today}}")) {
+        out = out.replaceAll("{{xlc:butler:today}}", "今日代办一览：\n1. 团队周会\n2. 代码评审");
+    }
+    return out;
 }
 

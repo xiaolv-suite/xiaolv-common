@@ -804,3 +804,105 @@ export function renderSafePreview(
         container.appendChild(el);
     }
 }
+
+export interface DualMacroPreviewLabels {
+    templateSource?: string;
+    expandedEffect?: string;
+}
+
+/**
+ * 宏条目双态实时预览渲染器（消除盲插焦虑）：
+ * 同时展示「模板源码」与「展开后真实效果」
+ */
+export function renderDualMacroPreview(
+    container: HTMLElement,
+    rawTemplateText: string,
+    expandedText: string,
+    itemType: ItemType | undefined,
+    labels: DualMacroPreviewLabels = {},
+): void {
+    const doc = container.ownerDocument || document;
+    container.textContent = "";
+
+    const dualWrap = doc.createElement("div");
+    dualWrap.className = "xlc-preview-dual";
+    if (typeof dualWrap.setAttribute === "function") {
+        dualWrap.setAttribute("role", "region");
+        dualWrap.setAttribute("aria-label", "宏模板源码与展开效果双态实时预览");
+    }
+
+    // 1. 模板源码卡片
+    const sourceCard = doc.createElement("div");
+    sourceCard.className = "xlc-preview-card xlc-preview-card--source";
+    if (typeof sourceCard.setAttribute === "function") {
+        sourceCard.setAttribute("role", "region");
+        sourceCard.setAttribute("aria-label", labels.templateSource || "模板源码");
+    }
+
+    const sourceHead = doc.createElement("div");
+    sourceHead.className = "xlc-preview-card-head";
+
+    const sourceTitle = doc.createElement("span");
+    sourceTitle.className = "xlc-preview-card-title";
+    if (typeof sourceTitle.setAttribute === "function") {
+        sourceTitle.setAttribute("role", "heading");
+        sourceTitle.setAttribute("aria-level", "3");
+    }
+    sourceTitle.textContent = `📝 ${labels.templateSource || "模板源码"}`;
+
+    const sourceBadge = doc.createElement("span");
+    sourceBadge.className = "xlc-preview-card-pill";
+    sourceBadge.textContent = "RAW";
+
+    sourceHead.appendChild(sourceTitle);
+    sourceHead.appendChild(sourceBadge);
+    sourceCard.appendChild(sourceHead);
+
+    const sourcePre = doc.createElement("pre");
+    sourcePre.className = "xlc-preview-source-code";
+    sourcePre.tabIndex = 0;
+    if (typeof sourcePre.setAttribute === "function") {
+        sourcePre.setAttribute("role", "region");
+        sourcePre.setAttribute("aria-label", "模板源码文本");
+    }
+    const sourceCode = doc.createElement("code");
+    sourceCode.textContent = rawTemplateText;
+    sourcePre.appendChild(sourceCode);
+    sourceCard.appendChild(sourcePre);
+    dualWrap.appendChild(sourceCard);
+
+    // 2. 展开后真实效果卡片
+    const expandedCard = doc.createElement("div");
+    expandedCard.className = "xlc-preview-card xlc-preview-card--expanded";
+    if (typeof expandedCard.setAttribute === "function") {
+        expandedCard.setAttribute("role", "region");
+        expandedCard.setAttribute("aria-label", labels.expandedEffect || "展开后真实效果");
+    }
+
+    const expandedHead = doc.createElement("div");
+    expandedHead.className = "xlc-preview-card-head";
+
+    const expandedTitle = doc.createElement("span");
+    expandedTitle.className = "xlc-preview-card-title";
+    if (typeof expandedTitle.setAttribute === "function") {
+        expandedTitle.setAttribute("role", "heading");
+        expandedTitle.setAttribute("aria-level", "3");
+    }
+    expandedTitle.textContent = `⚡ ${labels.expandedEffect || "展开后真实效果"}`;
+
+    const expandedBadge = doc.createElement("span");
+    expandedBadge.className = "xlc-preview-card-pill xlc-preview-card-pill--live";
+    expandedBadge.textContent = "LIVE";
+
+    expandedHead.appendChild(expandedTitle);
+    expandedHead.appendChild(expandedBadge);
+    expandedCard.appendChild(expandedHead);
+
+    const expandedBody = doc.createElement("div");
+    expandedBody.className = "xlc-preview-expanded-body";
+    renderSafePreview(expandedBody, expandedText, itemType);
+    expandedCard.appendChild(expandedBody);
+    dualWrap.appendChild(expandedCard);
+
+    container.appendChild(dualWrap);
+}

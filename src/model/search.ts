@@ -46,6 +46,7 @@ export interface SearchContext {
 
 // 索引条目：内容真源在库文档，这里只允许有界摘要与元数据
 export type SearchEntry = Pick<CommonItem, "id" | "blockId" | "libraryDocId" | "itemType" | "title" | "alias" | "tags" | "category" | "summary" | "createdAt" | "updatedAt"> & {
+    shortcode?: string;
     /** 来源引用（失效检测预检用；不参与搜索打分，绝不出域给 AI） */
     sourceDocId?: string;
     sourceBlockId?: string;
@@ -210,6 +211,7 @@ function matchSingleToken(entry: SearchEntry, token: string): {score: number; ma
     if (expansions.length === 0) return null;
     const title = normalizeText(entry.title);
     const alias = normalizeText(entry.alias);
+    const shortcode = normalizeText(entry.shortcode);
     const tags = entry.tags.map(normalizeText);
     const category = normalizeText(entry.category);
     const summary = normalizeText(entry.summary);
@@ -227,6 +229,7 @@ function matchSingleToken(entry: SearchEntry, token: string): {score: number; ma
     for (const q of expansions.map(normalizeText)) {
         if (!q) continue;
         const candidates: Array<{score: number; matchedBy: string}> = [
+            {score: shortcode ? scoreHaystack(shortcode, q, 10, 5) : 0, matchedBy: "shortcode"},
             {score: scoreHaystack(title, q, 8, 3), matchedBy: "title"},
             {score: scoreHaystack(alias, q, 6, 2), matchedBy: "alias"},
             {score: Math.max(0, ...tags.map((t) => scoreHaystack(t, q, 4))), matchedBy: "tags"},
@@ -350,6 +353,9 @@ export const ALIAS_EXACT_MATCH_BOOST = 400;
 export const ALIAS_PREFIX_MATCH_BOOST = 200;
 export const ALIAS_PINYIN_EXACT_BOOST = 150;
 export const ALIAS_PINYIN_PREFIX_BOOST = 100;
+
+export const SHORTCODE_EXACT_MATCH_BOOST = 500;
+export const SHORTCODE_PREFIX_MATCH_BOOST = 250;
 
 export const TITLE_ACRONYM_EXACT_BOOST = 1.5;
 export const TITLE_ACRONYM_PREFIX_BOOST = 0.8;
@@ -481,6 +487,43 @@ export function calculateAliasBoost(entry: SearchEntry, rawQuery: string, tokens
 }
 
 /**
+ * 简码专属打分加权体系（对标 Espanso / Raycast 简码触发极速置顶）
+ * 1. 简码完全吻合（支持直接输入 :code 或忽略首冒号输入 code）：+500（最高优先级，确立绝对首位）
+ * 2. 简码前缀吻合：+250
+ */
+export function calculateShortcodeBoost(entry: SearchEntry, rawQuery: string, tokens: readonly string[]): number {
+    const sc = normalizeText(entry.shortcode);
+    if (!sc) return 0;
+    const cleanQuery = normalizeText(rawQuery);
+    const cleanTokens = tokens.map(normalizeText).filter(Boolean);
+    if (!cleanQuery && cleanTokens.length === 0) return 0;
+
+    const matchExact = (target: string): boolean => {
+        if (!target) return false;
+        if (cleanQuery && (target === cleanQuery || target === ":" + cleanQuery || ":" + target === cleanQuery)) return true;
+        return cleanTokens.some((t) => t === target || ":" + t === target || target === ":" + t);
+    };
+
+    const matchPrefix = (target: string): boolean => {
+        if (!target) return false;
+        if (cleanQuery && cleanQuery.length > 0) {
+            if (target.startsWith(cleanQuery)) return true;
+            if (target.startsWith(":" + cleanQuery)) return true;
+            if (cleanQuery.startsWith(":") && (":" + target).startsWith(cleanQuery)) return true;
+        }
+        return cleanTokens.some((t) => t.length > 0 && (target.startsWith(t) || target.startsWith(":" + t)));
+    };
+
+    if (matchExact(sc)) {
+        return SHORTCODE_EXACT_MATCH_BOOST;
+    }
+    if (matchPrefix(sc)) {
+        return SHORTCODE_PREFIX_MATCH_BOOST;
+    }
+    return 0;
+}
+
+/**
  * 单词/多词组合评分：标题×8（前缀+3）/ 别名×6（前缀+2）/ 标签×4 / 分类×4 / 摘要×2。
  * 单词走快速路径；空格/多维标点分隔的多词执行跨字段 AND 匹配并累加各词得分（ADR 0036 / T-0063 / T-0117）。
  * 集成别名与拼音全阶梯加权（ADR 0084 / T-0144）。
@@ -513,6 +556,13 @@ export function matchEntry(entry: SearchEntry, rawQuery: string): Omit<ScoredRes
         matchedBy = matchedBys.size === 1 ? (Array.from(matchedBys)[0] ?? "multi") : "multi";
     }
 
+    // 简码专属打分加权体系 (Espanso / Raycast 简码极速置顶)
+    const shortcodeBoost = calculateShortcodeBoost(entry, rawQuery, tokens);
+    totalScore += shortcodeBoost;
+    if (shortcodeBoost >= SHORTCODE_PREFIX_MATCH_BOOST && (matchedBy === "none" || matchedBy === "multi")) {
+        matchedBy = "shortcode";
+    }
+
     // ADR 0084 / T-0144: 别名专属打分加权体系 (Raycast / Alfred 别名置顶体验)
     const aliasBoost = calculateAliasBoost(entry, rawQuery, tokens);
     totalScore += aliasBoost;
@@ -536,7 +586,7 @@ export function passesFilters(entry: SearchEntry, query: SearchQuery, ctx: Searc
     if (query.scope === "favorites" && !ctx.favorites.has(entry.id)) return false;
     if (query.scope === "recent" && !ctx.recents.has(entry.id)) return false;
     if (query.excludeTokens && query.excludeTokens.length > 0) {
-        const fullHaystack = `${entry.title}\n${entry.alias}\n${entry.tags.join(" ")}\n${entry.category}\n${entry.summary}`.toLowerCase();
+        const fullHaystack = `${entry.title}\n${entry.alias}\n${entry.shortcode || ""}\n${entry.tags.join(" ")}\n${entry.category}\n${entry.summary}`.toLowerCase();
         for (const ex of query.excludeTokens) {
             if (fullHaystack.includes(ex)) return false;
         }
@@ -590,6 +640,10 @@ export function calculateFrecencyScore(count: number, lastUsedAt: number | undef
     return validCount * weight;
 }
 
+export function scoreFrecency(useCount: number, lastUsedAt: number | undefined, now: number = Date.now()): number {
+    return calculateFrecencyScore(useCount, lastUsedAt, now);
+}
+
 function compareResults(a: ScoredResult, b: ScoredResult, ctx: SearchContext): number {
     // 标题排序：仅在无关键词浏览（score 全 0）时生效，有关键词保持相关度优先
     if (!ctx.sort || ctx.sort === "manual") {
@@ -617,6 +671,10 @@ function compareResults(a: ScoredResult, b: ScoredResult, ctx: SearchContext): n
         if (rb !== ra) return rb - ra;
     }
     if (ctx.sort === "recent" && a.score === 0 && b.score === 0) {
+        const now = ctx.now || Date.now();
+        const fa = calculateFrecencyScore(ctx.usage?.get(a.entry.id) ?? 1, ctx.recents.get(a.entry.id), now);
+        const fb = calculateFrecencyScore(ctx.usage?.get(b.entry.id) ?? 1, ctx.recents.get(b.entry.id), now);
+        if (fb !== fa) return fb - fa;
         const ra = ctx.recents.get(a.entry.id) ?? 0;
         const rb = ctx.recents.get(b.entry.id) ?? 0;
         if (rb !== ra) return rb - ra;
@@ -690,9 +748,15 @@ export function listByScope(entries: readonly SearchEntry[], scope: "favorites" 
             .slice(0, cap)
             .map(({entry}) => entry);
     }
+    const now = ctx.now || Date.now();
     return entries
         .filter((e) => ctx.recents.has(e.id))
-        .sort((a, b) => (ctx.recents.get(b.id) ?? 0) - (ctx.recents.get(a.id) ?? 0))
+        .sort((a, b) => {
+            const fa = calculateFrecencyScore(ctx.usage?.get(a.id) ?? 1, ctx.recents.get(a.id), now);
+            const fb = calculateFrecencyScore(ctx.usage?.get(b.id) ?? 1, ctx.recents.get(b.id), now);
+            if (fb !== fa) return fb - fa;
+            return (ctx.recents.get(b.id) ?? 0) - (ctx.recents.get(a.id) ?? 0);
+        })
         .slice(0, cap);
 }
 
@@ -731,6 +795,34 @@ export function findExactAliasMatch(
                 matched = entry;
             } else {
                 return null; // 存在多条同名别名，产生歧义，放弃直达
+            }
+        }
+    }
+    return matched;
+}
+
+/**
+ * 唯一简码精确匹配查找（Espanso 风格 :shortcode 极速命中）
+ * 当查询词与某条目的简码（无论是否带前导冒号、去首尾空白、不区分大小写）完全相同时：
+ * 若命中且全局唯一，则返回该条目；若有多条同名简码或无命中，则返回 null（避免歧义误插）。
+ */
+export function findExactShortcodeMatch(
+    entries: readonly SearchEntry[],
+    queryText: string,
+): SearchEntry | null {
+    const raw = (queryText ?? "").trim().toLowerCase();
+    if (!raw) return null;
+    const clean = raw.startsWith(":") ? raw : ":" + raw;
+    let matched: SearchEntry | null = null;
+    let matchCount = 0;
+    for (const entry of entries) {
+        const sc = (entry.shortcode ?? "").trim().toLowerCase();
+        if (sc && (sc === clean || sc === raw)) {
+            matchCount++;
+            if (matchCount === 1) {
+                matched = entry;
+            } else {
+                return null; // 存在多条同名简码，产生歧义，放弃直达
             }
         }
     }

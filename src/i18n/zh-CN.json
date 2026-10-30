@@ -151,6 +151,8 @@
   "providerUnavailable": "内容来源 %s 暂不可用",
   "unknownType": "未知类型",
   "previewUnavailable": "暂无预览",
+  "previewTemplateSource": "模板源码",
+  "previewExpandedEffect": "展开后真实效果",
   "previewNoResult": "选择左侧条目后，这里会显示预览",
   "usageHint": "↑ ↓ 选择 · Enter 插入 · Ctrl/⌘ + Enter 复制 · Alt + 1-9 快速插入 · Esc 关闭",
   "usageHintMobile": "点按选择条目，再点底栏主按钮使用 · 长按查看操作",

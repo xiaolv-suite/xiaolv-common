@@ -83,8 +83,8 @@ const WEEKDAY_INDEX: Record<string, number> = {
     sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
 };
 
-// 格式化令牌：长优先匹配
-export const FORMAT_TOKEN_PATTERN = /YYYY|YY|MM|M|DD|D|HH|H|hh|h|mm|m|ss|s|dddd|ddd|A|a/g;
+// 格式化令牌：长优先匹配，支持 ISO 周次 ww/w、年 gggg 及转义方括号 [W]
+export const FORMAT_TOKEN_PATTERN = /YYYY|YY|gggg|MM|M|DD|D|HH|H|hh|h|mm|m|ss|s|dddd|ddd|ww|w|A|a|\[[^\]]*\]/g;
 
 function pad(n: number): string {
     return String(n).padStart(2, "0");
@@ -97,8 +97,12 @@ function renderDate(now: Date): string {
 /** 格式化日期时间对象，零依赖轻量替换 */
 export function formatDateTime(date: Date, pattern: string): string {
     return pattern.replace(FORMAT_TOKEN_PATTERN, (token) => {
+        if (token.startsWith("[") && token.endsWith("]")) {
+            return token.slice(1, -1);
+        }
         switch (token) {
-            case "YYYY": return String(date.getFullYear());
+            case "YYYY":
+            case "gggg": return String(date.getFullYear());
             case "YY": return String(date.getFullYear()).slice(-2);
             case "MM": return pad(date.getMonth() + 1);
             case "M": return String(date.getMonth() + 1);
@@ -114,6 +118,8 @@ export function formatDateTime(date: Date, pattern: string): string {
             case "s": return String(date.getSeconds());
             case "dddd": return WEEKDAYS_FULL_ZH[date.getDay()] ?? "";
             case "ddd": return WEEKDAYS_ZH[date.getDay()] ?? "";
+            case "ww": return pad(getIsoWeekNumber(date));
+            case "w": return String(getIsoWeekNumber(date));
             case "A": return date.getHours() < 12 ? "上午" : "下午";
             case "a": return date.getHours() < 12 ? "am" : "pm";
             default: return token;
@@ -2479,9 +2485,27 @@ export function resolvePlaceholder(
 /** 应用占位符替换（resolver 返回各 kind 的值）。enabled=false 时原文返回（一字不改）。 */
 export function applyPlaceholders(text: string, now: Date, enabled: boolean, doc?: {title: string; path: string; selection?: string} | null): string {
     if (!enabled || !text) return text;
-    return text.replace(PLACEHOLDER_PATTERN, (match, kind: string, arg?: string) => {
+    // 1. 标准 {{xlc:...}} 动态占位符替换
+    let result = text.replace(PLACEHOLDER_PATTERN, (match, kind: string, arg?: string) => {
         return resolvePlaceholder(kind, arg, now, doc) ?? match;
     });
+
+    // 2. 扩展 Templater / Espanso 相对日期偏移：{{date+Nd}} / {{date-Nd}} / {{date+1w}} / {{date+1m}} / {{date+1y}}
+    result = result.replace(/\{\{date([+-]\d{1,4}[dwmy])\}\}/g, (_match, offset: string) => {
+        return resolveDateArg(now, offset) ?? _match;
+    });
+
+    // 3. 扩展自定义日期格式化：{{date:FORMAT}}
+    result = result.replace(/\{\{date:([^}]+)\}\}/g, (_match, formatPattern: string) => {
+        const trimmed = formatPattern.trim();
+        return resolveDateArg(now, trimmed) || formatDateTime(now, trimmed) || _match;
+    });
+
+    // 4. 扩展当前文档上下文：{{doc.title}} 与 {{doc.path}}
+    result = result.replace(/\{\{doc\.title\}\}/g, () => doc?.title ?? "");
+    result = result.replace(/\{\{doc\.path\}\}/g, () => doc?.path ?? "");
+
+    return result;
 }
 
 /** 诊断：列出文本中出现的占位符种类（回执/提示/预取判定用） */

@@ -63,6 +63,7 @@ function toRef(item: Partial<CommonItem> & Pick<CommonItem, "id">): CommonItemRe
         title: item.title,
     };
     if (item.alias) ref.alias = item.alias;
+    if (item.shortcode) ref.shortcode = item.shortcode;
     if (item.tags && item.tags.length > 0) ref.tags = item.tags;
     if (item.category) ref.category = item.category;
     if (typeof item.varCount === "number") ref.varCount = item.varCount;

@@ -285,14 +285,14 @@ export class ActionExecutor {
                 ? {...docInfo, selection: selectionText.slice(0, 4000)}
                 : (selectionText ? {title: "", path: "", selection: selectionText.slice(0, 4000)} : null);
             let output = applyPlaceholders(text, this.placeholders.now(), true, doc);
-            if (output.includes("{{xlc:clipboard}}") && this.placeholders.clipboard) {
+            if ((output.includes("{{xlc:clipboard}}") || output.includes("{{clipboard}}")) && this.placeholders.clipboard) {
                 let clipboardText = "";
                 try {
                     clipboardText = (await this.placeholders.clipboard()) ?? "";
                 } catch {
                     clipboardText = "";
                 }
-                output = output.replaceAll("{{xlc:clipboard}}", clipboardText.slice(0, 4000));
+                output = output.replaceAll("{{xlc:clipboard}}", clipboardText.slice(0, 4000)).replaceAll("{{clipboard}}", clipboardText.slice(0, 4000));
             }
             if (output.includes("{{xlc:checkin:today}}")) {
                 const checkinSummaryText = await callBridge<any, string>(

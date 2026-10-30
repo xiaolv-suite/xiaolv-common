@@ -17,6 +17,7 @@ import {
 } from "../kernel/client";
 import {
     CommonItem,
+    cleanShortcode,
     deriveSummary,
     ISourceRef,
     ItemType,
@@ -170,6 +171,7 @@ function toSearchEntry(item: CommonItem): SearchEntry {
         itemType: item.itemType,
         title: item.title,
         alias: item.alias,
+        shortcode: item.shortcode,
         tags: item.tags,
         category: item.category,
         summary: item.summary,
@@ -189,6 +191,7 @@ export interface NewItemInput {
     logicalId?: string;
     title?: string;
     alias?: string;
+    shortcode?: string;
     tags?: string[];
     category?: string;
     url?: string;
@@ -1045,6 +1048,7 @@ export class LibraryService {
         };
         if (input.title) attrs[ATTR.title] = input.title.slice(0, LIMITS.title);
         if (input.alias) attrs[ATTR.alias] = input.alias.slice(0, LIMITS.alias);
+        if (input.shortcode) attrs[ATTR.shortcode] = cleanShortcode(input.shortcode);
         if (input.tags?.length) attrs[ATTR.tags] = input.tags.slice(0, LIMITS.tags).join(",");
         if (input.category) attrs[ATTR.category] = input.category.slice(0, LIMITS.category);
         if (input.url) {
@@ -1146,7 +1150,7 @@ export class LibraryService {
         return resolved;
     }
 
-    async updateItem(itemId: string, patch: Partial<Pick<NewItemInput, "title" | "alias" | "tags" | "category" | "markdown" | "url" | "targetBlockId">>, options: WriteOptions = {}): Promise<Receipt<{item: CommonItem}>> {
+    async updateItem(itemId: string, patch: Partial<Pick<NewItemInput, "title" | "alias" | "shortcode" | "tags" | "category" | "markdown" | "url" | "targetBlockId">>, options: WriteOptions = {}): Promise<Receipt<{item: CommonItem}>> {
         const idempotencyKey = options.idempotencyKey && options.idempotencyKey.length >= 8 && options.idempotencyKey.length <= 128
             ? options.idempotencyKey : "";
         const receiptKey = idempotencyKey ? `${itemId}:${idempotencyKey}` : "";
@@ -1232,7 +1236,7 @@ export class LibraryService {
         return receipt;
     }
 
-    private async updateItemUnlocked(itemId: string, patch: Partial<Pick<NewItemInput, "title" | "alias" | "tags" | "category" | "markdown" | "url" | "targetBlockId">>, options: WriteOptions = {}): Promise<Receipt<{item: CommonItem}>> {
+    private async updateItemUnlocked(itemId: string, patch: Partial<Pick<NewItemInput, "title" | "alias" | "shortcode" | "tags" | "category" | "markdown" | "url" | "targetBlockId">>, options: WriteOptions = {}): Promise<Receipt<{item: CommonItem}>> {
         if (typeof patch.markdown === "string" && patch.markdown.trim()) {
             const restriction = bodyWriteRestriction(patch.markdown);
             if (restriction) return fail("conflict", restriction);
@@ -1250,6 +1254,7 @@ export class LibraryService {
         };
         if (patch.title !== undefined) attrs[ATTR.title] = patch.title.slice(0, LIMITS.title);
         if (patch.alias !== undefined) attrs[ATTR.alias] = patch.alias.slice(0, LIMITS.alias);
+        if (patch.shortcode !== undefined) attrs[ATTR.shortcode] = cleanShortcode(patch.shortcode);
         if (patch.tags !== undefined) attrs[ATTR.tags] = patch.tags.slice(0, LIMITS.tags).join(",");
         if (patch.category !== undefined) attrs[ATTR.category] = patch.category.slice(0, LIMITS.category);
         if (patch.url !== undefined) {

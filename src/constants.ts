@@ -13,6 +13,7 @@ export const ATTR = {
     type: "custom-xlc-type",
     title: "custom-xlc-title",
     alias: "custom-xlc-alias",
+    shortcode: "custom-xlc-shortcode",
     tags: "custom-xlc-tags",
     category: "custom-xlc-category",
     srcDoc: "custom-xlc-src-doc",
@@ -31,6 +32,7 @@ export const ATTR = {
 export const LIMITS = {
     title: 512,
     alias: 256,
+    shortcode: 64,
     tag: 64,
     tags: 32,
     category: 64,

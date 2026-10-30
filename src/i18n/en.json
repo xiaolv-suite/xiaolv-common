@@ -151,6 +151,8 @@
   "providerUnavailable": "Content source %s is unavailable",
   "unknownType": "Unknown type",
   "previewUnavailable": "No preview",
+  "previewTemplateSource": "Template Source",
+  "previewExpandedEffect": "Live Expanded Effect",
   "previewNoResult": "Select an item on the left to preview it here",
   "usageHint": "↑ ↓ select · Enter insert · Ctrl/⌘ + Enter copy · Alt + 1-9 quick insert · Esc close",
   "usageHintMobile": "Tap to select, then use the primary footer button · long-press for actions",

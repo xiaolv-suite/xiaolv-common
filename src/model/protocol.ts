@@ -145,6 +145,7 @@ export interface CaptureQuoteInput {
     tags?: string[];
     category?: string;
     alias?: string;
+    shortcode?: string;
 }
 
 // ---- save() 协议输入（跨插件写入必须带正文；字段全部校验上界）----
@@ -158,6 +159,7 @@ export interface SaveInput {
     idempotencyKey?: string;
     title?: string;
     alias?: string;
+    shortcode?: string;
     tags?: string[];
     category?: string;
     url?: string;
@@ -190,6 +192,7 @@ export function normalizeSaveInput(raw: unknown): {ok: true; input: SaveInput} |
             idempotencyKey: str(obj.idempotencyKey, 128),
             title: str(obj.title, 512),
             alias: str(obj.alias, 256),
+            shortcode: str(obj.shortcode, LIMITS.shortcode),
             tags: Array.isArray(obj.tags) ? obj.tags.filter((t): t is string => typeof t === "string").map((tg) => tg.slice(0, LIMITS.tag)).slice(0, 32) : undefined,
             category: str(obj.category, 64),
             url,

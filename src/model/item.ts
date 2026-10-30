@@ -62,6 +62,7 @@ export interface CommonItem {
     itemType: ItemType;
     title: string;
     alias: string;
+    shortcode?: string;
     tags: string[];
     category: string;
     /** 有界摘要（索引缓存，可重建） */
@@ -83,6 +84,7 @@ export interface CommonItemRef {
     itemType?: ItemType;
     title?: string;
     alias?: string;
+    shortcode?: string;
     tags?: readonly string[];
     category?: string;
     varCount?: number;
@@ -136,6 +138,14 @@ export function cleanTagList(v: unknown): string[] {
         if (out.length >= LIMITS.tags) break;
     }
     return out;
+}
+
+export function cleanShortcode(v: unknown): string {
+    if (typeof v !== "string") return "";
+    let s = v.trim();
+    if (!s) return "";
+    if (!s.startsWith(":")) s = ":" + s;
+    return cleanString(s.toLowerCase(), LIMITS.shortcode);
 }
 
 // SiYuan 块类型（getChildBlocks）：p 段落 / h 标题 / c 代码 / l 列表 / t 表格 /
@@ -217,6 +227,7 @@ export function normalizeCommonItem(input: {
         itemType,
         title,
         alias: cleanString(attrs[ATTR.alias], LIMITS.alias),
+        ...(cleanShortcode(attrs[ATTR.shortcode]) ? {shortcode: cleanShortcode(attrs[ATTR.shortcode])} : {}),
         tags,
         category: cleanString(attrs[ATTR.category], LIMITS.category),
         summary: deriveSummary(kramdown),
@@ -310,6 +321,7 @@ export function normalizeUnknownItem(raw: unknown): CommonItem | null {
             [ATTR.type]: obj.itemType,
             [ATTR.title]: obj.title,
             [ATTR.alias]: obj.alias,
+            [ATTR.shortcode]: obj.shortcode,
             [ATTR.tags]: obj.tags,
             [ATTR.category]: obj.category,
             [ATTR.srcDoc]: (obj.source as {sourceDocId?: unknown})?.sourceDocId,
