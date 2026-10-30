@@ -90,6 +90,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     ta.rows = 8;
     ta.placeholder = t("csvImportPlaceholder");
     ta.setAttribute("spellcheck", "false");
+    ta.setAttribute("aria-label", t("csvImportTitle") || "表格文本输入");
     root.appendChild(ta);
 
     // 状态管理
@@ -119,10 +120,6 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
 
     const mappingGrid = document.createElement("div");
     mappingGrid.className = "xlc-wizard-mapping-grid";
-    mappingGrid.style.display = "grid";
-    mappingGrid.style.gridTemplateColumns = "repeat(auto-fill, minmax(200px, 1fr))";
-    mappingGrid.style.gap = "12px";
-    mappingGrid.style.marginTop = "8px";
 
     const FIELD_METAS: Array<{key: keyof typeof state.mapping; label: string}> = [
         {key: "titleIndex", label: "标题 (Title)"},
@@ -136,21 +133,19 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     const createMappingItem = (fieldName: keyof typeof state.mapping, labelText: string): HTMLElement => {
         const itemWrap = document.createElement("div");
         itemWrap.className = "xlc-wizard-field-item";
-        itemWrap.style.display = "flex";
-        itemWrap.style.flexDirection = "column";
-        itemWrap.style.gap = "4px";
 
+        const selectId = `xlc-wizard-field-${String(fieldName)}`;
         const label = document.createElement("label");
         label.className = "xlc-form-label";
         label.textContent = labelText;
-        label.style.fontSize = "12px";
-        label.style.fontWeight = "600";
-        label.style.color = "var(--b3-theme-on-surface)";
+        label.htmlFor = selectId;
         itemWrap.appendChild(label);
 
         const select = document.createElement("select");
+        select.id = selectId;
         select.className = "b3-text-field xlc-wizard-select";
         select.dataset.xlcControl = `wizard.field.${fieldName}`;
+        select.setAttribute("aria-label", labelText);
         select.addEventListener("change", () => {
             state.mapping[fieldName] = parseInt(select.value, 10);
             updatePreview();
@@ -191,13 +186,10 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
 
     // 步骤 3：预览区域
     const preview = document.createElement("div");
-    preview.className = "xlc-form-hint";
-    preview.style.whiteSpace = "pre-wrap";
-    preview.style.maxHeight = "200px";
-    preview.style.overflowY = "auto";
-    preview.style.border = "1px solid var(--b3-border-color)";
-    preview.style.padding = "8px";
-    preview.style.borderRadius = "var(--b3-radius-md)";
+    preview.className = "xlc-form-hint xlc-wizard-preview-box";
+    preview.tabIndex = 0;
+    preview.setAttribute("role", "region");
+    preview.setAttribute("aria-label", "表格解析预览");
     root.appendChild(preview);
 
     // 底部按钮
@@ -214,12 +206,14 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
         release();
     });
 
+    let isSubmitting = false;
     const nextBtn = document.createElement("button");
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.textContent = t("setupNext");
     nextBtn.disabled = true;
     nextBtn.addEventListener("click", () => {
-        if (nextBtn.disabled || !parsedItems.length || parsedText !== state.rawText) return;
+        if (isSubmitting || nextBtn.disabled || !parsedItems.length || parsedText !== state.rawText) return;
+        isSubmitting = true;
         nextBtn.disabled = true;
         dialog.destroy();
         release();
@@ -235,6 +229,15 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
                 );
             });
         });
+    });
+
+    root.addEventListener("keydown", (e) => {
+        if (e.isComposing || (e as KeyboardEvent).keyCode === 229) return;
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            if (e.repeat || nextBtn.disabled) return;
+            e.preventDefault();
+            nextBtn.click();
+        }
     });
 
     foot.appendChild(cancelBtn);

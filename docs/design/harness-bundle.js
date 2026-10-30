@@ -17635,6 +17635,7 @@ ${finalHtml}
     ta.rows = 8;
     ta.placeholder = t("csvImportPlaceholder");
     ta.setAttribute("spellcheck", "false");
+    ta.setAttribute("aria-label", t("csvImportTitle") || "\u8868\u683C\u6587\u672C\u8F93\u5165");
     root.appendChild(ta);
     let state = {
       rawText: "",
@@ -17659,10 +17660,6 @@ ${finalHtml}
     mapRow.appendChild(mapTitle);
     const mappingGrid = document.createElement("div");
     mappingGrid.className = "xlc-wizard-mapping-grid";
-    mappingGrid.style.display = "grid";
-    mappingGrid.style.gridTemplateColumns = "repeat(auto-fill, minmax(200px, 1fr))";
-    mappingGrid.style.gap = "12px";
-    mappingGrid.style.marginTop = "8px";
     const FIELD_METAS = [
       { key: "titleIndex", label: "\u6807\u9898 (Title)" },
       { key: "contentIndex", label: "\u6B63\u6587 (Content)" },
@@ -17674,19 +17671,17 @@ ${finalHtml}
     const createMappingItem = (fieldName, labelText) => {
       const itemWrap = document.createElement("div");
       itemWrap.className = "xlc-wizard-field-item";
-      itemWrap.style.display = "flex";
-      itemWrap.style.flexDirection = "column";
-      itemWrap.style.gap = "4px";
+      const selectId = `xlc-wizard-field-${String(fieldName)}`;
       const label = document.createElement("label");
       label.className = "xlc-form-label";
       label.textContent = labelText;
-      label.style.fontSize = "12px";
-      label.style.fontWeight = "600";
-      label.style.color = "var(--b3-theme-on-surface)";
+      label.htmlFor = selectId;
       itemWrap.appendChild(label);
       const select = document.createElement("select");
+      select.id = selectId;
       select.className = "b3-text-field xlc-wizard-select";
       select.dataset.xlcControl = `wizard.field.${fieldName}`;
+      select.setAttribute("aria-label", labelText);
       select.addEventListener("change", () => {
         state.mapping[fieldName] = parseInt(select.value, 10);
         updatePreview();
@@ -17721,13 +17716,10 @@ ${finalHtml}
     mapRow.appendChild(btnRow);
     root.appendChild(mapRow);
     const preview = document.createElement("div");
-    preview.className = "xlc-form-hint";
-    preview.style.whiteSpace = "pre-wrap";
-    preview.style.maxHeight = "200px";
-    preview.style.overflowY = "auto";
-    preview.style.border = "1px solid var(--b3-border-color)";
-    preview.style.padding = "8px";
-    preview.style.borderRadius = "var(--b3-radius-md)";
+    preview.className = "xlc-form-hint xlc-wizard-preview-box";
+    preview.tabIndex = 0;
+    preview.setAttribute("role", "region");
+    preview.setAttribute("aria-label", "\u8868\u683C\u89E3\u6790\u9884\u89C8");
     root.appendChild(preview);
     const foot = document.createElement("div");
     foot.className = "xlc-form-actions";
@@ -17740,12 +17732,14 @@ ${finalHtml}
       dialog.destroy();
       release();
     });
+    let isSubmitting = false;
     const nextBtn = document.createElement("button");
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.textContent = t("setupNext");
     nextBtn.disabled = true;
     nextBtn.addEventListener("click", () => {
-      if (nextBtn.disabled || !parsedItems.length || parsedText !== state.rawText) return;
+      if (isSubmitting || nextBtn.disabled || !parsedItems.length || parsedText !== state.rawText) return;
+      isSubmitting = true;
       nextBtn.disabled = true;
       dialog.destroy();
       release();
@@ -17761,6 +17755,14 @@ ${finalHtml}
           );
         });
       });
+    });
+    root.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (e.repeat || nextBtn.disabled) return;
+        e.preventDefault();
+        nextBtn.click();
+      }
     });
     foot.appendChild(cancelBtn);
     foot.appendChild(nextBtn);
@@ -28143,7 +28145,8 @@ fi`;
       const sec = document.createElement("div");
       sec.className = "xlc-menu-sec";
       for (const mode of modes) {
-        const option = this.menuButton(mode === current ? "\u2713" : " ", this.deps.t(`sort.${mode}`), "xlc-menu-item" + (mode === current ? " xlc-menu-item--on" : ""), async () => {
+        const isSelected = mode === current;
+        const option = this.menuButton(isSelected ? "\u2713" : " ", this.deps.t(`sort.${mode}`), "xlc-menu-item" + (isSelected ? " xlc-menu-item--on" : ""), async () => {
           var _a2;
           this.sortMenuClosedAt = Date.now();
           (_a2 = this.menuDismiss) == null ? void 0 : _a2.call(this);
@@ -28154,6 +28157,8 @@ fi`;
           void this.refresh();
         });
         option.title = this.deps.t(`sortHint.${mode}`);
+        option.setAttribute("role", "menuitemradio");
+        option.setAttribute("aria-checked", isSelected ? "true" : "false");
         sec.appendChild(option);
       }
       menu.appendChild(sec);
@@ -28175,6 +28180,7 @@ fi`;
       this.menuDismiss = dismissMenu;
       document.addEventListener("pointerdown", dismiss, true);
       menu.addEventListener("keydown", (e) => {
+        var _a2, _b2, _c2;
         if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
@@ -28183,6 +28189,25 @@ fi`;
           if (this.menuDismiss === dismissMenu) this.menuDismiss = null;
           document.removeEventListener("pointerdown", dismiss, true);
           this.restoreFocusToSearch();
+          return;
+        }
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          const items = Array.from(menu.querySelectorAll(".xlc-menu-item"));
+          if (items.length === 0) return;
+          const idx = items.indexOf(document.activeElement);
+          e.preventDefault();
+          e.stopPropagation();
+          const nextIdx = e.key === "ArrowDown" ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
+          (_a2 = items[nextIdx]) == null ? void 0 : _a2.focus();
+          return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+          const items = Array.from(menu.querySelectorAll(".xlc-menu-item"));
+          if (items.length === 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Home") (_b2 = items[0]) == null ? void 0 : _b2.focus();
+          else (_c2 = items[items.length - 1]) == null ? void 0 : _c2.focus();
         }
       });
       (_f = menu.querySelector(".xlc-menu-item")) == null ? void 0 : _f.focus();

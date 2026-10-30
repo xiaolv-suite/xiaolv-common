@@ -2832,7 +2832,8 @@ export class CommonSearchDialog {
         const sec = document.createElement("div");
         sec.className = "xlc-menu-sec";
         for (const mode of modes) {
-            const option = this.menuButton(mode === current ? "✓" : " ", this.deps.t(`sort.${mode}`), "xlc-menu-item" + (mode === current ? " xlc-menu-item--on" : ""), async () => {
+            const isSelected = mode === current;
+            const option = this.menuButton(isSelected ? "✓" : " ", this.deps.t(`sort.${mode}`), "xlc-menu-item" + (isSelected ? " xlc-menu-item--on" : ""), async () => {
                 this.sortMenuClosedAt = Date.now();
                 this.menuDismiss?.();
                 this.menuDismiss = null;
@@ -2842,6 +2843,8 @@ export class CommonSearchDialog {
                 void this.refresh();
             });
             option.title = this.deps.t(`sortHint.${mode}`);
+            option.setAttribute("role", "menuitemradio");
+            option.setAttribute("aria-checked", isSelected ? "true" : "false");
             sec.appendChild(option);
         }
         menu.appendChild(sec);
@@ -2862,7 +2865,7 @@ export class CommonSearchDialog {
         };
         this.menuDismiss = dismissMenu;
         document.addEventListener("pointerdown", dismiss, true);
-        // Esc 关闭排序菜单（隔离宿主全局 Esc，防整弹窗连带关闭；R112）
+        // 键盘无障碍漫游：Esc 关闭、↑↓ 项间循环切换、Home/End 直达首尾
         menu.addEventListener("keydown", (e) => {
             if (e.key === "Escape") {
                 e.preventDefault();
@@ -2872,6 +2875,27 @@ export class CommonSearchDialog {
                 if (this.menuDismiss === dismissMenu) this.menuDismiss = null;
                 document.removeEventListener("pointerdown", dismiss, true);
                 this.restoreFocusToSearch();
+                return;
+            }
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                const items = Array.from(menu.querySelectorAll<HTMLButtonElement>(".xlc-menu-item"));
+                if (items.length === 0) return;
+                const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+                e.preventDefault();
+                e.stopPropagation();
+                const nextIdx = e.key === "ArrowDown"
+                    ? (idx + 1) % items.length
+                    : (idx - 1 + items.length) % items.length;
+                items[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                const items = Array.from(menu.querySelectorAll<HTMLButtonElement>(".xlc-menu-item"));
+                if (items.length === 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") items[0]?.focus();
+                else items[items.length - 1]?.focus();
             }
         });
         menu.querySelector<HTMLElement>(".xlc-menu-item")?.focus();
