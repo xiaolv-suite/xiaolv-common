@@ -357,6 +357,7 @@ export class CommonSearchDialog {
         pinBtn.textContent = "📌";
         pinBtn.title = "固定窗口（连续复制/插入不关闭，Alt+P 切换）";
         pinBtn.setAttribute("aria-label", "固定窗口");
+        pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
         pinBtn.addEventListener("click", () => {
             this.togglePinWindow();
         });
@@ -680,6 +681,11 @@ export class CommonSearchDialog {
         }
         root.appendChild(filters);
 
+        // 桌面顶部关键指标横带（参考图统计优先原则：3-4个关键数字指标，竖线分隔无厚重边框）
+        if (!isMobile) {
+            root.appendChild(this.buildMetricsStrip());
+        }
+
         // 热门标签快速筛选胶囊行（桌面与平板快捷直达）
         const quickPills = document.createElement("div");
         quickPills.className = "xlc-quick-filter-pills";
@@ -962,7 +968,99 @@ export class CommonSearchDialog {
         usage.className = "xlc-badge xlc-badge--ai xlc-pane-usage";
         usage.style.display = "none";
         head.appendChild(usage);
+
+        // 上下文面板折叠/展开切换按钮（参考图三段式布局体系）
+        const collapseBtn = document.createElement("button");
+        collapseBtn.type = "button";
+        collapseBtn.className = "b3-button b3-button--text xlc-pane-collapse-btn";
+        collapseBtn.dataset.xlcControl = "preview.collapse";
+        const titleCollapse = this.deps.t("paneCollapse") || "收起详情面板";
+        const titleExpand = this.deps.t("paneExpand") || "展开详情面板";
+        collapseBtn.title = titleCollapse;
+        collapseBtn.setAttribute("aria-label", titleCollapse);
+        collapseBtn.setAttribute("aria-expanded", "true");
+        collapseBtn.textContent = "⇲";
+        collapseBtn.addEventListener("click", () => {
+            const pane = this.dialog?.element.querySelector<HTMLElement>(".xlc-pane");
+            if (pane) {
+                const isCollapsed = pane.classList.toggle("xlc-pane--collapsed");
+                collapseBtn.textContent = isCollapsed ? "⇱" : "⇲";
+                const label = isCollapsed ? titleExpand : titleCollapse;
+                collapseBtn.title = label;
+                collapseBtn.setAttribute("aria-label", label);
+                collapseBtn.setAttribute("aria-expanded", String(!isCollapsed));
+            }
+        });
+        head.appendChild(collapseBtn);
         return head;
+    }
+
+    private buildMetricsStrip(): HTMLElement {
+        const strip = document.createElement("div");
+        strip.className = "xlc-metrics-strip";
+        strip.dataset.xlcControl = "metrics.strip";
+
+        const makeItem = (key: string, label: string, initialValue: string = "0") => {
+            const item = document.createElement("div");
+            item.className = "xlc-metric-item";
+            const num = document.createElement("div");
+            num.className = "xlc-metric-number";
+            num.dataset.xlcMetric = key;
+            num.textContent = initialValue;
+            const lbl = document.createElement("div");
+            lbl.className = "xlc-metric-label";
+            lbl.textContent = label;
+            item.appendChild(num);
+            item.appendChild(lbl);
+            return item;
+        };
+
+        const divider = () => {
+            const div = document.createElement("div");
+            div.className = "xlc-metric-divider";
+            return div;
+        };
+
+        const labelTotal = this.deps.t("metricTotal") || "资产总计";
+        const labelUsage = this.deps.t("metricUsage") || "复用频次";
+        const labelFav = this.deps.t("metricFav") || "星标收藏";
+        const labelProviders = this.deps.t("metricProviders") || "外部生态";
+
+        strip.appendChild(makeItem("total", labelTotal, String(this.results.length)));
+        strip.appendChild(divider());
+        strip.appendChild(makeItem("usage", labelUsage, "0"));
+        strip.appendChild(divider());
+        strip.appendChild(makeItem("fav", labelFav, "0"));
+        strip.appendChild(divider());
+        strip.appendChild(makeItem("providers", labelProviders, String(this.providerRows.length)));
+
+        return strip;
+    }
+
+    private updateMetricsStrip(): void {
+        const strip = this.dialog?.element.querySelector<HTMLElement>(".xlc-metrics-strip");
+        if (!strip) return;
+        const totalEl = strip.querySelector<HTMLElement>("[data-xlc-metric='total']");
+        const usageEl = strip.querySelector<HTMLElement>("[data-xlc-metric='usage']");
+        const favEl = strip.querySelector<HTMLElement>("[data-xlc-metric='fav']");
+        const provEl = strip.querySelector<HTMLElement>("[data-xlc-metric='providers']");
+
+        if (totalEl) totalEl.textContent = String(this.results.length);
+        if (usageEl) {
+            const usage = this.deps.getUsage ? this.deps.getUsage() : {};
+            let sum = 0;
+            for (const item of this.results) {
+                sum += usage[item.id]?.count ?? 0;
+            }
+            usageEl.textContent = String(sum);
+        }
+        if (favEl) {
+            const favCount = this.results.filter((r) => this.deps.isFavorite ? this.deps.isFavorite(r.id) : false).length;
+            favEl.textContent = String(favCount);
+        }
+        if (provEl) {
+            provEl.textContent = String(this.providerRows.length);
+        }
     }
 
     private buildPaneFoot(): HTMLElement {
@@ -1775,13 +1873,6 @@ export class CommonSearchDialog {
             catBadge.setAttribute("aria-label", `${this.deps.t("category")}：${entry.category.trim()}`);
             title.appendChild(catBadge);
         }
-        if ((entry.varCount ?? 0) > 0) {
-            const varBadge = document.createElement("span");
-            varBadge.className = "xlc-badge xlc-badge--var";
-            varBadge.textContent = `{${entry.varCount}} 变量`;
-            varBadge.title = `此条目含有 ${entry.varCount} 个动态填参字段`;
-            title.appendChild(varBadge);
-        }
         const hasSelectionPlaceholder = Boolean(entry.content?.includes("{{xlc:selection}}") || entry.summary?.includes("{{xlc:selection}}"));
         if (hasSelectionPlaceholder) {
             const surroundBadge = document.createElement("span");
@@ -1969,6 +2060,7 @@ export class CommonSearchDialog {
     }
 
     private renderList(list: HTMLElement): void {
+        this.updateMetricsStrip();
         this.virtualListCleanup?.();
         this.virtualListCleanup = null;
         this.virtualEnsureIndex = null;
@@ -2553,8 +2645,12 @@ export class CommonSearchDialog {
         menu.querySelector<HTMLElement>(".xlc-menu-item")?.focus();
     }
 
-    /** 外部变更（动作菜单内删除/建副本等）后的列表同步入口（R138）。 */
+    /** 外部变更（动作菜单内删除/建副本等）后的列表同步入口（R138/R390：输入中与组词中防冲刷覆盖）。 */
     public refreshAfterExternalChange(): void {
+        if (this.isComposing || this.inputDebounce !== null) {
+            // 用户正在打字或中文组词输入中，延迟到输入稳定后再执行差量同步，防丢失用户心流
+            return;
+        }
         void this.refreshPreservingPosition();
     }
 
@@ -3025,16 +3121,26 @@ export class CommonSearchDialog {
         if (cleanQuery) this.deps.addRecentQuery?.(cleanQuery);
         if (this.primaryBusy || this.varFormOpen) return;
         if (this.deps.defaultActionMode === "copy") {
-            const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
-            const plain = kramdownToPlainText(raw || entry.summary || "");
-            await this.deps.copyProviderPayload(plain);
-            if (!this.pinWindow) this.destroy();
-            this.deps.notify?.("info", "已复制条目内容到剪贴板");
+            this.primaryBusy = true;
+            try {
+                const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
+                const plain = kramdownToPlainText(raw || entry.summary || "");
+                await this.deps.copyProviderPayload(plain);
+                if (!this.pinWindow) this.destroy();
+                this.deps.notify?.("info", "已复制条目内容到剪贴板");
+            } finally {
+                this.primaryBusy = false;
+            }
             return;
         }
         if (this.deps.defaultActionMode === "openSource") {
-            if (!this.pinWindow) this.destroy();
-            await this.deps.openSource(entry.id);
+            this.primaryBusy = true;
+            try {
+                if (!this.pinWindow) this.destroy();
+                await this.deps.openSource(entry.id);
+            } finally {
+                this.primaryBusy = false;
+            }
             return;
         }
         await this.insertEntryWithVars(entry, (fills) => this.runActionFor(entry, fills));
@@ -5295,13 +5401,19 @@ export class CommonSearchDialog {
             e.preventDefault();
             if (this.quickLookOpen) this.closeQuickLook();
             if (this.activeProvider >= 0) {
-                const row = this.providerRows[this.activeProvider];
-                if (row) {
-                    // 定向模式一致性（R50）：provider payload 同样插入目标文档
-                    const execution = this.deps.insertProviderPayload(row.payload, this.insertTarget ?? undefined);
-                    if (!this.pinWindow) this.destroy();
-                    await execution;
-                    if (this.pinWindow) this.deps.notify?.("info", "已插入（窗口已固定，可连续选择）");
+                if (this.primaryBusy) return;
+                this.primaryBusy = true;
+                try {
+                    const row = this.providerRows[this.activeProvider];
+                    if (row) {
+                        // 定向模式一致性（R50）：provider payload 同样插入目标文档
+                        const execution = this.deps.insertProviderPayload(row.payload, this.insertTarget ?? undefined);
+                        if (!this.pinWindow) this.destroy();
+                        await execution;
+                        if (this.pinWindow) this.deps.notify?.("info", "已插入（窗口已固定，可连续选择）");
+                    }
+                } finally {
+                    this.primaryBusy = false;
                 }
                 return;
             }
@@ -5315,50 +5427,68 @@ export class CommonSearchDialog {
                 this.deps.newItem(queryText);
             }
         } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            if (e.repeat || this.primaryBusy) return;
+            this.primaryBusy = true;
             e.preventDefault();
-            if (this.quickLookOpen) this.closeQuickLook();
-            if (this.activeProvider >= 0) {
-                const row = this.providerRows[this.activeProvider];
-                if (row) await this.deps.copyProviderPayload(row.payload);
-                return;
+            try {
+                if (this.quickLookOpen) this.closeQuickLook();
+                if (this.activeProvider >= 0) {
+                    const row = this.providerRows[this.activeProvider];
+                    if (row) await this.deps.copyProviderPayload(row.payload);
+                    return;
+                }
+                const entry = this.results[this.activeIndex];
+                if (entry) await this.deps.runAction(entry.id, "copy");
+            } finally {
+                this.primaryBusy = false;
             }
-            const entry = this.results[this.activeIndex];
-            if (entry) await this.deps.runAction(entry.id, "copy");
         } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C")) {
             // Alt+Shift+C: 纯文本清洗复制（自动剥离任何 Markdown / Kramdown 语法，适用于微信、QQ 等纯文本输入框）
+            if (e.repeat || this.primaryBusy) return;
+            this.primaryBusy = true;
             e.preventDefault();
-            if (this.quickLookOpen) this.closeQuickLook();
-            const entry = this.results[this.activeIndex];
-            if (entry) {
-                const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
-                const plain = kramdownToPlainText(raw || entry.summary || "");
-                await this.deps.copyProviderPayload(plain);
-                if (!this.pinWindow) this.destroy();
-                this.deps.notify?.("info", this.pinWindow ? "已复制清洗纯文本（窗口已固定，可连续取用）" : "已复制清洗纯文本到剪贴板 (适用于微信/QQ)");
+            try {
+                if (this.quickLookOpen) this.closeQuickLook();
+                const entry = this.results[this.activeIndex];
+                if (entry) {
+                    const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
+                    const plain = kramdownToPlainText(raw || entry.summary || "");
+                    await this.deps.copyProviderPayload(plain);
+                    if (!this.pinWindow) this.destroy();
+                    this.deps.notify?.("info", this.pinWindow ? "已复制清洗纯文本（窗口已固定，可连续取用）" : "已复制清洗纯文本到剪贴板 (适用于微信/QQ)");
+                }
+            } finally {
+                this.primaryBusy = false;
             }
             return;
         } else if ((e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C")) || (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.shiftKey)) {
             // Alt+C / Ctrl+Shift+Enter: 快捷复制（窗口固定时保留）
+            if (e.repeat || this.primaryBusy) return;
+            this.primaryBusy = true;
             e.preventDefault();
-            if (this.quickLookOpen) this.closeQuickLook();
-            if (this.activeProvider >= 0) {
-                const row = this.providerRows[this.activeProvider];
-                if (row) {
-                    await this.deps.copyProviderPayload(row.payload);
+            try {
+                if (this.quickLookOpen) this.closeQuickLook();
+                if (this.activeProvider >= 0) {
+                    const row = this.providerRows[this.activeProvider];
+                    if (row) {
+                        await this.deps.copyProviderPayload(row.payload);
+                        if (!this.pinWindow) this.destroy();
+                        this.deps.notify?.("info", this.pinWindow ? "已复制到剪贴板（窗口已固定，可连续取用）" : "已复制到剪贴板，可直接在外部窗口粘贴 (Ctrl+V)");
+                    }
+                    return;
+                }
+                const entry = this.results[this.activeIndex];
+                if (entry) {
+                    if (entry.isOmni) {
+                        await this.deps.copyProviderPayload(entry.content || entry.summary || "");
+                    } else {
+                        await this.deps.runAction(entry.id, "copy");
+                    }
                     if (!this.pinWindow) this.destroy();
                     this.deps.notify?.("info", this.pinWindow ? "已复制到剪贴板（窗口已固定，可连续取用）" : "已复制到剪贴板，可直接在外部窗口粘贴 (Ctrl+V)");
                 }
-                return;
-            }
-            const entry = this.results[this.activeIndex];
-            if (entry) {
-                if (entry.isOmni) {
-                    await this.deps.copyProviderPayload(entry.content || entry.summary || "");
-                } else {
-                    await this.deps.runAction(entry.id, "copy");
-                }
-                if (!this.pinWindow) this.destroy();
-                this.deps.notify?.("info", this.pinWindow ? "已复制到剪贴板（窗口已固定，可连续取用）" : "已复制到剪贴板，可直接在外部窗口粘贴 (Ctrl+V)");
+            } finally {
+                this.primaryBusy = false;
             }
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R")) {
@@ -5455,7 +5585,13 @@ export class CommonSearchDialog {
                 if (entry) {
                     if (e.shiftKey) {
                         // Alt + Shift + 1~9：直达复制
-                        await this.deps.runAction(entry.id, "copy");
+                        if (this.primaryBusy) return;
+                        this.primaryBusy = true;
+                        try {
+                            await this.deps.runAction(entry.id, "copy");
+                        } finally {
+                            this.primaryBusy = false;
+                        }
                     } else {
                         // Alt + 1~9：直达插入
                         await this.runPrimary(entry);
@@ -5545,6 +5681,7 @@ export class CommonSearchDialog {
             }
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "t" || e.key === "T")) {
             // Alt+T 轮转搜索范围 (all -> favorites -> recent -> clipboard -> current-doc -> all-notes -> all)
+            if (e.repeat) return;
             e.preventDefault();
             const scopeOrder: SearchScope[] = ["all", "favorites", "recent", "clipboard", "current-doc", "all-notes"];
             const currentIdx = scopeOrder.indexOf(this.currentScope);
@@ -5555,6 +5692,7 @@ export class CommonSearchDialog {
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === "0") {
             // Alt+0 重置全部范围
+            if (e.repeat) return;
             e.preventDefault();
             this.currentScope = "all";
             this.syncScopeChips();
@@ -5605,6 +5743,7 @@ export class CommonSearchDialog {
         const pinBtn = this.dialog?.element.querySelector<HTMLElement>(".xlc-search-pin");
         if (pinBtn) {
             pinBtn.classList.toggle("xlc-search-pin--active", this.pinWindow);
+            pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
             pinBtn.title = this.pinWindow ? "已固定窗口（连续复制/插入不关闭，Alt+P 切换）" : "固定窗口（连续复制/插入不关闭，Alt+P 切换）";
         }
         this.deps.notify?.("info", this.pinWindow ? "已开启窗口固定：连续复制或插入将保持窗口打开 (Alt+P 切换)" : "已关闭窗口固定");
@@ -5691,6 +5830,10 @@ export class CommonSearchDialog {
         body.appendChild(loading);
 
         card.append(head, body);
+        card.addEventListener("pointerdown", (ev) => {
+            // 阻止卡片内部点击事件冒泡到背景遮罩，允许正常选中文本与点击滚动条
+            ev.stopPropagation();
+        });
         overlay.appendChild(card);
         // 阻止遮罩上的指针事件把键盘焦点从列表抢走
         overlay.addEventListener("pointerdown", (ev) => {
@@ -6042,6 +6185,11 @@ export class CommonSearchDialog {
             }
         };
 
+        const onDragEnd = (): void => {
+            dragDepth = 0;
+            hideOverlay();
+        };
+
         const onDrop = (e: DragEvent): void => {
             e.preventDefault();
             dragDepth = 0;
@@ -6072,6 +6220,9 @@ export class CommonSearchDialog {
         root.addEventListener("dragleave", onDragLeave);
         root.addEventListener("drop", onDrop);
         root.addEventListener("paste", onPaste);
+        if (typeof window !== "undefined") {
+            window.addEventListener("dragend", onDragEnd);
+        }
 
         this.dropCleanup = () => {
             hideOverlay();
@@ -6080,6 +6231,9 @@ export class CommonSearchDialog {
             root.removeEventListener("dragleave", onDragLeave);
             root.removeEventListener("drop", onDrop);
             root.removeEventListener("paste", onPaste);
+            if (typeof window !== "undefined") {
+                window.removeEventListener("dragend", onDragEnd);
+            }
         };
     }
 

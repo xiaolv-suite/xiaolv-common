@@ -162,8 +162,11 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
             props.onCancel?.();
         });
 
+        let confirmed = false;
         const confirmBtn = container.querySelector(".b3-button--primary");
         confirmBtn?.addEventListener("click", () => {
+            if (confirmed) return;
+            confirmed = true;
             const opts = parseOptions();
             props.onConfirm?.(opts);
         });

@@ -9938,12 +9938,14 @@ ${codeText}`;
         return;
       }
       if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+        if (ev.repeat) return;
         ev.preventDefault();
         confirm3();
         return;
       }
       if (ev.altKey && (ev.key === "c" || ev.key === "C") || ev.ctrlKey && ev.shiftKey && (ev.key === "C" || ev.key === "c")) {
         if (options.onCopy) {
+          if (ev.repeat) return;
           ev.preventDefault();
           if (liveDebounceTimer) {
             clearTimeout(liveDebounceTimer);
@@ -9957,6 +9959,7 @@ ${codeText}`;
         }
       }
       if (ev.key === "Enter" && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
+        if (ev.repeat) return;
         if (ev.target.tagName === "BUTTON") return;
         if (ev.target.tagName === "TEXTAREA") return;
         const el = ev.target;
@@ -15292,7 +15295,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           saveBtn.textContent = t("save");
           const submitOnEnter = (el) => {
             el.addEventListener("keydown", (ev) => {
-              if (ev.isComposing || ev.keyCode === 229) return;
+              if (ev.isComposing || ev.keyCode === 229 || ev.repeat) return;
               if (ev.key === "Enter" && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
                 ev.preventDefault();
                 saveBtn.click();
@@ -15302,7 +15305,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           [titleEl, aliasEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el));
           form.addEventListener("keydown", (ev) => {
             var _a2, _b2;
-            if (ev.isComposing || ev.keyCode === 229) return;
+            if (ev.isComposing || ev.keyCode === 229 || ev.repeat) return;
             if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
               ev.preventDefault();
               saveBtn.click();
@@ -15387,6 +15390,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
                   closed = true;
                   dialog.destroy();
                 } else {
+                  saving = false;
                   saveBtn.disabled = false;
                   saveBtn.textContent = t("save");
                   cancelBtn.disabled = false;
@@ -17732,6 +17736,7 @@ ${finalHtml}
     nextBtn.disabled = true;
     nextBtn.addEventListener("click", () => {
       if (nextBtn.disabled || !parsedItems.length || parsedText !== state.rawText) return;
+      nextBtn.disabled = true;
       dialog.destroy();
       release();
       void loadParser().then((parser) => {
@@ -18253,9 +18258,12 @@ ${finalHtml}
         var _a2;
         (_a2 = props.onCancel) == null ? void 0 : _a2.call(props);
       });
+      let confirmed = false;
       const confirmBtn2 = container.querySelector(".b3-button--primary");
       confirmBtn2 == null ? void 0 : confirmBtn2.addEventListener("click", () => {
         var _a2;
+        if (confirmed) return;
+        confirmed = true;
         const opts = parseOptions();
         (_a2 = props.onConfirm) == null ? void 0 : _a2.call(props, opts);
       });
@@ -19064,13 +19072,23 @@ ${finalHtml}
         ${renderTableHtml(props.report, currentPlan)}
         ${renderFooterHtml(currentPlan)}
     `;
+    let applying = false;
+    let cachedReceipt = null;
     const performApply = async () => {
-      const baseEntries = props.localEntries || props.report.diffs.map((d) => d.local).filter((e) => Boolean(e));
-      const receipt = executeSyncMerge(baseEntries, currentPlan);
-      if (props.onConfirm) {
-        await props.onConfirm(receipt, currentPlan);
+      if (applying && cachedReceipt) return cachedReceipt;
+      if (applying) return executeSyncMerge([], currentPlan);
+      applying = true;
+      try {
+        const baseEntries = props.localEntries || props.report.diffs.map((d) => d.local).filter((e) => Boolean(e));
+        const receipt = executeSyncMerge(baseEntries, currentPlan);
+        cachedReceipt = receipt;
+        if (props.onConfirm) {
+          await props.onConfirm(receipt, currentPlan);
+        }
+        return receipt;
+      } finally {
+        applying = false;
       }
-      return receipt;
     };
     if (isBrowser) {
       let dialog = null;
@@ -19152,6 +19170,7 @@ ${finalHtml}
       });
       const confirmBtn2 = container.querySelector(".xlc-btn-confirm");
       confirmBtn2 == null ? void 0 : confirmBtn2.addEventListener("click", async () => {
+        if (applying) return;
         dialog == null ? void 0 : dialog.destroy();
         await performApply();
       });
@@ -22024,6 +22043,8 @@ ${exception.mark.snippet}`;
     root.appendChild(intro);
     const navBar = document.createElement("div");
     navBar.className = "xlc-settings-nav-bar";
+    navBar.setAttribute("role", "tablist");
+    navBar.setAttribute("aria-label", "\u8BBE\u7F6E\u5206\u533A\u5BFC\u822A");
     const navTabs = [
       { id: "xlc-settings-lib", label: "\u{1F4E6} \u5E93\u914D\u7F6E" },
       { id: "xlc-settings-ai", label: "\u{1F916} AI\u6A21\u578B" },
@@ -22036,9 +22057,19 @@ ${exception.mark.snippet}`;
     for (const tab of navTabs) {
       const pill = document.createElement("button");
       pill.type = "button";
-      pill.className = "xlc-settings-nav-pill";
+      const isActive = tab.id === "xlc-settings-lib";
+      pill.className = "xlc-settings-nav-pill" + (isActive ? " xlc-settings-nav-pill--active" : "");
       pill.textContent = tab.label;
+      pill.setAttribute("role", "tab");
+      pill.setAttribute("aria-selected", isActive ? "true" : "false");
+      pill.setAttribute("aria-controls", tab.id);
       pill.addEventListener("click", () => {
+        navBar.querySelectorAll(".xlc-settings-nav-pill").forEach((p) => {
+          p.classList.remove("xlc-settings-nav-pill--active");
+          p.setAttribute("aria-selected", "false");
+        });
+        pill.classList.add("xlc-settings-nav-pill--active");
+        pill.setAttribute("aria-selected", "true");
         const el = root.querySelector(`#${tab.id}`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -25799,6 +25830,7 @@ fi`;
       pinBtn.textContent = "\u{1F4CC}";
       pinBtn.title = "\u56FA\u5B9A\u7A97\u53E3\uFF08\u8FDE\u7EED\u590D\u5236/\u63D2\u5165\u4E0D\u5173\u95ED\uFF0CAlt+P \u5207\u6362\uFF09";
       pinBtn.setAttribute("aria-label", "\u56FA\u5B9A\u7A97\u53E3");
+      pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
       pinBtn.addEventListener("click", () => {
         this.togglePinWindow();
       });
@@ -26101,6 +26133,9 @@ fi`;
         filters.insertBefore(targetBanner, filters.firstChild);
       }
       root.appendChild(filters);
+      if (!isMobile) {
+        root.appendChild(this.buildMetricsStrip());
+      }
       const quickPills = document.createElement("div");
       quickPills.className = "xlc-quick-filter-pills";
       quickPills.style.display = "none";
@@ -26359,7 +26394,91 @@ fi`;
       usage.className = "xlc-badge xlc-badge--ai xlc-pane-usage";
       usage.style.display = "none";
       head.appendChild(usage);
+      const collapseBtn = document.createElement("button");
+      collapseBtn.type = "button";
+      collapseBtn.className = "b3-button b3-button--text xlc-pane-collapse-btn";
+      collapseBtn.dataset.xlcControl = "preview.collapse";
+      const titleCollapse = this.deps.t("paneCollapse") || "\u6536\u8D77\u8BE6\u60C5\u9762\u677F";
+      const titleExpand = this.deps.t("paneExpand") || "\u5C55\u5F00\u8BE6\u60C5\u9762\u677F";
+      collapseBtn.title = titleCollapse;
+      collapseBtn.setAttribute("aria-label", titleCollapse);
+      collapseBtn.setAttribute("aria-expanded", "true");
+      collapseBtn.textContent = "\u21F2";
+      collapseBtn.addEventListener("click", () => {
+        var _a;
+        const pane = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-pane");
+        if (pane) {
+          const isCollapsed = pane.classList.toggle("xlc-pane--collapsed");
+          collapseBtn.textContent = isCollapsed ? "\u21F1" : "\u21F2";
+          const label = isCollapsed ? titleExpand : titleCollapse;
+          collapseBtn.title = label;
+          collapseBtn.setAttribute("aria-label", label);
+          collapseBtn.setAttribute("aria-expanded", String(!isCollapsed));
+        }
+      });
+      head.appendChild(collapseBtn);
       return head;
+    }
+    buildMetricsStrip() {
+      const strip = document.createElement("div");
+      strip.className = "xlc-metrics-strip";
+      strip.dataset.xlcControl = "metrics.strip";
+      const makeItem = (key, label, initialValue = "0") => {
+        const item = document.createElement("div");
+        item.className = "xlc-metric-item";
+        const num = document.createElement("div");
+        num.className = "xlc-metric-number";
+        num.dataset.xlcMetric = key;
+        num.textContent = initialValue;
+        const lbl = document.createElement("div");
+        lbl.className = "xlc-metric-label";
+        lbl.textContent = label;
+        item.appendChild(num);
+        item.appendChild(lbl);
+        return item;
+      };
+      const divider = () => {
+        const div = document.createElement("div");
+        div.className = "xlc-metric-divider";
+        return div;
+      };
+      const labelTotal = this.deps.t("metricTotal") || "\u8D44\u4EA7\u603B\u8BA1";
+      const labelUsage = this.deps.t("metricUsage") || "\u590D\u7528\u9891\u6B21";
+      const labelFav = this.deps.t("metricFav") || "\u661F\u6807\u6536\u85CF";
+      const labelProviders = this.deps.t("metricProviders") || "\u5916\u90E8\u751F\u6001";
+      strip.appendChild(makeItem("total", labelTotal, String(this.results.length)));
+      strip.appendChild(divider());
+      strip.appendChild(makeItem("usage", labelUsage, "0"));
+      strip.appendChild(divider());
+      strip.appendChild(makeItem("fav", labelFav, "0"));
+      strip.appendChild(divider());
+      strip.appendChild(makeItem("providers", labelProviders, String(this.providerRows.length)));
+      return strip;
+    }
+    updateMetricsStrip() {
+      var _a, _b, _c;
+      const strip = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-metrics-strip");
+      if (!strip) return;
+      const totalEl = strip.querySelector("[data-xlc-metric='total']");
+      const usageEl = strip.querySelector("[data-xlc-metric='usage']");
+      const favEl = strip.querySelector("[data-xlc-metric='fav']");
+      const provEl = strip.querySelector("[data-xlc-metric='providers']");
+      if (totalEl) totalEl.textContent = String(this.results.length);
+      if (usageEl) {
+        const usage = this.deps.getUsage ? this.deps.getUsage() : {};
+        let sum = 0;
+        for (const item of this.results) {
+          sum += (_c = (_b = usage[item.id]) == null ? void 0 : _b.count) != null ? _c : 0;
+        }
+        usageEl.textContent = String(sum);
+      }
+      if (favEl) {
+        const favCount = this.results.filter((r) => this.deps.isFavorite ? this.deps.isFavorite(r.id) : false).length;
+        favEl.textContent = String(favCount);
+      }
+      if (provEl) {
+        provEl.textContent = String(this.providerRows.length);
+      }
     }
     buildPaneFoot() {
       const foot = document.createElement("div");
@@ -27050,7 +27169,7 @@ fi`;
     }
     /** 创建一行真实库条目。抽出后虚拟列表可以复用同一套交互与无障碍属性。 */
     createEntryRow(entry, index) {
-      var _a, _b, _c, _d, _e, _f, _g, _h;
+      var _a, _b, _c, _d, _e, _f, _g;
       const fav = this.deps.isFavorite(entry.id);
       const row = document.createElement("div");
       row.className = "xlc-row" + (index === this.activeIndex ? " xlc-row--active" : "") + (fav ? " xlc-row--fav" : "");
@@ -27117,14 +27236,7 @@ fi`;
         catBadge.setAttribute("aria-label", `${this.deps.t("category")}\uFF1A${entry.category.trim()}`);
         title.appendChild(catBadge);
       }
-      if (((_d = entry.varCount) != null ? _d : 0) > 0) {
-        const varBadge = document.createElement("span");
-        varBadge.className = "xlc-badge xlc-badge--var";
-        varBadge.textContent = `{${entry.varCount}} \u53D8\u91CF`;
-        varBadge.title = `\u6B64\u6761\u76EE\u542B\u6709 ${entry.varCount} \u4E2A\u52A8\u6001\u586B\u53C2\u5B57\u6BB5`;
-        title.appendChild(varBadge);
-      }
-      const hasSelectionPlaceholder = Boolean(((_e = entry.content) == null ? void 0 : _e.includes("{{xlc:selection}}")) || ((_f = entry.summary) == null ? void 0 : _f.includes("{{xlc:selection}}")));
+      const hasSelectionPlaceholder = Boolean(((_d = entry.content) == null ? void 0 : _d.includes("{{xlc:selection}}")) || ((_e = entry.summary) == null ? void 0 : _e.includes("{{xlc:selection}}")));
       if (hasSelectionPlaceholder) {
         const surroundBadge = document.createElement("span");
         surroundBadge.className = "xlc-badge xlc-badge--surround";
@@ -27146,7 +27258,7 @@ fi`;
       if (highlight) this.appendHighlighted(titleText, entry.title || this.deps.t("unknownType"), this.lastQueryText);
       else titleText.textContent = entry.title || this.deps.t("unknownType");
       title.appendChild(titleText);
-      if (((_g = entry.varCount) != null ? _g : 0) > 0) {
+      if (((_f = entry.varCount) != null ? _f : 0) > 0) {
         const varBadge = document.createElement("span");
         varBadge.className = "xlc-badge xlc-badge--var";
         varBadge.textContent = this.deps.t("varCountBadge", String(entry.varCount));
@@ -27203,7 +27315,7 @@ fi`;
         }
         meta.appendChild(tagsWrapper);
       }
-      const useCount = (_h = this.usageCounts.get(entry.id)) != null ? _h : 0;
+      const useCount = (_g = this.usageCounts.get(entry.id)) != null ? _g : 0;
       const sourceTextForSummary = entry.content || entry.summary || "";
       if (sourceTextForSummary) {
         const summarySpan = document.createElement("span");
@@ -27302,6 +27414,7 @@ fi`;
     }
     renderList(list) {
       var _a, _b, _c, _d;
+      this.updateMetricsStrip();
       (_a = this.virtualListCleanup) == null ? void 0 : _a.call(this);
       this.virtualListCleanup = null;
       this.virtualEnsureIndex = null;
@@ -27830,8 +27943,11 @@ fi`;
       });
       (_f = menu.querySelector(".xlc-menu-item")) == null ? void 0 : _f.focus();
     }
-    /** 外部变更（动作菜单内删除/建副本等）后的列表同步入口（R138）。 */
+    /** 外部变更（动作菜单内删除/建副本等）后的列表同步入口（R138/R390：输入中与组词中防冲刷覆盖）。 */
     refreshAfterExternalChange() {
+      if (this.isComposing || this.inputDebounce !== null) {
+        return;
+      }
       void this.refreshPreservingPosition();
     }
     /** 鉴权/权限错误由统一内核处理器调用；旧列表失效后保留查询条件并提供显式重试。 */
@@ -28270,16 +28386,26 @@ fi`;
       if (cleanQuery) (_b = (_a = this.deps).addRecentQuery) == null ? void 0 : _b.call(_a, cleanQuery);
       if (this.primaryBusy || this.varFormOpen) return;
       if (this.deps.defaultActionMode === "copy") {
-        const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
-        const plain = kramdownToPlainText(raw || entry.summary || "");
-        await this.deps.copyProviderPayload(plain);
-        if (!this.pinWindow) this.destroy();
-        (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", "\u5DF2\u590D\u5236\u6761\u76EE\u5185\u5BB9\u5230\u526A\u8D34\u677F");
+        this.primaryBusy = true;
+        try {
+          const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
+          const plain = kramdownToPlainText(raw || entry.summary || "");
+          await this.deps.copyProviderPayload(plain);
+          if (!this.pinWindow) this.destroy();
+          (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", "\u5DF2\u590D\u5236\u6761\u76EE\u5185\u5BB9\u5230\u526A\u8D34\u677F");
+        } finally {
+          this.primaryBusy = false;
+        }
         return;
       }
       if (this.deps.defaultActionMode === "openSource") {
-        if (!this.pinWindow) this.destroy();
-        await this.deps.openSource(entry.id);
+        this.primaryBusy = true;
+        try {
+          if (!this.pinWindow) this.destroy();
+          await this.deps.openSource(entry.id);
+        } finally {
+          this.primaryBusy = false;
+        }
         return;
       }
       await this.insertEntryWithVars(entry, (fills) => this.runActionFor(entry, fills));
@@ -30676,12 +30802,18 @@ ${progress.progressBar}`);
         e.preventDefault();
         if (this.quickLookOpen) this.closeQuickLook();
         if (this.activeProvider >= 0) {
-          const row = this.providerRows[this.activeProvider];
-          if (row) {
-            const execution = this.deps.insertProviderPayload(row.payload, (_u = this.insertTarget) != null ? _u : void 0);
-            if (!this.pinWindow) this.destroy();
-            await execution;
-            if (this.pinWindow) (_w = (_v = this.deps).notify) == null ? void 0 : _w.call(_v, "info", "\u5DF2\u63D2\u5165\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u9009\u62E9\uFF09");
+          if (this.primaryBusy) return;
+          this.primaryBusy = true;
+          try {
+            const row = this.providerRows[this.activeProvider];
+            if (row) {
+              const execution = this.deps.insertProviderPayload(row.payload, (_u = this.insertTarget) != null ? _u : void 0);
+              if (!this.pinWindow) this.destroy();
+              await execution;
+              if (this.pinWindow) (_w = (_v = this.deps).notify) == null ? void 0 : _w.call(_v, "info", "\u5DF2\u63D2\u5165\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u9009\u62E9\uFF09");
+            }
+          } finally {
+            this.primaryBusy = false;
           }
           return;
         }
@@ -30694,48 +30826,66 @@ ${progress.progressBar}`);
           this.deps.newItem(queryText);
         }
       } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        if (e.repeat || this.primaryBusy) return;
+        this.primaryBusy = true;
         e.preventDefault();
-        if (this.quickLookOpen) this.closeQuickLook();
-        if (this.activeProvider >= 0) {
-          const row = this.providerRows[this.activeProvider];
-          if (row) await this.deps.copyProviderPayload(row.payload);
-          return;
+        try {
+          if (this.quickLookOpen) this.closeQuickLook();
+          if (this.activeProvider >= 0) {
+            const row = this.providerRows[this.activeProvider];
+            if (row) await this.deps.copyProviderPayload(row.payload);
+            return;
+          }
+          const entry = this.results[this.activeIndex];
+          if (entry) await this.deps.runAction(entry.id, "copy");
+        } finally {
+          this.primaryBusy = false;
         }
-        const entry = this.results[this.activeIndex];
-        if (entry) await this.deps.runAction(entry.id, "copy");
       } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C")) {
+        if (e.repeat || this.primaryBusy) return;
+        this.primaryBusy = true;
         e.preventDefault();
-        if (this.quickLookOpen) this.closeQuickLook();
-        const entry = this.results[this.activeIndex];
-        if (entry) {
-          const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
-          const plain = kramdownToPlainText(raw || entry.summary || "");
-          await this.deps.copyProviderPayload(plain);
-          if (!this.pinWindow) this.destroy();
-          (_y = (_x = this.deps).notify) == null ? void 0 : _y.call(_x, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\u5230\u526A\u8D34\u677F (\u9002\u7528\u4E8E\u5FAE\u4FE1/QQ)");
+        try {
+          if (this.quickLookOpen) this.closeQuickLook();
+          const entry = this.results[this.activeIndex];
+          if (entry) {
+            const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
+            const plain = kramdownToPlainText(raw || entry.summary || "");
+            await this.deps.copyProviderPayload(plain);
+            if (!this.pinWindow) this.destroy();
+            (_y = (_x = this.deps).notify) == null ? void 0 : _y.call(_x, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\u5230\u526A\u8D34\u677F (\u9002\u7528\u4E8E\u5FAE\u4FE1/QQ)");
+          }
+        } finally {
+          this.primaryBusy = false;
         }
         return;
       } else if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C") || e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+        if (e.repeat || this.primaryBusy) return;
+        this.primaryBusy = true;
         e.preventDefault();
-        if (this.quickLookOpen) this.closeQuickLook();
-        if (this.activeProvider >= 0) {
-          const row = this.providerRows[this.activeProvider];
-          if (row) {
-            await this.deps.copyProviderPayload(row.payload);
+        try {
+          if (this.quickLookOpen) this.closeQuickLook();
+          if (this.activeProvider >= 0) {
+            const row = this.providerRows[this.activeProvider];
+            if (row) {
+              await this.deps.copyProviderPayload(row.payload);
+              if (!this.pinWindow) this.destroy();
+              (_A = (_z = this.deps).notify) == null ? void 0 : _A.call(_z, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+            }
+            return;
+          }
+          const entry = this.results[this.activeIndex];
+          if (entry) {
+            if (entry.isOmni) {
+              await this.deps.copyProviderPayload(entry.content || entry.summary || "");
+            } else {
+              await this.deps.runAction(entry.id, "copy");
+            }
             if (!this.pinWindow) this.destroy();
-            (_A = (_z = this.deps).notify) == null ? void 0 : _A.call(_z, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+            (_C = (_B = this.deps).notify) == null ? void 0 : _C.call(_B, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
           }
-          return;
-        }
-        const entry = this.results[this.activeIndex];
-        if (entry) {
-          if (entry.isOmni) {
-            await this.deps.copyProviderPayload(entry.content || entry.summary || "");
-          } else {
-            await this.deps.runAction(entry.id, "copy");
-          }
-          if (!this.pinWindow) this.destroy();
-          (_C = (_B = this.deps).notify) == null ? void 0 : _C.call(_B, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+        } finally {
+          this.primaryBusy = false;
         }
         return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R")) {
@@ -30825,7 +30975,13 @@ ${progress.progressBar}`);
           const entry = this.results[idx];
           if (entry) {
             if (e.shiftKey) {
-              await this.deps.runAction(entry.id, "copy");
+              if (this.primaryBusy) return;
+              this.primaryBusy = true;
+              try {
+                await this.deps.runAction(entry.id, "copy");
+              } finally {
+                this.primaryBusy = false;
+              }
             } else {
               await this.runPrimary(entry);
             }
@@ -30906,6 +31062,7 @@ ${progress.progressBar}`);
           await this.refresh();
         }
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "t" || e.key === "T")) {
+        if (e.repeat) return;
         e.preventDefault();
         const scopeOrder = ["all", "favorites", "recent", "clipboard", "current-doc", "all-notes"];
         const currentIdx = scopeOrder.indexOf(this.currentScope);
@@ -30915,6 +31072,7 @@ ${progress.progressBar}`);
         void this.refresh().then(() => this.restoreFocusToSearch());
         return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === "0") {
+        if (e.repeat) return;
         e.preventDefault();
         this.currentScope = "all";
         this.syncScopeChips();
@@ -30956,6 +31114,7 @@ ${progress.progressBar}`);
       const pinBtn = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-search-pin");
       if (pinBtn) {
         pinBtn.classList.toggle("xlc-search-pin--active", this.pinWindow);
+        pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
         pinBtn.title = this.pinWindow ? "\u5DF2\u56FA\u5B9A\u7A97\u53E3\uFF08\u8FDE\u7EED\u590D\u5236/\u63D2\u5165\u4E0D\u5173\u95ED\uFF0CAlt+P \u5207\u6362\uFF09" : "\u56FA\u5B9A\u7A97\u53E3\uFF08\u8FDE\u7EED\u590D\u5236/\u63D2\u5165\u4E0D\u5173\u95ED\uFF0CAlt+P \u5207\u6362\uFF09";
       }
       (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "info", this.pinWindow ? "\u5DF2\u5F00\u542F\u7A97\u53E3\u56FA\u5B9A\uFF1A\u8FDE\u7EED\u590D\u5236\u6216\u63D2\u5165\u5C06\u4FDD\u6301\u7A97\u53E3\u6253\u5F00 (Alt+P \u5207\u6362)" : "\u5DF2\u5173\u95ED\u7A97\u53E3\u56FA\u5B9A");
@@ -31030,6 +31189,9 @@ ${progress.progressBar}`);
       loading.textContent = "\u52A0\u8F7D\u4E2D\u2026";
       body.appendChild(loading);
       card.append(head, body);
+      card.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+      });
       overlay.appendChild(card);
       overlay.addEventListener("pointerdown", (ev) => {
         ev.preventDefault();
@@ -31344,6 +31506,10 @@ ${progress.progressBar}`);
           hideOverlay();
         }
       };
+      const onDragEnd = () => {
+        dragDepth = 0;
+        hideOverlay();
+      };
       const onDrop = (e) => {
         var _a, _b;
         e.preventDefault();
@@ -31373,6 +31539,9 @@ ${progress.progressBar}`);
       root.addEventListener("dragleave", onDragLeave);
       root.addEventListener("drop", onDrop);
       root.addEventListener("paste", onPaste);
+      if (typeof window !== "undefined") {
+        window.addEventListener("dragend", onDragEnd);
+      }
       this.dropCleanup = () => {
         hideOverlay();
         root.removeEventListener("dragenter", onDragEnter);
@@ -31380,6 +31549,9 @@ ${progress.progressBar}`);
         root.removeEventListener("dragleave", onDragLeave);
         root.removeEventListener("drop", onDrop);
         root.removeEventListener("paste", onPaste);
+        if (typeof window !== "undefined") {
+          window.removeEventListener("dragend", onDragEnd);
+        }
       };
     }
     async toggleAdjacentContextProbe() {
@@ -35642,7 +35814,13 @@ ${details.join("\n")}` : ""}`;
     discoveryOperationConflict: "\u5F53\u524D\u64CD\u4F5C\u72B6\u6001\u53D1\u751F\u53D8\u5316\uFF0C\u8BF7\u7B49\u5F85\u6B63\u5728\u8FDB\u884C\u7684\u64CD\u4F5C\u7ED3\u675F\u540E\u91CD\u8BD5\u3002",
     discoveryInvalidInput: "\u626B\u63CF\u76EE\u6807\u6216\u5019\u9009\u72B6\u6001\u65E0\u6548\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9\u76EE\u6807\u6216\u91CD\u65B0\u626B\u63CF\u3002",
     discoveryKernelError: "\u601D\u6E90\u8BF7\u6C42\u672A\u5B8C\u6210\uFF0C\u8BF7\u68C0\u67E5\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002",
-    discoveryUndoAvailable: "\u672C\u6B21\u6536\u5F55\u4ECD\u53EF\u64A4\u9500\uFF1B\u5173\u95ED\u7A97\u53E3\u540E\u5C06\u5931\u53BB\u8FD9\u91CC\u7684\u64A4\u9500\u5165\u53E3\u3002"
+    discoveryUndoAvailable: "\u672C\u6B21\u6536\u5F55\u4ECD\u53EF\u64A4\u9500\uFF1B\u5173\u95ED\u7A97\u53E3\u540E\u5C06\u5931\u53BB\u8FD9\u91CC\u7684\u64A4\u9500\u5165\u53E3\u3002",
+    metricTotal: "\u8D44\u4EA7\u603B\u8BA1",
+    metricUsage: "\u590D\u7528\u9891\u6B21",
+    metricFav: "\u661F\u6807\u6536\u85CF",
+    metricProviders: "\u5916\u90E8\u751F\u6001",
+    paneExpand: "\u5C55\u5F00\u8BE6\u60C5\u9762\u677F",
+    paneCollapse: "\u6536\u8D77\u8BE6\u60C5\u9762\u677F"
   };
 
   // scripts/harness/entry.ts

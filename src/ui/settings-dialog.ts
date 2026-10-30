@@ -160,6 +160,8 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     // 顶部快速定位胶囊导航条（解决长面板反复滚动的痛点，顺序严格与物理卡片一致）
     const navBar = document.createElement("div");
     navBar.className = "xlc-settings-nav-bar";
+    navBar.setAttribute("role", "tablist");
+    navBar.setAttribute("aria-label", "设置分区导航");
     const navTabs = [
         {id: "xlc-settings-lib", label: "📦 库配置"},
         {id: "xlc-settings-ai", label: "🤖 AI模型"},
@@ -172,9 +174,19 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     for (const tab of navTabs) {
         const pill = document.createElement("button");
         pill.type = "button";
-        pill.className = "xlc-settings-nav-pill";
+        const isActive = tab.id === "xlc-settings-lib";
+        pill.className = "xlc-settings-nav-pill" + (isActive ? " xlc-settings-nav-pill--active" : "");
         pill.textContent = tab.label;
+        pill.setAttribute("role", "tab");
+        pill.setAttribute("aria-selected", isActive ? "true" : "false");
+        pill.setAttribute("aria-controls", tab.id);
         pill.addEventListener("click", () => {
+            navBar.querySelectorAll(".xlc-settings-nav-pill").forEach((p) => {
+                p.classList.remove("xlc-settings-nav-pill--active");
+                p.setAttribute("aria-selected", "false");
+            });
+            pill.classList.add("xlc-settings-nav-pill--active");
+            pill.setAttribute("aria-selected", "true");
             const el = root.querySelector<HTMLElement>(`#${tab.id}`);
             if (el) {
                 el.scrollIntoView({behavior: "smooth", block: "start"});

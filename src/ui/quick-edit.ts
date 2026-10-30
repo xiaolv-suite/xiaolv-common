@@ -81,6 +81,7 @@ export function openQuickEditDialog(
     errHint.dataset.xlcControl = "quick-edit.error";
 
     const btnRow = document.createElement("div");
+    btnRow.className = "xlc-quick-edit-actions";
     btnRow.style.display = "flex";
     btnRow.style.justifyContent = "flex-end";
     btnRow.style.gap = "8px";
@@ -152,9 +153,11 @@ export function openQuickEditDialog(
     textarea.addEventListener("keydown", (e) => {
         if (e.isComposing || (e as KeyboardEvent).keyCode === 229) return;
         if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            if (e.repeat) return;
             e.preventDefault();
             void doSave();
         } else if (e.key === "Escape") {
+            e.preventDefault();
             dialog.destroy();
         }
     });

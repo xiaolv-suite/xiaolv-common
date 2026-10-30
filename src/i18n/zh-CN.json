@@ -668,5 +668,11 @@
   "discoveryOperationConflict": "当前操作状态发生变化，请等待正在进行的操作结束后重试。",
   "discoveryInvalidInput": "扫描目标或候选状态无效，请重新选择目标或重新扫描。",
   "discoveryKernelError": "思源请求未完成，请检查连接后重试。",
-  "discoveryUndoAvailable": "本次收录仍可撤销；关闭窗口后将失去这里的撤销入口。"
+  "discoveryUndoAvailable": "本次收录仍可撤销；关闭窗口后将失去这里的撤销入口。",
+  "metricTotal": "资产总计",
+  "metricUsage": "复用频次",
+  "metricFav": "星标收藏",
+  "metricProviders": "外部生态",
+  "paneExpand": "展开详情面板",
+  "paneCollapse": "收起详情面板"
 }

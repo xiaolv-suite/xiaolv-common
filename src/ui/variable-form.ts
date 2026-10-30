@@ -503,6 +503,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         }
         // Ctrl+Enter / Cmd+Enter: 在任何输入控件/多行文本中直接快速确认提交 (G46)
         if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+            if (ev.repeat) return;
             ev.preventDefault();
             confirm();
             return;
@@ -510,6 +511,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         // Alt+C / Ctrl+Shift+C: 快捷复制展开结果并关闭 (G49)
         if ((ev.altKey && (ev.key === "c" || ev.key === "C")) || (ev.ctrlKey && ev.shiftKey && (ev.key === "C" || ev.key === "c"))) {
             if (options.onCopy) {
+                if (ev.repeat) return;
                 ev.preventDefault();
                 if (liveDebounceTimer) {
                     clearTimeout(liveDebounceTimer);
@@ -523,6 +525,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
             }
         }
         if (ev.key === "Enter" && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
+            if (ev.repeat) return;
             if ((ev.target as HTMLElement).tagName === "BUTTON") return;
             // textarea 字段（R160）：Enter=换行，插入只走按钮或 Tab 到按钮后回车
             if ((ev.target as HTMLElement).tagName === "TEXTAREA") return;

@@ -1003,7 +1003,7 @@ export class CaptureDialog {
         const submitOnEnter = (el: HTMLInputElement): void => {
             el.addEventListener("keydown", (ev) => {
                 // IME 组合态：Enter 属选词确认，不得触发保存（对齐 dialog.ts 惯例，R138）
-                if (ev.isComposing || ev.keyCode === 229) return;
+                if (ev.isComposing || ev.keyCode === 229 || ev.repeat) return;
                 if (ev.key === "Enter" && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
                     ev.preventDefault();
                     saveBtn.click();
@@ -1012,7 +1012,7 @@ export class CaptureDialog {
         };
         [titleEl, aliasEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el as HTMLInputElement));
         form.addEventListener("keydown", (ev) => {
-            if (ev.isComposing || (ev as KeyboardEvent).keyCode === 229) return;
+            if (ev.isComposing || (ev as KeyboardEvent).keyCode === 229 || (ev as KeyboardEvent).repeat) return;
             // Ctrl+Enter / Cmd+Enter: 全局快捷保存 (G46)
             if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
                 ev.preventDefault();
@@ -1109,6 +1109,7 @@ export class CaptureDialog {
                         closed = true;
                         dialog.destroy();
                     } else {
+                        saving = false;
                         saveBtn.disabled = false;
                         saveBtn.textContent = t("save");
                         cancelBtn.disabled = false;

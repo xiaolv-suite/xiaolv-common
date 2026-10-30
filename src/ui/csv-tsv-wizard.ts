@@ -220,6 +220,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     nextBtn.disabled = true;
     nextBtn.addEventListener("click", () => {
         if (nextBtn.disabled || !parsedItems.length || parsedText !== state.rawText) return;
+        nextBtn.disabled = true;
         dialog.destroy();
         release();
         void loadParser().then((parser) => {

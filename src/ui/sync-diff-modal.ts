@@ -343,13 +343,23 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
     `;
 
     // 执行合并的方法
+    let applying = false;
+    let cachedReceipt: SyncReceipt | null = null;
     const performApply = async (): Promise<SyncReceipt> => {
-        const baseEntries = props.localEntries || props.report.diffs.map((d) => d.local).filter((e): e is SyncEntry => Boolean(e));
-        const receipt = executeSyncMerge(baseEntries, currentPlan);
-        if (props.onConfirm) {
-            await props.onConfirm(receipt, currentPlan);
+        if (applying && cachedReceipt) return cachedReceipt;
+        if (applying) return executeSyncMerge([], currentPlan);
+        applying = true;
+        try {
+            const baseEntries = props.localEntries || props.report.diffs.map((d) => d.local).filter((e): e is SyncEntry => Boolean(e));
+            const receipt = executeSyncMerge(baseEntries, currentPlan);
+            cachedReceipt = receipt;
+            if (props.onConfirm) {
+                await props.onConfirm(receipt, currentPlan);
+            }
+            return receipt;
+        } finally {
+            applying = false;
         }
-        return receipt;
     };
 
     if (isBrowser) {
@@ -447,6 +457,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
 
         const confirmBtn = container.querySelector(".xlc-btn-confirm");
         confirmBtn?.addEventListener("click", async () => {
+            if (applying) return;
             dialog?.destroy();
             await performApply();
         });

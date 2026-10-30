@@ -668,5 +668,11 @@
   "discoveryOperationConflict": "The operation state changed. Wait for pending work and retry.",
   "discoveryInvalidInput": "The scan target or candidate state is invalid. Choose the target again or rescan.",
   "discoveryKernelError": "The SiYuan request did not finish. Check the connection and retry.",
-  "discoveryUndoAvailable": "You can still undo these additions here until this window closes."
+  "discoveryUndoAvailable": "You can still undo these additions here until this window closes.",
+  "metricTotal": "Total Assets",
+  "metricUsage": "Usage Count",
+  "metricFav": "Favorites",
+  "metricProviders": "Ecosystem",
+  "paneExpand": "Expand details panel",
+  "paneCollapse": "Collapse details panel"
 }

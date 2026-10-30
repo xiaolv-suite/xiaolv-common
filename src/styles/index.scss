@@ -1033,6 +1033,40 @@
     flex-direction: column;
     min-width: 0;
     background-color: var(--b3-theme-background);
+    transition: flex var(--xlc-dur-normal) var(--xlc-ease),
+                max-width var(--xlc-dur-normal) var(--xlc-ease),
+                min-width var(--xlc-dur-normal) var(--xlc-ease);
+
+    &--collapsed {
+      flex: 0 0 44px !important;
+      min-width: 44px !important;
+      max-width: 44px !important;
+      overflow: hidden;
+
+      .xlc-pane-body,
+      .xlc-pane-foot,
+      .xlc-pane-meta,
+      .xlc-pane-vars,
+      .xlc-pane-warn,
+      .xlc-page-intro {
+        display: none !important;
+      }
+
+      .xlc-pane-head {
+        padding: var(--xlc-space-3) var(--xlc-space-1);
+        flex-direction: column;
+        justify-content: flex-start;
+
+        .xlc-pane-title,
+        .xlc-badge {
+          display: none !important;
+        }
+
+        .xlc-pane-collapse-btn {
+          margin-left: 0;
+        }
+      }
+    }
   }
 
   .xlc-pane-head {
@@ -1047,6 +1081,40 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .xlc-pane-collapse-btn {
+      margin-left: auto;
+      min-width: 24px;
+      min-height: 24px;
+      padding: 2px 6px;
+      font-size: var(--xlc-font-sm);
+      opacity: 0.7;
+      border-radius: var(--xlc-radius-sm);
+      border: 1px solid var(--xlc-line);
+      background: transparent;
+      cursor: pointer;
+      color: var(--xlc-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--xlc-dur-fast) var(--xlc-ease);
+
+      &:hover {
+        opacity: 1;
+        background: var(--xlc-soft);
+        color: var(--xlc-ink);
+      }
+
+      &:active {
+        transform: scale(0.96);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+        opacity: 1;
+      }
     }
   }
 
@@ -1323,10 +1391,10 @@
     z-index: var(--xlc-layer-popover);
     display: flex;
     flex-direction: column;
-    background-color: var(--b3-menu-background);
-    border: 1px solid var(--b3-border-color);
-    border-radius: var(--xlc-radius-lg);
-    box-shadow: var(--b3-dialog-shadow, var(--xlc-shadow-2));
+    background-color: var(--xlc-surface);
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius-xl);
+    box-shadow: var(--xlc-shadow-float);
     overflow: auto;
     max-height: 72%;
     transform-origin: 100% 100%;
@@ -1406,14 +1474,14 @@
 
     .xlc-menu-sec {
       padding: var(--xlc-space-1) var(--xlc-space-2) var(--xlc-space-2);
-      border-bottom: 1px solid var(--b3-border-color);
+      border-bottom: 1px solid var(--xlc-line);
       display: flex;
       flex-wrap: wrap;
       gap: var(--xlc-space-0-5);
 
       &:last-child { border-bottom: none; }
 
-      &--ai { background-color: rgba(53, 117, 240, .04); }
+      &--ai { background-color: var(--xlc-ai-tint); }
     }
 
     .xlc-menu-item {
@@ -1467,8 +1535,16 @@
         .xlc-menu-ic { color: var(--b3-theme-primary); }
       }
 
-      // 当前档（排序直选菜单 ✓ 项，R108）
-      &--on { font-weight: var(--xlc-weight-semibold); }
+      // 当前档（排序直选菜单 ✓ 项，R108 / 现代微底色高亮）
+      &--on {
+        font-weight: var(--xlc-weight-semibold);
+        color: var(--xlc-accent);
+        background-color: var(--xlc-lavender);
+
+        .xlc-menu-ic {
+          color: var(--xlc-accent);
+        }
+      }
 
       // 危险动作（删除）：固定语义红，一眼可辨（R106）
       &--danger,
@@ -1865,6 +1941,62 @@
     font-size: var(--xlc-font-xs);
     line-height: var(--xlc-leading-relaxed);
     color: var(--b3-theme-on-surface);
+  }
+}
+
+// ---------- 设置中心快速定位胶囊导航条（胶囊体系贯穿 / 吸顶导航）----------
+.xlc-settings-nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--xlc-space-1);
+  padding: var(--xlc-space-2) 0;
+  margin-bottom: var(--xlc-space-3);
+  background: var(--b3-theme-background);
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--xlc-line);
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  .xlc-settings-nav-pill {
+    padding: var(--xlc-space-1) var(--xlc-space-3);
+    border-radius: var(--xlc-radius-pill);
+    border: 1px solid var(--xlc-line);
+    background: var(--xlc-surface);
+    color: var(--xlc-muted);
+    font-size: var(--xlc-font-xs);
+    font-weight: var(--xlc-weight-medium);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--xlc-dur-fast) var(--xlc-ease);
+
+    &:hover {
+      background: var(--xlc-soft);
+      color: var(--xlc-ink);
+      border-color: var(--xlc-line-strong);
+      transform: translateY(-0.5px);
+    }
+
+    &:active {
+      transform: scale(0.98);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: 1px;
+    }
+
+    &--active {
+      background: var(--xlc-lavender);
+      color: var(--xlc-accent);
+      border-color: var(--xlc-accent);
+      font-weight: var(--xlc-weight-semibold);
+    }
   }
 }
 
@@ -3139,7 +3271,9 @@
   align-items: center;
   justify-content: center;
   padding: var(--xlc-space-4);
-  background-color: var(--xlc-overlay-bg, rgba(0, 0, 0, 0.35));
+  background-color: rgba(18, 17, 28, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 
   .xlc-quicklook-card {
     display: flex;
@@ -3150,9 +3284,9 @@
     max-height: 80vh;
     overflow: hidden;
     border: 1px solid var(--xlc-line);
-    border-radius: var(--xlc-radius-lg);
-    background-color: var(--xlc-raised);
-    box-shadow: var(--xlc-overlay-shadow);
+    border-radius: var(--xlc-radius-2xl);
+    background-color: var(--xlc-surface);
+    box-shadow: var(--xlc-shadow-float);
   }
 
   .xlc-quicklook-head {
@@ -3161,28 +3295,29 @@
     gap: var(--xlc-space-2);
     align-items: baseline;
     padding: var(--xlc-space-3) var(--xlc-space-4);
-    border-bottom: 1px solid var(--xlc-border-subtle, var(--b3-border-color));
+    border-bottom: 1px solid var(--xlc-line);
   }
 
   .xlc-quicklook-title {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
-    font-size: var(--xlc-font-size-3);
-    font-weight: 600;
+    font-size: var(--xlc-font-lg);
+    font-weight: var(--xlc-weight-semibold);
+    color: var(--xlc-ink);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .xlc-quicklook-meta {
-    color: var(--xlc-text-muted);
-    font-size: var(--xlc-font-size-1);
+    color: var(--xlc-muted);
+    font-size: var(--xlc-font-2xs);
   }
 
   .xlc-quicklook-hints {
     flex: 0 0 auto;
-    color: var(--xlc-text-muted);
-    font-size: var(--xlc-font-size-1);
+    color: var(--xlc-muted);
+    font-size: var(--xlc-font-2xs);
   }
 
   .xlc-quicklook-body {
@@ -3190,13 +3325,13 @@
     min-height: 0;
     overflow: auto;
     padding: var(--xlc-space-4);
-    line-height: var(--xlc-line-height-2, 1.6);
+    line-height: var(--xlc-leading-relaxed);
     overscroll-behavior: contain;
   }
 
   .xlc-quicklook-loading {
-    color: var(--xlc-text-muted);
-    font-size: var(--xlc-font-size-2);
+    color: var(--xlc-muted);
+    font-size: var(--xlc-font-sm);
   }
 }
 
@@ -4662,5 +4797,133 @@
     line-height: var(--xlc-leading-normal);
   }
 }
+
+// ---------- 就地快编弹窗（Omni Block Quick Edit · 令牌化收敛）----------
+.xlc-quick-edit-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xlc-space-3);
+  padding: var(--xlc-space-4);
+  background: var(--xlc-surface);
+  border-radius: var(--xlc-radius-xl);
+
+  textarea.b3-text-field {
+    border-radius: var(--xlc-radius-sm);
+    border: 1px solid var(--xlc-line);
+    transition: all var(--xlc-dur-fast) var(--xlc-ease);
+
+    &:focus {
+      border-color: var(--xlc-accent);
+      box-shadow: 0 0 0 2px var(--xlc-lavender);
+    }
+  }
+
+  .xlc-quick-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xlc-space-2);
+  }
+}
+
+// ══════════ 三段式结构升级：极窄导航 Rail、顶部指标行与状态指示体系 ══════════
+
+// 1. 顶部统计优先关键指标横带（固定一行、大数字配小标签、竖分割线）
+.xlc-metrics-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: var(--xlc-space-2) var(--xlc-space-4);
+  margin-bottom: var(--xlc-space-2);
+  background: var(--xlc-surface);
+  border-radius: var(--xlc-radius-lg);
+  border: 1px solid var(--xlc-line);
+  box-shadow: var(--xlc-shadow-sm);
+  user-select: none;
+
+  .xlc-metric-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-width: 0;
+
+    .xlc-metric-number {
+      font-size: var(--xlc-font-xl);
+      font-weight: var(--xlc-weight-semibold);
+      color: var(--xlc-ink);
+      font-variant-numeric: tabular-nums;
+      line-height: var(--xlc-leading-tight);
+      letter-spacing: -0.02em;
+
+      &[data-xlc-metric="usage"],
+      &[data-xlc-metric="fav"] {
+        color: var(--xlc-data-accent);
+      }
+    }
+
+    .xlc-metric-label {
+      font-size: var(--xlc-font-2xs);
+      color: var(--xlc-muted);
+      margin-top: 2px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+  }
+
+  .xlc-metric-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--xlc-line);
+    flex-shrink: 0;
+  }
+}
+
+// 3. 无障碍动效偏好：当用户开启减弱动效时，面板折叠与胶囊平滑过渡一律降为即时无动效
+@media (prefers-reduced-motion: reduce) {
+  .xlc-pane,
+  .xlc-pane--collapsed,
+  .xlc-settings-nav-pill,
+  .xlc-metrics-strip {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+// 2. 状态圆点微指示体系（文字加小圆点，取代大块刺眼底色）
+.xlc-status-dot-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--xlc-font-xs);
+  color: var(--xlc-muted);
+
+  .xlc-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--xlc-radius-circle);
+    background-color: var(--xlc-muted);
+    flex-shrink: 0;
+
+    &--active {
+      background-color: var(--xlc-data-accent);
+      box-shadow: 0 0 0 2px var(--xlc-data-soft);
+    }
+
+    &--primary {
+      background-color: var(--xlc-accent);
+      box-shadow: 0 0 0 2px var(--xlc-lavender);
+    }
+
+    &--warn {
+      background-color: var(--xlc-warning);
+    }
+
+    &--danger {
+      background-color: var(--xlc-danger);
+    }
+  }
+}
+
 
 

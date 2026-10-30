@@ -47,6 +47,8 @@ export class DockView {
     private static sharedCollapsedCategories = new Set<string>();
     private collapsedCategories: Set<string>;
     private activeMenuEl: HTMLElement | null = null;
+    private isInsertBusy = false;
+    private isCopyBusy = false;
 
     // DOM 引用
     private searchInput!: HTMLInputElement;
@@ -155,6 +157,7 @@ export class DockView {
                 return;
             }
             if (e.key === "Enter") {
+                if (e.repeat) return;
                 e.preventDefault();
                 const target = (this.activeIndex >= 0 && this.results[this.activeIndex])
                     ? this.results[this.activeIndex]
@@ -538,6 +541,8 @@ export class DockView {
     }
 
     private async insertEntry(entry: SearchEntry): Promise<void> {
+        if (this.isInsertBusy) return;
+        this.isInsertBusy = true;
         try {
             const res = await this.deps.runAction(entry.id, "insert");
             if (res.ok) {
@@ -547,10 +552,14 @@ export class DockView {
             }
         } catch (err) {
             this.deps.notify?.("error", toErrorMessage(err));
+        } finally {
+            this.isInsertBusy = false;
         }
     }
 
     private async copyEntry(entry: SearchEntry): Promise<void> {
+        if (this.isCopyBusy) return;
+        this.isCopyBusy = true;
         try {
             const res = await this.deps.runAction(entry.id, "copy");
             if (res.ok) {
@@ -560,6 +569,8 @@ export class DockView {
             }
         } catch (err) {
             this.deps.notify?.("error", toErrorMessage(err));
+        } finally {
+            this.isCopyBusy = false;
         }
     }
 
