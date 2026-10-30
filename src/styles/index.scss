@@ -2946,8 +2946,12 @@
   &:hover { border-color: var(--b3-theme-primary-light); }
 
   &:focus-visible {
-    outline: 2px solid var(--b3-theme-primary);
+    outline: 2px solid var(--xlc-accent);
     outline-offset: 1px;
+  }
+
+  &:active {
+    transform: scale(0.98);
   }
 
   &--on {
@@ -5104,7 +5108,8 @@
   .xlc-tag-facet,
   .xlc-quick-pill,
   .xlc-policy,
-  .xlc-varbtn {
+  .xlc-varbtn,
+  .xlc-doclist-item {
     transition: none !important;
     animation: none !important;
   }

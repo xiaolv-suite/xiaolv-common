@@ -63,5 +63,5 @@ test("UI/UX Pro Max · 变量表单与预览卡片样式令牌化与减动效降
     assert.match(indexScss, /\.xlc-varform-preview\s*\{[\s\S]*?&:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--xlc-accent\);/);
 
     // 2. prefers-reduced-motion 降级涵盖 .xlc-varbtn
-    assert.match(indexScss, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.xlc-varbtn\s*\{[\s\S]*?transition:\s*none !important;/);
+    assert.match(indexScss, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.xlc-varbtn[\s\S]*?transition:\s*none !important;/);
 });

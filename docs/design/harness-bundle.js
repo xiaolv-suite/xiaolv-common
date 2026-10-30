@@ -22726,6 +22726,7 @@ ${exception.mark.snippet}`;
     if (showQuickStart) usageGuide.style.display = "none";
     const quickStart = document.createElement("section");
     quickStart.className = "xlc-setup-quickstart";
+    quickStart.setAttribute("role", "region");
     quickStart.setAttribute("aria-labelledby", "xlc-setup-quickstart-title");
     const quickStartTitle = document.createElement("h3");
     quickStartTitle.className = "xlc-setup-quickstart-title";
@@ -22769,6 +22770,7 @@ ${exception.mark.snippet}`;
     modeSelect.className = "b3-select";
     modeSelect.id = "xlc-setup-mode";
     modeSelect.dataset.xlcControl = "setup.mode";
+    modeSelect.setAttribute("aria-label", t("setupModeLabel"));
     modeLabel.htmlFor = modeSelect.id;
     const modes = [
       { v: "new-doc", label: t("setupCreateNewDoc") },
@@ -22796,6 +22798,31 @@ ${exception.mark.snippet}`;
     pickerWrap.appendChild(pickerInput);
     const pickerList = document.createElement("div");
     pickerList.className = "xlc-doclist";
+    pickerList.setAttribute("role", "listbox");
+    pickerList.setAttribute("aria-label", t("docPicker"));
+    pickerList.addEventListener("keydown", (e) => {
+      var _a, _b, _c;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        const items = Array.from(pickerList.querySelectorAll(".xlc-doclist-item"));
+        if (!items.length) return;
+        const idx = items.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const nextIdx = e.key === "ArrowDown" ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
+        (_a = items[nextIdx]) == null ? void 0 : _a.focus();
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        const items = Array.from(pickerList.querySelectorAll(".xlc-doclist-item"));
+        if (!items.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Home") (_b = items[0]) == null ? void 0 : _b.focus();
+        else (_c = items[items.length - 1]) == null ? void 0 : _c.focus();
+      }
+    });
     pickerWrap.appendChild(pickerList);
     step1.appendChild(pickerWrap);
     let pickerSeq = 0;
@@ -22843,15 +22870,23 @@ ${exception.mark.snippet}`;
           item.type = "button";
           item.className = "xlc-doclist-item";
           item.dataset.xlcControl = "setup.doc.result";
+          item.setAttribute("role", "option");
+          const isPicked = hit.id === currentDocId;
+          item.setAttribute("aria-selected", isPicked ? "true" : "false");
+          item.setAttribute("aria-label", hit.hPath || hit.name || hit.id);
           item.textContent = hit.hPath || hit.name || hit.id;
-          if (hit.id === currentDocId) {
+          if (isPicked) {
             pickedDoc = { id: hit.id, hPath: hit.hPath };
             item.classList.add("xlc-doclist-item--on");
           }
           item.addEventListener("click", () => {
             pickedDoc = { id: hit.id, hPath: hit.hPath };
-            pickerList.querySelectorAll(".xlc-doclist-item").forEach((el) => el.classList.remove("xlc-doclist-item--on"));
+            pickerList.querySelectorAll(".xlc-doclist-item").forEach((el) => {
+              el.classList.remove("xlc-doclist-item--on");
+              el.setAttribute("aria-selected", "false");
+            });
             item.classList.add("xlc-doclist-item--on");
+            item.setAttribute("aria-selected", "true");
             syncNextState();
           });
           pickerList.appendChild(item);
@@ -22877,6 +22912,7 @@ ${exception.mark.snippet}`;
     nbSelect.className = "b3-select";
     nbSelect.id = "xlc-setup-notebook";
     nbSelect.dataset.xlcControl = "setup.notebook";
+    nbSelect.setAttribute("aria-label", t("setupNotebook"));
     nbSelect.disabled = true;
     if ((existingConfig == null ? void 0 : existingConfig.mode) === "notebook" && existingConfig.notebookIds[0]) {
       nbSelect.dataset.currentNotebook = existingConfig.notebookIds[0];
@@ -23099,6 +23135,7 @@ ${exception.mark.snippet}`;
     createBtn.dataset.xlcControl = "setup.newdoc.create";
     createBtn.style.whiteSpace = "nowrap";
     createBtn.textContent = t("create");
+    createBtn.setAttribute("aria-label", t("create"));
     createBtn.disabled = true;
     let creatingLibrary = false;
     createBtn.addEventListener("click", () => {
@@ -23238,11 +23275,14 @@ ${exception.mark.snippet}`;
     });
     const step1Actions = document.createElement("div");
     step1Actions.className = "xlc-form-actions";
+    step1Actions.setAttribute("role", "toolbar");
+    step1Actions.setAttribute("aria-label", "\u5411\u5BFC\u7B2C\u4E00\u6B65\u64CD\u4F5C");
     if (opts == null ? void 0 : opts.onDismiss) {
       const dismissBtn = document.createElement("button");
       dismissBtn.className = "b3-button xlc-btn-ghost";
       dismissBtn.dataset.xlcControl = "setup.later";
       dismissBtn.textContent = t("setupLater");
+      dismissBtn.setAttribute("aria-label", t("setupLater"));
       dismissBtn.addEventListener("click", () => {
         var _a;
         return (_a = opts.onDismiss) == null ? void 0 : _a.call(opts);
@@ -23253,6 +23293,7 @@ ${exception.mark.snippet}`;
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.dataset.xlcControl = "setup.next";
     nextBtn.textContent = t("setupNext");
+    nextBtn.setAttribute("aria-label", t("setupNext"));
     nextBtn.disabled = true;
     nextBtn.addEventListener("click", () => {
       const mode = modeSelect.value;
@@ -23297,16 +23338,20 @@ ${exception.mark.snippet}`;
     step2.appendChild(summaryHint);
     const step2Actions = document.createElement("div");
     step2Actions.className = "xlc-form-actions";
+    step2Actions.setAttribute("role", "toolbar");
+    step2Actions.setAttribute("aria-label", "\u5411\u5BFC\u7B2C\u4E8C\u6B65\u64CD\u4F5C");
     const backBtn = document.createElement("button");
     backBtn.className = "b3-button xlc-btn-ghost";
     backBtn.dataset.xlcControl = "setup.back";
     backBtn.textContent = t("setupBack");
+    backBtn.setAttribute("aria-label", t("setupBack"));
     backBtn.addEventListener("click", () => gotoStep(1));
     step2Actions.appendChild(backBtn);
     const finishBtn = document.createElement("button");
     finishBtn.className = "b3-button xlc-btn-primary";
     finishBtn.dataset.xlcControl = "setup.finish";
     finishBtn.textContent = t("setupFinish");
+    finishBtn.setAttribute("aria-label", t("setupFinish"));
     finishBtn.addEventListener("click", () => {
       const mode = modeSelect.value;
       if (mode === "notebook") {
@@ -23402,6 +23447,24 @@ ${exception.mark.snippet}`;
         });
       }
     }
+    root.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (e.repeat) return;
+        if (step === 1) {
+          if (createBtn.offsetParent !== null && !createBtn.disabled) {
+            e.preventDefault();
+            createBtn.click();
+          } else if (nextBtn.offsetParent !== null && !nextBtn.disabled) {
+            e.preventDefault();
+            nextBtn.click();
+          }
+        } else if (step === 2 && !finishBtn.disabled) {
+          e.preventDefault();
+          finishBtn.click();
+        }
+      }
+    });
   }
   function buildAiSection(ctx, root) {
     const t = ctx.t;
