@@ -1793,7 +1793,16 @@
     &[data-state="empty"] { border-style: dashed; }
     &[data-state="error"] { border-color: color-mix(in srgb, var(--xlc-badge-warn) 40%, var(--b3-border-color)); background: color-mix(in srgb, var(--xlc-badge-warn) 8%, var(--b3-theme-background)); }
     .xlc-form-hint, .xlc-form-error { flex: 1 1 180px; overflow-wrap: anywhere; }
-    .xlc-operation-retry { flex: 0 0 auto; margin-left: auto; }
+    .xlc-operation-retry {
+      flex: 0 0 auto;
+      margin-left: auto;
+      min-height: 24px;
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
   }
 
   .xlc-settings-data-actions {
@@ -5302,7 +5311,8 @@
   .xlc-discovery-footer .b3-button,
   .xlc-quick-option-pill,
   .xlc-varform-foot .b3-button,
-  .xlc-fab-new {
+  .xlc-fab-new,
+  .xlc-operation-retry {
     transition: none !important;
     animation: none !important;
   }

@@ -698,18 +698,37 @@ export function renderSafePreview(
         if (block.type === "h1") {
             el = doc.createElement("div");
             el.className = "xlc-md-h xlc-md-h1";
+            if (typeof el.setAttribute === "function") {
+                el.setAttribute("role", "heading");
+                el.setAttribute("aria-level", "1");
+            }
         } else if (block.type === "h2") {
             el = doc.createElement("div");
             el.className = "xlc-md-h xlc-md-h2";
+            if (typeof el.setAttribute === "function") {
+                el.setAttribute("role", "heading");
+                el.setAttribute("aria-level", "2");
+            }
         } else if (block.type === "h3") {
             el = doc.createElement("div");
             el.className = "xlc-md-h xlc-md-h3";
+            if (typeof el.setAttribute === "function") {
+                el.setAttribute("role", "heading");
+                el.setAttribute("aria-level", "3");
+            }
         } else if (block.type === "quote") {
             el = doc.createElement("blockquote");
             el.className = "xlc-md-quote";
+            if (typeof el.setAttribute === "function") {
+                el.setAttribute("role", "note");
+                el.setAttribute("aria-label", "引用文本");
+            }
         } else if (block.type === "list-bullet") {
             el = doc.createElement("div");
             el.className = "xlc-md-list-item";
+            if (typeof el.setAttribute === "function") {
+                el.setAttribute("role", "listitem");
+            }
             const bullet = doc.createElement("span");
             bullet.className = "xlc-md-bullet";
             bullet.textContent = "•";
@@ -717,6 +736,9 @@ export function renderSafePreview(
         } else if (block.type === "list-ordered") {
             el = doc.createElement("div");
             el.className = "xlc-md-list-item";
+            if (typeof el.setAttribute === "function") {
+                el.setAttribute("role", "listitem");
+            }
             const num = doc.createElement("span");
             num.className = "xlc-md-ordered-num";
             num.textContent = "›";
@@ -724,6 +746,9 @@ export function renderSafePreview(
         } else if (block.type === "task-item") {
             el = doc.createElement("div");
             el.className = "xlc-md-list-item xlc-md-task-item" + (block.isDone ? " xlc-md-task--done" : "") + (block.isNested ? " xlc-md-nested" : "");
+            if (typeof el.setAttribute === "function") {
+                el.setAttribute("role", "listitem");
+            }
             const checkbox = doc.createElement("input");
             checkbox.type = "checkbox";
             checkbox.className = "b3-switch xlc-md-task-checkbox";

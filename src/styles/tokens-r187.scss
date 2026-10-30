@@ -961,6 +961,8 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     width: 100%;
     border-collapse: collapse;
     font-size: var(--xlc-font-sm);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
     line-height: var(--xlc-leading-normal);
   }
   .xlc-md-th, .xlc-md-td {

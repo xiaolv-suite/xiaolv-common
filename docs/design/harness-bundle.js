@@ -22571,16 +22571,22 @@ ${exception.mark.snippet}`;
     wrap.className = "xlc-form";
     const meta = document.createElement("div");
     meta.className = "xlc-import-meta";
+    meta.setAttribute("role", "status");
+    meta.setAttribute("aria-live", "polite");
     wrap.appendChild(meta);
     const paintMeta = (count, varCount) => {
       meta.textContent = "";
       const countBadge = document.createElement("span");
       countBadge.className = "xlc-badge xlc-badge--markdown";
+      countBadge.setAttribute("role", "status");
+      countBadge.setAttribute("aria-label", t("itemCountBadge", String(count)));
       countBadge.textContent = t("itemCountBadge", String(count));
       meta.appendChild(countBadge);
       if (varCount > 0) {
         const varBadge = document.createElement("span");
         varBadge.className = "xlc-badge xlc-badge--var";
+        varBadge.setAttribute("role", "status");
+        varBadge.setAttribute("aria-label", t("packVarsBadge", String(varCount)));
         varBadge.textContent = t("packVarsBadge", String(varCount));
         meta.appendChild(varBadge);
       }
@@ -22648,6 +22654,7 @@ ${exception.mark.snippet}`;
     configSanitizeBtn.type = "button";
     configSanitizeBtn.className = "b3-button b3-button--text";
     configSanitizeBtn.textContent = t("packSanitizeConfigBtn");
+    configSanitizeBtn.setAttribute("aria-label", t("packSanitizeConfigBtn"));
     configSanitizeBtn.style.fontSize = "12px";
     configSanitizeBtn.addEventListener("click", () => {
       openSanitizerOptionsDialog(currentSanitizer != null ? currentSanitizer : {}, (opts) => {
@@ -22671,15 +22678,41 @@ ${exception.mark.snippet}`;
     wrap.appendChild(trustHint);
     const actions = document.createElement("div");
     actions.className = "xlc-form-actions";
+    actions.setAttribute("role", "toolbar");
+    actions.setAttribute("aria-label", "\u6A21\u677F\u5305\u5BFC\u51FA\u64CD\u4F5C\u680F");
+    actions.addEventListener("keydown", (e) => {
+      var _a2, _b, _c;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const btns = Array.from(actions.querySelectorAll("button:not([disabled])"));
+        if (!btns.length) return;
+        const idx2 = btns.indexOf(document.activeElement);
+        if (idx2 === -1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const nextIdx = e.key === "ArrowRight" ? (idx2 + 1) % btns.length : (idx2 - 1 + btns.length) % btns.length;
+        (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        const btns = Array.from(actions.querySelectorAll("button:not([disabled])"));
+        if (!btns.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Home") (_b = btns[0]) == null ? void 0 : _b.focus();
+        else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+      }
+    });
     const cancelBtn = document.createElement("button");
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "settings.pack-export.cancel";
     cancelBtn.textContent = t("cancel");
-    cancelBtn.addEventListener("click", () => dialog.destroy());
+    cancelBtn.setAttribute("aria-label", t("cancel"));
     actions.appendChild(cancelBtn);
     const exportBtn = document.createElement("button");
     exportBtn.className = "b3-button xlc-btn-primary";
     exportBtn.textContent = t("packExportBtn");
+    exportBtn.setAttribute("aria-label", t("packExportBtn"));
     exportBtn.addEventListener("click", () => {
       const packName = nameInput.value.trim() || t("packNameDefault");
       const category = catSelect.value;
@@ -24970,17 +25003,44 @@ fi`;
     root.appendChild(preview);
     const foot = document.createElement("div");
     foot.className = "xlc-form-row";
+    foot.setAttribute("role", "toolbar");
+    foot.setAttribute("aria-label", "Espanso\u5BFC\u5165\u64CD\u4F5C\u680F");
+    foot.addEventListener("keydown", (e) => {
+      var _a, _b, _c;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const btns = Array.from(foot.querySelectorAll("button:not([disabled])"));
+        if (!btns.length) return;
+        const idx = btns.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+        (_a = btns[nextIdx]) == null ? void 0 : _a.focus();
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        const btns = Array.from(foot.querySelectorAll("button:not([disabled])"));
+        if (!btns.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Home") (_b = btns[0]) == null ? void 0 : _b.focus();
+        else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+      }
+    });
     foot.style.justifyContent = "flex-end";
     foot.style.gap = "8px";
     const cancelBtn = document.createElement("button");
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "settings.espanso.cancel";
     cancelBtn.textContent = t("cancel");
+    cancelBtn.setAttribute("aria-label", t("cancel"));
     foot.appendChild(cancelBtn);
     const nextBtn = document.createElement("button");
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.dataset.xlcControl = "settings.espanso.next";
     nextBtn.textContent = t("setupNext");
+    nextBtn.setAttribute("aria-label", t("setupNext"));
     nextBtn.disabled = true;
     foot.appendChild(nextBtn);
     root.appendChild(foot);
@@ -25109,10 +25169,13 @@ fi`;
     }
     const actions = document.createElement("div");
     actions.className = "xlc-form-actions";
+    actions.setAttribute("role", "toolbar");
+    actions.setAttribute("aria-label", "\u6807\u7B7E\u4F53\u68C0\u64CD\u4F5C\u680F");
     const close = document.createElement("button");
     close.className = "b3-button";
     close.dataset.xlcControl = "settings.tag-audit.close";
     close.textContent = t("close");
+    close.setAttribute("aria-label", t("close"));
     close.addEventListener("click", () => dialog.destroy());
     actions.appendChild(close);
     wrap.appendChild(actions);
@@ -26116,18 +26179,37 @@ fi`;
       if (block.type === "h1") {
         el = doc.createElement("div");
         el.className = "xlc-md-h xlc-md-h1";
+        if (typeof el.setAttribute === "function") {
+          el.setAttribute("role", "heading");
+          el.setAttribute("aria-level", "1");
+        }
       } else if (block.type === "h2") {
         el = doc.createElement("div");
         el.className = "xlc-md-h xlc-md-h2";
+        if (typeof el.setAttribute === "function") {
+          el.setAttribute("role", "heading");
+          el.setAttribute("aria-level", "2");
+        }
       } else if (block.type === "h3") {
         el = doc.createElement("div");
         el.className = "xlc-md-h xlc-md-h3";
+        if (typeof el.setAttribute === "function") {
+          el.setAttribute("role", "heading");
+          el.setAttribute("aria-level", "3");
+        }
       } else if (block.type === "quote") {
         el = doc.createElement("blockquote");
         el.className = "xlc-md-quote";
+        if (typeof el.setAttribute === "function") {
+          el.setAttribute("role", "note");
+          el.setAttribute("aria-label", "\u5F15\u7528\u6587\u672C");
+        }
       } else if (block.type === "list-bullet") {
         el = doc.createElement("div");
         el.className = "xlc-md-list-item";
+        if (typeof el.setAttribute === "function") {
+          el.setAttribute("role", "listitem");
+        }
         const bullet = doc.createElement("span");
         bullet.className = "xlc-md-bullet";
         bullet.textContent = "\u2022";
@@ -26135,6 +26217,9 @@ fi`;
       } else if (block.type === "list-ordered") {
         el = doc.createElement("div");
         el.className = "xlc-md-list-item";
+        if (typeof el.setAttribute === "function") {
+          el.setAttribute("role", "listitem");
+        }
         const num = doc.createElement("span");
         num.className = "xlc-md-ordered-num";
         num.textContent = "\u203A";
@@ -26142,6 +26227,9 @@ fi`;
       } else if (block.type === "task-item") {
         el = doc.createElement("div");
         el.className = "xlc-md-list-item xlc-md-task-item" + (block.isDone ? " xlc-md-task--done" : "") + (block.isNested ? " xlc-md-nested" : "");
+        if (typeof el.setAttribute === "function") {
+          el.setAttribute("role", "listitem");
+        }
         const checkbox = doc.createElement("input");
         checkbox.type = "checkbox";
         checkbox.className = "b3-switch xlc-md-task-checkbox";
