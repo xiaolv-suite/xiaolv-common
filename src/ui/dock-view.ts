@@ -94,6 +94,29 @@ export class DockView {
 
         const actions = document.createElement("div");
         actions.className = "xlc-dock-head-actions";
+        if (typeof actions.setAttribute === "function") {
+            actions.setAttribute("role", "toolbar");
+            actions.setAttribute("aria-label", "侧栏快捷动作栏");
+        }
+        actions.addEventListener("keydown", (e) => {
+            const buttons = Array.from(actions.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.disabled);
+            if (buttons.length <= 1) return;
+            const curIdx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            if (curIdx === -1) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                buttons[(curIdx + 1) % buttons.length]?.focus();
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                buttons[(curIdx - 1 + buttons.length) % buttons.length]?.focus();
+            } else if (e.key === "Home") {
+                e.preventDefault();
+                buttons[0]?.focus();
+            } else if (e.key === "End") {
+                e.preventDefault();
+                buttons[buttons.length - 1]?.focus();
+            }
+        });
 
         const newBtn = document.createElement("button");
         newBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
@@ -135,6 +158,9 @@ export class DockView {
         this.searchInput = document.createElement("input");
         this.searchInput.className = "b3-text-field xlc-dock-search-input";
         this.searchInput.placeholder = this.deps.t("searchPlaceholder") || "搜索常用语、拼音缩写...";
+        if (typeof this.searchInput.setAttribute === "function") {
+            this.searchInput.setAttribute("aria-label", this.deps.t("searchPlaceholder") || "搜索常用资产");
+        }
         this.searchInput.addEventListener("input", () => {
             this.clearBtn.style.display = this.searchInput.value ? "inline-flex" : "none";
             if (this.debounceTimer) clearTimeout(this.debounceTimer);
@@ -201,6 +227,30 @@ export class DockView {
             this.chipsContainer.setAttribute("role", "radiogroup");
             this.chipsContainer.setAttribute("aria-label", "侧边栏内容过滤");
         }
+        this.chipsContainer.addEventListener("keydown", (e) => {
+            const chips = Array.from(this.chipsContainer.querySelectorAll<HTMLButtonElement>(".xlc-dock-chip"));
+            if (chips.length <= 1) return;
+            const curIdx = chips.indexOf(document.activeElement as HTMLButtonElement);
+            if (curIdx === -1) return;
+            let nextIdx = -1;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                nextIdx = (curIdx + 1) % chips.length;
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                nextIdx = (curIdx - 1 + chips.length) % chips.length;
+            } else if (e.key === "Home") {
+                e.preventDefault();
+                nextIdx = 0;
+            } else if (e.key === "End") {
+                e.preventDefault();
+                nextIdx = chips.length - 1;
+            }
+            if (nextIdx >= 0 && chips[nextIdx]) {
+                chips[nextIdx]?.focus();
+                chips[nextIdx]?.click();
+            }
+        });
         const scopes: Array<{key: "all" | "common" | "recent" | "favorites"; label: string}> = [
             {key: "all", label: this.deps.t("scopeAll") || "全部"},
             {key: "common", label: this.deps.t("filterCommon") || "常用"},
@@ -230,12 +280,20 @@ export class DockView {
         // 4. 状态提示
         this.statusText = document.createElement("div");
         this.statusText.className = "xlc-dock-status";
+        if (typeof this.statusText.setAttribute === "function") {
+            this.statusText.setAttribute("role", "status");
+            this.statusText.setAttribute("aria-live", "polite");
+        }
         this.statusText.textContent = "加载中...";
         this.container.appendChild(this.statusText);
 
         // 5. 列表容器
         this.listContainer = document.createElement("div");
         this.listContainer.className = "xlc-dock-list";
+        if (typeof this.listContainer.setAttribute === "function") {
+            this.listContainer.setAttribute("role", "listbox");
+            this.listContainer.setAttribute("aria-label", "常用资产列表");
+        }
         this.container.appendChild(this.listContainer);
 
         // 6. 底部微型抽屉
@@ -322,18 +380,31 @@ export class DockView {
                 const isCollapsed = this.collapsedCategories.has(catName);
                 const groupHead = document.createElement("div");
                 groupHead.className = "xlc-dock-group-head";
+                groupHead.tabIndex = 0;
+                if (typeof groupHead.setAttribute === "function") {
+                    groupHead.setAttribute("role", "button");
+                    groupHead.setAttribute("aria-expanded", !isCollapsed ? "true" : "false");
+                    groupHead.setAttribute("aria-label", `分类：${catName}，共 ${catEntries.length} 项，${isCollapsed ? "已折叠" : "已展开"}`);
+                }
                 groupHead.innerHTML = `
                     <span class="xlc-dock-group-arrow">${isCollapsed ? "▸" : "▾"}</span>
                     <span class="xlc-dock-group-name">${catName}</span>
                     <span class="xlc-dock-group-count">${catEntries.length}</span>
                 `;
-                groupHead.addEventListener("click", () => {
+                const toggleGroup = () => {
                     if (this.collapsedCategories.has(catName)) {
                         this.collapsedCategories.delete(catName);
                     } else {
                         this.collapsedCategories.add(catName);
                     }
                     this.renderList();
+                };
+                groupHead.addEventListener("click", toggleGroup);
+                groupHead.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleGroup();
+                    }
                 });
                 this.listContainer.appendChild(groupHead);
 
@@ -359,6 +430,10 @@ export class DockView {
         const row = document.createElement("div");
         row.className = "xlc-dock-row" + (index === this.activeIndex ? " xlc-dock-row--active" : "");
         row.dataset.index = String(index);
+        if (typeof row.setAttribute === "function") {
+            row.setAttribute("role", "option");
+            row.setAttribute("aria-selected", index === this.activeIndex ? "true" : "false");
+        }
 
         // 原生 HTML5 拖拽属性支持（F2：支持按住 Alt 拖出块引用、按住 Shift 拖出嵌入块）
         row.draggable = true;
@@ -552,7 +627,11 @@ export class DockView {
 
     private updateActiveRow(): void {
         this.listContainer.querySelectorAll<HTMLElement>(".xlc-dock-row").forEach((el) => {
-            el.classList.toggle("xlc-dock-row--active", el.dataset.index === String(this.activeIndex));
+            const isActive = el.dataset.index === String(this.activeIndex);
+            el.classList.toggle("xlc-dock-row--active", isActive);
+            if (typeof el.setAttribute === "function") {
+                el.setAttribute("aria-selected", isActive ? "true" : "false");
+            }
         });
     }
 
@@ -600,6 +679,10 @@ export class DockView {
     private openDrawer(entry: SearchEntry): void {
         this.drawerContainer.innerHTML = "";
         this.drawerContainer.style.display = "flex";
+        if (typeof this.drawerContainer.setAttribute === "function") {
+            this.drawerContainer.setAttribute("role", "region");
+            this.drawerContainer.setAttribute("aria-label", "资产抽屉预览");
+        }
 
         const head = document.createElement("div");
         head.className = "xlc-dock-drawer-head";
@@ -613,6 +696,9 @@ export class DockView {
         closeBtn.className = "xlc-dock-drawer-close";
         closeBtn.textContent = "×";
         closeBtn.title = this.deps.t("cancel") || "关闭预览";
+        if (typeof closeBtn.setAttribute === "function") {
+            closeBtn.setAttribute("aria-label", this.deps.t("cancel") || "关闭预览");
+        }
         closeBtn.addEventListener("click", () => this.closeDrawer());
         head.appendChild(closeBtn);
         this.drawerContainer.appendChild(head);
@@ -633,10 +719,36 @@ export class DockView {
 
         const foot = document.createElement("div");
         foot.className = "xlc-dock-drawer-foot";
+        if (typeof foot.setAttribute === "function") {
+            foot.setAttribute("role", "toolbar");
+            foot.setAttribute("aria-label", "抽屉操作栏");
+        }
+        foot.addEventListener("keydown", (e) => {
+            const buttons = Array.from(foot.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.disabled);
+            if (buttons.length <= 1) return;
+            const curIdx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            if (curIdx === -1) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                buttons[(curIdx + 1) % buttons.length]?.focus();
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                buttons[(curIdx - 1 + buttons.length) % buttons.length]?.focus();
+            } else if (e.key === "Home") {
+                e.preventDefault();
+                buttons[0]?.focus();
+            } else if (e.key === "End") {
+                e.preventDefault();
+                buttons[buttons.length - 1]?.focus();
+            }
+        });
 
         const insertBtn = document.createElement("button");
         insertBtn.className = "b3-button xlc-btn-primary";
         insertBtn.textContent = "＋ " + (this.deps.t("insert") || "插入到当前正文");
+        if (typeof insertBtn.setAttribute === "function") {
+            insertBtn.setAttribute("aria-label", this.deps.t("insert") || "插入到当前正文");
+        }
         insertBtn.addEventListener("mousedown", (e) => e.preventDefault());
         insertBtn.addEventListener("click", () => void this.insertEntry(entry));
         foot.appendChild(insertBtn);
@@ -644,6 +756,9 @@ export class DockView {
         const copyBtn = document.createElement("button");
         copyBtn.className = "b3-button";
         copyBtn.textContent = "⧉ " + (this.deps.t("copy") || "复制");
+        if (typeof copyBtn.setAttribute === "function") {
+            copyBtn.setAttribute("aria-label", this.deps.t("copy") || "复制");
+        }
         copyBtn.addEventListener("click", () => void this.copyEntry(entry));
         foot.appendChild(copyBtn);
 

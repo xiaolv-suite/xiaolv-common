@@ -182,7 +182,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
         const isAct = (s: string | null) => (activeFilter === s ? "xlc-summary-card--active" : "");
         const isPress = (s: string | null) => (activeFilter === s ? "true" : "false");
         return `
-            <div class="xlc-sync-summary-cards">
+            <div class="xlc-sync-summary-cards" role="toolbar" aria-label="同步状态筛选">
                 <div class="xlc-summary-card ${isAct(null)}" data-status="" role="button" tabindex="0" aria-pressed="${isPress(null)}" title="点击查看全部明细">
                     <span class="xlc-card-label">总计对比</span>
                     <span class="xlc-card-value">${report.totalLocal} / ${report.totalRemote}</span>
@@ -224,14 +224,14 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
             <div class="xlc-sync-diff-controls b3-dialog__content">
                 <div class="xlc-sync-strategy-row">
                     <label class="xlc-field-label">合并冲突策略：</label>
-                    <select class="b3-select xlc-sync-strategy-select">
+                    <select class="b3-select xlc-sync-strategy-select" aria-label="合并冲突策略">
                         ${optionsHtml}
                     </select>
                     <label class="b3-label xlc-mirror-checkbox-label" title="若勾选，远端已不存在的条目将在本地删除">
-                        <input type="checkbox" class="b3-switch xlc-mirror-checkbox" ${mirrorDelete ? "checked" : ""} />
+                        <input type="checkbox" class="b3-switch xlc-mirror-checkbox" aria-label="镜像删除本地多余项" ${mirrorDelete ? "checked" : ""} />
                         镜像删除本地多余项
                     </label>
-                    <input type="text" class="b3-text-field xlc-diff-search-input" placeholder="🔍 快速过滤标题或 ID..." value="${escapeHtml(searchKeyword)}" style="flex:1; min-width:140px; height:28px; font-size:12px;" />
+                    <input type="text" class="b3-text-field xlc-diff-search-input" aria-label="快速过滤标题或 ID" placeholder="🔍 快速过滤标题或 ID..." value="${escapeHtml(searchKeyword)}" style="flex:1; min-width:140px; height:28px; font-size:12px;" />
                 </div>
                 <div class="b3-label__text xlc-strategy-hint">
                     ${escapeHtml(STRATEGY_DESCRIPTIONS[currentStrategy])}
@@ -296,7 +296,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
 
     const renderTableHtml = (report: LibraryDiffReport, plan: SyncPlan): string => {
         return `
-            <div class="xlc-sync-diff-table-container">
+            <div class="xlc-sync-diff-table-container" tabindex="0" role="region" aria-label="同步变动明细表格">
                 <table class="xlc-sync-diff-table">
                     <thead>
                         <tr>
@@ -318,13 +318,13 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
     const renderFooterHtml = (plan: SyncPlan): string => {
         const actionableCount = plan.summary.create + plan.summary.update + plan.summary.fork + plan.summary.delete;
         return `
-            <div class="b3-dialog__action">
+            <div class="b3-dialog__action xlc-sync-diff-actions" role="toolbar" aria-label="同步比对操作栏">
                 <span class="xlc-plan-stat-hint">
                     预计变动：新增 ${plan.summary.create} · 更新 ${plan.summary.update} · 副本 ${plan.summary.fork} · 删除 ${plan.summary.delete} · 不变 ${plan.summary.noop}
                 </span>
-                <button class="b3-button b3-button--cancel">取消</button>
+                <button class="b3-button b3-button--cancel" aria-label="取消同步">取消</button>
                 <div class="fn__space"></div>
-                <button class="b3-button b3-button--text b3-button--primary xlc-btn-confirm">
+                <button class="b3-button b3-button--text b3-button--primary xlc-btn-confirm" aria-label="确认执行合并">
                     确认执行合并 (${actionableCount} 项)
                 </button>
             </div>
@@ -437,6 +437,22 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
                 if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     toggleCard();
+                } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                    e.preventDefault();
+                    const cardList = Array.from(cards);
+                    const idx = cardList.indexOf(card);
+                    if (idx !== -1) cardList[(idx + 1) % cardList.length]?.focus();
+                } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    const cardList = Array.from(cards);
+                    const idx = cardList.indexOf(card);
+                    if (idx !== -1) cardList[(idx - 1 + cardList.length) % cardList.length]?.focus();
+                } else if (e.key === "Home") {
+                    e.preventDefault();
+                    cards[0]?.focus();
+                } else if (e.key === "End") {
+                    e.preventDefault();
+                    cards[cards.length - 1]?.focus();
                 }
             });
         });
@@ -470,6 +486,37 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
             if (applying) return;
             dialog?.destroy();
             await performApply();
+        });
+
+        const footerToolbar = container.querySelector(".xlc-sync-diff-actions");
+        footerToolbar?.addEventListener("keydown", (e: any) => {
+            const buttons = [cancelBtn, confirmBtn].filter((b): b is HTMLElement => Boolean(b && !(b as HTMLButtonElement).disabled));
+            if (buttons.length <= 1) return;
+            const curIdx = buttons.indexOf(document.activeElement as HTMLElement);
+            if (curIdx === -1) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                buttons[(curIdx + 1) % buttons.length]?.focus();
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                buttons[(curIdx - 1 + buttons.length) % buttons.length]?.focus();
+            } else if (e.key === "Home") {
+                e.preventDefault();
+                buttons[0]?.focus();
+            } else if (e.key === "End") {
+                e.preventDefault();
+                buttons[buttons.length - 1]?.focus();
+            }
+        });
+
+        container.addEventListener("keydown", (e) => {
+            if (e.isComposing || (e as KeyboardEvent).keyCode === 229) return;
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                if (e.repeat || applying) return;
+                e.preventDefault();
+                dialog?.destroy();
+                void performApply();
+            }
         });
 
         return {

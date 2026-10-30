@@ -114,9 +114,9 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
                 <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" aria-label="自定义字面替换词典" placeholder="内部IP=10.0.0.x&#10;核心客户=保密客户">${escapeHtml(customText)}</textarea>
             </div>
         </div>
-        <div class="b3-dialog__action xlc-form-actions xlc-export-sanitizer-actions">
-            <button class="b3-button b3-button--cancel">取消</button>
-            <button class="b3-button b3-button--primary xlc-btn-primary">保存脱敏配置</button>
+        <div class="b3-dialog__action xlc-form-actions xlc-export-sanitizer-actions" role="toolbar" aria-label="脱敏选项操作栏">
+            <button class="b3-button b3-button--cancel" aria-label="取消脱敏设置">取消</button>
+            <button class="b3-button b3-button--primary xlc-btn-primary" aria-label="保存脱敏配置">保存脱敏配置</button>
         </div>
     `;
 
@@ -178,6 +178,27 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
                 if (e.repeat) return;
                 e.preventDefault();
                 doConfirm();
+            }
+        });
+
+        const actionsToolbar = container.querySelector(".xlc-export-sanitizer-actions");
+        actionsToolbar?.addEventListener("keydown", (e: any) => {
+            const buttons = [cancelBtn, confirmBtn].filter((b): b is HTMLButtonElement => Boolean(b && !(b as HTMLButtonElement).disabled));
+            if (buttons.length <= 1) return;
+            const curIdx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            if (curIdx === -1) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                buttons[(curIdx + 1) % buttons.length]?.focus();
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                buttons[(curIdx - 1 + buttons.length) % buttons.length]?.focus();
+            } else if (e.key === "Home") {
+                e.preventDefault();
+                buttons[0]?.focus();
+            } else if (e.key === "End") {
+                e.preventDefault();
+                buttons[buttons.length - 1]?.focus();
             }
         });
 

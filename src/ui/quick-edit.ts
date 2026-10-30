@@ -57,6 +57,7 @@ export function openQuickEditDialog(
     container.className = "xlc-quick-edit-container";
 
     const textarea = document.createElement("textarea");
+    textarea.id = "xlc-quick-edit-textarea";
     textarea.className = "b3-text-field fn__block";
     textarea.style.height = "180px";
     textarea.style.resize = "vertical";
@@ -67,16 +68,26 @@ export function openQuickEditDialog(
     textarea.style.lineHeight = "1.5";
     textarea.value = initialContent;
     textarea.dataset.xlcControl = "quick-edit.textarea";
+    if (typeof textarea.setAttribute === "function") {
+        textarea.setAttribute("aria-label", `${deps.t("quickEditBlock")} (${blockId})`);
+        textarea.setAttribute("aria-describedby", "xlc-quick-edit-hint xlc-quick-edit-counter xlc-quick-edit-error");
+    }
 
     const footer = document.createElement("div");
     footer.className = "xlc-quick-edit-footer";
 
     const hint = document.createElement("span");
+    hint.id = "xlc-quick-edit-hint";
     hint.className = "xlc-quick-edit-hint";
     hint.textContent = "Ctrl+Enter 保存 · Esc 取消";
 
     const counter = document.createElement("span");
+    counter.id = "xlc-quick-edit-counter";
     counter.className = "xlc-quick-edit-counter";
+    if (typeof counter.setAttribute === "function") {
+        counter.setAttribute("role", "status");
+        counter.setAttribute("aria-live", "polite");
+    }
     const updateCount = () => {
         counter.textContent = `${textarea.value.length} 字符`;
     };
@@ -87,20 +98,32 @@ export function openQuickEditDialog(
     footer.appendChild(counter);
 
     const errHint = document.createElement("div");
+    errHint.id = "xlc-quick-edit-error";
     errHint.className = "xlc-form-error";
     errHint.style.color = "var(--b3-theme-error)";
     errHint.style.fontSize = "12px";
     errHint.style.minHeight = "18px";
     errHint.style.display = "none";
     errHint.dataset.xlcControl = "quick-edit.error";
+    if (typeof errHint.setAttribute === "function") {
+        errHint.setAttribute("role", "alert");
+        errHint.setAttribute("aria-live", "assertive");
+    }
 
     const btnRow = document.createElement("div");
     btnRow.className = "xlc-quick-edit-actions";
+    if (typeof btnRow.setAttribute === "function") {
+        btnRow.setAttribute("role", "toolbar");
+        btnRow.setAttribute("aria-label", "快编操作栏");
+    }
 
     const cancelBtn = document.createElement("button");
     cancelBtn.className = "b3-button b3-button--cancel";
     cancelBtn.textContent = deps.t("cancel");
     cancelBtn.dataset.xlcControl = "quick-edit.cancel";
+    if (typeof cancelBtn.setAttribute === "function") {
+        cancelBtn.setAttribute("aria-label", deps.t("cancel") || "取消快编");
+    }
     cancelBtn.addEventListener("click", () => {
         if (saving) return;
         dialog.destroy();
@@ -110,6 +133,29 @@ export function openQuickEditDialog(
     saveBtn.className = "b3-button xlc-btn-primary";
     saveBtn.textContent = deps.t("saveChanges");
     saveBtn.dataset.xlcControl = "quick-edit.save";
+    if (typeof saveBtn.setAttribute === "function") {
+        saveBtn.setAttribute("aria-label", deps.t("saveChanges") || "保存修改");
+    }
+
+    btnRow.addEventListener("keydown", (e) => {
+        const buttons = [cancelBtn, saveBtn].filter((b) => !b.disabled);
+        if (buttons.length <= 1) return;
+        const curIdx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        if (curIdx === -1) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+            e.preventDefault();
+            buttons[(curIdx + 1) % buttons.length]?.focus();
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            buttons[(curIdx - 1 + buttons.length) % buttons.length]?.focus();
+        } else if (e.key === "Home") {
+            e.preventDefault();
+            buttons[0]?.focus();
+        } else if (e.key === "End") {
+            e.preventDefault();
+            buttons[buttons.length - 1]?.focus();
+        }
+    });
 
     const doSave = async () => {
         if (saving || closed) return;

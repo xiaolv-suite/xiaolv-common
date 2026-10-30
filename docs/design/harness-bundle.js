@@ -18289,9 +18289,9 @@ ${finalHtml}
                 <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" aria-label="\u81EA\u5B9A\u4E49\u5B57\u9762\u66FF\u6362\u8BCD\u5178" placeholder="\u5185\u90E8IP=10.0.0.x&#10;\u6838\u5FC3\u5BA2\u6237=\u4FDD\u5BC6\u5BA2\u6237">${escapeHtml(customText)}</textarea>
             </div>
         </div>
-        <div class="b3-dialog__action xlc-form-actions xlc-export-sanitizer-actions">
-            <button class="b3-button b3-button--cancel">\u53D6\u6D88</button>
-            <button class="b3-button b3-button--primary xlc-btn-primary">\u4FDD\u5B58\u8131\u654F\u914D\u7F6E</button>
+        <div class="b3-dialog__action xlc-form-actions xlc-export-sanitizer-actions" role="toolbar" aria-label="\u8131\u654F\u9009\u9879\u64CD\u4F5C\u680F">
+            <button class="b3-button b3-button--cancel" aria-label="\u53D6\u6D88\u8131\u654F\u8BBE\u7F6E">\u53D6\u6D88</button>
+            <button class="b3-button b3-button--primary xlc-btn-primary" aria-label="\u4FDD\u5B58\u8131\u654F\u914D\u7F6E">\u4FDD\u5B58\u8131\u654F\u914D\u7F6E</button>
         </div>
     `;
     if (typeof document !== "undefined") {
@@ -18349,6 +18349,27 @@ ${finalHtml}
           if (e.repeat) return;
           e.preventDefault();
           doConfirm();
+        }
+      });
+      const actionsToolbar = container.querySelector(".xlc-export-sanitizer-actions");
+      actionsToolbar == null ? void 0 : actionsToolbar.addEventListener("keydown", (e) => {
+        var _a2, _b, _c, _d;
+        const buttons = [cancelBtn2, confirmBtn2].filter((b) => Boolean(b && !b.disabled));
+        if (buttons.length <= 1) return;
+        const curIdx = buttons.indexOf(document.activeElement);
+        if (curIdx === -1) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          (_a2 = buttons[(curIdx + 1) % buttons.length]) == null ? void 0 : _a2.focus();
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          (_b = buttons[(curIdx - 1 + buttons.length) % buttons.length]) == null ? void 0 : _b.focus();
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          (_c = buttons[0]) == null ? void 0 : _c.focus();
+        } else if (e.key === "End") {
+          e.preventDefault();
+          (_d = buttons[buttons.length - 1]) == null ? void 0 : _d.focus();
         }
       });
       return {
@@ -19016,7 +19037,7 @@ ${finalHtml}
       const isAct = (s) => activeFilter === s ? "xlc-summary-card--active" : "";
       const isPress = (s) => activeFilter === s ? "true" : "false";
       return `
-            <div class="xlc-sync-summary-cards">
+            <div class="xlc-sync-summary-cards" role="toolbar" aria-label="\u540C\u6B65\u72B6\u6001\u7B5B\u9009">
                 <div class="xlc-summary-card ${isAct(null)}" data-status="" role="button" tabindex="0" aria-pressed="${isPress(null)}" title="\u70B9\u51FB\u67E5\u770B\u5168\u90E8\u660E\u7EC6">
                     <span class="xlc-card-label">\u603B\u8BA1\u5BF9\u6BD4</span>
                     <span class="xlc-card-value">${report.totalLocal} / ${report.totalRemote}</span>
@@ -19053,14 +19074,14 @@ ${finalHtml}
             <div class="xlc-sync-diff-controls b3-dialog__content">
                 <div class="xlc-sync-strategy-row">
                     <label class="xlc-field-label">\u5408\u5E76\u51B2\u7A81\u7B56\u7565\uFF1A</label>
-                    <select class="b3-select xlc-sync-strategy-select">
+                    <select class="b3-select xlc-sync-strategy-select" aria-label="\u5408\u5E76\u51B2\u7A81\u7B56\u7565">
                         ${optionsHtml}
                     </select>
                     <label class="b3-label xlc-mirror-checkbox-label" title="\u82E5\u52FE\u9009\uFF0C\u8FDC\u7AEF\u5DF2\u4E0D\u5B58\u5728\u7684\u6761\u76EE\u5C06\u5728\u672C\u5730\u5220\u9664">
-                        <input type="checkbox" class="b3-switch xlc-mirror-checkbox" ${mirrorDelete ? "checked" : ""} />
+                        <input type="checkbox" class="b3-switch xlc-mirror-checkbox" aria-label="\u955C\u50CF\u5220\u9664\u672C\u5730\u591A\u4F59\u9879" ${mirrorDelete ? "checked" : ""} />
                         \u955C\u50CF\u5220\u9664\u672C\u5730\u591A\u4F59\u9879
                     </label>
-                    <input type="text" class="b3-text-field xlc-diff-search-input" placeholder="\u{1F50D} \u5FEB\u901F\u8FC7\u6EE4\u6807\u9898\u6216 ID..." value="${escapeHtml(searchKeyword)}" style="flex:1; min-width:140px; height:28px; font-size:12px;" />
+                    <input type="text" class="b3-text-field xlc-diff-search-input" aria-label="\u5FEB\u901F\u8FC7\u6EE4\u6807\u9898\u6216 ID" placeholder="\u{1F50D} \u5FEB\u901F\u8FC7\u6EE4\u6807\u9898\u6216 ID..." value="${escapeHtml(searchKeyword)}" style="flex:1; min-width:140px; height:28px; font-size:12px;" />
                 </div>
                 <div class="b3-label__text xlc-strategy-hint">
                     ${escapeHtml(STRATEGY_DESCRIPTIONS[currentStrategy])}
@@ -19114,7 +19135,7 @@ ${finalHtml}
     };
     const renderTableHtml = (report, plan) => {
       return `
-            <div class="xlc-sync-diff-table-container">
+            <div class="xlc-sync-diff-table-container" tabindex="0" role="region" aria-label="\u540C\u6B65\u53D8\u52A8\u660E\u7EC6\u8868\u683C">
                 <table class="xlc-sync-diff-table">
                     <thead>
                         <tr>
@@ -19135,13 +19156,13 @@ ${finalHtml}
     const renderFooterHtml = (plan) => {
       const actionableCount = plan.summary.create + plan.summary.update + plan.summary.fork + plan.summary.delete;
       return `
-            <div class="b3-dialog__action">
+            <div class="b3-dialog__action xlc-sync-diff-actions" role="toolbar" aria-label="\u540C\u6B65\u6BD4\u5BF9\u64CD\u4F5C\u680F">
                 <span class="xlc-plan-stat-hint">
                     \u9884\u8BA1\u53D8\u52A8\uFF1A\u65B0\u589E ${plan.summary.create} \xB7 \u66F4\u65B0 ${plan.summary.update} \xB7 \u526F\u672C ${plan.summary.fork} \xB7 \u5220\u9664 ${plan.summary.delete} \xB7 \u4E0D\u53D8 ${plan.summary.noop}
                 </span>
-                <button class="b3-button b3-button--cancel">\u53D6\u6D88</button>
+                <button class="b3-button b3-button--cancel" aria-label="\u53D6\u6D88\u540C\u6B65">\u53D6\u6D88</button>
                 <div class="fn__space"></div>
-                <button class="b3-button b3-button--text b3-button--primary xlc-btn-confirm">
+                <button class="b3-button b3-button--text b3-button--primary xlc-btn-confirm" aria-label="\u786E\u8BA4\u6267\u884C\u5408\u5E76">
                     \u786E\u8BA4\u6267\u884C\u5408\u5E76 (${actionableCount} \u9879)
                 </button>
             </div>
@@ -19235,9 +19256,26 @@ ${finalHtml}
         };
         card.addEventListener("click", toggleCard);
         card.addEventListener("keydown", (e) => {
+          var _a2, _b2, _c2, _d;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             toggleCard();
+          } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+            e.preventDefault();
+            const cardList = Array.from(cards);
+            const idx = cardList.indexOf(card);
+            if (idx !== -1) (_a2 = cardList[(idx + 1) % cardList.length]) == null ? void 0 : _a2.focus();
+          } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            const cardList = Array.from(cards);
+            const idx = cardList.indexOf(card);
+            if (idx !== -1) (_b2 = cardList[(idx - 1 + cardList.length) % cardList.length]) == null ? void 0 : _b2.focus();
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            (_c2 = cards[0]) == null ? void 0 : _c2.focus();
+          } else if (e.key === "End") {
+            e.preventDefault();
+            (_d = cards[cards.length - 1]) == null ? void 0 : _d.focus();
           }
         });
       });
@@ -19267,6 +19305,36 @@ ${finalHtml}
         if (applying) return;
         dialog == null ? void 0 : dialog.destroy();
         await performApply();
+      });
+      const footerToolbar = container.querySelector(".xlc-sync-diff-actions");
+      footerToolbar == null ? void 0 : footerToolbar.addEventListener("keydown", (e) => {
+        var _a2, _b2, _c2, _d;
+        const buttons = [cancelBtn2, confirmBtn2].filter((b) => Boolean(b && !b.disabled));
+        if (buttons.length <= 1) return;
+        const curIdx = buttons.indexOf(document.activeElement);
+        if (curIdx === -1) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          (_a2 = buttons[(curIdx + 1) % buttons.length]) == null ? void 0 : _a2.focus();
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          (_b2 = buttons[(curIdx - 1 + buttons.length) % buttons.length]) == null ? void 0 : _b2.focus();
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          (_c2 = buttons[0]) == null ? void 0 : _c2.focus();
+        } else if (e.key === "End") {
+          e.preventDefault();
+          (_d = buttons[buttons.length - 1]) == null ? void 0 : _d.focus();
+        }
+      });
+      container.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          if (e.repeat || applying) return;
+          e.preventDefault();
+          dialog == null ? void 0 : dialog.destroy();
+          void performApply();
+        }
       });
       return {
         element: container,
