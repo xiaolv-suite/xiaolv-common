@@ -103,6 +103,9 @@ function createMockContainer() {
         },
         style,
         innerHTML: "",
+        attributes: {},
+        setAttribute(k, v) { this.attributes[k] = String(v); },
+        getAttribute(k) { return this.attributes[k] || null; },
         appendChild: (child) => {
             children.push(child);
             return child;

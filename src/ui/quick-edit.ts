@@ -55,10 +55,6 @@ export function openQuickEditDialog(
     const body = getDialogBody(dialog.element);
     const container = document.createElement("div");
     container.className = "xlc-quick-edit-container";
-    container.style.display = "flex";
-    container.style.flexDirection = "column";
-    container.style.gap = "12px";
-    container.style.padding = "16px";
 
     const textarea = document.createElement("textarea");
     textarea.className = "b3-text-field fn__block";
@@ -72,6 +68,24 @@ export function openQuickEditDialog(
     textarea.value = initialContent;
     textarea.dataset.xlcControl = "quick-edit.textarea";
 
+    const footer = document.createElement("div");
+    footer.className = "xlc-quick-edit-footer";
+
+    const hint = document.createElement("span");
+    hint.className = "xlc-quick-edit-hint";
+    hint.textContent = "Ctrl+Enter 保存 · Esc 取消";
+
+    const counter = document.createElement("span");
+    counter.className = "xlc-quick-edit-counter";
+    const updateCount = () => {
+        counter.textContent = `${textarea.value.length} 字符`;
+    };
+    updateCount();
+    textarea.addEventListener("input", updateCount);
+
+    footer.appendChild(hint);
+    footer.appendChild(counter);
+
     const errHint = document.createElement("div");
     errHint.className = "xlc-form-error";
     errHint.style.color = "var(--b3-theme-error)";
@@ -82,15 +96,15 @@ export function openQuickEditDialog(
 
     const btnRow = document.createElement("div");
     btnRow.className = "xlc-quick-edit-actions";
-    btnRow.style.display = "flex";
-    btnRow.style.justifyContent = "flex-end";
-    btnRow.style.gap = "8px";
 
     const cancelBtn = document.createElement("button");
     cancelBtn.className = "b3-button b3-button--cancel";
     cancelBtn.textContent = deps.t("cancel");
     cancelBtn.dataset.xlcControl = "quick-edit.cancel";
-    cancelBtn.addEventListener("click", () => dialog.destroy());
+    cancelBtn.addEventListener("click", () => {
+        if (saving) return;
+        dialog.destroy();
+    });
 
     const saveBtn = document.createElement("button");
     saveBtn.className = "b3-button xlc-btn-primary";
@@ -117,6 +131,7 @@ export function openQuickEditDialog(
 
         saving = true;
         saveBtn.disabled = true;
+        cancelBtn.disabled = true;
         saveBtn.textContent = deps.t("loading");
         errHint.style.display = "none";
 
@@ -125,6 +140,7 @@ export function openQuickEditDialog(
             if (closed) return;
             saving = false;
             saveBtn.disabled = false;
+            cancelBtn.disabled = false;
             saveBtn.textContent = deps.t("saveChanges");
 
             if (res.success) {
@@ -141,6 +157,7 @@ export function openQuickEditDialog(
             if (closed) return;
             saving = false;
             saveBtn.disabled = false;
+            cancelBtn.disabled = false;
             saveBtn.textContent = deps.t("saveChanges");
             const msg = toErrorMessage(err) || deps.t("kernelError", "failed to update");
             errHint.textContent = msg;
@@ -157,6 +174,7 @@ export function openQuickEditDialog(
             e.preventDefault();
             void doSave();
         } else if (e.key === "Escape") {
+            if (saving) return;
             e.preventDefault();
             dialog.destroy();
         }
@@ -164,6 +182,7 @@ export function openQuickEditDialog(
 
     container.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
+            if (saving) return;
             e.preventDefault();
             dialog.destroy();
             return;
@@ -184,6 +203,7 @@ export function openQuickEditDialog(
     btnRow.appendChild(saveBtn);
 
     container.appendChild(textarea);
+    container.appendChild(footer);
     container.appendChild(errHint);
     container.appendChild(btnRow);
 

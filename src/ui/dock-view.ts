@@ -98,6 +98,7 @@ export class DockView {
         const newBtn = document.createElement("button");
         newBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
         newBtn.title = (this.deps.t("newItemAction") || "新建常用语") + " (Alt+Shift+N)";
+        if (typeof newBtn.setAttribute === "function") newBtn.setAttribute("aria-label", newBtn.title);
         newBtn.textContent = "＋";
         newBtn.addEventListener("click", () => this.deps.newItem());
         actions.appendChild(newBtn);
@@ -105,6 +106,7 @@ export class DockView {
         const refreshBtn = document.createElement("button");
         refreshBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
         refreshBtn.title = this.deps.t("reindex") || "刷新内容库";
+        if (typeof refreshBtn.setAttribute === "function") refreshBtn.setAttribute("aria-label", refreshBtn.title);
         refreshBtn.textContent = "↺";
         refreshBtn.addEventListener("click", () => void this.refresh());
         actions.appendChild(refreshBtn);
@@ -113,6 +115,7 @@ export class DockView {
             const gearBtn = document.createElement("button");
             gearBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
             gearBtn.title = this.deps.t("openSettings") || "打开小驴常用设置";
+            if (typeof gearBtn.setAttribute === "function") gearBtn.setAttribute("aria-label", gearBtn.title);
             gearBtn.textContent = "⚙";
             gearBtn.addEventListener("click", () => this.deps.openSettings?.());
             actions.appendChild(gearBtn);
@@ -181,6 +184,7 @@ export class DockView {
         this.clearBtn.textContent = "×";
         this.clearBtn.style.display = "none";
         this.clearBtn.title = this.deps.t("clearSearch") || "清空输入";
+        if (typeof this.clearBtn.setAttribute === "function") this.clearBtn.setAttribute("aria-label", this.clearBtn.title);
         this.clearBtn.addEventListener("click", () => {
             this.searchInput.value = "";
             this.clearBtn.style.display = "none";
@@ -193,6 +197,10 @@ export class DockView {
         // 3. 过滤 Chips
         this.chipsContainer = document.createElement("div");
         this.chipsContainer.className = "xlc-dock-chips";
+        if (typeof this.chipsContainer.setAttribute === "function") {
+            this.chipsContainer.setAttribute("role", "radiogroup");
+            this.chipsContainer.setAttribute("aria-label", "侧边栏内容过滤");
+        }
         const scopes: Array<{key: "all" | "common" | "recent" | "favorites"; label: string}> = [
             {key: "all", label: this.deps.t("scopeAll") || "全部"},
             {key: "common", label: this.deps.t("filterCommon") || "常用"},
@@ -202,9 +210,14 @@ export class DockView {
         for (const s of scopes) {
             const chip = document.createElement("button");
             chip.type = "button";
-            chip.className = "xlc-dock-chip" + (this.currentScope === s.key ? " xlc-dock-chip--active" : "");
+            const isActive = this.currentScope === s.key;
+            chip.className = "xlc-dock-chip" + (isActive ? " xlc-dock-chip--active" : "");
             chip.textContent = s.label;
             chip.dataset.scope = s.key;
+            if (typeof chip.setAttribute === "function") {
+                chip.setAttribute("role", "radio");
+                chip.setAttribute("aria-checked", isActive ? "true" : "false");
+            }
             chip.addEventListener("click", () => {
                 this.currentScope = s.key;
                 this.syncChips();
@@ -234,7 +247,9 @@ export class DockView {
 
     private syncChips(): void {
         this.chipsContainer.querySelectorAll<HTMLButtonElement>(".xlc-dock-chip").forEach((btn) => {
-            btn.classList.toggle("xlc-dock-chip--active", btn.dataset.scope === this.currentScope);
+            const isActive = btn.dataset.scope === this.currentScope;
+            btn.classList.toggle("xlc-dock-chip--active", isActive);
+            if (typeof btn.setAttribute === "function") btn.setAttribute("aria-checked", isActive ? "true" : "false");
         });
     }
 
@@ -399,6 +414,7 @@ export class DockView {
         insertBtn.type = "button";
         insertBtn.className = "xlc-dock-act-btn";
         insertBtn.title = "插入到当前文档光标处";
+        if (typeof insertBtn.setAttribute === "function") insertBtn.setAttribute("aria-label", insertBtn.title);
         insertBtn.textContent = "＋";
         insertBtn.addEventListener("mousedown", (e) => {
             e.preventDefault(); // 阻止抢夺编辑器光标焦点
@@ -414,6 +430,7 @@ export class DockView {
         copyBtn.type = "button";
         copyBtn.className = "xlc-dock-act-btn";
         copyBtn.title = "复制纯文本到剪贴板";
+        if (typeof copyBtn.setAttribute === "function") copyBtn.setAttribute("aria-label", copyBtn.title);
         copyBtn.textContent = "⧉";
         copyBtn.addEventListener("click", (e) => {
             e.stopPropagation();
@@ -425,13 +442,19 @@ export class DockView {
         const favBtn = document.createElement("button");
         favBtn.type = "button";
         favBtn.className = "xlc-dock-act-btn" + (this.deps.isFavorite(entry.id) ? " xlc-dock-act-btn--fav" : "");
-        favBtn.title = this.deps.isFavorite(entry.id) ? "取消收藏" : "加入收藏";
+        const favTitle = this.deps.isFavorite(entry.id) ? "取消收藏" : "加入收藏";
+        favBtn.title = favTitle;
+        if (typeof favBtn.setAttribute === "function") favBtn.setAttribute("aria-label", favTitle);
         favBtn.textContent = this.deps.isFavorite(entry.id) ? "★" : "☆";
         favBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             this.deps.toggleFavorite(entry.id);
-            favBtn.textContent = this.deps.isFavorite(entry.id) ? "★" : "☆";
-            favBtn.classList.toggle("xlc-dock-act-btn--fav", this.deps.isFavorite(entry.id));
+            const isFav = this.deps.isFavorite(entry.id);
+            favBtn.textContent = isFav ? "★" : "☆";
+            const updatedTitle = isFav ? "取消收藏" : "加入收藏";
+            favBtn.title = updatedTitle;
+            if (typeof favBtn.setAttribute === "function") favBtn.setAttribute("aria-label", updatedTitle);
+            favBtn.classList.toggle("xlc-dock-act-btn--fav", isFav);
         });
         hoverActs.appendChild(favBtn);
 
