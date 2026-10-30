@@ -76,3 +76,41 @@ if (typeof window !== "undefined") {
     // 导出到全局用于调试
     (window as any).__xlcEventListeners = () => eventListenerCount;
 }
+
+export interface VirtualScrollWindow {
+    startIndex: number;
+    endIndex: number;
+    offsetY: number;
+    totalHeight: number;
+    visibleCount: number;
+}
+
+/**
+ * 纯函数：计算超大条目库 (5000+项) 的虚拟滚动视口窗口范围
+ * 用于轻量 DOM 树挂载与非可视区域内存即时回收
+ */
+export function calculateVirtualScrollWindow(
+    totalCount: number,
+    scrollTop: number,
+    itemHeight: number,
+    viewportHeight: number,
+    buffer = 4,
+): VirtualScrollWindow {
+    if (totalCount <= 0 || itemHeight <= 0 || viewportHeight <= 0) {
+        return {startIndex: 0, endIndex: 0, offsetY: 0, totalHeight: 0, visibleCount: 0};
+    }
+    const totalHeight = totalCount * itemHeight;
+    const clampedScrollTop = Math.max(0, Math.min(scrollTop, Math.max(0, totalHeight - viewportHeight)));
+    const rawStart = Math.floor(clampedScrollTop / itemHeight);
+    const visibleCount = Math.ceil(viewportHeight / itemHeight);
+    const startIndex = Math.max(0, rawStart - buffer);
+    const endIndex = Math.min(totalCount, rawStart + visibleCount + buffer);
+    const offsetY = startIndex * itemHeight;
+    return {
+        startIndex,
+        endIndex,
+        offsetY,
+        totalHeight,
+        visibleCount,
+    };
+}

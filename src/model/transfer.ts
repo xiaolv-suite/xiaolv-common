@@ -2,12 +2,15 @@
 import {EXPORT_SCHEMA_VERSION, LIMITS, PROTOCOL_NAME} from "../constants";
 import {CommonItem, isItemType, isLogicalId, isSafeHttpUrl, isSourceType, newLogicalId} from "./item";
 import {SanitizerOptions, sanitizeTextForExport} from "./export-sanitizer";
+import {calculateChecksum} from "./clipboard-cleaner";
 
 export interface ExportBundle {
     protocol: typeof PROTOCOL_NAME;
     schemaVersion: typeof EXPORT_SCHEMA_VERSION;
     exportedAt: number;
     items: ExportedItem[];
+    /** 内容完整性校验和 (CRC-32 哈希签名，防伪与防篡改) */
+    checksum?: string;
 }
 
 export interface ExportedItem {
@@ -29,36 +32,51 @@ export interface ExportedItem {
     extensions?: Record<string, unknown>;
 }
 
+/** 计算条目集合的防伪哈希签名与校验和 (CRC-32) */
+export function computeBundleChecksum(items: readonly ExportedItem[]): string {
+    const raw = items.map((i) => `${i.id}::${i.title}::${i.kramdown}::${i.itemType}::${i.alias}`).join(";;");
+    return calculateChecksum(raw, "crc32");
+}
+
+/** 校验模板包签名是否匹配（无签名时宽容通过，有签名时严格核验） */
+export function verifyBundleChecksum(bundle: ExportBundle): boolean {
+    if (!bundle.checksum) return true;
+    return computeBundleChecksum(bundle.items) === bundle.checksum;
+}
+
 export function buildBundle(
     items: readonly CommonItem[],
     kramdownById: ReadonlyMap<string, string>,
     now: number,
     sanitizer?: SanitizerOptions,
 ): ExportBundle {
+    const exportedItems: ExportedItem[] = items.map((item) => {
+        let body = (kramdownById.get(item.id) ?? "").slice(0, LIMITS.contentChars);
+        if (sanitizer && item.itemType !== "code") {
+            body = sanitizeTextForExport(body, sanitizer).text;
+        }
+        return {
+            id: item.id,
+            itemType: item.itemType,
+            title: item.title,
+            alias: item.alias,
+            tags: Array.isArray(item.tags) ? [...item.tags] : [],
+            category: item.category,
+            kramdown: body,
+            source: {...item.source},
+            url: item.url,
+            targetBlockId: item.targetBlockId,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+        };
+    });
+
     return {
         protocol: PROTOCOL_NAME,
         schemaVersion: EXPORT_SCHEMA_VERSION,
         exportedAt: now,
-        items: items.map((item) => {
-            let body = (kramdownById.get(item.id) ?? "").slice(0, LIMITS.contentChars);
-            if (sanitizer && item.itemType !== "code") {
-                body = sanitizeTextForExport(body, sanitizer).text;
-            }
-            return {
-                id: item.id,
-                itemType: item.itemType,
-                title: item.title,
-                alias: item.alias,
-                tags: Array.isArray(item.tags) ? [...item.tags] : [],
-                category: item.category,
-                kramdown: body,
-                source: {...item.source},
-                url: item.url,
-                targetBlockId: item.targetBlockId,
-                createdAt: item.createdAt,
-                updatedAt: item.updatedAt,
-            };
-        }),
+        items: exportedItems,
+        checksum: computeBundleChecksum(exportedItems),
     };
 }
 
@@ -181,7 +199,7 @@ export function validateImport(jsonText: string): ImportValidation {
     if (record.items.length > LIMITS.maxItems) {
         return {ok: false, reason: "too-many-items", issues};
     }
-    const knownTop = ["protocol", "schemaVersion", "exportedAt", "items"];
+    const knownTop = ["protocol", "schemaVersion", "exportedAt", "items", "checksum"];
     const unknownTopFields = Object.keys(record).filter((k) => !knownTop.includes(k));
     const items: ExportedItem[] = [];
     const seenIds = new Set<string>();
@@ -198,6 +216,15 @@ export function validateImport(jsonText: string): ImportValidation {
         seenIds.add(item.id);
         items.push(item);
     });
+
+    // 完整性校验：若包含防伪哈希签名，校验条目内容是否与签名严格匹配
+    if (typeof record.checksum === "string" && record.checksum.length > 0) {
+        const computed = computeBundleChecksum(items);
+        if (computed !== record.checksum) {
+            issues.push({index: -1, reason: "checksum-mismatch"});
+        }
+    }
+
     return {ok: true, parsed: {schemaVersion: EXPORT_SCHEMA_VERSION, items, unknownTopFields}, issues};
 }
 

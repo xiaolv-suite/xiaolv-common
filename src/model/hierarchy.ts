@@ -156,3 +156,56 @@ export function flattenHierarchyTree(
 
     return result;
 }
+
+/**
+ * 改变层级路径的父级（用于分类/标签拖拽移动与归属重定）
+ * 例如：reparentHierarchyPath("客服/退款", "财务") -> "财务/退款"
+ * reparentHierarchyPath("客服/售后/退款", "") -> "退款" (移至根级)
+ */
+export function reparentHierarchyPath(currentPath: string, newParentPath: string): string {
+    const segments = splitHierarchyPath(currentPath);
+    if (segments.length === 0) return "";
+    const leafName = segments[segments.length - 1]!;
+    const parentSegments = splitHierarchyPath(newParentPath);
+    if (parentSegments.length === 0) return leafName;
+    return `${parentSegments.join("/")}/${leafName}`;
+}
+
+/**
+ * 级联重命名层级路径节点（用于分类改名时自动级联更新所有子孙项）
+ * 例如：renameHierarchyNode("客服/售后/退款", "客服/售后", "客服/技术支持") -> "客服/技术支持/退款"
+ */
+export function renameHierarchyNode(fullPath: string, oldPrefix: string, newPrefix: string): string {
+    const c = fullPath.trim();
+    const o = oldPrefix.trim();
+    const n = newPrefix.trim();
+    if (c === o) return n;
+    if (c.startsWith(o + "/")) {
+        return `${n}/${c.slice(o.length + 1)}`;
+    }
+    return c;
+}
+
+/**
+ * 自定义同级排序（支持将常用分类或标签置顶于前列）
+ */
+export function reorderHierarchyNodes(nodes: readonly HierarchyNode[], customOrder: readonly string[]): HierarchyNode[] {
+    const orderMap = new Map<string, number>();
+    customOrder.forEach((nameOrPath, index) => {
+        orderMap.set(nameOrPath.trim(), index);
+    });
+
+    const sorted = [...nodes].sort((a, b) => {
+        const orderA = orderMap.get(a.path) ?? orderMap.get(a.name);
+        const orderB = orderMap.get(b.path) ?? orderMap.get(b.name);
+        if (orderA !== undefined && orderB !== undefined) return orderA - orderB;
+        if (orderA !== undefined) return -1;
+        if (orderB !== undefined) return 1;
+        return a.name.localeCompare(b.name, "zh-Hans-CN");
+    });
+
+    return sorted.map((node) => ({
+        ...node,
+        children: reorderHierarchyNodes(node.children, customOrder),
+    }));
+}

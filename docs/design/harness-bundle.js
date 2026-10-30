@@ -15745,32 +15745,38 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
   });
 
   // src/model/transfer.ts
+  function computeBundleChecksum(items) {
+    const raw = items.map((i) => `${i.id}::${i.title}::${i.kramdown}::${i.itemType}::${i.alias}`).join(";;");
+    return calculateChecksum(raw, "crc32");
+  }
   function buildBundle(items, kramdownById, now, sanitizer) {
+    const exportedItems = items.map((item) => {
+      var _a;
+      let body = ((_a = kramdownById.get(item.id)) != null ? _a : "").slice(0, LIMITS.contentChars);
+      if (sanitizer && item.itemType !== "code") {
+        body = sanitizeTextForExport(body, sanitizer).text;
+      }
+      return {
+        id: item.id,
+        itemType: item.itemType,
+        title: item.title,
+        alias: item.alias,
+        tags: Array.isArray(item.tags) ? [...item.tags] : [],
+        category: item.category,
+        kramdown: body,
+        source: { ...item.source },
+        url: item.url,
+        targetBlockId: item.targetBlockId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt
+      };
+    });
     return {
       protocol: PROTOCOL_NAME,
       schemaVersion: EXPORT_SCHEMA_VERSION,
       exportedAt: now,
-      items: items.map((item) => {
-        var _a;
-        let body = ((_a = kramdownById.get(item.id)) != null ? _a : "").slice(0, LIMITS.contentChars);
-        if (sanitizer && item.itemType !== "code") {
-          body = sanitizeTextForExport(body, sanitizer).text;
-        }
-        return {
-          id: item.id,
-          itemType: item.itemType,
-          title: item.title,
-          alias: item.alias,
-          tags: Array.isArray(item.tags) ? [...item.tags] : [],
-          category: item.category,
-          kramdown: body,
-          source: { ...item.source },
-          url: item.url,
-          targetBlockId: item.targetBlockId,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt
-        };
-      })
+      items: exportedItems,
+      checksum: computeBundleChecksum(exportedItems)
     };
   }
   function utf8ToBase64(str) {
@@ -15857,7 +15863,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
     if (record.items.length > LIMITS.maxItems) {
       return { ok: false, reason: "too-many-items", issues };
     }
-    const knownTop = ["protocol", "schemaVersion", "exportedAt", "items"];
+    const knownTop = ["protocol", "schemaVersion", "exportedAt", "items", "checksum"];
     const unknownTopFields = Object.keys(record).filter((k) => !knownTop.includes(k));
     const items = [];
     const seenIds = /* @__PURE__ */ new Set();
@@ -15874,6 +15880,12 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
       seenIds.add(item.id);
       items.push(item);
     });
+    if (typeof record.checksum === "string" && record.checksum.length > 0) {
+      const computed = computeBundleChecksum(items);
+      if (computed !== record.checksum) {
+        issues.push({ index: -1, reason: "checksum-mismatch" });
+      }
+    }
     return { ok: true, parsed: { schemaVersion: EXPORT_SCHEMA_VERSION, items, unknownTopFields }, issues };
   }
   function normalizeExportedItem(raw) {
@@ -15920,6 +15932,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
       init_constants();
       init_item();
       init_export_sanitizer();
+      init_clipboard_cleaner();
       COMPACT_BUNDLE_PREFIX = "xlc-bundle:";
     }
   });
