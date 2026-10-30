@@ -30,8 +30,12 @@ export function mountPlatformDialogTitleWrap(
 
     const wrap = document.createElement("div");
     wrap.className = "lv-dialog-title-wrap";
+    wrap.setAttribute("role", "heading");
+    wrap.setAttribute("aria-level", "1");
+    wrap.setAttribute("aria-label", `${titleText} ${badgeText ? `版本 ${badgeText}` : ""}`.trim());
     const iconSpan = document.createElement("span");
     iconSpan.className = "lv-dialog-title-icon";
+    iconSpan.setAttribute("aria-hidden", "true");
     iconSpan.innerHTML = `<svg><use xlink:href="#${iconName || "iconXlcCommon"}"></use></svg>`;
     const titleSpan = document.createElement("span");
     titleSpan.className = "lv-dialog-title-text";
@@ -40,6 +44,8 @@ export function mountPlatformDialogTitleWrap(
     if (badgeText) {
         const badgeSpan = document.createElement("span");
         badgeSpan.className = "lv-dialog-title-pill";
+        badgeSpan.setAttribute("role", "status");
+        badgeSpan.setAttribute("aria-label", `插件版本：${badgeText}`);
         badgeSpan.textContent = badgeText;
         wrap.appendChild(badgeSpan);
     }

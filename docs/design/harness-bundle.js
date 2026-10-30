@@ -194,8 +194,12 @@
     if (existing) return existing;
     const wrap = document.createElement("div");
     wrap.className = "lv-dialog-title-wrap";
+    wrap.setAttribute("role", "heading");
+    wrap.setAttribute("aria-level", "1");
+    wrap.setAttribute("aria-label", `${titleText} ${badgeText ? `\u7248\u672C ${badgeText}` : ""}`.trim());
     const iconSpan = document.createElement("span");
     iconSpan.className = "lv-dialog-title-icon";
+    iconSpan.setAttribute("aria-hidden", "true");
     iconSpan.innerHTML = `<svg><use xlink:href="#${iconName || "iconXlcCommon"}"></use></svg>`;
     const titleSpan = document.createElement("span");
     titleSpan.className = "lv-dialog-title-text";
@@ -204,6 +208,8 @@
     if (badgeText) {
       const badgeSpan = document.createElement("span");
       badgeSpan.className = "lv-dialog-title-pill";
+      badgeSpan.setAttribute("role", "status");
+      badgeSpan.setAttribute("aria-label", `\u63D2\u4EF6\u7248\u672C\uFF1A${badgeText}`);
       badgeSpan.textContent = badgeText;
       wrap.appendChild(badgeSpan);
     }
@@ -9580,6 +9586,8 @@ ${codeText}`;
     root.className = "xlc-varform";
     const head = document.createElement("div");
     head.className = "xlc-varform-head";
+    head.setAttribute("role", "toolbar");
+    head.setAttribute("aria-label", "\u53D8\u91CF\u5361\u6807\u9898\u680F");
     const badge = document.createElement("span");
     badge.className = "xlc-badge xlc-badge--markdown";
     badge.textContent = (_a = TYPE_BADGES[options.itemType]) != null ? _a : "TXT";
@@ -9718,6 +9726,31 @@ ${codeText}`;
       if (candidateOptions.size > 0) {
         const pillsWrap = document.createElement("div");
         pillsWrap.className = "xlc-varform-quick-options";
+        pillsWrap.setAttribute("role", "toolbar");
+        pillsWrap.setAttribute("aria-label", "\u5FEB\u6377\u5019\u9009\u9879");
+        pillsWrap.addEventListener("keydown", (e) => {
+          var _a2, _b2, _c;
+          if (e.isComposing || e.keyCode === 229) return;
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const btns = Array.from(pillsWrap.querySelectorAll("button.xlc-quick-option-pill"));
+            if (!btns.length) return;
+            const idx = btns.indexOf(document.activeElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+            (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+            return;
+          }
+          if (e.key === "Home" || e.key === "End") {
+            const btns = Array.from(pillsWrap.querySelectorAll("button.xlc-quick-option-pill"));
+            if (!btns.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Home") (_b2 = btns[0]) == null ? void 0 : _b2.focus();
+            else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+          }
+        });
         const syncPills = () => {
           pillsWrap.querySelectorAll(".xlc-quick-option-pill").forEach((pill) => {
             const isPicked = pill.textContent === input.value;
@@ -9792,6 +9825,31 @@ ${codeText}`;
     const presetSchemes = { ...options.presets || {} };
     const presetWrap = document.createElement("div");
     presetWrap.className = "xlc-varform-preset-wrap";
+    presetWrap.setAttribute("role", "toolbar");
+    presetWrap.setAttribute("aria-label", "\u9884\u8BBE\u65B9\u6848\u64CD\u4F5C\u680F");
+    presetWrap.addEventListener("keydown", (e) => {
+      var _a2, _b2, _c;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const btns = Array.from(presetWrap.querySelectorAll("select, button"));
+        if (!btns.length) return;
+        const idx = btns.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+        (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        const btns = Array.from(presetWrap.querySelectorAll("select, button"));
+        if (!btns.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Home") (_b2 = btns[0]) == null ? void 0 : _b2.focus();
+        else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+      }
+    });
     presetWrap.style.display = "flex";
     presetWrap.style.alignItems = "center";
     presetWrap.style.gap = "8px";
@@ -9877,6 +9935,31 @@ ${codeText}`;
     root.appendChild(presetWrap);
     const foot = document.createElement("div");
     foot.className = "xlc-varform-foot";
+    foot.setAttribute("role", "toolbar");
+    foot.setAttribute("aria-label", "\u53D8\u91CF\u5361\u64CD\u4F5C\u680F");
+    foot.addEventListener("keydown", (e) => {
+      var _a2, _b2, _c;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const btns = Array.from(foot.querySelectorAll("button:not([disabled]):not([style*='display: none'])"));
+        if (!btns.length) return;
+        const idx = btns.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+        (_a2 = btns[nextIdx]) == null ? void 0 : _a2.focus();
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        const btns = Array.from(foot.querySelectorAll("button:not([disabled]):not([style*='display: none'])"));
+        if (!btns.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Home") (_b2 = btns[0]) == null ? void 0 : _b2.focus();
+        else (_c = btns[btns.length - 1]) == null ? void 0 : _c.focus();
+      }
+    });
     const kbdHint = document.createElement("span");
     kbdHint.className = "xlc-varform-hint";
     kbdHint.textContent = options.fields.some((f) => f.kind === "textarea") ? t("varFormHintMultiline") : t("varFormHint");
@@ -9885,6 +9968,7 @@ ${codeText}`;
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "variable.cancel";
     cancelBtn.textContent = t("cancel");
+    cancelBtn.setAttribute("aria-label", t("cancel"));
     foot.appendChild(cancelBtn);
     const resetBtn = document.createElement("button");
     resetBtn.type = "button";
@@ -9925,6 +10009,7 @@ ${codeText}`;
     const insertBtn = document.createElement("button");
     insertBtn.className = "b3-button xlc-btn-primary";
     insertBtn.textContent = t("insert");
+    insertBtn.setAttribute("aria-label", t("insert"));
     foot.appendChild(insertBtn);
     root.appendChild(foot);
     body.appendChild(root);
@@ -32825,7 +32910,6 @@ ${progress.progressBar}`);
       confirm3.dataset.xlcControl = "discovery.close.confirm";
       confirm3.textContent = this.tx("discoveryCloseConfirm");
       confirm3.setAttribute("aria-label", this.tx("discoveryCloseConfirm"));
-      actions.append(cancel, confirm3);
       actions.append(cancel, confirm3);
       form.append(warning, error, actions);
       body.appendChild(form);

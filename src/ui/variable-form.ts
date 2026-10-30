@@ -99,6 +99,8 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     // 头部：类型徽标 + 条目标题 + Esc 提示
     const head = document.createElement("div");
     head.className = "xlc-varform-head";
+    head.setAttribute("role", "toolbar");
+    head.setAttribute("aria-label", "变量卡标题栏");
     const badge = document.createElement("span");
     badge.className = "xlc-badge xlc-badge--markdown";
     badge.textContent = TYPE_BADGES[options.itemType] ?? "TXT";
@@ -255,6 +257,30 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         if (candidateOptions.size > 0) {
             const pillsWrap = document.createElement("div");
             pillsWrap.className = "xlc-varform-quick-options";
+            pillsWrap.setAttribute("role", "toolbar");
+            pillsWrap.setAttribute("aria-label", "快捷候选项");
+            pillsWrap.addEventListener("keydown", (e: any) => {
+                if (e.isComposing || e.keyCode === 229) return;
+                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                    const btns = Array.from(pillsWrap.querySelectorAll<HTMLButtonElement>("button.xlc-quick-option-pill"));
+                    if (!btns.length) return;
+                    const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                    if (idx === -1) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                    btns[nextIdx]?.focus();
+                    return;
+                }
+                if (e.key === "Home" || e.key === "End") {
+                    const btns = Array.from(pillsWrap.querySelectorAll<HTMLButtonElement>("button.xlc-quick-option-pill"));
+                    if (!btns.length) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.key === "Home") btns[0]?.focus();
+                    else btns[btns.length - 1]?.focus();
+                }
+            });
             const syncPills = () => {
                 pillsWrap.querySelectorAll<HTMLElement>(".xlc-quick-option-pill").forEach((pill) => {
                     const isPicked = pill.textContent === input.value;
@@ -342,6 +368,30 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     const presetSchemes: Record<string, Record<string, string>> = {...(options.presets || {})};
     const presetWrap = document.createElement("div");
     presetWrap.className = "xlc-varform-preset-wrap";
+    presetWrap.setAttribute("role", "toolbar");
+    presetWrap.setAttribute("aria-label", "预设方案操作栏");
+    presetWrap.addEventListener("keydown", (e: any) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const btns = Array.from(presetWrap.querySelectorAll<HTMLElement>("select, button"));
+            if (!btns.length) return;
+            const idx = btns.indexOf(document.activeElement as HTMLElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+            btns[nextIdx]?.focus();
+            return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+            const btns = Array.from(presetWrap.querySelectorAll<HTMLElement>("select, button"));
+            if (!btns.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Home") btns[0]?.focus();
+            else btns[btns.length - 1]?.focus();
+        }
+    });
     presetWrap.style.display = "flex";
     presetWrap.style.alignItems = "center";
     presetWrap.style.gap = "8px";
@@ -435,6 +485,30 @@ export function openVariableFillCard(options: VariableFillOptions): void {
 
     const foot = document.createElement("div");
     foot.className = "xlc-varform-foot";
+    foot.setAttribute("role", "toolbar");
+    foot.setAttribute("aria-label", "变量卡操作栏");
+    foot.addEventListener("keydown", (e: any) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            const btns = Array.from(foot.querySelectorAll<HTMLButtonElement>("button:not([disabled]):not([style*='display: none'])"));
+            if (!btns.length) return;
+            const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+            btns[nextIdx]?.focus();
+            return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+            const btns = Array.from(foot.querySelectorAll<HTMLButtonElement>("button:not([disabled]):not([style*='display: none'])"));
+            if (!btns.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Home") btns[0]?.focus();
+            else btns[btns.length - 1]?.focus();
+        }
+    });
     const kbdHint = document.createElement("span");
     kbdHint.className = "xlc-varform-hint";
     // 含 textarea 字段时 Enter 语义变化（R160）：提示行如实告知，不沿用「Enter 插入」
@@ -444,6 +518,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "variable.cancel";
     cancelBtn.textContent = t("cancel");
+    cancelBtn.setAttribute("aria-label", t("cancel"));
     foot.appendChild(cancelBtn);
 
     const resetBtn = document.createElement("button");
@@ -485,6 +560,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     const insertBtn = document.createElement("button");
     insertBtn.className = "b3-button xlc-btn-primary";
     insertBtn.textContent = t("insert");
+    insertBtn.setAttribute("aria-label", t("insert"));
     foot.appendChild(insertBtn);
     root.appendChild(foot);
 
