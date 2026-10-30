@@ -2315,6 +2315,11 @@
     border: 1px solid var(--b3-border-color);
     border-radius: var(--xlc-radius-sm);
     background-color: var(--b3-theme-surface);
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: 1px;
+    }
   }
 
   .xlc-health-issue {
@@ -2421,6 +2426,11 @@
     background-color: var(--b3-theme-surface);
     font-size: var(--xlc-font-xs);
     line-height: var(--xlc-leading-normal);
+
+    &:focus-visible {
+      outline: 2px solid var(--xlc-accent);
+      outline-offset: 1px;
+    }
 
     .xlc-dep-row {
       display: flex;
@@ -2733,8 +2743,12 @@
     &:hover { border-color: var(--b3-theme-primary-light); }
 
     &:focus-visible {
-      outline: 2px solid var(--b3-theme-primary);
+      outline: 2px solid var(--xlc-accent);
       outline-offset: 1px;
+    }
+
+    &:active {
+      transform: scale(0.98);
     }
 
     .xlc-policy-ic {
@@ -5032,7 +5046,8 @@
   .xlc-metrics-strip,
   .xlc-discovery-row,
   .xlc-tag-facet,
-  .xlc-quick-pill {
+  .xlc-quick-pill,
+  .xlc-policy {
     transition: none !important;
     animation: none !important;
   }

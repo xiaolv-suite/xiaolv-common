@@ -22116,6 +22116,30 @@ ${exception.mark.snippet}`;
           el.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       });
+      pill.addEventListener("keydown", (e) => {
+        var _a2, _b2;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          e.stopPropagation();
+          const pills = Array.from(navBar.querySelectorAll(".xlc-settings-nav-pill"));
+          if (!pills.length) return;
+          const idx = pills.indexOf(pill);
+          const nextIdx = e.key === "ArrowRight" ? (idx + 1) % pills.length : (idx - 1 + pills.length) % pills.length;
+          (_a2 = pills[nextIdx]) == null ? void 0 : _a2.focus();
+          (_b2 = pills[nextIdx]) == null ? void 0 : _b2.click();
+          return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+          e.preventDefault();
+          e.stopPropagation();
+          const pills = Array.from(navBar.querySelectorAll(".xlc-settings-nav-pill"));
+          if (!pills.length) return;
+          const target = e.key === "Home" ? pills[0] : pills[pills.length - 1];
+          target == null ? void 0 : target.focus();
+          target == null ? void 0 : target.click();
+        }
+      });
       navBar.appendChild(pill);
     }
     root.appendChild(navBar);
@@ -22241,6 +22265,7 @@ ${exception.mark.snippet}`;
     const catSelect = document.createElement("select");
     catSelect.className = "b3-select";
     catSelect.id = "xlc-pack-category";
+    catSelect.setAttribute("aria-label", t("packCategoryLabel"));
     catLabel.htmlFor = catSelect.id;
     const allOpt = document.createElement("option");
     allOpt.value = "";
@@ -22263,6 +22288,7 @@ ${exception.mark.snippet}`;
     const nameInput = document.createElement("input");
     nameInput.className = "b3-text-field";
     nameInput.id = "xlc-pack-name";
+    nameInput.setAttribute("aria-label", t("packNameLabel"));
     nameLabel.htmlFor = nameInput.id;
     nameInput.value = t("packNameDefault");
     nameWrap.appendChild(nameInput);
@@ -22283,6 +22309,7 @@ ${exception.mark.snippet}`;
     sanitizeCheckbox.type = "checkbox";
     sanitizeCheckbox.className = "b3-switch";
     sanitizeCheckbox.dataset.xlcControl = "settings.pack-export.sanitizer-toggle";
+    sanitizeCheckbox.setAttribute("aria-label", t("packSanitizeLabel"));
     const sanitizeLabelText = document.createElement("span");
     sanitizeLabelText.className = "xlc-form-label";
     sanitizeLabelText.style.marginBottom = "0";
@@ -22360,6 +22387,14 @@ ${exception.mark.snippet}`;
     });
     actions.appendChild(exportBtn);
     wrap.appendChild(actions);
+    wrap.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (e.repeat || exportBtn.disabled) return;
+        e.preventDefault();
+        exportBtn.click();
+      }
+    });
     body.appendChild(wrap);
     const repaint = () => {
       const category = catSelect.value;
@@ -23617,6 +23652,9 @@ ${exception.mark.snippet}`;
     issuesContainer.className = "xlc-health-issues";
     issuesContainer.dataset.xlcControl = "settings.health.list";
     issuesContainer.hidden = true;
+    issuesContainer.tabIndex = 0;
+    issuesContainer.setAttribute("role", "list");
+    issuesContainer.setAttribute("aria-label", t("healthSection"));
     sec.appendChild(issuesContainer);
     const btnRow = document.createElement("div");
     btnRow.style.display = "flex";
@@ -23689,9 +23727,12 @@ ${exception.mark.snippet}`;
           for (const issue of result.issues) {
             const row = document.createElement("div");
             row.className = `xlc-health-issue xlc-health-issue--${issue.severity}`;
+            row.setAttribute("role", "listitem");
+            const sevLabel = issue.severity === "error" ? t("healthErrorBadge") : t("healthWarnBadge");
+            row.setAttribute("aria-label", `${sevLabel} \xB7 ${issue.itemTitle || issue.itemId} \xB7 ${issue.message}`);
             const pill = document.createElement("span");
             pill.className = `xlc-health-pill xlc-health-pill--${issue.severity}`;
-            pill.textContent = issue.severity === "error" ? t("healthErrorBadge") : t("healthWarnBadge");
+            pill.textContent = sevLabel;
             const titleSpan = document.createElement("strong");
             titleSpan.className = "xlc-health-title";
             titleSpan.textContent = issue.itemTitle || issue.itemId;
@@ -24699,6 +24740,9 @@ fi`;
       const depTree = document.createElement("div");
       depTree.className = "xlc-import-dep-tree";
       depTree.dataset.xlcControl = "import.pack.dep-tree";
+      depTree.tabIndex = 0;
+      depTree.setAttribute("role", "region");
+      depTree.setAttribute("aria-label", t("packDepTreeTitle") || "\u5D4C\u5957\u7247\u6BB5\u4F9D\u8D56\u5173\u7CFB");
       for (const [parentTitle, children] of Object.entries(parsed.pack.dependencyMap)) {
         const row = document.createElement("div");
         row.className = "xlc-dep-row";
@@ -24775,6 +24819,8 @@ fi`;
     };
     const policyList = document.createElement("div");
     policyList.className = "xlc-policy-list";
+    policyList.setAttribute("role", "radiogroup");
+    policyList.setAttribute("aria-label", t("importPolicyTitle"));
     for (const [policy, title, desc, recommended] of [
       ["skip", t("importPolicySkip"), t("importPolicySkipDesc"), false],
       ["overwrite", t("importPolicyOverwrite"), t("importPolicyOverwriteDesc"), false],
@@ -24783,6 +24829,9 @@ fi`;
       const card = document.createElement("button");
       card.type = "button";
       card.className = "xlc-policy" + (recommended ? " xlc-policy--recommended" : "");
+      card.setAttribute("role", "radio");
+      card.setAttribute("aria-checked", recommended ? "true" : "false");
+      card.setAttribute("aria-label", `${title} \xB7 ${desc}`);
       const icon = document.createElement("span");
       icon.className = "xlc-policy-ic";
       icon.textContent = policy === "skip" ? "\u25CB" : policy === "overwrite" ? "\u21C4" : "\uFF0B";
@@ -24799,11 +24848,42 @@ fi`;
       card.appendChild(text);
       card.dataset.xlcControl = `settings.import.policy.${policy}`;
       card.addEventListener("click", () => void run(policy));
+      card.addEventListener("keydown", (e) => {
+        var _a2, _b2, _c2;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          e.stopPropagation();
+          const cards = Array.from(policyList.querySelectorAll(".xlc-policy"));
+          if (!cards.length) return;
+          const idx = cards.indexOf(card);
+          const nextIdx = e.key === "ArrowDown" ? (idx + 1) % cards.length : (idx - 1 + cards.length) % cards.length;
+          (_a2 = cards[nextIdx]) == null ? void 0 : _a2.focus();
+          return;
+        }
+        if (e.key === "Home" || e.key === "End") {
+          e.preventDefault();
+          e.stopPropagation();
+          const cards = Array.from(policyList.querySelectorAll(".xlc-policy"));
+          if (!cards.length) return;
+          if (e.key === "Home") (_b2 = cards[0]) == null ? void 0 : _b2.focus();
+          else (_c2 = cards[cards.length - 1]) == null ? void 0 : _c2.focus();
+        }
+      });
       policyCards.push(card);
       policyList.appendChild(card);
     }
     wrap.appendChild(policyList);
     wrap.appendChild(receiptHint);
+    wrap.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        const recommendedCard = policyCards.find((c) => c.classList.contains("xlc-policy--recommended")) || policyCards[0];
+        if (e.repeat || !recommendedCard || recommendedCard.disabled) return;
+        e.preventDefault();
+        recommendedCard.click();
+      }
+    });
     body.appendChild(wrap);
   }
   var import_siyuan7, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;

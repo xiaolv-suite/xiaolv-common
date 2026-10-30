@@ -78,5 +78,5 @@ test("UI/UX Pro Max · 发现中心与捕获表单焦点轮廓与减动效降级
     assert.match(indexScss, /\.xlc-quick-pill\s*\{[\s\S]*?min-height:\s*24px;[\s\S]*?&:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--xlc-accent\);/);
 
     // 4. prefers-reduced-motion 降级
-    assert.match(indexScss, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.xlc-discovery-row,[\s\S]*?\.xlc-tag-facet,[\s\S]*?\.xlc-quick-pill\s*\{[\s\S]*?transition:\s*none !important;/);
+    assert.match(indexScss, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.xlc-discovery-row,[\s\S]*?\.xlc-tag-facet,[\s\S]*?\.xlc-quick-pill[\s\S]*?transition:\s*none !important;/);
 });

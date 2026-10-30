@@ -192,6 +192,31 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
                 el.scrollIntoView({behavior: "smooth", block: "start"});
             }
         });
+        pill.addEventListener("keydown", (e) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                e.stopPropagation();
+                const pills = Array.from(navBar.querySelectorAll<HTMLButtonElement>(".xlc-settings-nav-pill"));
+                if (!pills.length) return;
+                const idx = pills.indexOf(pill);
+                const nextIdx = e.key === "ArrowRight"
+                    ? (idx + 1) % pills.length
+                    : (idx - 1 + pills.length) % pills.length;
+                pills[nextIdx]?.focus();
+                pills[nextIdx]?.click();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                e.preventDefault();
+                e.stopPropagation();
+                const pills = Array.from(navBar.querySelectorAll<HTMLButtonElement>(".xlc-settings-nav-pill"));
+                if (!pills.length) return;
+                const target = e.key === "Home" ? pills[0] : pills[pills.length - 1];
+                target?.focus();
+                target?.click();
+            }
+        });
         navBar.appendChild(pill);
     }
     root.appendChild(navBar);
@@ -330,6 +355,7 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     const catSelect = document.createElement("select");
     catSelect.className = "b3-select";
     catSelect.id = "xlc-pack-category";
+    catSelect.setAttribute("aria-label", t("packCategoryLabel"));
     catLabel.htmlFor = catSelect.id;
     const allOpt = document.createElement("option");
     allOpt.value = "";
@@ -354,6 +380,7 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     const nameInput = document.createElement("input");
     nameInput.className = "b3-text-field";
     nameInput.id = "xlc-pack-name";
+    nameInput.setAttribute("aria-label", t("packNameLabel"));
     nameLabel.htmlFor = nameInput.id;
     nameInput.value = t("packNameDefault");
     nameWrap.appendChild(nameInput);
@@ -378,6 +405,7 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     sanitizeCheckbox.type = "checkbox";
     sanitizeCheckbox.className = "b3-switch";
     sanitizeCheckbox.dataset.xlcControl = "settings.pack-export.sanitizer-toggle";
+    sanitizeCheckbox.setAttribute("aria-label", t("packSanitizeLabel"));
 
     const sanitizeLabelText = document.createElement("span");
     sanitizeLabelText.className = "xlc-form-label";
@@ -465,6 +493,16 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     });
     actions.appendChild(exportBtn);
     wrap.appendChild(actions);
+
+    wrap.addEventListener("keydown", (e) => {
+        if (e.isComposing || (e as KeyboardEvent).keyCode === 229) return;
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            if (e.repeat || exportBtn.disabled) return;
+            e.preventDefault();
+            exportBtn.click();
+        }
+    });
+
     body.appendChild(wrap);
 
     const repaint = (): void => {
@@ -1810,6 +1848,9 @@ function buildHealthSection(ctx: SettingsUiContext, root: HTMLElement): void {
     issuesContainer.className = "xlc-health-issues";
     issuesContainer.dataset.xlcControl = "settings.health.list";
     issuesContainer.hidden = true;
+    issuesContainer.tabIndex = 0;
+    issuesContainer.setAttribute("role", "list");
+    issuesContainer.setAttribute("aria-label", t("healthSection"));
     sec.appendChild(issuesContainer);
 
     const btnRow = document.createElement("div");
@@ -1890,10 +1931,13 @@ function buildHealthSection(ctx: SettingsUiContext, root: HTMLElement): void {
                 for (const issue of result.issues) {
                     const row = document.createElement("div");
                     row.className = `xlc-health-issue xlc-health-issue--${issue.severity}`;
+                    row.setAttribute("role", "listitem");
+                    const sevLabel = issue.severity === "error" ? t("healthErrorBadge") : t("healthWarnBadge");
+                    row.setAttribute("aria-label", `${sevLabel} · ${issue.itemTitle || issue.itemId} · ${issue.message}`);
 
                     const pill = document.createElement("span");
                     pill.className = `xlc-health-pill xlc-health-pill--${issue.severity}`;
-                    pill.textContent = issue.severity === "error" ? t("healthErrorBadge") : t("healthWarnBadge");
+                    pill.textContent = sevLabel;
 
                     const titleSpan = document.createElement("strong");
                     titleSpan.className = "xlc-health-title";
@@ -2958,6 +3002,9 @@ export function openImportPolicyDialog(
         const depTree = document.createElement("div");
         depTree.className = "xlc-import-dep-tree";
         depTree.dataset.xlcControl = "import.pack.dep-tree";
+        depTree.tabIndex = 0;
+        depTree.setAttribute("role", "region");
+        depTree.setAttribute("aria-label", t("packDepTreeTitle") || "嵌套片段依赖关系");
 
         for (const [parentTitle, children] of Object.entries(parsed.pack.dependencyMap)) {
             const row = document.createElement("div");
@@ -3038,6 +3085,8 @@ export function openImportPolicyDialog(
     // 策略卡（原型屏 8）：标题+说明+推荐档高亮；逐卡整行可点
     const policyList = document.createElement("div");
     policyList.className = "xlc-policy-list";
+    policyList.setAttribute("role", "radiogroup");
+    policyList.setAttribute("aria-label", t("importPolicyTitle"));
     for (const [policy, title, desc, recommended] of [
         ["skip", t("importPolicySkip"), t("importPolicySkipDesc"), false],
         ["overwrite", t("importPolicyOverwrite"), t("importPolicyOverwriteDesc"), false],
@@ -3046,6 +3095,9 @@ export function openImportPolicyDialog(
         const card = document.createElement("button");
         card.type = "button";
         card.className = "xlc-policy" + (recommended ? " xlc-policy--recommended" : "");
+        card.setAttribute("role", "radio");
+        card.setAttribute("aria-checked", recommended ? "true" : "false");
+        card.setAttribute("aria-label", `${title} · ${desc}`);
         const icon = document.createElement("span");
         icon.className = "xlc-policy-ic";
         // ○（U+25CB）：⃝ 组合字符在中文字体下渲染成错位小圈，换稳定字形
@@ -3063,10 +3115,44 @@ export function openImportPolicyDialog(
         card.appendChild(text);
         card.dataset.xlcControl = `settings.import.policy.${policy}`;
         card.addEventListener("click", () => void run(policy));
+        card.addEventListener("keydown", (e) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                e.stopPropagation();
+                const cards = Array.from(policyList.querySelectorAll<HTMLButtonElement>(".xlc-policy"));
+                if (!cards.length) return;
+                const idx = cards.indexOf(card);
+                const nextIdx = e.key === "ArrowDown"
+                    ? (idx + 1) % cards.length
+                    : (idx - 1 + cards.length) % cards.length;
+                cards[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                e.preventDefault();
+                e.stopPropagation();
+                const cards = Array.from(policyList.querySelectorAll<HTMLButtonElement>(".xlc-policy"));
+                if (!cards.length) return;
+                if (e.key === "Home") cards[0]?.focus();
+                else cards[cards.length - 1]?.focus();
+            }
+        });
         policyCards.push(card);
         policyList.appendChild(card);
     }
     wrap.appendChild(policyList);
     wrap.appendChild(receiptHint);
+
+    wrap.addEventListener("keydown", (e) => {
+        if (e.isComposing || (e as KeyboardEvent).keyCode === 229) return;
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            const recommendedCard = policyCards.find((c) => c.classList.contains("xlc-policy--recommended")) || policyCards[0];
+            if (e.repeat || !recommendedCard || recommendedCard.disabled) return;
+            e.preventDefault();
+            recommendedCard.click();
+        }
+    });
+
     body.appendChild(wrap);
 }
