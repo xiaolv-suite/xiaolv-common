@@ -401,6 +401,116 @@ async function main() {
                         },
                     });
                 }
+
+                // 4. 常用手机号（@注解剥离示范）
+                const phone1Res = await api(base, token, "/api/block/appendBlock", {
+                    parentID: libDocId,
+                    dataType: "markdown",
+                    data: "18588888888@手机号",
+                });
+                const phone1Id = phone1Res?.data?.[0]?.doOperations?.[0]?.id;
+                if (phone1Id) {
+                    await api(base, token, "/api/attr/setBlockAttrs", {
+                        id: phone1Id,
+                        attrs: {
+                            "custom-xlc-id": "xlc-livedemophone01",
+                            "custom-xlc-type": "text",
+                            "custom-xlc-title": "常用主手机号",
+                            "custom-xlc-tags": "手机号,联系电话",
+                            "custom-xlc-category": "联系方式",
+                            "custom-xlc-created": String(Date.now()),
+                            "custom-xlc-updated": String(Date.now()),
+                        },
+                    });
+                }
+
+                // 5. 备用手机号
+                const phone2Res = await api(base, token, "/api/block/appendBlock", {
+                    parentID: libDocId,
+                    dataType: "markdown",
+                    data: "13800138000 @备用手机",
+                });
+                const phone2Id = phone2Res?.data?.[0]?.doOperations?.[0]?.id;
+                if (phone2Id) {
+                    await api(base, token, "/api/attr/setBlockAttrs", {
+                        id: phone2Id,
+                        attrs: {
+                            "custom-xlc-id": "xlc-livedemophone02",
+                            "custom-xlc-type": "text",
+                            "custom-xlc-title": "备用手机号",
+                            "custom-xlc-tags": "备用手机,电话",
+                            "custom-xlc-category": "联系方式",
+                            "custom-xlc-created": String(Date.now()),
+                            "custom-xlc-updated": String(Date.now()),
+                        },
+                    });
+                }
+
+                // 6. 官方客服邮箱
+                const email1Res = await api(base, token, "/api/block/appendBlock", {
+                    parentID: libDocId,
+                    dataType: "markdown",
+                    data: "service@xiaolv.com @客服工作邮箱",
+                });
+                const email1Id = email1Res?.data?.[0]?.doOperations?.[0]?.id;
+                if (email1Id) {
+                    await api(base, token, "/api/attr/setBlockAttrs", {
+                        id: email1Id,
+                        attrs: {
+                            "custom-xlc-id": "xlc-livedemoemail01",
+                            "custom-xlc-type": "text",
+                            "custom-xlc-title": "官方客服邮箱",
+                            "custom-xlc-tags": "客服邮箱,工作邮箱",
+                            "custom-xlc-category": "邮箱",
+                            "custom-xlc-created": String(Date.now()),
+                            "custom-xlc-updated": String(Date.now()),
+                        },
+                    });
+                }
+
+                // 7. 个人工作对接邮箱
+                const email2Res = await api(base, token, "/api/block/appendBlock", {
+                    parentID: libDocId,
+                    dataType: "markdown",
+                    data: "contact@domain.com @工作邮箱",
+                });
+                const email2Id = email2Res?.data?.[0]?.doOperations?.[0]?.id;
+                if (email2Id) {
+                    await api(base, token, "/api/attr/setBlockAttrs", {
+                        id: email2Id,
+                        attrs: {
+                            "custom-xlc-id": "xlc-livedemoemail02",
+                            "custom-xlc-type": "text",
+                            "custom-xlc-title": "个人工作对接邮箱",
+                            "custom-xlc-tags": "工作邮箱,商务对接",
+                            "custom-xlc-category": "邮箱",
+                            "custom-xlc-created": String(Date.now()),
+                            "custom-xlc-updated": String(Date.now()),
+                        },
+                    });
+                }
+
+                // 8. 公司发票税号
+                const taxRes = await api(base, token, "/api/block/appendBlock", {
+                    parentID: libDocId,
+                    dataType: "markdown",
+                    data: "[公司税号] 91110108MA00000000",
+                });
+                const taxId = taxRes?.data?.[0]?.doOperations?.[0]?.id;
+                if (taxId) {
+                    await api(base, token, "/api/attr/setBlockAttrs", {
+                        id: taxId,
+                        attrs: {
+                            "custom-xlc-id": "xlc-livedemotax001",
+                            "custom-xlc-type": "text",
+                            "custom-xlc-title": "企业统一社会信用代码（税号）",
+                            "custom-xlc-tags": "公司税号,发票,财务",
+                            "custom-xlc-category": "财务",
+                            "custom-xlc-created": String(Date.now()),
+                            "custom-xlc-updated": String(Date.now()),
+                        },
+                    });
+                }
             } catch {}
         }
     }

@@ -25,6 +25,7 @@ import type {SanitizerOptions} from "../model/export-sanitizer";
 import {openSyncDiffModal} from "./sync-diff-modal";
 import {diffLibraries, SyncEntry} from "../model/sync-diff";
 import {countRememberedFields, clearAllMemory} from "../model/variable-memory";
+import {openStepByStepGuideDialog} from "./guide-dialog";
 
 type TFn = (key: string, ...args: string[]) => string;
 
@@ -268,6 +269,16 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
         });
         libBtnWrap.appendChild(openLibBtn);
     }
+    const guideBtn = document.createElement("button");
+    guideBtn.type = "button";
+    guideBtn.className = "b3-button";
+    guideBtn.dataset.xlcControl = "settings.library.step-guide";
+    guideBtn.textContent = "🎓 新手指引";
+    guideBtn.title = "打开分步实操指引，学习智能注解与高效使用技巧";
+    guideBtn.addEventListener("click", () => {
+        openStepByStepGuideDialog({t: ctx.t});
+    });
+    libBtnWrap.appendChild(guideBtn);
     libBtnWrap.appendChild(changeBtn);
     libRow.appendChild(libBtnWrap);
     libSec.appendChild(libRow);

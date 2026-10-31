@@ -16919,6 +16919,281 @@ ${finalHtml}
     }
   });
 
+  // src/ui/guide-dialog.ts
+  function openStepByStepGuideDialog(deps) {
+    var _a, _b, _c, _d, _e;
+    if ((_a = activeGuideDialog == null ? void 0 : activeGuideDialog.element) == null ? void 0 : _a.isConnected) {
+      (_b = activeGuideDialog.element.querySelector("button, input")) == null ? void 0 : _b.focus();
+      return;
+    }
+    activeGuideDialog = null;
+    const t = deps.t;
+    const _isMobile = (_d = (_c = deps.isMobile) == null ? void 0 : _c.call(deps)) != null ? _d : false;
+    void _isMobile;
+    const dialogTitle = t("stepGuideTitle") || "\u65B0\u624B\u5B9E\u64CD\u4F7F\u7528\u6307\u5F15";
+    const dialog = new import_siyuan4.Dialog({
+      title: dialogTitle,
+      content: "",
+      width: "min(680px, 94vw)",
+      height: "min(680px, 92vh)"
+    });
+    activeGuideDialog = dialog;
+    mountPlatformDialogTitleWrap(dialog.element, dialogTitle, "\u5B9E\u64CD\u5F15\u5BFC", "iconXlcCommon");
+    (_e = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _e.classList.add("xlc-form-host", "xlc-guide-host");
+    const body = getDialogBody(dialog.element);
+    if (!body) return;
+    body.innerHTML = "";
+    const root = document.createElement("div");
+    root.className = "xlc-form xlc-guide xlc-guide-stepper-root";
+    const subIntro = document.createElement("p");
+    subIntro.className = "xlc-form-hint xlc-guide-subtitle";
+    subIntro.textContent = t("stepGuideSub") || "4 \u6B65\u638C\u63E1\u9AD8\u9891\u5E38\u7528\u8BED\u6781\u901F\u590D\u7528\u6280\u80FD\uFF0C\u544A\u522B\u91CD\u590D\u8F93\u5165";
+    root.appendChild(subIntro);
+    const stepperNav = document.createElement("div");
+    stepperNav.className = "xlc-stepper-nav";
+    stepperNav.setAttribute("role", "tablist");
+    stepperNav.setAttribute("aria-label", "\u5F15\u5BFC\u6B65\u9AA4");
+    const stepTitles = [
+      t("stepGuideStep1") || "\u2460 \u547C\u51FA\u4E0E\u68C0\u7D22",
+      t("stepGuideStep2") || "\u2461 \u624B\u673A/\u90AE\u7BB1\u6CE8\u89E3",
+      t("stepGuideStep3") || "\u2462 \u6781\u901F\u590D\u7528\u4E0E\u5173\u95ED",
+      t("stepGuideStep4") || "\u2463 \u53D8\u91CF\u4E0E\u53CC\u5411\u8054\u52A8"
+    ];
+    let currentStep = 0;
+    const tabButtons = [];
+    stepTitles.forEach((title, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `xlc-stepper-tab ${idx === 0 ? "xlc-stepper-tab--active" : ""}`;
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", idx === 0 ? "true" : "false");
+      btn.textContent = title;
+      btn.dataset.step = String(idx);
+      btn.addEventListener("click", () => switchStep(idx));
+      tabButtons.push(btn);
+      stepperNav.appendChild(btn);
+    });
+    root.appendChild(stepperNav);
+    const contentArea = document.createElement("div");
+    contentArea.className = "xlc-guide-content-area";
+    root.appendChild(contentArea);
+    const footActions = document.createElement("div");
+    footActions.className = "xlc-form-actions xlc-guide-foot-actions";
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "b3-button b3-button--cancel xlc-guide-prev-btn";
+    prevBtn.textContent = t("stepGuidePrev") || "\u4E0A\u4E00\u6B65";
+    prevBtn.style.display = "none";
+    prevBtn.addEventListener("click", () => {
+      if (currentStep > 0) switchStep(currentStep - 1);
+    });
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "b3-button xlc-btn-primary xlc-guide-next-btn";
+    nextBtn.textContent = t("stepGuideNext") || "\u4E0B\u4E00\u6B65";
+    nextBtn.addEventListener("click", () => {
+      var _a2;
+      if (currentStep < stepTitles.length - 1) {
+        switchStep(currentStep + 1);
+      } else {
+        dialog.destroy();
+        (_a2 = deps.onOpenSearch) == null ? void 0 : _a2.call(deps);
+      }
+    });
+    footActions.append(prevBtn, nextBtn);
+    root.appendChild(footActions);
+    body.appendChild(root);
+    function switchStep(index) {
+      currentStep = index;
+      tabButtons.forEach((btn, idx) => {
+        const active2 = idx === index;
+        btn.classList.toggle("xlc-stepper-tab--active", active2);
+        btn.setAttribute("aria-selected", active2 ? "true" : "false");
+      });
+      prevBtn.style.display = index === 0 ? "none" : "";
+      nextBtn.textContent = index === stepTitles.length - 1 ? t("stepGuideFinish") || "\u5B8C\u6210\u5F15\u5BFC \xB7 \u5F00\u59CB\u4F53\u9A8C" : t("stepGuideNext") || "\u4E0B\u4E00\u6B65";
+      contentArea.innerHTML = "";
+      const panel = document.createElement("section");
+      panel.className = "xlc-guide-step-panel";
+      panel.setAttribute("role", "tabpanel");
+      if (index === 0) {
+        renderStep1(panel);
+      } else if (index === 1) {
+        renderStep2(panel);
+      } else if (index === 2) {
+        renderStep3(panel);
+      } else {
+        renderStep4(panel);
+      }
+      contentArea.appendChild(panel);
+    }
+    function renderStep1(container) {
+      container.innerHTML = `
+            <div class="xlc-guide-card">
+                <div class="xlc-guide-card-head">
+                    <span class="xlc-guide-card-icon">\u26A1</span>
+                    <strong>\u968F\u65F6\u968F\u5730\uFF0C\u952E\u76D8\u79D2\u7EA7\u547C\u51FA</strong>
+                </div>
+                <p class="xlc-guide-card-text">
+                    \u65E0\u9700\u5728\u591A\u4E2A\u7A97\u53E3\u95F4\u5207\u6765\u5207\u53BB\u5BFB\u627E\u5907\u5FD8\u5F55\u3002\u5728\u601D\u6E90\u7B14\u8BB0\u4E2D\uFF0C\u60A8\u6709\u4E24\u4E2A\u6781\u901F\u547C\u51FA\u5165\u53E3\uFF1A
+                </p>
+                <div class="xlc-guide-feature-grid">
+                    <div class="xlc-guide-feature-box">
+                        <span class="xlc-guide-kbd">Alt + Space</span>
+                        <div class="xlc-guide-box-title">\u5168\u5C40\u95EA\u7535\u547C\u51FA</div>
+                        <div class="xlc-guide-box-desc">\u968F\u65F6\u5524\u8D77\u5E38\u7528\u8BED\u641C\u7D22\u9762\u677F\uFF0C\u652F\u6301\u8FDE\u7EED\u591A\u6B21\u8C03\u7528\u3002</div>
+                    </div>
+                    <div class="xlc-guide-feature-box">
+                        <span class="xlc-guide-kbd">/\u5E38\u7528</span>
+                        <div class="xlc-guide-box-title">\u7F16\u8F91\u5668\u539F\u751F Slash \u83DC\u5355</div>
+                        <div class="xlc-guide-box-desc">\u5728\u4EFB\u610F\u601D\u6E90\u7B14\u8BB0\u6587\u6863\u6B63\u6587\u4E2D\u76F4\u63A5\u8F93\u5165 <code>/\u5E38\u7528</code> \u539F\u751F\u6FC0\u6D3B\uFF0C\u65E0\u7F1D\u5D4C\u5165\u5F53\u524D\u5149\u6807\u6BB5\u843D\u3002</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="xlc-guide-card" style="margin-top: 12px;">
+                <div class="xlc-guide-card-head">
+                    <span class="xlc-guide-card-icon">\u{1F50D}</span>
+                    <strong>\u652F\u6301\u6C49\u5B57\u4E0E\u62FC\u97F3\u6DF7\u5408\u6A21\u7CCA\u68C0\u7D22</strong>
+                </div>
+                <p class="xlc-guide-card-text">
+                    \u5373\u4F7F\u53EA\u8BB0\u5F97\u4E00\u4E24\u4E2A\u5B57\uFF0C\u4E5F\u80FD\u77AC\u95F4\u5B9A\u4F4D\uFF1A
+                </p>
+                <ul class="xlc-guide-bullet-list">
+                    <li><strong>\u62FC\u97F3\u9996\u5B57\u6BCD\u68C0\u7D22</strong>\uFF1A\u5982\u8F93\u5165 <code>sjh</code> \u5373\u53EF\u547D\u4E2D\u300C\u5E38\u7528\u624B\u673A\u53F7\u300D\uFF0C\u8F93\u5165 <code>yx</code> \u5373\u53EF\u547D\u4E2D\u300C\u5DE5\u4F5C\u90AE\u7BB1\u300D\uFF1B</li>
+                    <li><strong>\u591A\u5173\u952E\u8BCD AND \u5339\u914D</strong>\uFF1A\u652F\u6301\u7A7A\u683C\u5206\u9694\u591A\u4E2A\u8BCD\uFF0C\u5982 <code>\u624B\u673A \u5907\u7528</code> \u540C\u65F6\u547D\u4E2D\u3002</li>
+                </ul>
+            </div>
+        `;
+    }
+    function renderStep2(container) {
+      container.innerHTML = `
+            <div class="xlc-guide-card">
+                <div class="xlc-guide-card-head">
+                    <span class="xlc-guide-card-icon">\u{1F3F7}\uFE0F</span>
+                    <strong>\u667A\u80FD\u6CE8\u89E3\u89C4\u5219\uFF1A\u68C0\u7D22\u9760\u5173\u952E\u5B57\uFF0C\u8F93\u51FA\u81EA\u52A8\u5265\u79BB\u7EAF\u51C0\u6B63\u6587</strong>
+                </div>
+                <p class="xlc-guide-card-text">
+                    <strong>\u4F20\u7EDF\u75DB\u70B9</strong>\uFF1A\u7EAF\u6570\u5B57\u7535\u8BDD\u5BB9\u6613\u5FD8\uFF1B\u4F46\u5982\u679C\u5728\u7535\u8BDD\u540E\u5199\u4E0A\u300C\u5F20\u4E09\u624B\u673A\u300D\uFF0C\u63D2\u5165\u65F6\u53C8\u5F97\u624B\u52A8\u5220\u6389\u540E\u9762\u7684\u6C49\u5B57\uFF0C\u975E\u5E38\u7E41\u7410\u3002<br>
+                    <strong>\u5C0F\u9A74\u5E38\u7528\u89E3\u6CD5</strong>\uFF1A\u8F93\u5165\u65F6\u5E26\u6CE8\u89E3\uFF0C\u68C0\u7D22\u65F6\u641C\u5173\u952E\u5B57\uFF1B<strong>\u63D2\u5165\u4E0E\u590D\u5236\u65F6\uFF0C\u63D2\u4EF6\u81EA\u52A8\u5265\u79BB\u6CE8\u89E3\uFF0C\u53EA\u8F93\u51FA\u7EAF\u51C0\u5185\u5BB9\uFF01</strong>
+                </p>
+
+                <div class="xlc-guide-demo-box">
+                    <div class="xlc-guide-demo-row">
+                        <div class="xlc-guide-demo-col">
+                            <div class="xlc-guide-demo-badge">\u60A8\u5F55\u5165\u7684\u683C\u5F0F\uFF08\u5E26\u5C3E\u90E8\u6CE8\u89E3\uFF09</div>
+                            <code class="xlc-guide-code-block">18588888888@\u624B\u673A\u53F7</code>
+                            <code class="xlc-guide-code-block" style="margin-top:6px;">contact@domain.com @\u5DE5\u4F5C\u90AE\u7BB1</code>
+                            <code class="xlc-guide-code-block" style="margin-top:6px;">13800138000 // \u5907\u7528\u7535\u8BDD</code>
+                            <code class="xlc-guide-code-block" style="margin-top:6px;">[\u516C\u53F8\u7A0E\u53F7] 91110108MA00000000</code>
+                        </div>
+                        <div class="xlc-guide-demo-arrow">\u2794 \u6309 Enter \u63D2\u5165</div>
+                        <div class="xlc-guide-demo-col">
+                            <div class="xlc-guide-demo-badge xlc-guide-demo-badge--success">\u5B9E\u9645\u63D2\u5165/\u590D\u5236\u7684\u7EAF\u51C0\u6B63\u6587</div>
+                            <code class="xlc-guide-code-block xlc-guide-code-clean">18588888888</code>
+                            <code class="xlc-guide-code-block xlc-guide-code-clean" style="margin-top:6px;">contact@domain.com</code>
+                            <code class="xlc-guide-code-block xlc-guide-code-clean" style="margin-top:6px;">13800138000</code>
+                            <code class="xlc-guide-code-block xlc-guide-code-clean" style="margin-top:6px;">91110108MA00000000</code>
+                        </div>
+                    </div>
+                </div>
+
+                <p class="xlc-form-hint" style="margin-top: 10px; font-size: 12px;">
+                    \u2728 <strong>\u667A\u80FD\u4FDD\u62A4\u673A\u5236</strong>\uFF1A\u5BF9\u4E8E <code>user@domain.com</code> \u8FD9\u79CD\u6807\u51C6\u5408\u6CD5\u90AE\u7BB1\uFF0C\u5185\u90E8 @ \u5B57\u7B26\u53D7\u4E25\u683C\u4FDD\u62A4\u7EDD\u4E0D\u8BEF\u5220\uFF0C\u4EC5\u8BC6\u522B\u5C3E\u90E8\u6CE8\u89E3\u3002
+                </p>
+            </div>
+        `;
+    }
+    function renderStep3(container) {
+      container.innerHTML = `
+            <div class="xlc-guide-card">
+                <div class="xlc-guide-card-head">
+                    <span class="xlc-guide-card-icon">\u{1F680}</span>
+                    <strong>\u4E00\u6C14\u5475\u6210\uFF1A\u64CD\u4F5C\u5B8C\u6210\u5F39\u7A97\u81EA\u52A8\u9000\u51FA</strong>
+                </div>
+                <p class="xlc-guide-card-text">
+                    \u4E3A\u4E86\u8BA9\u6253\u5B57\u5199\u4F5C\u7684\u5FC3\u6D41\u4E0D\u88AB\u6253\u65AD\uFF0C\u63D2\u5165\u6216\u590D\u5236\u6210\u529F\u540E\uFF0C\u641C\u7D22\u9762\u677F\u4F1A\u81EA\u52A8\u9000\u51FA\uFF0C\u7126\u70B9\u77AC\u95F4\u56DE\u5F52\u601D\u6E90\u7F16\u8F91\u5668\u5149\u6807\u5904\u3002
+                </p>
+                <div class="xlc-guide-feature-grid">
+                    <div class="xlc-guide-feature-box">
+                        <span class="xlc-guide-kbd">Enter</span>
+                        <div class="xlc-guide-box-title">\u76F4\u63A5\u63D2\u5165\u6B63\u6587</div>
+                        <div class="xlc-guide-box-desc">\u5C06\u9009\u4E2D\u7684\u5E38\u7528\u8BED\u76F4\u63A5\u6CE8\u5165\u5149\u6807\u6240\u5728\u5757\uFF0C\u5F39\u7A97\u81EA\u52A8\u5173\u95ED\u3002</div>
+                    </div>
+                    <div class="xlc-guide-feature-box">
+                        <span class="xlc-guide-kbd">Ctrl + Enter</span>
+                        <div class="xlc-guide-box-title">\u590D\u5236\u5230\u526A\u8D34\u677F</div>
+                        <div class="xlc-guide-box-desc">\u5C06\u5265\u79BB\u540E\u7684\u6838\u5FC3\u7EAF\u6587\u672C\u9001\u5165\u526A\u8D34\u677F\uFF0C\u4F9B\u5916\u90E8\u8F6F\u4EF6\u79D2\u8D34\uFF0C\u5F39\u7A97\u81EA\u52A8\u5173\u95ED\u3002</div>
+                    </div>
+                    <div class="xlc-guide-feature-box">
+                        <span class="xlc-guide-kbd">Alt + 1~9</span>
+                        <div class="xlc-guide-box-title">\u6570\u5B57\u952E\u77AC\u53D1\u76F4\u8FBE</div>
+                        <div class="xlc-guide-box-desc">\u8F93\u5165\u5173\u952E\u8BCD\u540E\uFF0C\u65E0\u9700\u4E0A\u4E0B\u79FB\u52A8\u5149\u6807\uFF0C\u76F4\u63A5\u6309 Alt+1 \u5373\u63D2\u5165\u7B2C 1 \u9879\uFF0CAlt+Shift+1 \u590D\u5236\u7B2C 1 \u9879\u3002</div>
+                    </div>
+                    <div class="xlc-guide-feature-box">
+                        <span class="xlc-guide-kbd">Alt + P</span>
+                        <div class="xlc-guide-box-title">\u56FA\u5B9A\u6A21\u5F0F\uFF08Pin\uFF09</div>
+                        <div class="xlc-guide-box-desc">\u9700\u8981\u8FDE\u7EED\u5411\u6587\u6863\u63D2\u5165\u591A\u6BB5\u5E38\u7528\u8BED\u65F6\uFF0C\u6309 Alt+P \u9489\u4F4F\u9762\u677F\uFF0C\u63D2\u5165\u540E\u7A97\u53E3\u4FDD\u6301\u6253\u5F00\u3002</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    function renderStep4(container) {
+      container.innerHTML = `
+            <div class="xlc-guide-card">
+                <div class="xlc-guide-card-head">
+                    <span class="xlc-guide-card-icon">\u{1F9E9}</span>
+                    <strong>\u52A8\u6001\u53D8\u91CF\u8868\u5355\uFF1A\u667A\u80FD\u63D2\u503C</strong>
+                </div>
+                <p class="xlc-guide-card-text">
+                    \u6A21\u677F\u4E2D\u652F\u6301\u5199\u7075\u6D3B\u7684\u52A8\u6001\u5360\u4F4D\u7B26\uFF0C\u8C03\u7528\u65F6\u52A8\u6001\u5C55\u5F00\uFF1A
+                </p>
+                <div class="xlc-guide-tag-list">
+                    <span class="xlc-badge"><code>{{xlc:date}}</code> \u5F53\u5929\u65E5\u671F</span>
+                    <span class="xlc-badge"><code>{{xlc:time}}</code> \u5F53\u524D\u65F6\u95F4</span>
+                    <span class="xlc-badge"><code>{{xlc:clipboard}}</code> \u526A\u8D34\u677F\u6587\u672C</span>
+                    <span class="xlc-badge"><code>{{xlc:ask:\u5BA2\u6237\u59D3\u540D}}</code> \u5F39\u7A97\u586B\u5199</span>
+                    <span class="xlc-badge"><code>{{xlc:cursor}}</code> \u63D2\u5165\u540E\u5149\u6807\u843D\u70B9</span>
+                </div>
+            </div>
+
+            <div class="xlc-guide-card" style="margin-top: 12px;">
+                <div class="xlc-guide-card-head">
+                    <span class="xlc-guide-card-icon">\u{1F517}</span>
+                    <strong>\u601D\u6E90\u7B14\u8BB0\u53CC\u5411\u8054\u52A8\u4E0E\u539F\u5757\u76F4\u8FBE</strong>
+                </div>
+                <p class="xlc-guide-card-text">
+                    \u6761\u76EE\u672C\u8D28\u662F\u60A8\u601D\u6E90\u7B14\u8BB0\u6587\u6863\u4E2D\u7684\u771F\u5B9E\u7269\u7406\u5757\uFF0C\u6C38\u4E0D\u4E22\u5931\uFF1A
+                </p>
+                <ul class="xlc-guide-bullet-list">
+                    <li><strong>\u53CC\u5411\u5F15\u7528\u6A21\u5F0F</strong>\uFF1A\u652F\u6301\u63D2\u5165\u4E3A\u539F\u751F\u5757\u5F15\u7528 <code>((block_id '\u951A\u6587\u672C'))</code> \u6216\u5D4C\u5165\u5757 <code>{{select * from blocks where id='...'}}</code>\uFF1B</li>
+                    <li><strong>\u4E00\u952E\u76F4\u8FBE\u539F\u5757</strong>\uFF1A\u5728\u9884\u89C8\u9762\u677F\u70B9\u51FB\u300C\u{1F4E6} \u5E93\u5185\u539F\u5757\u300D\uFF0C\u5373\u53EF\u76F4\u63A5\u8DF3\u8F6C\u6253\u5F00\u601D\u6E90\u7B14\u8BB0\u5BF9\u5E94\u6587\u6863\u5E76\u7CBE\u786E\u5B9A\u4F4D\u9AD8\u4EAE\u8BE5\u5757\uFF01</li>
+                </ul>
+            </div>
+
+            <div class="xlc-guide-media-examples" style="margin-top: 12px;" aria-labelledby="xlc-guide-media-title">
+                <p id="xlc-guide-media-title" class="xlc-form-label">\u771F\u5B9E\u8D44\u6E90\u793A\u4F8B\uFF08\u9700\u5148\u5728\u601D\u6E90\u6DFB\u52A0\uFF09</p>
+                <ul class="xlc-guide-media-list">
+                    <li data-xlc-control="guide.media.image">\u56FE\u7247 / \u8EAB\u4EFD\u8BC1\u7167\u7247\uFF1A\u5148\u5C06\u56FE\u7247\u6DFB\u52A0\u5230\u601D\u6E90\uFF0C\u518D\u4FDD\u5B58\u4E3A\u5E38\u7528\u6761\u76EE\u3002</li>
+                    <li data-xlc-control="guide.media.attachment">\u516C\u53F8\u4ECB\u7ECD PPT\u3001PDF\u3001DOCX\uFF1A\u5148\u62D6\u5165\u601D\u6E90\u751F\u6210\u9644\u4EF6\uFF0C\u652F\u6301\u590D\u5236\u548C\u6253\u5F00\u8D44\u6E90\u94FE\u63A5\u3002</li>
+                    <li data-xlc-control="guide.media.resume">\u7B80\u5386\uFF1A\u6B63\u6587\u53EF\u4F5C\u4E3A\u8D85\u7EA7\u5757\u4FDD\u5B58\uFF0C\u6587\u4EF6\u7248\u9700\u5148\u5728\u601D\u6E90\u6DFB\u52A0\u3002</li>
+                </ul>
+            </div>
+        `;
+    }
+    switchStep(0);
+  }
+  var import_siyuan4, activeGuideDialog;
+  var init_guide_dialog = __esm({
+    "src/ui/guide-dialog.ts"() {
+      "use strict";
+      import_siyuan4 = __toESM(require_stub_dom());
+      init_dialog_dom();
+      activeGuideDialog = null;
+    }
+  });
+
   // src/model/variable-memory.ts
   function clearAllMemory(memory) {
     return { enabled: memory ? memory.enabled : true, values: {} };
@@ -17365,6 +17640,128 @@ ${finalHtml}
   });
 
   // src/service/prompt-pack.ts
+  function buildInitialLibraryDocMarkdown(title) {
+    const docTitle = title || "\u5E38\u7528\u5185\u5BB9\u5E93";
+    return [
+      `# ${docTitle}`,
+      "",
+      "> \u{1F4A1} **\u5C0F\u9A74\u5E38\u7528 \xB7 \u65B0\u624B\u4F7F\u7528\u6307\u5357\u4E0E\u5E38\u7528\u5185\u5BB9\u771F\u6E90**",
+      "> \u672C\u6587\u6863\u662F\u60A8\u5E38\u7528\u8BED\u7684\u771F\u5B9E\u6570\u636E\u5B58\u50A8\u5730\u3002\u6BCF\u4E2A\u5E26\u5C5E\u6027\u7684\u5757\u90FD\u662F\u4E00\u6761\u72EC\u7ACB\u7684\u5E38\u7528\u8BED\u6761\u76EE\u3002",
+      "> \u60A8\u53EF\u4EE5\u5728\u601D\u6E90\u7B14\u8BB0\u4E2D\u968F\u65F6\u76F4\u63A5\u4FEE\u6539\u3001\u6392\u7248\u6216\u6269\u5145\uFF0C\u4E5F\u53EF\u4EE5\u968F\u65F6\u5728\u4EFB\u4F55\u5730\u65B9\u547C\u51FA\u63D2\u4EF6\u79D2\u7EA7\u68C0\u7D22\u590D\u7528\u3002",
+      "",
+      "## \u{1F4CC} \u8BED\u6CD5\u4E0E\u4F7F\u7528\u89C4\u5219\uFF08\u5FC5\u8BFB\uFF09",
+      "",
+      "### 1. \u5C3E\u90E8\u667A\u80FD\u6CE8\u89E3\u89C4\u5219\uFF08\u63D2\u5165/\u590D\u5236\u65F6\u81EA\u52A8\u5265\u79BB\uFF09",
+      "\u5728\u6587\u672C\u5C3E\u90E8\u6DFB\u52A0\u8BF4\u660E\u6807\u8BB0\uFF0C\u68C0\u7D22\u65F6\u53EF\u4F9D\u5173\u952E\u5B57\u79D2\u641C\uFF1B\u5728**\u6309\u56DE\u8F66\u63D2\u5165\u6216\u5FEB\u6377\u952E\u590D\u5236\u65F6\uFF0C\u63D2\u4EF6\u4F1A\u81EA\u52A8\u5265\u79BB\u6CE8\u89E3**\uFF0C\u4EC5\u8F93\u51FA\u6838\u5FC3\u7EAF\u51C0\u5185\u5BB9\uFF1A",
+      "- **@\u6807\u7B7E\u6CE8\u89E3**\uFF1A\u4F8B\u5982 `18588888888@\u624B\u673A\u53F7` \u6216 `contact@company.com @\u5DE5\u4F5C\u90AE\u7BB1`\uFF0C\u8C03\u7528\u65F6\u4EC5\u8F93\u51FA\u53F7\u7801/\u90AE\u7BB1\uFF0C`@` \u540E\u7684\u8BCD\u4F5C\u4E3A\u68C0\u7D22\u6807\u7B7E\uFF1B",
+      "- **// \u53CC\u659C\u6760\u6CE8\u91CA**\uFF1A\u4F8B\u5982 `13800138000 // \u5907\u7528\u624B\u673A`\uFF0C\u8C03\u7528\u65F6\u4EC5\u8F93\u51FA\u53F7\u7801\uFF1B",
+      "- **[\u8BF4\u660E] \u62EC\u53F7\u6CE8\u89E3**\uFF1A\u4F8B\u5982 `[\u516C\u53F8\u7A0E\u53F7] 91110108MA00000000` \u6216 `91110108MA00000000 [\u516C\u53F8\u7A0E\u53F7]`\uFF0C\u8C03\u7528\u65F6\u4EC5\u8F93\u51FA\u7A0E\u53F7\uFF1B",
+      "- **#\u6807\u7B7E#**\uFF1A\u4F8B\u5982 `13800138000 #\u624B\u673A\u53F7#`\uFF0C\u8C03\u7528\u65F6\u4EC5\u8F93\u51FA\u7EAF\u6570\u5B57\u3002",
+      "",
+      "### 2. \u52A8\u6001\u6A21\u677F\u53D8\u91CF\u8BED\u6CD5",
+      "- `{{xlc:date}}`\uFF1A\u81EA\u52A8\u5C55\u5F00\u4E3A\u5F53\u524D\u65E5\u671F\uFF08\u5982 2026-10-31\uFF09",
+      "- `{{xlc:time}}`\uFF1A\u81EA\u52A8\u5C55\u5F00\u4E3A\u5F53\u524D\u65F6\u95F4\uFF08\u5982 19:30\uFF09",
+      "- `{{xlc:clipboard}}`\uFF1A\u81EA\u52A8\u8BFB\u53D6\u7CFB\u7EDF\u526A\u8D34\u677F\u6700\u65B0\u6587\u672C\u5E76\u5185\u5D4C\u63D2\u5165",
+      "- `{{xlc:ask:\u53D8\u91CF\u540D}}`\uFF1A\u63D2\u5165\u524D\u5F39\u51FA\u8F7B\u91CF\u5361\u7247\u63D0\u793A\u7528\u6237\u8F93\u5165\uFF08\u5982\u5BA2\u6237\u59D3\u540D\u3001\u5DE5\u5355\u53F7\uFF09",
+      "- `{{xlc:ask:\u9009\u9879|\u9009\u9879A,\u9009\u9879B}}`\uFF1A\u63D2\u5165\u524D\u5F39\u51FA\u4E0B\u62C9\u5355\u9009",
+      "- `{{xlc:cursor}}`\uFF1A\u63D2\u5165\u5B8C\u6210\u540E\u5C06\u5149\u6807\u7CBE\u786E\u5B9A\u4F4D\u5728\u6B64\u5904",
+      "",
+      "### 3. \u9AD8\u6548\u8C03\u7528\u5FEB\u6377\u65B9\u5F0F",
+      "- **\u968F\u65F6\u547C\u51FA**\uFF1A\u6309\u5168\u5C40\u5FEB\u6377\u952E\uFF08\u9ED8\u8BA4 `Alt+Space`\uFF09\u6216\u5728\u601D\u6E90\u7F16\u8F91\u5668\u8F93\u5165 `/\u5E38\u7528` \u79D2\u7EA7\u5524\u51FA\uFF1B",
+      "- **\u95EA\u7535\u590D\u7528**\uFF1A\u6309 `Enter` \u63D2\u5165\u5F53\u524D\u6587\u6863\u5149\u6807\u5904\uFF0C\u6309 `Ctrl+Enter` \u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C**\u64CD\u4F5C\u5B8C\u6210\u540E\u7A97\u53E3\u81EA\u52A8\u9000\u51FA**\uFF1B",
+      "- **\u56FA\u5B9A\u6A21\u5F0F**\uFF1A\u6309 `Alt+P` \u9489\u4F4F\u9762\u677F\uFF0C\u652F\u6301\u8FDE\u7EED\u590D\u7528\u591A\u4E2A\u6761\u76EE\uFF1B",
+      "- **\u6570\u5B57\u76F4\u8FBE**\uFF1A`Alt + 1~9` \u77AC\u65F6\u63D2\u5165\u524D 9 \u9879\uFF0C`Alt + Shift + 1~9` \u77AC\u65F6\u590D\u5236\u3002",
+      "",
+      "---",
+      "",
+      "## \u{1F4F1} \u5E38\u7528\u8054\u7CFB\u65B9\u5F0F\u4E0E\u7535\u8BDD\uFF08\u624B\u673A\u53F7\u4E13\u95E8\u793A\u4F8B\uFF09",
+      "",
+      "18588888888@\u624B\u673A\u53F7",
+      `{: custom-xlc-id="xlc-demophone01" custom-xlc-type="text" custom-xlc-title="\u5E38\u7528\u4E3B\u624B\u673A\u53F7" custom-xlc-tags="\u624B\u673A\u53F7,\u5E38\u7528\u7535\u8BDD" custom-xlc-category="\u8054\u7CFB\u65B9\u5F0F"}`,
+      "",
+      "13800138000 @\u5907\u7528\u624B\u673A",
+      `{: custom-xlc-id="xlc-demophone02" custom-xlc-type="text" custom-xlc-title="\u5907\u7528\u624B\u673A\u53F7" custom-xlc-tags="\u5907\u7528\u624B\u673A,\u8054\u7CFB\u7535\u8BDD" custom-xlc-category="\u8054\u7CFB\u65B9\u5F0F"}`,
+      "",
+      "010-88886666 @\u516C\u53F8\u5EA7\u673A\u7535\u8BDD",
+      `{: custom-xlc-id="xlc-demophone03" custom-xlc-type="text" custom-xlc-title="\u516C\u53F8\u529E\u516C\u5BA4\u5EA7\u673A" custom-xlc-tags="\u5EA7\u673A,\u529E\u516C\u7535\u8BDD" custom-xlc-category="\u8054\u7CFB\u65B9\u5F0F"}`,
+      "",
+      "18588888888 // \u5FEB\u9012\u5916\u5356\u9632\u9A9A\u6270\u865A\u62DF\u53F7",
+      `{: custom-xlc-id="xlc-demophone04" custom-xlc-type="text" custom-xlc-title="\u5916\u5356\u5FEB\u9012\u865A\u62DF\u624B\u673A\u53F7" custom-xlc-tags="\u5FEB\u9012\u7535\u8BDD,\u5916\u5356" custom-xlc-category="\u8054\u7CFB\u65B9\u5F0F"}`,
+      "",
+      "## \u2709\uFE0F \u5E38\u7528\u7535\u5B50\u90AE\u7BB1\u4E0E\u90AE\u4EF6\u7B7E\u540D\uFF08\u90AE\u7BB1\u4E13\u95E8\u793A\u4F8B\uFF09",
+      "",
+      "service@xiaolv.com @\u5BA2\u670D\u5DE5\u4F5C\u90AE\u7BB1",
+      `{: custom-xlc-id="xlc-demoemail01" custom-xlc-type="text" custom-xlc-title="\u5B98\u65B9\u5BA2\u670D\u90AE\u7BB1" custom-xlc-tags="\u5BA2\u670D\u90AE\u7BB1,\u5DE5\u4F5C\u90AE\u7BB1" custom-xlc-category="\u90AE\u7BB1"}`,
+      "",
+      "contact@company.com @\u4E2A\u4EBA\u5DE5\u4F5C\u5BF9\u63A5\u90AE\u7BB1",
+      `{: custom-xlc-id="xlc-demoemail02" custom-xlc-type="text" custom-xlc-title="\u4E2A\u4EBA\u5BF9\u5916\u5DE5\u4F5C\u90AE\u7BB1" custom-xlc-tags="\u5DE5\u4F5C\u90AE\u7BB1,\u5546\u52A1\u5BF9\u63A5" custom-xlc-category="\u90AE\u7BB1"}`,
+      "",
+      "myname@gmail.com @\u4E2A\u4EBA\u79C1\u4EBA\u5E38\u7528\u90AE\u7BB1",
+      `{: custom-xlc-id="xlc-demoemail03" custom-xlc-type="text" custom-xlc-title="\u4E2A\u4EBA\u79C1\u4EBA\u5E38\u7528\u90AE\u7BB1" custom-xlc-tags="\u79C1\u4EBA\u90AE\u7BB1,Gmail" custom-xlc-category="\u90AE\u7BB1"}`,
+      "",
+      "{{{row",
+      "\u795D\u597D\uFF01",
+      "",
+      "{{xlc:ask:\u59D3\u540D}} | {{xlc:ask:\u804C\u4F4D}}",
+      "{{xlc:ask:\u516C\u53F8\u540D\u79F0}}",
+      "\u90AE\u7BB1\uFF1A{{xlc:ask:\u90AE\u7BB1}}",
+      "\u7535\u8BDD\uFF1A{{xlc:ask:\u624B\u673A\u53F7}}{{xlc:cursor}}",
+      "}}}",
+      `{: custom-xlc-id="xlc-demoemailsig" custom-xlc-type="structure" custom-xlc-title="\u6807\u51C6\u90AE\u4EF6\u843D\u6B3E\u7B7E\u540D" custom-xlc-tags="\u90AE\u4EF6\u7B7E\u540D,\u7B7E\u540D\u6A21\u677F" custom-xlc-category="\u90AE\u7BB1"}`,
+      "",
+      "## \u{1F3E2} \u5E38\u7528\u8D22\u52A1\u4E0E\u5F00\u7968\u4FE1\u606F\uFF08\u4F01\u4E1A\u8D44\u8D28\u4E13\u95E8\u793A\u4F8B\uFF09",
+      "",
+      "[\u516C\u53F8\u7A0E\u53F7] 91110108MA00000000",
+      `{: custom-xlc-id="xlc-demotax001" custom-xlc-type="text" custom-xlc-title="\u4F01\u4E1A\u7EDF\u4E00\u793E\u4F1A\u4FE1\u7528\u4EE3\u7801\uFF08\u7A0E\u53F7\uFF09" custom-xlc-tags="\u516C\u53F8\u7A0E\u53F7,\u7EB3\u7A0E\u4EBA\u8BC6\u522B\u53F7,\u8D22\u52A1" custom-xlc-category="\u8D22\u52A1"}`,
+      "",
+      "{{{row",
+      "\u4F01\u4E1A\u540D\u79F0\uFF1A{{xlc:ask:\u4F01\u4E1A\u5168\u79F0}}",
+      "\u7EB3\u7A0E\u4EBA\u8BC6\u522B\u53F7\uFF1A91110108MA00000000",
+      "\u5F00\u6237\u94F6\u884C\uFF1A\u4E2D\u56FD\u5DE5\u5546\u94F6\u884C\u80A1\u4EFD\u6709\u9650\u516C\u53F8\u5317\u4EAC\u4E2D\u5173\u6751\u652F\u884C",
+      "\u94F6\u884C\u8D26\u53F7\uFF1A0200 0010 0900 1234 567",
+      "\u6CE8\u518C\u5730\u5740\uFF1A\u5317\u4EAC\u5E02\u6D77\u6DC0\u533A\u4E2D\u5173\u6751\u5357\u5927\u88571\u53F7\u9662",
+      "\u8054\u7CFB\u7535\u8BDD\uFF1A010-88886666",
+      "}}}",
+      `{: custom-xlc-id="xlc-demotaxcard" custom-xlc-type="structure" custom-xlc-title="\u5B8C\u6574\u589E\u503C\u7A0E\u53D1\u7968\u5F00\u7968\u8D44\u6599" custom-xlc-tags="\u5F00\u7968\u8D44\u6599,\u4F01\u4E1A\u62AC\u5934,\u53D1\u7968" custom-xlc-category="\u8D22\u52A1"}`,
+      "",
+      "## \u{1F4E6} \u5E38\u7528\u5FEB\u9012\u4E0E\u6536\u4EF6\u5730\u5740\uFF08\u5730\u5740\u4E13\u95E8\u793A\u4F8B\uFF09",
+      "",
+      "\u5317\u4EAC\u5E02\u6D77\u6DC0\u533A\u4E2D\u5173\u6751\u5357\u5927\u88571\u53F7\u9662A\u5EA712\u5C42\u524D\u53F0 @\u516C\u53F8\u6536\u4EF6\u5730\u5740",
+      `{: custom-xlc-id="xlc-demoaddr001" custom-xlc-type="text" custom-xlc-title="\u516C\u53F8\u529E\u516C\u5BA4\u6536\u4EF6\u5730\u5740" custom-xlc-tags="\u5FEB\u9012\u5730\u5740,\u516C\u53F8\u6536\u4EF6" custom-xlc-category="\u5730\u5740"}`,
+      "",
+      "{{{row",
+      "\u6536\u4EF6\u4EBA\uFF1A{{xlc:ask:\u6536\u4EF6\u4EBA\u59D3\u540D}}",
+      "\u8054\u7CFB\u7535\u8BDD\uFF1A{{xlc:ask:\u624B\u673A\u53F7}}",
+      "\u6536\u8D27\u5730\u5740\uFF1A{{xlc:ask:\u7701\u5E02\u533A}} {{xlc:ask:\u8BE6\u7EC6\u95E8\u724C\u5730\u5740}}",
+      "\u90AE\u7F16\uFF1A100080{{xlc:cursor}}",
+      "}}}",
+      `{: custom-xlc-id="xlc-demoaddrcard" custom-xlc-type="structure" custom-xlc-title="\u6807\u51C6\u7535\u5546\u4E0E\u5FEB\u9012\u6536\u4EF6\u5361\u7247" custom-xlc-tags="\u6536\u4EF6\u5361\u7247,\u5FEB\u9012\u6A21\u677F,\u53D1\u8D27" custom-xlc-category="\u5730\u5740"}`,
+      "",
+      "## \u{1F4AC} \u5E38\u7528\u5546\u52A1\u4E0E\u65E5\u5E38\u56DE\u590D\u8BDD\u672F",
+      "",
+      "\u6536\u5230\uFF0C\u5DF2\u59A5\u5584\u8BB0\u5F55\uFF0C\u4ECA\u5929\u4E0B\u5348\u4E0B\u73ED\u524D\u5411\u60A8\u53CD\u9988\u5904\u7406\u8FDB\u5C55\uFF01 @\u5DE5\u4F5C\u6536\u5230\u786E\u8BA4",
+      `{: custom-xlc-id="xlc-demoreply01" custom-xlc-type="text" custom-xlc-title="\u5DE5\u4F5C\u4E8B\u9879\u6536\u5230\u786E\u8BA4" custom-xlc-tags="\u6536\u5230\u786E\u8BA4,\u5DE5\u4F5C\u56DE\u590D,\u5546\u52A1" custom-xlc-category="\u5546\u52A1"}`,
+      "",
+      "\u60A8\u597D\uFF0C\u5173\u4E8E\u60A8\u54A8\u8BE2\u7684\u95EE\u9898\u5DF2\u4E3A\u60A8\u8F6C\u4EA4\u6280\u672F\u90E8\u95E8\u6838\u5B9E\uFF0C\u9884\u8BA130\u5206\u949F\u5185\u7ED9\u60A8\u7B54\u590D\uFF0C\u8BF7\u7A0D\u5019\u3002 @\u5BA2\u670D\u5FEB\u901F\u5E94\u7B54",
+      `{: custom-xlc-id="xlc-demoreply02" custom-xlc-type="text" custom-xlc-title="\u5BA2\u670D\u63A5\u5F85\u5FEB\u901F\u5E94\u7B54\u8BDD\u672F" custom-xlc-tags="\u5BA2\u670D\u56DE\u590D,\u63A5\u5F85\u8BDD\u672F,\u5B89\u629A" custom-xlc-category="\u5BA2\u670D"}`,
+      "",
+      "\u62B1\u6B49\u7ED9\u60A8\u5E26\u6765\u4E0D\u4FBF\uFF0C\u5DF2\u4E3A\u60A8\u4F18\u5148\u52A0\u6025\u50AC\u529E\uFF08\u5DE5\u5355\u53F7\uFF1A{{xlc:ask:\u5DE5\u5355\u53F7}}\uFF09\uFF0C\u9884\u8BA1 {{xlc:date}} \u524D\u4E3A\u60A8\u5B8C\u6210\u5904\u7406\u5E76\u56DE\u8BBF\uFF01 @\u6545\u969C\u81F4\u6B49\u4E0E\u52A0\u6025\u50AC\u529E",
+      `{: custom-xlc-id="xlc-demoreply03" custom-xlc-type="text" custom-xlc-title="\u52A0\u6025\u50AC\u529E\u4E0E\u81F4\u6B49\u8BDD\u672F" custom-xlc-tags="\u81F4\u6B49,\u50AC\u529E,\u5DE5\u5355" custom-xlc-category="\u5BA2\u670D"}`,
+      "",
+      "## \u{1F4BB} \u5E38\u7528\u5F00\u53D1\u547D\u4EE4\u4E0E SQL \u4EE3\u7801\u7247\u6BB5",
+      "",
+      "```bash",
+      'git commit -m "{{xlc:ask:\u63D0\u4EA4\u4FE1\u606F}}"',
+      "```",
+      `{: custom-xlc-id="xlc-democmd0001" custom-xlc-type="code" custom-xlc-title="Git \u5E26\u4FE1\u606F\u5FEB\u901F\u63D0\u4EA4" custom-xlc-tags="Git,\u5F00\u53D1\u547D\u4EE4,\u7EC8\u7AEF" custom-xlc-category="\u5F00\u53D1"}`,
+      "",
+      "```sql",
+      "SELECT id, username, email, created_at FROM users WHERE status = 1 ORDER BY created_at DESC LIMIT 20;",
+      "```",
+      `{: custom-xlc-id="xlc-democmd0002" custom-xlc-type="code" custom-xlc-title="\u7528\u6237\u8868\u5206\u9875\u67E5\u8BE2 SQL" custom-xlc-tags="SQL,\u6570\u636E\u5E93,\u67E5\u8BE2" custom-xlc-category="\u5F00\u53D1"}`,
+      ""
+    ].join("\n");
+  }
   var PROMPT_PACK_NAME, PROMPT_PACK_MD, REFORMULATION_PACK_NAME, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_NAME, TASK_HORIZON_PACK_MD, CALLOUT_PACK_NAME, CALLOUT_PACK_MD, ACADEMIC_CITATION_PACK_NAME, ACADEMIC_CITATION_PACK_MD;
   var init_prompt_pack = __esm({
     "src/service/prompt-pack.ts"() {
@@ -18437,7 +18834,7 @@ ${finalHtml}
       observer == null ? void 0 : observer.disconnect();
       onClose == null ? void 0 : onClose();
     };
-    const dialog = new import_siyuan5.Dialog({
+    const dialog = new import_siyuan6.Dialog({
       title: t("csvImportTitle"),
       content: "",
       width: "min(800px, 96vw)",
@@ -18737,11 +19134,11 @@ ${finalHtml}
     });
     ta.focus();
   }
-  var import_siyuan5;
+  var import_siyuan6;
   var init_csv_tsv_wizard = __esm({
     "src/ui/csv-tsv-wizard.ts"() {
       "use strict";
-      import_siyuan5 = __toESM(require_stub_dom());
+      import_siyuan6 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_csv_tsv_import();
       init_errors();
@@ -19231,10 +19628,10 @@ ${finalHtml}
     };
   }
   function openSanitizerOptionsDialog(initialOptions, onConfirm) {
-    if (typeof import_siyuan6.Dialog === "undefined") return null;
+    if (typeof import_siyuan7.Dialog === "undefined") return null;
     let dialog;
     try {
-      dialog = new import_siyuan6.Dialog({
+      dialog = new import_siyuan7.Dialog({
         title: "\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879",
         content: "",
         width: "min(560px, 92vw)",
@@ -19264,13 +19661,13 @@ ${finalHtml}
     if (innerHeader) innerHeader.style.display = "none";
     return dialog;
   }
-  var import_siyuan6, MockElement;
+  var import_siyuan7, MockElement;
   var init_export_sanitizer_modal = __esm({
     "src/ui/export-sanitizer-modal.ts"() {
       "use strict";
       init_clipboard();
       init_dialog_dom();
-      import_siyuan6 = __toESM(require_stub_dom());
+      import_siyuan7 = __toESM(require_stub_dom());
       MockElement = class {
         constructor(tagName = "div") {
           this._classes = /* @__PURE__ */ new Set();
@@ -20036,7 +20433,7 @@ ${finalHtml}
     if (isBrowser) {
       let dialog = null;
       try {
-        dialog = new import_siyuan7.Dialog({
+        dialog = new import_siyuan8.Dialog({
           title: titleText,
           content: "",
           width: "min(960px, 94vw)",
@@ -20259,12 +20656,12 @@ ${finalHtml}
       }
     };
   }
-  var import_siyuan7, MockElement2, STRATEGY_DESCRIPTIONS;
+  var import_siyuan8, MockElement2, STRATEGY_DESCRIPTIONS;
   var init_sync_diff_modal = __esm({
     "src/ui/sync-diff-modal.ts"() {
       "use strict";
       init_sync_diff();
-      import_siyuan7 = __toESM(require_stub_dom());
+      import_siyuan8 = __toESM(require_stub_dom());
       init_clipboard();
       init_dialog_dom();
       MockElement2 = class {
@@ -22993,7 +23390,7 @@ ${exception.mark.snippet}`;
     }
     activeSetupDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan8.Dialog({
+    const dialog = new import_siyuan9.Dialog({
       title: t("setupTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -23023,7 +23420,7 @@ ${exception.mark.snippet}`;
     }
     activeSettingsDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan8.Dialog({
+    const dialog = new import_siyuan9.Dialog({
       title: t("openSettings"),
       content: "",
       width: "min(720px, 92vw)",
@@ -23143,6 +23540,16 @@ ${exception.mark.snippet}`;
       });
       libBtnWrap.appendChild(openLibBtn);
     }
+    const guideBtn = document.createElement("button");
+    guideBtn.type = "button";
+    guideBtn.className = "b3-button";
+    guideBtn.dataset.xlcControl = "settings.library.step-guide";
+    guideBtn.textContent = "\u{1F393} \u65B0\u624B\u6307\u5F15";
+    guideBtn.title = "\u6253\u5F00\u5206\u6B65\u5B9E\u64CD\u6307\u5F15\uFF0C\u5B66\u4E60\u667A\u80FD\u6CE8\u89E3\u4E0E\u9AD8\u6548\u4F7F\u7528\u6280\u5DE7";
+    guideBtn.addEventListener("click", () => {
+      openStepByStepGuideDialog({ t: ctx.t });
+    });
+    libBtnWrap.appendChild(guideBtn);
     libBtnWrap.appendChild(changeBtn);
     libRow.appendChild(libBtnWrap);
     libSec.appendChild(libRow);
@@ -23205,7 +23612,7 @@ ${exception.mark.snippet}`;
     }
     const all = Array.from(idx.items.values());
     const categories = Array.from(new Set(all.map((i) => i.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-    const dialog = new import_siyuan8.Dialog({
+    const dialog = new import_siyuan9.Dialog({
       title: t("packExportTitle"),
       content: "",
       width: "min(580px, 92vw)",
@@ -23501,7 +23908,7 @@ ${exception.mark.snippet}`;
     syncClearUsage();
     clearBtn.addEventListener("click", () => {
       if (!hasUsage()) return;
-      (0, import_siyuan8.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
+      (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
         var _a;
         ctx.state.usage = {};
         ctx.persistSoon();
@@ -23535,7 +23942,7 @@ ${exception.mark.snippet}`;
       if (countRememberedFields(ctx.state.variableMemory) === 0) return;
       const confirmTitle = "\u26A0\uFE0F " + (t("clearVariableMemoryBtn") || "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6");
       const confirmBody = t("clearVariableMemoryConfirm") || "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u8BB0\u4F4F\u7684\u6240\u6709\u53D8\u91CF\u5386\u53F2\u586B\u5199\u503C\u5417\uFF1F\u6761\u76EE\u6A21\u677F\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002";
-      (0, import_siyuan8.confirm)(confirmTitle, confirmBody, () => {
+      (0, import_siyuan9.confirm)(confirmTitle, confirmBody, () => {
         ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
         ctx.persistSoon();
         syncClearMem();
@@ -24241,7 +24648,7 @@ ${exception.mark.snippet}`;
       }
       const revision = setupRevision;
       const confirmText = mode === "new-notebook" ? t("setupIndependentConfirmCreate", notebookName, title) : t("setupConfirmCreate", title);
-      (0, import_siyuan8.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
+      (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
         if (creatingLibrary || setupRevision !== revision || modeSelect.value !== mode || mode === "new-doc" && nbSelect.value !== notebookId || mode === "new-notebook" && independentNotebookInput.value.trim() !== notebookName || nameInput.value.trim() !== title) return;
         creatingLibrary = true;
         clearOrphanReceipt();
@@ -24663,7 +25070,7 @@ ${exception.mark.snippet}`;
         delBtn.setAttribute("aria-label", `${t("delete")}\uFF1A${ct.name}`);
         delBtn.title = `${t("delete")}\uFF1A${ct.name}`;
         delBtn.addEventListener("click", () => {
-          (0, import_siyuan8.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
+          (0, import_siyuan9.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
             ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
             persistCt();
             repaintCt();
@@ -24832,7 +25239,7 @@ ${exception.mark.snippet}`;
         remove.textContent = t("savedViewsDelete");
         remove.setAttribute("aria-label", `${t("savedViewsDelete")}\uFF1A${view.name}`);
         remove.addEventListener("click", () => {
-          (0, import_siyuan8.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
+          (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
             var _a;
             if (ctx.deleteSavedDiscoveryView) {
               ctx.deleteSavedDiscoveryView(view.id);
@@ -25272,7 +25679,7 @@ fi`;
     const clearRecentsBtn = mkBtn(ctx.state.recents.length ? t("clearRecents") : t("clearRecentsEmpty"), void 0, "settings.data.clearRecents");
     clearRecentsBtn.addEventListener("click", () => {
       if (ctx.state.recents.length === 0 || clearRecentsBtn.disabled) return;
-      (0, import_siyuan8.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
+      (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
         var _a;
         ctx.state.recents = [];
         ctx.persistSoon();
@@ -25779,7 +26186,7 @@ fi`;
   }
   function openEspansoImportDialog(ctx, onClose) {
     const t = ctx.t;
-    const dialog = new import_siyuan8.Dialog({
+    const dialog = new import_siyuan9.Dialog({
       title: t("espansoTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -25944,7 +26351,7 @@ fi`;
     } catch (err) {
       throw new Error(ctx.aiErrorText(err));
     }
-    const dialog = new import_siyuan8.Dialog({
+    const dialog = new import_siyuan9.Dialog({
       title: t("tagAuditTitle"),
       content: "",
       width: "min(620px, 92vw)",
@@ -25995,7 +26402,7 @@ fi`;
   function openImportPolicyDialog(ctx, parsed, issues, source) {
     var _a, _b, _c;
     const t = ctx.t;
-    const dialog = new import_siyuan8.Dialog({
+    const dialog = new import_siyuan9.Dialog({
       title: t("importPolicyTitle"),
       content: "",
       width: "min(540px, 92vw)",
@@ -26199,11 +26606,11 @@ fi`;
     });
     body.appendChild(wrap);
   }
-  var import_siyuan8, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
+  var import_siyuan9, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
   var init_settings_dialog = __esm({
     "src/ui/settings-dialog.ts"() {
       "use strict";
-      import_siyuan8 = __toESM(require_stub_dom());
+      import_siyuan9 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_storage();
       init_constants();
@@ -26223,6 +26630,7 @@ fi`;
       init_sync_diff_modal();
       init_sync_diff();
       init_variable_memory();
+      init_guide_dialog();
       activeSetupDialog = null;
       activeSettingsDialog = null;
       espansoParserPromise = null;
@@ -26231,7 +26639,7 @@ fi`;
   });
 
   // src/ui/dialog.ts
-  var import_siyuan4 = __toESM(require_stub_dom());
+  var import_siyuan5 = __toESM(require_stub_dom());
   init_dialog_dom();
   init_item();
   init_clipboard_cleaner();
@@ -27241,6 +27649,7 @@ fi`;
   init_clipboard();
   init_placeholders();
   init_calculator();
+  init_guide_dialog();
   function resolveEntryBlockId(entry) {
     var _a;
     const strippedOmni = entry.id.startsWith("xlc-omni-") ? entry.id.slice("xlc-omni-".length) : entry.id;
@@ -27323,7 +27732,7 @@ fi`;
       const isMobile = this.deps.isMobile();
       void ((_b = (_a = this.deps).syncSystemClipboard) == null ? void 0 : _b.call(_a));
       this.prevActiveElement = document.activeElement;
-      const dialog = new import_siyuan4.Dialog({
+      const dialog = new import_siyuan5.Dialog({
         title: this.deps.t("pluginName"),
         content: "",
         // 桌面采用宽松密度，减少截断并让双栏预览一次展示更多内容；移动端仍由 sheet 占满视口。
@@ -27369,6 +27778,10 @@ fi`;
         input.focus();
       }
       void this.refresh();
+    }
+    focusInput() {
+      var _a, _b, _c;
+      (_c = (_b = (_a = this.dialog) == null ? void 0 : _a.element) == null ? void 0 : _b.querySelector(".xlc-search-input")) == null ? void 0 : _c.focus();
     }
     buildDom(isMobile) {
       var _a, _b, _c, _d, _e, _f;
@@ -27983,6 +28396,20 @@ fi`;
       guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
       guide.addEventListener("click", () => this.openUsageGuide());
       footer.appendChild(guide);
+      const stepGuide = document.createElement("button");
+      stepGuide.type = "button";
+      stepGuide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-stepguide";
+      stepGuide.dataset.xlcControl = "footer.stepguide";
+      stepGuide.textContent = "\u{1F393} " + (this.deps.t("stepGuideTitle") || "\u65B0\u624B\u5B9E\u64CD\u6307\u5F15");
+      stepGuide.setAttribute("aria-label", this.deps.t("stepGuideTitle") || "\u65B0\u624B\u5B9E\u64CD\u6307\u5F15");
+      stepGuide.addEventListener("click", () => {
+        openStepByStepGuideDialog({
+          t: this.deps.t,
+          isMobile: this.deps.isMobile,
+          onOpenSearch: () => this.focusInput()
+        });
+      });
+      footer.appendChild(stepGuide);
       const gear = document.createElement("button");
       gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";
       gear.dataset.xlcControl = "footer.settings";
@@ -27999,7 +28426,7 @@ fi`;
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
     openUsageGuide() {
       var _a;
-      const guideDialog = new import_siyuan4.Dialog({
+      const guideDialog = new import_siyuan5.Dialog({
         title: this.deps.t("usageGuideTitle"),
         content: "",
         width: "min(600px, 92vw)",
@@ -28012,6 +28439,18 @@ fi`;
       body.innerHTML = "";
       const root = document.createElement("div");
       root.className = "xlc-form xlc-guide";
+      const stepBanner = document.createElement("div");
+      stepBanner.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 14px; border:1px solid var(--b3-theme-primary); border-radius:var(--b3-border-radius); background:color-mix(in srgb, var(--b3-theme-primary) 8%, var(--b3-theme-surface)); margin-bottom:12px; cursor:pointer;";
+      stepBanner.innerHTML = `<strong>\u{1F393} \u63A8\u8350\uFF1A\u4F53\u9A8C\u5206\u6B65\u5F0F\u5B9E\u64CD\u6559\u5B66\u6307\u5F15\uFF08\u4E00\u6B65\u6B65\u4E0A\u624B\uFF09</strong><span style="font-size:12px; color:var(--b3-theme-primary); font-weight:600;">\u70B9\u51FB\u8FDB\u5165 \u2794</span>`;
+      stepBanner.addEventListener("click", () => {
+        guideDialog.destroy();
+        openStepByStepGuideDialog({
+          t: this.deps.t,
+          isMobile: this.deps.isMobile,
+          onOpenSearch: () => this.focusInput()
+        });
+      });
+      root.appendChild(stepBanner);
       const intro = document.createElement("p");
       intro.className = "xlc-form-hint xlc-guide-intro";
       intro.textContent = this.deps.t("usageGuideIntro");
@@ -33739,7 +34178,7 @@ ${progress.progressBar}`);
   init_capture();
 
   // src/ui/discovery-dialog.ts
-  var import_siyuan9 = __toESM(require_stub_dom());
+  var import_siyuan10 = __toESM(require_stub_dom());
   init_constants();
   init_dialog_dom();
   init_item();
@@ -34015,7 +34454,7 @@ ${progress.progressBar}`);
       var _a, _b, _c;
       if (this.dialog) return;
       this.closed = false;
-      const dialog = new import_siyuan9.Dialog({
+      const dialog = new import_siyuan10.Dialog({
         title: (_a = this.options.title) != null ? _a : this.tx(this.titleKey()),
         content: "",
         width: "min(1040px, 94vw)",
@@ -34103,7 +34542,7 @@ ${progress.progressBar}`);
     openCloseConfirmation(onClosed) {
       var _a;
       if (this.closeConfirmationDialog || this.closed) return;
-      const dialog = new import_siyuan9.Dialog({
+      const dialog = new import_siyuan10.Dialog({
         title: this.tx("discoveryCloseTitle"),
         content: "",
         width: "min(440px, 92vw)",
@@ -35244,7 +35683,7 @@ ${progress.progressBar}`);
         pathLabel: ((_f = this.options.sourcePath) != null ? _f : "").slice(0, LIMITS.savedViewPathChars),
         defaultCategory: ((_h = (_g = this.defaultCategoryInput) == null ? void 0 : _g.value) != null ? _h : "").trim().slice(0, LIMITS.category)
       };
-      const dialog = new import_siyuan9.Dialog({
+      const dialog = new import_siyuan10.Dialog({
         title: this.tx("discoverySaveView"),
         content: "",
         width: "min(440px, 92vw)",
@@ -35743,7 +36182,7 @@ ${details.join("\n")}` : ""}`;
 
   // src/service/commands.ts
   var siyuan = __toESM(require_stub_dom());
-  var import_siyuan10 = __toESM(require_stub_dom());
+  var import_siyuan11 = __toESM(require_stub_dom());
   init_constants();
   init_actions();
   init_placeholders();
@@ -36137,6 +36576,7 @@ ${details.join("\n")}` : ""}`;
   init_pinyin();
   init_variables();
   init_errors();
+  init_prompt_pack();
   function fail(reason, message) {
     return { ok: false, reason, message };
   }
@@ -36333,12 +36773,13 @@ ${details.join("\n")}` : ""}`;
           if (previous) return previous;
         }
         try {
+          const initialMd = options.emptyDoc ? `# ${normalizedTitle}
+
+` : buildInitialLibraryDocMarkdown(normalizedTitle);
           const docId = parseDocId(await this.kernel.request("createDocWithMd", {
             notebook: notebookId,
             path: "/" + normalizedTitle.replace(/\//g, "-"),
-            markdown: `# ${normalizedTitle}
-
-`
+            markdown: initialMd
           }, { idempotencyKey: idempotencyKey || void 0, maxRetries: 0 }));
           if (!docId) return fail("kernel-error", "createDocWithMd returned no id");
           const receipt = ok({ docId });
@@ -37762,6 +38203,15 @@ ${details.join("\n")}` : ""}`;
     usageHintMobile: "\u70B9\u6309\u9009\u62E9\u6761\u76EE\uFF0C\u518D\u70B9\u5E95\u680F\u4E3B\u6309\u94AE\u4F7F\u7528 \xB7 \u957F\u6309\u67E5\u770B\u64CD\u4F5C",
     usageGuideBtn: "\u4F7F\u7528\u5E2E\u52A9",
     usageGuideTitle: "\u5C0F\u9A74\u5E38\u7528\u600E\u4E48\u7528",
+    stepGuideTitle: "\u65B0\u624B\u5B9E\u64CD\u4F7F\u7528\u6307\u5F15",
+    stepGuideSub: "4 \u6B65\u638C\u63E1\u9AD8\u9891\u5E38\u7528\u8BED\u6781\u901F\u590D\u7528\u6280\u80FD\uFF0C\u544A\u522B\u91CD\u590D\u8F93\u5165",
+    stepGuideStep1: "\u2460 \u547C\u51FA\u4E0E\u68C0\u7D22",
+    stepGuideStep2: "\u2461 \u624B\u673A/\u90AE\u7BB1\u6CE8\u89E3",
+    stepGuideStep3: "\u2462 \u6781\u901F\u590D\u7528\u4E0E\u5173\u95ED",
+    stepGuideStep4: "\u2463 \u53D8\u91CF\u4E0E\u53CC\u5411\u8054\u52A8",
+    stepGuidePrev: "\u4E0A\u4E00\u6B65",
+    stepGuideNext: "\u4E0B\u4E00\u6B65",
+    stepGuideFinish: "\u5B8C\u6210\u5F15\u5BFC \xB7 \u5F00\u59CB\u4F53\u9A8C",
     usageGuideIntro: "\u628A\u5E38\u7528\u5185\u5BB9\u4FDD\u5B58\u5728\u601D\u6E90\u6587\u6863\u4E2D\uFF0C\u4E4B\u540E\u641C\u7D22\u3001\u9884\u89C8\uFF0C\u518D\u63D2\u5165\u6216\u590D\u5236\u3002",
     usageGuideAdd: "\u65B0\u589E\uFF1A\u70B9\u300C\uFF0B \u65B0\u5EFA\u6761\u76EE\u300D\uFF0C\u6216\u4ECE\u9009\u533A\u3001\u5F53\u524D\u5757\u3001\u526A\u8D34\u677F\u548C\u53F3\u952E\u83DC\u5355\u4FDD\u5B58\uFF1B\u8FD8\u53EF\u4EE5\u7528\u547D\u4EE4\u9762\u677F\u6216\u6B63\u6587\u53F3\u952E\u7684\u300C\u4ECE\u5F53\u524D\u6587\u6863\u53D1\u73B0\u5E38\u7528\u8BED\u300D\u6279\u91CF\u6311\u9009\u5DF2\u6709\u5185\u5BB9\u3002",
     usageGuideSearch: "\u67E5\u627E\uFF1A\u641C\u7D22\u6807\u9898\u3001\u522B\u540D\u3001\u6458\u8981\u3001\u6807\u7B7E\u548C\u5206\u7C7B\uFF1B\u4E5F\u53EF\u4EE5\u7528\u62FC\u97F3\u3001\u6536\u85CF\u3001\u6700\u8FD1\u4F7F\u7528\u548C\u5E38\u7528\u6392\u5E8F\u3002",

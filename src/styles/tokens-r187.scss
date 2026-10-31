@@ -15,7 +15,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-line-strong: rgba(44, 43, 62, 0.12);
 
   // ② 两色分工：主题色承担操作语义，数据语义色承担使用频次/命中率/连续性
-  --xlc-accent: #5e59cb; // 核心操作语义色 (紫罗兰)
+  --xlc-accent: #5e59cb; // 核心操作语义色 (紫罗兰基准色，契约保留)
   --xlc-accent-text: #504abd;
   --xlc-accent-contrast: #ffffff;
   --xlc-data-accent: #059669; // 数据语义色 (色轮向青绿偏移25°，正向翡翠绿)
@@ -135,6 +135,13 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
 :is(#{$roots}) {
   @include light-palette;
 
+  // 核心视觉修正：操作高亮与焦点状态全面遵循宿主原生主题色（原生蓝等），杜绝任何突兀紫框残留
+  --xlc-accent: var(--b3-theme-primary);
+  --xlc-accent-text: var(--b3-theme-primary);
+  --xlc-accent-contrast: var(--b3-theme-on-primary, #ffffff);
+  --xlc-lavender: var(--b3-list-hover);
+  --xlc-lavender-ink: var(--b3-theme-primary);
+
   --xlc-font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   // Typography scale: seven product roles; half-pixel aliases were retired in R190.
   --xlc-font-2xs: 11px;
@@ -245,15 +252,13 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --b3-theme-on-background: var(--xlc-ink);
   --b3-theme-on-surface: var(--xlc-muted);
   --b3-theme-on-surface-light: var(--xlc-muted);
-  --b3-theme-primary: var(--xlc-accent);
   --b3-theme-primary-light: var(--xlc-line);
-  --b3-theme-primary-lighter: var(--xlc-lavender);
-  --b3-theme-on-primary: var(--xlc-accent-contrast);
+  --b3-theme-primary-lighter: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent);
   --b3-theme-success: var(--xlc-success);
   --b3-theme-warning: var(--xlc-warning);
   --b3-theme-error: var(--xlc-danger);
   --b3-border-color: var(--xlc-line);
-  --b3-list-hover: var(--xlc-lavender);
+  --b3-list-hover: color-mix(in srgb, var(--b3-theme-primary) 8%, var(--xlc-surface));
   --b3-menu-background: var(--xlc-raised);
   --b3-dialog-shadow: var(--xlc-overlay-shadow);
 
@@ -265,6 +270,11 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
 :is(:root[data-theme-mode="dark"], [data-theme-mode="dark"], body.body--dark, .b3-theme-dark, [data-theme="dark"], .b3-scope.dark) :is(#{$roots}),
 :is(#{$roots}):is([data-theme-mode="dark"], .b3-theme-dark, [data-theme="dark"]) {
   @include dark-palette;
+  --xlc-accent: var(--b3-theme-primary);
+  --xlc-accent-text: var(--b3-theme-primary);
+  --xlc-accent-contrast: var(--b3-theme-on-primary, #161522);
+  --xlc-lavender: var(--b3-list-hover);
+  --xlc-lavender-ink: var(--b3-theme-primary);
 }
 
 // ---- 控件与公共任务面 ----
@@ -272,8 +282,8 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   :is(button, input, select, textarea) { font-family: inherit; }
 
   :is(button, input, select, textarea, a, [tabindex]):focus-visible {
-    outline: 2px solid var(--xlc-accent-text);
-    outline-offset: 3px;
+    outline: 2px solid var(--b3-theme-primary);
+    outline-offset: 2px;
   }
 
   input[type="checkbox"] { accent-color: var(--xlc-accent); }
@@ -365,7 +375,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
                 box-shadow var(--xlc-dur-control) ease;
 
     &:hover { border-color: var(--xlc-muted); }
-    &:focus { border-color: var(--xlc-accent); background-color: var(--xlc-surface); box-shadow: 0 0 0 2px var(--xlc-lavender); }
+    &:focus { border-color: var(--b3-theme-primary); background-color: var(--xlc-surface); box-shadow: 0 0 0 2px color-mix(in srgb, var(--b3-theme-primary) 25%, transparent); }
     &:disabled, &[aria-disabled="true"] { opacity: .5; cursor: not-allowed; background-color: var(--xlc-soft); }
     &[aria-busy="true"] { opacity: .7; cursor: wait; }
     &::placeholder { color: var(--xlc-muted); opacity: 1; }
@@ -391,7 +401,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     background: var(--xlc-surface);
     box-shadow: none;
 
-    &:focus-within { border-color: var(--xlc-accent); box-shadow: none; }
+    &:focus-within { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--b3-theme-primary) 25%, transparent); }
     > .xlc-form-label { margin-bottom: var(--xlc-space-2); font-size: var(--xlc-font-lg); letter-spacing: 0; }
   }
 
@@ -572,25 +582,25 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   .xlc-pane { min-height: 0; border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-lg); background: var(--xlc-surface); box-shadow: var(--xlc-shadow-float); overflow: hidden; }
   .xlc-group-head { padding: var(--xlc-space-3) var(--xlc-space-4); background: var(--xlc-soft); color: var(--xlc-muted); font-size: var(--xlc-font-xs); font-weight: var(--xlc-weight-semibold); letter-spacing: 0; }
   .xlc-row { gap: var(--xlc-space-3); min-height: 64px; padding: var(--xlc-space-3) var(--xlc-space-4); border-bottom-color: var(--xlc-line); box-shadow: none; }
-  .xlc-row:hover { background: var(--xlc-soft); }
-  .xlc-row--active { background: var(--xlc-lavender); box-shadow: none; }
+  .xlc-row:hover { background: var(--b3-list-hover); }
+  .xlc-row--active { background: var(--b3-list-hover); box-shadow: inset 3.5px 0 0 var(--b3-theme-primary); border-color: var(--b3-theme-primary); }
   .xlc-row-title { gap: var(--xlc-space-2); margin-bottom: var(--xlc-space-1); font-size: var(--xlc-font-lg); line-height: var(--xlc-line-body); font-weight: var(--xlc-weight-semibold); }
   .xlc-row-meta { color: var(--xlc-muted); font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); }
   .xlc-row-ordinal { width: 20px; height: 20px; border: 0; border-radius: var(--xlc-radius-sm); background: var(--xlc-soft); color: var(--xlc-muted); }
-  .xlc-row--active .xlc-row-ordinal { background: var(--xlc-surface); color: var(--xlc-accent-text); border: 0; }
+  .xlc-row--active .xlc-row-ordinal { background: var(--b3-theme-primary); color: var(--b3-theme-on-primary, #ffffff); border: 0; }
   .xlc-row-action { width: 32px; min-width: 32px; height: 32px; min-height: 32px; opacity: 1; font-size: var(--xlc-font-lg); }
   .xlc-row-checkbox { width: 18px; min-width: 18px; height: 18px; min-height: 18px; cursor: pointer; }
   .xlc-row-action:hover { color: var(--xlc-warm-ink); background: var(--xlc-warm); }
   .xlc-row-action:active { transform: none; }
   .xlc-row--provider { background: var(--xlc-surface); }
-  .xlc-row--provider:hover { background: var(--xlc-lavender); }
-  .xlc-provider-header { padding: var(--xlc-space-3) var(--xlc-space-4); background: var(--xlc-lavender); color: var(--xlc-lavender-ink); font-size: var(--xlc-font-sm); letter-spacing: 0; }
+  .xlc-row--provider:hover { background: var(--b3-list-hover); }
+  .xlc-provider-header { padding: var(--xlc-space-3) var(--xlc-space-4); background: var(--b3-list-hover); color: var(--b3-theme-on-surface); font-size: var(--xlc-font-sm); letter-spacing: 0; }
 
   .xlc-pane-head { padding: var(--xlc-space-3) var(--xlc-space-4) var(--xlc-space-2); align-items: flex-start; flex-wrap: wrap; flex-shrink: 1; min-height: 0; overflow: hidden; }
   .xlc-pane-title { color: var(--xlc-ink); font-size: var(--xlc-font-xl); line-height: var(--xlc-line-heading); font-weight: var(--xlc-weight-strong); }
   .xlc-pane-meta { gap: var(--xlc-space-2); margin: var(--xlc-space-0-5) var(--xlc-space-4) var(--xlc-space-2); flex-shrink: 1; min-height: 0; overflow: hidden; }
   .xlc-meta-chip { min-height: 26px; padding: var(--xlc-space-1) var(--xlc-space-2); border: 0; border-radius: var(--xlc-radius-sm); background: var(--xlc-soft); color: var(--xlc-muted); font-size: var(--xlc-font-xs); }
-  .xlc-meta-chip--on { background: var(--xlc-lavender); color: var(--xlc-lavender-ink); }
+  .xlc-meta-chip--on { background: var(--b3-list-hover); color: var(--b3-theme-primary); }
   .xlc-pane-vars { margin: var(--xlc-space-0) var(--xlc-space-4) var(--xlc-space-2); padding: var(--xlc-space-1) var(--xlc-space-3); max-height: 36px; overflow-y: auto; flex-shrink: 1; min-height: 0; font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); }
   .xlc-pane-warn { margin: var(--xlc-space-0) var(--xlc-space-4) var(--xlc-space-2); padding: var(--xlc-space-2) var(--xlc-space-3); flex-shrink: 1; min-height: 0; }
   .xlc-pane-body { min-height: 0; padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-3); font-size: var(--xlc-font-lg); line-height: var(--xlc-leading-loose); color: var(--xlc-ink); }
@@ -769,9 +779,9 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
                 border-color var(--xlc-dur-fast) var(--xlc-ease);
   }
   .xlc-row--active {
-    background: var(--xlc-lavender);
-    border-color: var(--xlc-accent);
-    box-shadow: var(--xlc-shadow-sm);
+    background: var(--b3-list-hover);
+    border-color: var(--b3-theme-primary);
+    box-shadow: inset 3.5px 0 0 var(--b3-theme-primary);
   }
   .xlc-row-action { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
   .xlc-search .xlc-search-input { font-size: var(--xlc-font-xl); }

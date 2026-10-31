@@ -32,6 +32,7 @@ import {transformCase} from "../model/placeholders";
 import {evaluateMathExpression} from "../model/calculator";
 
 import {AdjacentBlocksContext} from "../service/omni-search";
+import {openStepByStepGuideDialog} from "./guide-dialog";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -260,6 +261,10 @@ export class CommonSearchDialog {
             input.focus();
         }
         void this.refresh();
+    }
+
+    public focusInput(): void {
+        this.dialog?.element?.querySelector<HTMLInputElement>(".xlc-search-input")?.focus();
     }
 
     private buildDom(isMobile: boolean): HTMLElement {
@@ -929,6 +934,22 @@ export class CommonSearchDialog {
         guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
         guide.addEventListener("click", () => this.openUsageGuide());
         footer.appendChild(guide);
+
+        // 新手分步实操指引入口
+        const stepGuide = document.createElement("button");
+        stepGuide.type = "button";
+        stepGuide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-stepguide";
+        stepGuide.dataset.xlcControl = "footer.stepguide";
+        stepGuide.textContent = "🎓 " + (this.deps.t("stepGuideTitle") || "新手实操指引");
+        stepGuide.setAttribute("aria-label", this.deps.t("stepGuideTitle") || "新手实操指引");
+        stepGuide.addEventListener("click", () => {
+            openStepByStepGuideDialog({
+                t: this.deps.t,
+                isMobile: this.deps.isMobile,
+                onOpenSearch: () => this.focusInput(),
+            });
+        });
+        footer.appendChild(stepGuide);
         // 设置入口双端可达（移动端无顶栏/命令面板，此处是唯一设置路径）
         const gear = document.createElement("button");
         gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";
@@ -959,6 +980,21 @@ export class CommonSearchDialog {
         body.innerHTML = "";
         const root = document.createElement("div");
         root.className = "xlc-form xlc-guide";
+
+        // 顶部引导 Banner
+        const stepBanner = document.createElement("div");
+        stepBanner.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 14px; border:1px solid var(--b3-theme-primary); border-radius:var(--b3-border-radius); background:color-mix(in srgb, var(--b3-theme-primary) 8%, var(--b3-theme-surface)); margin-bottom:12px; cursor:pointer;";
+        stepBanner.innerHTML = `<strong>🎓 推荐：体验分步式实操教学指引（一步步上手）</strong><span style="font-size:12px; color:var(--b3-theme-primary); font-weight:600;">点击进入 ➔</span>`;
+        stepBanner.addEventListener("click", () => {
+            guideDialog.destroy();
+            openStepByStepGuideDialog({
+                t: this.deps.t,
+                isMobile: this.deps.isMobile,
+                onOpenSearch: () => this.focusInput(),
+            });
+        });
+        root.appendChild(stepBanner);
+
         const intro = document.createElement("p");
         intro.className = "xlc-form-hint xlc-guide-intro";
         intro.textContent = this.deps.t("usageGuideIntro");

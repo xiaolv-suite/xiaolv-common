@@ -426,12 +426,20 @@
 
     .xlc-search-input {
       flex: 1;
-      border: none;
-      background: transparent;
-      box-shadow: none;
+      border: none !important;
+      outline: none !important;
+      background: transparent !important;
+      box-shadow: none !important;
       padding: var(--xlc-space-0);
       height: auto;
       font-size: var(--xlc-font-md);
+
+      &:focus,
+      &:focus-visible {
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+      }
 
       &::placeholder {
         color: var(--b3-theme-on-surface);
@@ -754,11 +762,11 @@
 
     &:hover {
       background-color: var(--b3-list-hover);
-      box-shadow: inset 2px 0 0 var(--xlc-accent-text);
+      box-shadow: inset 2px 0 0 var(--b3-theme-primary);
     }
 
     &--active {
-      background-color: var(--xlc-lavender) !important;
+      background-color: var(--b3-list-hover) !important;
       box-shadow: inset 3.5px 0 0 var(--b3-theme-primary) !important;
     }
 
@@ -3690,6 +3698,216 @@
     padding-left: var(--xlc-space-5);
     color: var(--b3-theme-on-background);
     line-height: var(--xlc-leading-relaxed);
+  }
+}
+
+// ---------- 新手实操交互式分步引导面板（Step-by-step Interactive Guide） ----------
+.xlc-guide-stepper-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xlc-space-3);
+  height: 100%;
+  box-sizing: border-box;
+
+  .xlc-guide-subtitle {
+    margin: 0;
+    font-size: 13px;
+    color: var(--b3-theme-on-surface);
+  }
+
+  .xlc-stepper-nav {
+    display: flex;
+    gap: var(--xlc-space-2);
+    border-bottom: 1px solid var(--b3-border-color);
+    padding-bottom: var(--xlc-space-2);
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+
+  .xlc-stepper-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    border: 1px solid transparent;
+    border-radius: var(--b3-border-radius);
+    background: transparent;
+    color: var(--b3-theme-on-surface);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--xlc-dur-fast) var(--xlc-ease);
+
+    &:hover {
+      background: var(--b3-list-hover);
+      color: var(--b3-theme-on-background);
+    }
+
+    &--active {
+      background: color-mix(in srgb, var(--b3-theme-primary) 12%, var(--b3-theme-surface));
+      color: var(--b3-theme-primary);
+      border-color: color-mix(in srgb, var(--b3-theme-primary) 30%, transparent);
+      font-weight: 600;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--b3-theme-primary);
+      outline-offset: 1px;
+    }
+  }
+
+  .xlc-guide-content-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--xlc-space-1) var(--xlc-space-0);
+  }
+
+  .xlc-guide-card {
+    padding: var(--xlc-space-4);
+    border: 1px solid var(--b3-border-color);
+    border-radius: var(--b3-border-radius);
+    background: var(--b3-theme-surface);
+    box-shadow: var(--b3-dialog-shadow);
+
+    .xlc-guide-card-head {
+      display: flex;
+      align-items: center;
+      gap: var(--xlc-space-2);
+      margin-bottom: var(--xlc-space-2);
+      font-size: 15px;
+      color: var(--b3-theme-on-background);
+
+      .xlc-guide-card-icon {
+        font-size: 18px;
+        line-height: 1;
+      }
+    }
+
+    .xlc-guide-card-text {
+      margin: 0 0 var(--xlc-space-3) 0;
+      font-size: 13px;
+      line-height: var(--xlc-leading-relaxed);
+      color: var(--b3-theme-on-surface);
+    }
+  }
+
+  .xlc-guide-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--xlc-space-3);
+  }
+
+  .xlc-guide-feature-box {
+    padding: var(--xlc-space-3);
+    border: 1px solid var(--b3-border-color);
+    border-radius: var(--b3-border-radius);
+    background: var(--b3-theme-background);
+
+    .xlc-guide-kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid var(--b3-border-color);
+      border-radius: 4px;
+      background: var(--b3-theme-surface);
+      font-family: var(--mono, monospace);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--b3-theme-primary);
+      margin-bottom: var(--xlc-space-1);
+    }
+
+    .xlc-guide-box-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--b3-theme-on-background);
+      margin-bottom: 2px;
+    }
+
+    .xlc-guide-box-desc {
+      font-size: 12px;
+      line-height: var(--xlc-leading-relaxed);
+      color: var(--b3-theme-on-surface);
+    }
+  }
+
+  .xlc-guide-demo-box {
+    padding: var(--xlc-space-3);
+    border: 1px dashed var(--b3-theme-primary);
+    border-radius: var(--b3-border-radius);
+    background: color-mix(in srgb, var(--b3-theme-primary) 4%, var(--b3-theme-background));
+  }
+
+  .xlc-guide-demo-row {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-3);
+    flex-wrap: wrap;
+  }
+
+  .xlc-guide-demo-col {
+    flex: 1 1 200px;
+  }
+
+  .xlc-guide-demo-arrow {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--b3-theme-primary);
+    padding: var(--xlc-space-1) var(--xlc-space-2);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent);
+  }
+
+  .xlc-guide-demo-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--b3-theme-on-surface);
+    margin-bottom: var(--xlc-space-1);
+
+    &--success {
+      color: var(--b3-theme-primary);
+    }
+  }
+
+  .xlc-guide-code-block {
+    display: block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--b3-theme-surface);
+    border: 1px solid var(--b3-border-color);
+    font-family: var(--mono, monospace);
+    font-size: 12px;
+    color: var(--b3-theme-on-background);
+  }
+
+  .xlc-guide-code-clean {
+    border-color: var(--b3-theme-primary);
+    color: var(--b3-theme-primary);
+    font-weight: 600;
+  }
+
+  .xlc-guide-bullet-list {
+    margin: 0;
+    padding-left: var(--xlc-space-5);
+    color: var(--b3-theme-on-surface);
+    font-size: 13px;
+    line-height: var(--xlc-leading-relaxed);
+  }
+
+  .xlc-guide-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xlc-space-2);
+  }
+
+  .xlc-guide-foot-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xlc-space-2);
+    padding-top: var(--xlc-space-3);
+    border-top: 1px solid var(--b3-border-color);
+    flex-shrink: 0;
   }
 }
 

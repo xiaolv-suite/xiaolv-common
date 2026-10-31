@@ -45,6 +45,7 @@ import {itemBodyRestriction, normalizeKramdownIal, storedKramdownToBody, toItemS
 import {getPinyinAdapter} from "../model/pinyin";
 import {countAskFields, SNIPPET_PATTERN} from "../model/variables";
 import {getErrorProperty, toErrorMessage} from "../model/errors";
+import {buildInitialLibraryDocMarkdown} from "./prompt-pack";
 
 export interface IndexBuildResult {
     entries: SearchEntry[];
@@ -403,10 +404,13 @@ export class LibraryService {
                 if (previous) return previous;
             }
             try {
+                const initialMd = (options as {emptyDoc?: boolean}).emptyDoc
+                    ? `# ${normalizedTitle}\n\n`
+                    : buildInitialLibraryDocMarkdown(normalizedTitle);
                 const docId = parseDocId(await this.kernel.request("createDocWithMd", {
                     notebook: notebookId,
                     path: "/" + normalizedTitle.replace(/\//g, "-"),
-                    markdown: `# ${normalizedTitle}\n\n`,
+                    markdown: initialMd,
                 }, {idempotencyKey: idempotencyKey || undefined, maxRetries: 0}));
                 if (!docId) return fail("kernel-error", "createDocWithMd returned no id");
                 const receipt = ok({docId});
