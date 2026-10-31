@@ -159,22 +159,23 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.80] — 2026-10-31 (Latest Release)
+### [v0.10.81] — 2026-11-01 (Latest Local Release)
 
-v0.10.80 Local Release: Multi-paragraph superblock storage container (all 25/25 built-in examples installable), UI surface reduction with searchable "Text Tools" drawers, and multi-zoom viewport gates:
-- **Multi-Paragraph Superblock Container (ADR 0165 / T-0752)**:
-  - Multi-paragraph bodies, lists, blockquotes, tables, and mixed structures are stored inside **one superblock** (`{{{row ... }}}`) in the library document, with automatic attribute restoration after `updateBlock`, zero-width space protection against `query_embed` on line-start `{{`, and clean host IAL stripping on read-back;
-  - All **25/25** templates in the built-in Example Pack (and all 43/43 across the 5 built-in packs) write and read back cleanly against the isolated SiYuan 3.8.9 kernel.
-- **UI Surface Reduction & Interaction Fixes (T-0753 ~ T-0755)**:
-  - Capture/edit `.xlc-varbar` keeps only the 10 core variable buttons visible and folds ~207 extended macros/formatters into a searchable "🛠 文本工具…" drawer; the action menu folds ~180 text tools into a searchable "🛠 文本工具…" entry; removed the top metrics strip and reduced keyboard hints from 19 to 5;
-  - Replaced `window.prompt` / `window.alert` with SiYuan `Dialog` modals, added missing `reindex`/`filterCommon`/`syncDiffBtn` locale keys, fixed `copied` `%s` formatting in Dock, unified Dock action execution with the main search variable-fill path, and made clipboard history opt-in (`clipboardHistoryEnabled: false` by default, preserving existing history).
-- **Generic Engineering Gates**: Added `pnpm run check:ui` and `pnpm run check:viewport` (12/12 primary buttons visible & clickable across 100%/125%/150% viewports), with 33/33 real-kernel integration checks, **1172/1172** unit tests, and **79/79** interaction audits passing.
+v0.10.81 Local Release: Default-on clipboard history with capacity tiers, 1-click clipboard-to-asset promotion with automatic annotation stripping & pinyin alias inference, native Protyle inline slash command expansion, purple highlight ring removal, interactive 4-step onboarding guide, and normalized settings page typography:
+- **Clipboard History Default ON & Capacity Setting (T-0775)**: `clipboardHistoryEnabled` defaults to `true` with zero cloud egress; default capacity of 30 items with 30/50/80/100 presets and strict 100-item cap; includes one-click clear button.
+- **One-Click Promotion from Clipboard to Asset (T-0776)**: Quick `⭐` button on clipboard rows and preview footer; automatically strips trailing `@annotations` (`18588888888@mobile`), `[tax-id]` tags, and `// comments`, storing pure clean payload, title, tags, category `常用`, and auto-derived pinyin alias (`sjh`).
+- **Protyle Inline Slash Direct Trigger (T-0777)**: Native Protyle `/剪贴板历史` (`/jtb`, `/clip`) slash entry; dynamically registers high-frequency library snippets with shortcodes (`:phone`) and aliases (`sjh`) as `⚡ title [shortcode]`, enabling instant in-place insertion right at the cursor without dialog popups.
+- **Complete Elimination of Purple Focus Borders (T-0773)**: Removed `--b3-theme-primary` purple override, dynamically bound all focus rings and active rows to SiYuan native primary theme color (`var(--b3-theme-primary)` / `#3575f0`).
+- **Dedicated Real-World Samples & Step Guide (T-0773)**: 17 production-grade snippets generated on first run with interactive 4-step guide dialog (`guide-dialog.ts`) showing live before/after annotation stripping.
+- **Settings Typography & Template Cards Modernization (T-0774)**: Normalized row typography to 14px body and 12.5px hints; redesigned template packs into bounded, comfortable cards.
+- **Full Verification Suite**: 1182/1182 unit tests, 79/79 interaction audits, 12/12 viewport visibility tests, and 21/21 isolated real-kernel checklist tests all passing.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.79, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.80, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.80** | Multi-paragraph superblock storage container (all 25/25 built-in examples installable), UI surface reduction with searchable "Text Tools" drawers, and multi-zoom viewport gates | [ADR 0165](./docs/adr/0165-superblock-item-container-and-surface-convergence.md) |
 | **v0.10.79** | Single source-of-truth material convergence, `:shortcode` end-to-end closure, Sync Diff & adjacent block probe fixes, and dynamic macro evaluation consistency | [ADR 0164](./docs/adr/0164-full-chain-closure-and-material-convergence.md) |
 | **v0.10.78** | Full-spectrum usability closure, 6 modern visual design systems, and user manual overhaul | [ADR 0163](./docs/adr/0163-github-benchmark-fusion-shortcode-macro-frecency.md) |
 | **v0.10.77** | Export sanitizer options dialog hierarchy cleanup and design token convergence | [ADR 0159](./docs/adr/0159-export-sanitizer-modal-closure.md) |

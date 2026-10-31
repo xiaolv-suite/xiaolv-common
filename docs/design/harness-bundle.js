@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.80";
+      PLUGIN_VERSION = "0.10.81";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -26900,6 +26900,7 @@ fi`;
   }
 
   // src/ui/dialog.ts
+  init_pinyin();
   init_pinyin_tiny();
 
   // src/ui/preview-renderer.ts
@@ -27880,6 +27881,7 @@ fi`;
       const container = this.dialog.element.querySelector(".b3-dialog__container");
       if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
       mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"));
+      this.syncScopeChips();
       const input = this.dialog.element.querySelector(".xlc-search-input");
       if (input) {
         const initial = (_c = this.deps.initialQuery) == null ? void 0 : _c.trim();
@@ -29180,8 +29182,23 @@ fi`;
           const cleanKeyword = query.text.trim().toLowerCase();
           let filtered = history;
           if (cleanKeyword) {
-            filtered = history.filter((h) => h.text.toLowerCase().includes(cleanKeyword));
+            const adapter2 = getPinyinAdapter();
+            filtered = history.filter((h) => {
+              if (h.text.toLowerCase().includes(cleanKeyword)) return true;
+              const parsed = parseSnippetAnnotations(h.text);
+              if (parsed.title && parsed.title.toLowerCase().includes(cleanKeyword)) return true;
+              if (parsed.tags.some((t) => t.toLowerCase().includes(cleanKeyword))) return true;
+              if (parsed.title && (adapter2 == null ? void 0 : adapter2.annotate)) {
+                try {
+                  const anno = adapter2.annotate({ title: parsed.title, alias: "" });
+                  if ((anno == null ? void 0 : anno.pyi) && anno.pyi.toLowerCase().includes(cleanKeyword)) return true;
+                } catch {
+                }
+              }
+              return false;
+            });
           }
+          const adapter = getPinyinAdapter();
           const entries = filtered.map((h, i) => {
             var _a2;
             const parsed = parseSnippetAnnotations(h.text);
@@ -29189,6 +29206,14 @@ fi`;
             const displayTitle = parsed.title ? `\u{1F4CB} ${parsed.title}` : `\u{1F4CB} ${firstLine}`;
             const tags = Array.from(new Set(["\u526A\u8D34\u677F", ...parsed.tags].filter(Boolean)));
             const cleanText = parsed.cleanText || h.text;
+            let clipAlias = "";
+            if (parsed.title && (adapter == null ? void 0 : adapter.annotate)) {
+              try {
+                const anno = adapter.annotate({ title: parsed.title, alias: "" });
+                if (anno == null ? void 0 : anno.pyi) clipAlias = anno.pyi.toLowerCase().slice(0, 8);
+              } catch {
+              }
+            }
             return {
               id: `xlc-clip-${i}`,
               blockId: "",
@@ -29199,7 +29224,7 @@ fi`;
               itemType: inferTypeFromText(cleanText),
               category: "\u526A\u8D34\u677F",
               tags,
-              alias: "",
+              alias: clipAlias,
               createdAt: h.copiedAt,
               updatedAt: h.copiedAt,
               isOmni: true
@@ -29589,7 +29614,8 @@ fi`;
         const summarySpan = document.createElement("span");
         summarySpan.className = "xlc-row-summary";
         const tokens = this.lastQueryText ? splitSearchTokens(this.lastQueryText) : [];
-        const summaryText = deriveSmartSummary(sourceTextForSummary, tokens, 90);
+        const cleanSummarySource = entry.itemType !== "code" ? extractCleanPayload(sourceTextForSummary) : sourceTextForSummary;
+        const summaryText = deriveSmartSummary(cleanSummarySource, tokens, 90);
         const prefix = shownTags.length > 0 || entry.isOmni && entry.category ? " \xB7 " : "";
         if (prefix) summarySpan.appendChild(document.createTextNode(prefix));
         if (this.lastQueryText && !this.lastQueryText.startsWith("?") && !this.aiResults) {

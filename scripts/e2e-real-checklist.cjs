@@ -561,7 +561,7 @@ function check(name, ok, detail = "") {
         await page.waitForSelector(".xlc-list .xlc-row[data-xlc-index='0']", {timeout: 10000});
         const clipRowVerify = await page.evaluate(() => {
             const row = document.querySelector(".xlc-list .xlc-row[data-xlc-index='0']");
-            const title = row?.querySelector(".xlc-row-titletext, .xlc-row-title")?.textContent?.trim() ?? "";
+            const title = row?.querySelector(".xlc-row-titletext")?.textContent?.trim() ?? "";
             const summary = row?.querySelector(".xlc-row-summary")?.textContent?.trim() ?? "";
             const saveBtn = row?.querySelector("[data-xlc-control='item.save-to-common']");
             const btnText = saveBtn?.textContent?.trim() ?? "";

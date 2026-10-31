@@ -144,9 +144,10 @@ test("T-0776 剪贴板一键转正常用语：智能剥离尾部注解、提取�
     assert.equal(parsedPhone.title, "手机号", "标题自动提取注解");
     assert.deepEqual(parsedPhone.tags, ["手机号"], "标签自动包含注解");
 
-    // 拼音别名推导
+    // 拼音别名推导与检索匹配验证
     const anno = pinyin.getPinyinAdapter().annotate({title: parsedPhone.title, alias: ""});
     assert.equal(anno.pyi, "sjh", "自动推导别名为 sjh 缩写");
+    assert.ok(anno.pyi.toLowerCase().includes("sjh"), "拼音简码应命中 sjh 检索");
 
     // 2. 邮箱带空格 @工作邮箱 注解
     const clipEmail = "service@xiaolv.com @客服工作邮箱";

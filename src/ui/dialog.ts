@@ -21,6 +21,7 @@ import {ProviderRow} from "../model/provider-section";
 import {AskField, askFieldTag, hasCursorToken, listAskFields, listSnippetRefs, expandAsks, applyAskDefaults, stripCursorToken, stripAllVariables, hasDynamicMacros, expandMacroPreview} from "../model/variables";
 import {openVariableFillCard} from "./variable-form";
 import {formatScopeFallbackQuery, shouldShowOmniSearchFallback, shouldShowScopeFallback, SearchScope} from "./empty-state";
+import {getPinyinAdapter} from "../model/pinyin";
 import {findPinyinMatches} from "../model/pinyin-tiny";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
@@ -250,6 +251,7 @@ export class CommonSearchDialog {
         const container = this.dialog.element.querySelector(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
         mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"));
+        this.syncScopeChips();
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
             const initial = this.deps.initialQuery?.trim();
@@ -1630,14 +1632,35 @@ export class CommonSearchDialog {
                 const cleanKeyword = query.text.trim().toLowerCase();
                 let filtered = history;
                 if (cleanKeyword) {
-                    filtered = history.filter((h) => h.text.toLowerCase().includes(cleanKeyword));
+                    const adapter = getPinyinAdapter();
+                    filtered = history.filter((h) => {
+                        if (h.text.toLowerCase().includes(cleanKeyword)) return true;
+                        const parsed = parseSnippetAnnotations(h.text);
+                        if (parsed.title && parsed.title.toLowerCase().includes(cleanKeyword)) return true;
+                        if (parsed.tags.some((t) => t.toLowerCase().includes(cleanKeyword))) return true;
+                        if (parsed.title && adapter?.annotate) {
+                            try {
+                                const anno = adapter.annotate({title: parsed.title, alias: ""});
+                                if (anno?.pyi && anno.pyi.toLowerCase().includes(cleanKeyword)) return true;
+                            } catch {}
+                        }
+                        return false;
+                    });
                 }
+                const adapter = getPinyinAdapter();
                 const entries: SearchEntry[] = filtered.map((h, i) => {
                     const parsed = parseSnippetAnnotations(h.text);
                     const firstLine = h.text.trim().split(/[\r\n]+/)[0]?.slice(0, 35) || "剪贴板文本";
                     const displayTitle = parsed.title ? `📋 ${parsed.title}` : `📋 ${firstLine}`;
                     const tags = Array.from(new Set(["剪贴板", ...parsed.tags].filter(Boolean)));
                     const cleanText = parsed.cleanText || h.text;
+                    let clipAlias = "";
+                    if (parsed.title && adapter?.annotate) {
+                        try {
+                            const anno = adapter.annotate({title: parsed.title, alias: ""});
+                            if (anno?.pyi) clipAlias = anno.pyi.toLowerCase().slice(0, 8);
+                        } catch {}
+                    }
                     return {
                         id: `xlc-clip-${i}`,
                         blockId: "",
@@ -1648,7 +1671,7 @@ export class CommonSearchDialog {
                         itemType: inferTypeFromText(cleanText),
                         category: "剪贴板",
                         tags,
-                        alias: "",
+                        alias: clipAlias,
                         createdAt: h.copiedAt,
                         updatedAt: h.copiedAt,
                         isOmni: true,
