@@ -29682,14 +29682,6 @@ fi`;
         omniBadge.className = "xlc-badge xlc-badge--omni";
         omniBadge.textContent = ((_c = entry.tags) == null ? void 0 : _c.includes("\u5168\u5E93\u5757")) ? "\u601D\u6E90\u5168\u5E93\u5757" : ((_d = entry.tags) == null ? void 0 : _d.includes("\u5F53\u524D\u6587\u6863")) ? "\u5F53\u524D\u6587\u6863\u5757" : "\u601D\u6E90\u6587\u6863";
         meta.appendChild(omniBadge);
-        if (entry.category) {
-          const docPathSpan = document.createElement("span");
-          docPathSpan.className = "xlc-row-breadcrumb";
-          const clean = entry.category.replace(/^\/+/, "").replace(/\.sy$/, "");
-          docPathSpan.textContent = clean.split("/").filter(Boolean).join(" \u203A ") || entry.category;
-          docPathSpan.title = `\u6240\u5C5E\u6587\u6863\u8DEF\u5F84\uFF1A${entry.category}`;
-          meta.appendChild(docPathSpan);
-        }
       }
       const setFilter = (patch) => {
         var _a2, _b2, _c2, _d2;
@@ -29708,7 +29700,7 @@ fi`;
       };
       const toggleChip = (value, active2) => active2 === value ? "" : value;
       const currentFilters = this.deps.getFilters();
-      if (entry.category) {
+      if (entry.category && !entry.isOmni) {
         const cat = document.createElement("button");
         cat.type = "button";
         cat.className = "xlc-meta-chip" + (currentFilters.category === entry.category ? " xlc-meta-chip--on" : "");
@@ -29741,30 +29733,32 @@ fi`;
         more.textContent = `+${cleanTags.length - shownTags.length}`;
         meta.appendChild(more);
       }
-      const effectiveDocPath = entry.sourceDocPath || (entry.category && entry.category !== "\u5168\u5E93\u5185\u5BB9" && entry.category !== "\u526A\u8D34\u677F" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : void 0);
+      const effectiveDocPath = entry.sourceDocPath || (entry.isOmni && entry.category && entry.category !== "\u5168\u5E93\u5185\u5BB9" && entry.category !== "\u526A\u8D34\u677F" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : void 0);
       if (effectiveDocPath) {
         const pathBtn = document.createElement("button");
         pathBtn.type = "button";
         pathBtn.className = "xlc-meta-chip xlc-meta-chip--path";
+        pathBtn.dataset.xlcControl = "preview.open-path";
         pathBtn.textContent = "\u{1F4C4} " + effectiveDocPath;
         pathBtn.title = "\u70B9\u51FB\u5728\u601D\u6E90\u4E2D\u6253\u5F00\u5E76\u5B9A\u4F4D\u6B64\u6587\u6863\u6216\u5757 (Alt+D)";
         pathBtn.addEventListener("click", () => {
           if (entry.isOmni && this.deps.openDocBlock) {
-            void this.deps.openDocBlock(entry.targetBlockId || entry.id);
+            void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
           } else {
             void this.deps.openSource(entry.id);
           }
         });
         meta.appendChild(pathBtn);
-        if (this.deps.getAdjacentBlocks) {
-          const probeBtn = document.createElement("button");
-          probeBtn.type = "button";
-          probeBtn.className = "xlc-meta-chip";
-          probeBtn.textContent = "\u{1F50D} \u524D\u540E\u6587 (Alt+J)";
-          probeBtn.title = "\u5C31\u5730\u5C55\u5F00\u6E90\u6587\u6863\u4E2D\u7684\u524D\u540E\u76F8\u90BB\u4E0A\u4E0B\u6587\u5757 (Alt+J)";
-          probeBtn.addEventListener("click", () => void this.toggleAdjacentContextProbe());
-          meta.appendChild(probeBtn);
-        }
+      }
+      if (this.deps.getAdjacentBlocks && isBlockId(resolveEntryBlockId(entry)) && isBlockId(entry.sourceDocId || entry.libraryDocId)) {
+        const probeBtn = document.createElement("button");
+        probeBtn.type = "button";
+        probeBtn.className = "xlc-meta-chip";
+        probeBtn.dataset.xlcControl = "preview.adjacent-probe";
+        probeBtn.textContent = "\u{1F50D} \u524D\u540E\u6587 (Alt+J)";
+        probeBtn.title = "\u5C31\u5730\u5C55\u5F00\u6E90\u6587\u6863\u4E2D\u7684\u524D\u540E\u76F8\u90BB\u4E0A\u4E0B\u6587\u5757 (Alt+J)";
+        probeBtn.addEventListener("click", () => void this.toggleAdjacentContextProbe());
+        meta.appendChild(probeBtn);
       }
       if (Number.isFinite(entry.updatedAt) && entry.updatedAt > 9466848e5) {
         const date = document.createElement("span");

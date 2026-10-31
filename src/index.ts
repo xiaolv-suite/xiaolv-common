@@ -1523,13 +1523,12 @@ export default class XiaolvCommonPlugin extends Plugin {
                     return false;
                 }
                 const item = got.data;
-                // blockref 条目：插引用语法（而非条目块自身的 marker 正文）
                 let markdown: string;
-                const blockrefTarget = resolveBlockRefTarget(item);
-                if (item.itemType === "blockref" && blockrefTarget && mode !== "insert-content") {
-                    markdown = mode === "insert-embed"
-                        ? buildEmbedBlock(blockrefTarget)
-                        : buildBlockRef(blockrefTarget, item.title || "ref");
+                const blockrefTarget = resolveBlockRefTarget(item) || item.source.sourceBlockId || item.blockId;
+                if (mode === "insert-embed" && blockrefTarget) {
+                    markdown = buildEmbedBlock(blockrefTarget);
+                } else if ((mode === "insert-ref" || (item.itemType === "blockref" && mode !== "insert-content")) && blockrefTarget) {
+                    markdown = buildBlockRef(blockrefTarget, item.title || "ref");
                 } else {
                     const kd = await this.library.getItemKramdown(item);
                     if (!kd.ok) {
@@ -1541,8 +1540,14 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
                 try {
                     const inserted = await this.library.appendToDoc(markdown, docId);
-                    if (inserted) this.notify("info", this.i18nFn()("insertToDocDone", shortTitle(hPath || docId)));
-                    else this.notify("error", this.i18nFn()("insertToDocFailed"));
+                    if (inserted) {
+                        this.service.touchRecent(item.id);
+                        this.recordUsage(item.id);
+                        this.notifyExternalDataChange();
+                        this.notify("info", this.i18nFn()("insertToDocDone", shortTitle(hPath || docId)));
+                    } else {
+                        this.notify("error", this.i18nFn()("insertToDocFailed"));
+                    }
                     return inserted;
                 } catch (err) {
                     this.notify("error", toErrorMessage(err));
@@ -1984,7 +1989,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                     }
                 });
             },
-            toggleFavorite: (itemId) => this.service.toggleFavorite(itemId),
+            toggleFavorite: (itemId) => {
+                const fav = this.service.toggleFavorite(itemId);
+                void this.dockView?.refresh();
+                return fav;
+            },
             isFavorite: (itemId) => this.state.favorites.includes(itemId),
             close: () => {
                 dialogClosed = true;

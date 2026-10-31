@@ -74,12 +74,42 @@ export class HostBridge implements IHostBridge {
             editor = getActiveEditor() ?? null;
             if (!editor) return {editor: null, handle: null, docId: null};
             docId = editor.protyle.block.rootID ?? null;
+            const protyleEl = editor.protyle.element;
+            let range: Range | null = null;
             const selection = window.getSelection();
-            if (!selection || selection.rangeCount === 0) return {editor, handle: null, docId};
-            const range = selection.getRangeAt(0);
-            if (!editor.protyle.element.contains(range.commonAncestorContainer)) return {editor, handle: null, docId};
-            const handle = editor.protyle.trackRange(range, {owner: this.owner, affinity: "after"});
-            return {editor, handle, docId};
+            if (selection && selection.rangeCount > 0) {
+                const candidate = selection.getRangeAt(0);
+                if (protyleEl.contains(candidate.commonAncestorContainer)) {
+                    range = candidate;
+                }
+            }
+            // 若用户点击了顶栏按钮或侧栏搜索框导致选区移出编辑器，优先回退 Protyle 自身记录的 toolbar.range
+            if (!range) {
+                const toolbarRange = (editor.protyle as unknown as {toolbar?: {range?: Range}})?.toolbar?.range;
+                if (toolbarRange && protyleEl.contains(toolbarRange.commonAncestorContainer)) {
+                    range = toolbarRange;
+                }
+            }
+            // 若文档刚打开尚未点击段落产生光标，回退到文档末尾可编辑块末尾，确保「点击插入」真实落入当前打开的文档
+            if (!range) {
+                const wysiwygEl = editor.protyle?.wysiwyg?.element;
+                if (wysiwygEl && wysiwygEl.isConnected && !wysiwygEl.closest(".fn__none, [inert]")) {
+                    const editables = wysiwygEl.querySelectorAll<HTMLElement>('[data-node-id] [contenteditable="true"]');
+                    const lastEditable = editables[editables.length - 1];
+                    if (lastEditable && typeof document.createRange === "function") {
+                        const fallback = document.createRange();
+                        fallback.selectNodeContents(lastEditable);
+                        fallback.collapse(false);
+                        range = fallback;
+                    }
+                }
+            }
+            if (!range) return {editor, handle: null, docId};
+            if (typeof editor.protyle.trackRange === "function") {
+                const handle = editor.protyle.trackRange(range, {owner: this.owner, affinity: "after"});
+                if (handle) return {editor, handle, docId};
+            }
+            return {editor, handle: {__xlcFallbackRange: range.cloneRange()} as unknown as ITrackedRangeHandle, docId};
         } catch {
             return {editor, handle: null, docId};
         }
@@ -91,6 +121,10 @@ export class HostBridge implements IHostBridge {
             const protyle = target.editor.protyle;
             const rootId = protyle.block.rootID ?? null;
             if (!rootId || !target.docId || rootId !== target.docId || protyle.disabled) return false;
+            const fallbackRange = (target.handle as unknown as {__xlcFallbackRange?: Range}).__xlcFallbackRange;
+            if (fallbackRange) {
+                return protyle.element.isConnected && protyle.element.contains(fallbackRange.commonAncestorContainer);
+            }
             const resolved = target.editor.protyle.resolveTrackedRange(target.handle);
             return resolved.status === "resolved"
                 && protyle.element.isConnected
@@ -102,6 +136,7 @@ export class HostBridge implements IHostBridge {
 
     releaseInsertTarget(target: EditorInsertTargetSnapshot | null): void {
         if (!target?.editor || !target.handle) return;
+        if ((target.handle as unknown as {__xlcFallbackRange?: Range}).__xlcFallbackRange) return;
         try {
             target.editor.protyle.releaseTrackedRange(target.handle);
         } catch {
@@ -125,13 +160,20 @@ export class HostBridge implements IHostBridge {
 
             if (target !== undefined) {
                 if (!this.canInsertAtTarget(target) || !target?.handle) return false;
-                const resolved = editor.protyle.resolveTrackedRange(target.handle);
-                if (resolved.status !== "resolved") return false;
+                const fallbackRange = (target.handle as unknown as {__xlcFallbackRange?: Range}).__xlcFallbackRange;
+                let rangeToRestore: Range | null = fallbackRange ?? null;
+                if (!rangeToRestore) {
+                    const resolved = editor.protyle.resolveTrackedRange(target.handle);
+                    if (resolved.status !== "resolved") return false;
+                    rangeToRestore = resolved.range;
+                }
                 const selection = window.getSelection();
                 if (!selection) return false;
                 editor.focus();
                 selection.removeAllRanges();
-                selection.addRange(resolved.range);
+                selection.addRange(rangeToRestore);
+                const protyleToolbar = (editor.protyle as unknown as {toolbar?: {range?: Range}})?.toolbar;
+                if (protyleToolbar) protyleToolbar.range = rangeToRestore;
             }
 
             // 渐进增强优先调用官方原子插入接口（SiYuan 3.8.8+）

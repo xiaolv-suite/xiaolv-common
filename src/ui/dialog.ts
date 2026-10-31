@@ -3029,15 +3029,6 @@ export class CommonSearchDialog {
             omniBadge.className = "xlc-badge xlc-badge--omni";
             omniBadge.textContent = entry.tags?.includes("全库块") ? "思源全库块" : (entry.tags?.includes("当前文档") ? "当前文档块" : "思源文档");
             meta.appendChild(omniBadge);
-
-            if (entry.category) {
-                const docPathSpan = document.createElement("span");
-                docPathSpan.className = "xlc-row-breadcrumb";
-                const clean = entry.category.replace(/^\/+/, "").replace(/\.sy$/, "");
-                docPathSpan.textContent = clean.split("/").filter(Boolean).join(" › ") || entry.category;
-                docPathSpan.title = `所属文档路径：${entry.category}`;
-                meta.appendChild(docPathSpan);
-            }
         }
         const setFilter = (patch: {tag?: string; category?: string}): void => {
             const current = this.deps.getFilters();
@@ -3055,7 +3046,7 @@ export class CommonSearchDialog {
         };
         const toggleChip = (value: string, active: string | undefined): string => (active === value ? "" : value);
         const currentFilters = this.deps.getFilters();
-        if (entry.category) {
+        if (entry.category && !entry.isOmni) {
             const cat = document.createElement("button");
             cat.type = "button";
             cat.className = "xlc-meta-chip" + (currentFilters.category === entry.category ? " xlc-meta-chip--on" : "");
@@ -3089,30 +3080,35 @@ export class CommonSearchDialog {
             more.textContent = `+${cleanTags.length - shownTags.length}`;
             meta.appendChild(more);
         }
-        const effectiveDocPath = entry.sourceDocPath || (entry.category && entry.category !== "全库内容" && entry.category !== "剪贴板" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : undefined);
+        const effectiveDocPath = entry.sourceDocPath
+            || (entry.isOmni && entry.category && entry.category !== "全库内容" && entry.category !== "剪贴板"
+                ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "")
+                : undefined);
         if (effectiveDocPath) {
             const pathBtn = document.createElement("button");
             pathBtn.type = "button";
             pathBtn.className = "xlc-meta-chip xlc-meta-chip--path";
+            pathBtn.dataset.xlcControl = "preview.open-path";
             pathBtn.textContent = "📄 " + effectiveDocPath;
             pathBtn.title = "点击在思源中打开并定位此文档或块 (Alt+D)";
             pathBtn.addEventListener("click", () => {
                 if (entry.isOmni && this.deps.openDocBlock) {
-                    void this.deps.openDocBlock(entry.targetBlockId || entry.id);
+                    void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
                 } else {
                     void this.deps.openSource(entry.id);
                 }
             });
             meta.appendChild(pathBtn);
-            if (this.deps.getAdjacentBlocks) {
-                const probeBtn = document.createElement("button");
-                probeBtn.type = "button";
-                probeBtn.className = "xlc-meta-chip";
-                probeBtn.textContent = "🔍 前后文 (Alt+J)";
-                probeBtn.title = "就地展开源文档中的前后相邻上下文块 (Alt+J)";
-                probeBtn.addEventListener("click", () => void this.toggleAdjacentContextProbe());
-                meta.appendChild(probeBtn);
-            }
+        }
+        if (this.deps.getAdjacentBlocks && isBlockId(resolveEntryBlockId(entry)) && isBlockId(entry.sourceDocId || entry.libraryDocId)) {
+            const probeBtn = document.createElement("button");
+            probeBtn.type = "button";
+            probeBtn.className = "xlc-meta-chip";
+            probeBtn.dataset.xlcControl = "preview.adjacent-probe";
+            probeBtn.textContent = "🔍 前后文 (Alt+J)";
+            probeBtn.title = "就地展开源文档中的前后相邻上下文块 (Alt+J)";
+            probeBtn.addEventListener("click", () => void this.toggleAdjacentContextProbe());
+            meta.appendChild(probeBtn);
         }
         // 更新日期（Raycast accessory date 惯例的详情面板版；1970 级脏值不显示）
         if (Number.isFinite(entry.updatedAt) && entry.updatedAt > 946684800000) {
