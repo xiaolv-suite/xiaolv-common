@@ -402,11 +402,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     box-shadow: none;
 
     &:focus-within { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--b3-theme-primary) 25%, transparent); }
-    > .xlc-form-label { margin-bottom: var(--xlc-space-2); font-size: var(--xlc-font-lg); letter-spacing: 0; }
+    > .xlc-form-label { margin-bottom: var(--xlc-space-2); font-size: var(--xlc-font-md); font-weight: var(--xlc-weight-semibold); letter-spacing: 0; }
   }
 
-  .xlc-setting-row { padding: var(--xlc-space-3) var(--xlc-space-0); gap: var(--xlc-space-4); font-size: var(--xlc-font-lg); line-height: var(--xlc-line-body); }
-  .xlc-setting-sub { margin-top: var(--xlc-space-1); font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); }
+  .xlc-setting-row { padding: var(--xlc-space-2) var(--xlc-space-0); gap: var(--xlc-space-3); font-size: var(--xlc-font-md); line-height: var(--xlc-line-body); }
+  .xlc-setting-text { font-size: var(--xlc-font-md); font-weight: var(--xlc-weight-medium); line-height: var(--xlc-line-control); color: var(--xlc-ink); }
+  .xlc-setting-sub { margin-top: var(--xlc-space-1); font-size: var(--xlc-font-xs); line-height: var(--xlc-line-control); color: var(--xlc-muted); }
   .xlc-switch { width: 40px; height: 24px; }
   .xlc-switch::after { width: 18px; height: 18px; top: 3px; left: 3px; }
   .xlc-switch:checked::after { transform: translateX(16px); }

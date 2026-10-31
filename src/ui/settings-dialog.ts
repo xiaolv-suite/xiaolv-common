@@ -809,7 +809,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
             topSec.className = "xlc-insights-top";
             topSec.style.cssText = "margin-top:10px; display:flex; flex-direction:column; gap:6px;";
             const topHead = document.createElement("div");
-            topHead.style.cssText = "font-size:11px; font-weight:600; opacity:0.8; display:flex; align-items:center; gap:4px;";
+            topHead.style.cssText = "font-size:13px; font-weight:600; color:var(--b3-theme-on-surface); display:flex; align-items:center; gap:4px;";
             topHead.textContent = "⭐ 高频资产 Top 榜（点击直接复制）：";
             topSec.appendChild(topHead);
 

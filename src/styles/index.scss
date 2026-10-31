@@ -2313,10 +2313,39 @@
 }
 
 .xlc-template-import-row {
-  align-items: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--xlc-space-3);
+  padding: var(--xlc-space-3) var(--xlc-space-4);
   margin-top: var(--xlc-space-2);
+  border: 1px solid var(--b3-border-color);
+  border-radius: var(--b3-border-radius);
+  background: var(--b3-theme-surface);
+  box-sizing: border-box;
+  transition: all var(--xlc-dur-fast) var(--xlc-ease);
 
-  > .b3-button { flex: 0 0 auto; }
+  &:hover {
+    border-color: var(--b3-theme-primary-light);
+    background: var(--b3-list-hover);
+  }
+
+  .xlc-setting-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px !important;
+    line-height: 1.55;
+    color: var(--b3-theme-on-surface);
+    font-weight: 400;
+  }
+
+  > .b3-button {
+    flex: 0 0 auto;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 5px 14px;
+    white-space: nowrap;
+  }
 }
 
 // 独立笔记本创建状态保持在字段下方，失败时不把错误挤到按钮行或隐藏到滚动边界外。
@@ -2376,22 +2405,24 @@
   display: flex;
   align-items: center;
   gap: var(--xlc-space-3);
-  font-size: var(--xlc-font-sm);
+  font-size: var(--xlc-font-md);
   line-height: var(--xlc-leading-relaxed);
   color: var(--b3-theme-on-background);
-  padding: var(--xlc-space-1) var(--xlc-space-0);
+  padding: 6px var(--xlc-space-0);
 
   .xlc-setting-text {
     flex: 1;
     min-width: 0;
+    font-size: 14px;
+    font-weight: 500;
   }
 
-  // 开关行副文本（原型屏 5：主文案 12.5 + 副文本 11 on-surface 两级）
+  // 开关行副文本（主文案 14px + 副文本 12.5px 两级规范）
   .xlc-setting-sub {
-    font-size: var(--xlc-font-xs);
-    line-height: var(--xlc-leading-normal);
+    font-size: 12.5px;
+    line-height: 1.5;
     color: var(--b3-theme-on-surface);
-    margin-top: var(--xlc-space-0-5);
+    margin-top: 3px;
   }
 
   .xlc-switch {
@@ -2578,7 +2609,7 @@
     }
 
     .xlc-insights-val {
-      font-size: var(--xlc-font-3xl); // 大字阶大数字
+      font-size: 19px;
       font-weight: var(--xlc-weight-semibold);
       color: var(--xlc-data-accent); // 数据语义色高亮 (翡翠青绿)
       font-variant-numeric: tabular-nums;
@@ -2586,7 +2617,7 @@
     }
 
     .xlc-insights-cap {
-      font-size: var(--xlc-font-2xs);
+      font-size: 12px;
       color: var(--xlc-dark-card-sub);
       margin-top: var(--xlc-space-1);
       letter-spacing: 0;
@@ -4852,21 +4883,21 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: var(--xlc-font-2xs);
+      font-size: 12px;
       font-weight: 600;
       letter-spacing: .3px;
       margin-bottom: 4px;
     }
 
     .xlc-bento-value {
-      font-size: var(--xlc-font-xl);
+      font-size: 18px;
       font-weight: 700;
       line-height: var(--xlc-line-heading);
     }
 
     .xlc-bento-sub {
-      font-size: var(--xlc-font-2xs);
-      opacity: 0.75;
+      font-size: 12px;
+      opacity: 0.8;
       margin-top: 2px;
     }
 

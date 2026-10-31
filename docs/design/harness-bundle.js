@@ -24036,7 +24036,7 @@ ${exception.mark.snippet}`;
         topSec.className = "xlc-insights-top";
         topSec.style.cssText = "margin-top:10px; display:flex; flex-direction:column; gap:6px;";
         const topHead = document.createElement("div");
-        topHead.style.cssText = "font-size:11px; font-weight:600; opacity:0.8; display:flex; align-items:center; gap:4px;";
+        topHead.style.cssText = "font-size:13px; font-weight:600; color:var(--b3-theme-on-surface); display:flex; align-items:center; gap:4px;";
         topHead.textContent = "\u2B50 \u9AD8\u9891\u8D44\u4EA7 Top \u699C\uFF08\u70B9\u51FB\u76F4\u63A5\u590D\u5236\uFF09\uFF1A";
         topSec.appendChild(topHead);
         const pillsWrap = document.createElement("div");
@@ -24220,7 +24220,7 @@ ${exception.mark.snippet}`;
         const defaultDocTitle = t("setupNewDocName") || "\u5E38\u7528\u5185\u5BB9\u5E93";
         if (nbRes.ok && nbRes.data.length > 0) {
           const targetNbId = nbRes.data[0].id;
-          const docRes = await ctx.library.createLibraryDoc(targetNbId, defaultDocTitle);
+          const docRes = await ctx.library.createLibraryDoc(targetNbId, defaultDocTitle, { seedInitialDoc: true });
           if (!docRes.ok) throw new Error(docRes.message);
           ctx.applyConfig({
             configVersion: CONFIG_VERSION,
@@ -24231,7 +24231,7 @@ ${exception.mark.snippet}`;
             configuredAt: Date.now()
           });
         } else {
-          const indepRes = await ctx.library.createIndependentLibrary(t("pluginName") || "\u5C0F\u9A74\u5E38\u7528", defaultDocTitle);
+          const indepRes = await ctx.library.createIndependentLibrary(t("pluginName") || "\u5C0F\u9A74\u5E38\u7528", defaultDocTitle, { seedInitialDoc: true });
           if (!indepRes.ok) throw new Error(indepRes.message);
           ctx.applyConfig({
             configVersion: CONFIG_VERSION,
@@ -36773,9 +36773,9 @@ ${details.join("\n")}` : ""}`;
           if (previous) return previous;
         }
         try {
-          const initialMd = options.emptyDoc ? `# ${normalizedTitle}
+          const initialMd = options.seedInitialDoc ? buildInitialLibraryDocMarkdown(normalizedTitle) : `# ${normalizedTitle}
 
-` : buildInitialLibraryDocMarkdown(normalizedTitle);
+`;
           const docId = parseDocId(await this.kernel.request("createDocWithMd", {
             notebook: notebookId,
             path: "/" + normalizedTitle.replace(/\//g, "-"),
@@ -36856,7 +36856,10 @@ ${details.join("\n")}` : ""}`;
         if (!notebook.ok) return notebook;
         const createdNotebookId = notebook.data.notebookId;
         (_b = options.onProgress) == null ? void 0 : _b.call(options, "creating-doc");
-        const doc = await this.createLibraryDoc(createdNotebookId, normalizedTitle, { idempotencyKey: scopedIdempotencyKey(baseKey, "doc") });
+        const doc = await this.createLibraryDoc(createdNotebookId, normalizedTitle, {
+          idempotencyKey: scopedIdempotencyKey(baseKey, "doc"),
+          seedInitialDoc: options.seedInitialDoc
+        });
         if (doc.ok) return ok({ notebookId: createdNotebookId, docId: doc.data.docId });
         (_c = options.onProgress) == null ? void 0 : _c.call(options, "rolling-back");
         const compensation = await this.removeNotebook(createdNotebookId, { idempotencyKey: scopedIdempotencyKey(baseKey, "rollback") });
