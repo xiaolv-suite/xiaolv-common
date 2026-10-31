@@ -22,7 +22,9 @@
     "check:viewport": "node scripts/check-viewport-actions.cjs",
     "check:changelog": "node scripts/check-changelog.cjs",
     "check:package": "node scripts/check-package.cjs",
-    "it:kernel": "node scripts/integration-kernel.cjs"
+    "it:kernel": "node scripts/integration-kernel.cjs",
+    "serve:isolated": "node scripts/serve-isolated.cjs",
+    "serve:isolated:stop": "node scripts/serve-isolated.cjs --stop"
   },
   "keywords": [
     "siyuan",
