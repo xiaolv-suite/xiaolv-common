@@ -1191,10 +1191,60 @@ function check(name, ok, detail = "") {
             step19.adoptedOk && step19Bidi.pullOk && step19Bidi.pushOk && srcDocPhysicallyUpdated,
             JSON.stringify({...step19, ...step19Bidi, srcDocPhysicallyUpdated}));
 
+        // ══════════ 第 20 步：思源编辑器内联斜杠菜单（protyleSlash）注册与就地唤起能力实测 ══════════
+        const step20 = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+
+            const slashList = p.protyleSlash ?? [];
+            const searchSlash = slashList.find((s) => s.id === "xiaolv-common-slash-search");
+            const newSlash = slashList.find((s) => s.id === "xiaolv-common-slash-new");
+            const clipSlash = slashList.find((s) => s.id === "xiaolv-common-slash-clip");
+
+            const hasSearchFilter = Boolean(searchSlash && searchSlash.filter.includes("常用") && searchSlash.filter.includes("cy"));
+            const hasNewFilter = Boolean(newSlash && newSlash.filter.includes("新建常用") && newSlash.filter.includes("xjcy"));
+            const hasClipFilter = Boolean(clipSlash && clipSlash.filter.includes("快速保存剪贴板") && clipSlash.filter.includes("ksbz"));
+
+            // 模拟在编辑器中选中「小驴常用：搜索与插入常用语」斜杠菜单项，触发 callback 就地唤起搜索弹窗
+            const fakeProtyle = {
+                protyle: {
+                    block: {rootID: "20261031000000-dummyroot"},
+                    element: document.body,
+                },
+            };
+            searchSlash?.callback(fakeProtyle, null);
+            await new Promise((r) => setTimeout(r, 350));
+            const searchOpened = Boolean(document.querySelector(".xlc-dialog"));
+            p.searchDialog?.destroy();
+            await new Promise((r) => setTimeout(r, 150));
+
+            // 模拟选中「小驴常用：新建常用语」斜杠菜单项，触发 callback 就地唤起新建捕获弹窗
+            newSlash?.callback(fakeProtyle, null);
+            await new Promise((r) => setTimeout(r, 350));
+            const captureOpened = Boolean(document.querySelector(".xlc-capture"));
+            p.capture?.destroy();
+            await new Promise((r) => setTimeout(r, 150));
+
+            return {
+                slashCount: slashList.length,
+                hasSearchFilter,
+                hasNewFilter,
+                hasClipFilter,
+                searchOpened,
+                captureOpened,
+            };
+        });
+        check("步骤 20：思源编辑器内联斜杠菜单（protyleSlash）注册健全（3 项快捷入口与完整中英拼音简码过滤）且就地唤起有效",
+            step20.slashCount === 3 && step20.hasSearchFilter && step20.hasNewFilter && step20.hasClipFilter && step20.searchOpened && step20.captureOpened,
+            JSON.stringify(step20));
+
         cleanup();
         const pass = results.filter((r) => r.ok).length;
         const fail = results.length - pass;
-        console.log(`\n真实思源宿主 19 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
+        console.log(`\n真实思源宿主 20 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
         process.exit(fail ? 1 : 0);
     } catch (err) {
         console.error(`[real-e2e] 异常：${err.stack || err.message}`);

@@ -57,42 +57,27 @@ export class HostBridge implements IHostBridge {
 
     constructor(private readonly app: App, private readonly owner: Plugin) {}
 
-    public recordActiveEditor(editor: Protyle | null | undefined): void {
-        if (editor?.protyle?.block?.rootID) {
-            this.lastActiveEditor = editor;
+    public recordActiveEditor(editor: any): void {
+        const candidate = editor?.protyle ? editor : (editor?.block?.rootID ? {protyle: editor} : null);
+        if (candidate?.protyle?.block?.rootID) {
+            this.lastActiveEditor = candidate as Protyle;
         }
     }
 
     private resolveActiveEditor(): Protyle | null {
+        if (this.lastActiveEditor?.protyle?.block?.rootID) {
+            const el = this.lastActiveEditor.protyle?.wysiwyg?.element;
+            if (!el || (el.isConnected && !el.closest?.(".fn__none, [inert]"))) {
+                return this.lastActiveEditor;
+            }
+        }
         try {
             const active = getActiveEditor() ?? null;
             if (active?.protyle?.block?.rootID) {
                 const el = active.protyle?.wysiwyg?.element;
                 const isVisible = !el || (el.isConnected && !el.closest?.(".fn__none, [inert]"));
                 if (isVisible) {
-                    const activeEl = typeof document !== "undefined" ? document.activeElement : null;
-                    const focusedInActive = Boolean(activeEl && active.protyle?.element?.contains?.(activeEl));
-                    if (focusedInActive || !this.lastActiveEditor) {
-                        this.lastActiveEditor = active;
-                        return active;
-                    }
-                }
-            }
-        } catch {
-            // ignore
-        }
-        const fallback = this.lastActiveEditor;
-        if (fallback?.protyle?.block?.rootID) {
-            const el = fallback.protyle?.wysiwyg?.element;
-            if (!el || (el.isConnected && !el.closest?.(".fn__none, [inert]"))) {
-                return fallback;
-            }
-        }
-        try {
-            const active = getActiveEditor() ?? null;
-            if (active?.protyle?.block?.rootID) {
-                const el = active.protyle?.wysiwyg?.element;
-                if (!el || (el.isConnected && !el.closest?.(".fn__none, [inert]"))) {
+                    this.lastActiveEditor = active;
                     return active;
                 }
             }

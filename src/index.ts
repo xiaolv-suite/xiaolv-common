@@ -1049,6 +1049,40 @@ export default class XiaolvCommonPlugin extends Plugin {
 
     private registerEntries(): void {
         try {
+            // 思源编辑器内联斜杠菜单（protyleSlash）：在笔记中输入 /常用、/cy、/xiaolv 直接就地唤起
+            this.protyleSlash = [
+                {
+                    filter: ["常用", "常用语", "xiaolv", "cy", "changyong", "xlc", "snippet", "snippets"],
+                    html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("openSearch") || "小驴常用：搜索与插入常用语"}</span><span class="b3-list-item__meta">⌥⇧C</span></div>`,
+                    id: "xiaolv-common-slash-search",
+                    callback: (protyle: any) => {
+                        this.host?.recordActiveEditor(protyle);
+                        this.openSearch();
+                    },
+                },
+                {
+                    filter: ["新建常用", "新建常用语", "xjcy", "new-snippet"],
+                    html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("newItem") || "小驴常用：新建常用语"}</span><span class="b3-list-item__meta">⌥⇧N</span></div>`,
+                    id: "xiaolv-common-slash-new",
+                    callback: (protyle: any) => {
+                        this.host?.recordActiveEditor(protyle);
+                        void this.capture?.newManual();
+                    },
+                },
+                {
+                    filter: ["快速保存剪贴板", "保存剪贴板", "ksbz", "jtb", "quick-clip"],
+                    html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("quickCapture") || "小驴常用：从剪贴板快速保存"}</span><span class="b3-list-item__meta">⌥⇧V</span></div>`,
+                    id: "xiaolv-common-slash-clip",
+                    callback: (protyle: any) => {
+                        this.host?.recordActiveEditor(protyle);
+                        void this.capture?.quickCaptureFromClipboard();
+                    },
+                },
+            ];
+        } catch {
+            // 旧宿主降级保护
+        }
+        try {
             this.addTopBar({
                 icon: "iconXlcCommon",
                 title: `${this.i18nFn()("openSearch")} (Alt+Shift+N / Alt+Shift+V)`,
@@ -1310,9 +1344,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.eventBus.on("click-editortitleicon" as any, this.editorTitleMenuHandler as any);
             // 页签切换与静态加载联动：记录最近活动 Protyle 编辑器并刷新「当前文档」范围与插入目标
             this.switchProtyleHandler = (event) => {
-                const raw = event?.detail?.protyle as any;
+                const raw = (event?.detail?.protyle ?? event?.detail ?? event?.protyle) as any;
                 if (raw) {
-                    const normalized = raw.protyle ? raw : {protyle: raw};
+                    const normalized = raw.protyle ? raw : (raw.block?.rootID ? {protyle: raw} : raw);
                     this.host?.recordActiveEditor(normalized);
                 }
                 this.searchDialog?.syncActiveContextAfterTabSwitch();
@@ -2794,6 +2828,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.editorTitleMenuHandler = null;
         this.switchProtyleHandler = null;
         this.wsMainHandler = null;
+        this.protyleSlash = [];
         if (this.wsSyncTimer) {
             clearTimeout(this.wsSyncTimer);
             this.wsSyncTimer = null;
