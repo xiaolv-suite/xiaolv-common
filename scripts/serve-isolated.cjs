@@ -2,8 +2,8 @@
  * 隔离环境独立网页服务脚本 (Isolated Live Web Environment)
  *
  * 专门用于为用户拉起一个完全隔离的、带完整图形界面的真实思源桌面网页端：
- * 1. 独立临时工作区（零触碰本机日常思源工作区与主端口 6806）；
- * 2. 挂载真实思源内核与思源官方桌面 Web 前端 (http://127.0.0.1:<PORT>/stage/build/desktop/)；
+ * 1. 独立临时工作区位于 D 盘（D:\Temp\xiaolv-common-live-workspace），零占用 C 盘空间；
+ * 2. 挂载真实思源内核与思源官方桌面 Web 前端 (http://127.0.0.1:43920/stage/build/desktop/)；
  * 3. 自动同步安装最新 dist/ 构建产物（小驴常用），开启集市信任与插件挂载；
  * 4. 自动预置测试笔记本、体验文档与常用库，开箱即用无需重复引导；
  * 5. 以 Windows 后台独立进程守护运行（关闭终端不丢失，支持随时刷新浏览器）；
@@ -11,7 +11,7 @@
  */
 "use strict";
 
-const {execSync, spawnSync} = require("node:child_process");
+const {spawn, spawnSync, execSync} = require("node:child_process");
 const fs = require("node:fs");
 const net = require("node:net");
 const os = require("node:os");
@@ -49,7 +49,8 @@ function checkPortFree(port) {
 }
 
 async function findAvailablePort(startPort = PREFERRED_PORT) {
-    for (let p = startPort; p < startPort + 50; p++) {
+    if (await checkPortFree(startPort)) return startPort;
+    for (let p = startPort + 1; p < startPort + 50; p++) {
         if (p === 6806 || p === 14680 || p === 43919) continue;
         if (await checkPortFree(p)) return p;
     }
@@ -59,13 +60,13 @@ async function findAvailablePort(startPort = PREFERRED_PORT) {
 function resolveKernel() {
     const candidates = [
         process.env.SIYUAN_KERNEL,
-        "D:\\RJ\\SiYuan\\resources\\kernel\\siyuan.exe",
         "D:\\RJ\\SiYuan\\resources\\kernel\\SiYuan-Kernel.exe",
-        path.join(process.env.ProgramFiles || "C:\\Program Files", "SiYuan", "resources", "kernel", "siyuan.exe"),
-        path.join(os.homedir(), "AppData", "Local", "Programs", "SiYuan", "resources", "kernel", "siyuan.exe"),
+        "D:\\RJ\\SiYuan\\resources\\kernel\\siyuan.exe",
+        path.join(process.env.ProgramFiles || "C:\\Program Files", "SiYuan", "resources", "kernel", "SiYuan-Kernel.exe"),
+        path.join(os.homedir(), "AppData", "Local", "Programs", "SiYuan", "resources", "kernel", "SiYuan-Kernel.exe"),
     ].filter(Boolean);
     const kernel = candidates.find((c) => fs.existsSync(c));
-    if (!kernel) throw new Error("未找到 siyuan.exe，可通过环境变量 SIYUAN_KERNEL 指定");
+    if (!kernel) throw new Error("未找到 SiYuan-Kernel.exe，可通过环境变量 SIYUAN_KERNEL 指定");
     const appDir = path.resolve(path.dirname(kernel), "..");
     return {kernel, appDir};
 }
@@ -88,7 +89,7 @@ function killPid(pid) {
     if (!pid) return;
     try {
         if (process.platform === "win32") {
-            spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {stdio: "ignore"});
+            spawnSync("cmd.exe", ["/c", `taskkill /pid ${pid} /T /F`], {stdio: "ignore"});
         } else {
             process.kill(pid, "SIGTERM");
         }
@@ -213,54 +214,39 @@ async function main() {
         try { fs.rmSync(WORKSPACE, {recursive: true, force: true}); } catch {}
     }
     fs.mkdirSync(WORKSPACE, {recursive: true});
+
+    // 预写入 conf.json（保证初次冷启动即信任集市插件）
+    const confPath = path.join(WORKSPACE, "conf", "conf.json");
+    let conf = {};
+    if (fs.existsSync(confPath)) {
+        try { conf = JSON.parse(fs.readFileSync(confPath, "utf8")); } catch {}
+    }
+    conf.bazaar = conf.bazaar || {};
+    conf.bazaar.trust = true;
+    conf.bazaar.petal = true;
+    conf.lang = "zh_CN";
+    fs.mkdirSync(path.dirname(confPath), {recursive: true});
+    fs.writeFileSync(confPath, JSON.stringify(conf, null, 2), "utf8");
+
     copyDistToWorkspace(WORKSPACE);
     writePetalsConfig(WORKSPACE);
 
     console.log(`[serve-isolated] 准备启动独立思源实例（端口=${port}，工作区=${WORKSPACE}）…`);
 
-    // 检查 conf/conf.json 是否已存在并配置 bazaar.trust
-    const confPath = path.join(WORKSPACE, "conf", "conf.json");
-    let needsInitialConfig = true;
-    if (fs.existsSync(confPath)) {
-        try {
-            const conf = JSON.parse(fs.readFileSync(confPath, "utf8"));
-            if (conf.bazaar?.trust) needsInitialConfig = false;
-        } catch {}
-    }
+    const logPath = path.join(WORKSPACE, "kernel.log");
+    const logFd = fs.openSync(logPath, "a");
 
-    if (needsInitialConfig) {
-        // 首次初始化运行
-        const initialPid = execSync(
-            `powershell.exe -NoProfile -Command "(Start-Process -FilePath '${kernel}' -ArgumentList 'serve','--workspace','${WORKSPACE.replace(/'/g, "''")}','--wd','${appDir.replace(/'/g, "''")}','--port','${port}','--lang','zh-CN' -WindowStyle Hidden -PassThru).Id"`,
-            {encoding: "utf8"},
-        ).trim();
-        const initPidNum = Number(initialPid);
-        let ready = false;
-        for (let i = 0; i < 30; i++) {
-            await new Promise((r) => setTimeout(r, 600));
-            if (await probe(base)) { ready = true; break; }
+    const child = spawn(
+        kernel,
+        ["serve", "--workspace", WORKSPACE, "--wd", appDir, "--port", String(port), "--lang", "zh-CN"],
+        {
+            stdio: ["ignore", logFd, logFd],
+            detached: true,
+            windowsHide: true,
         }
-        if (initPidNum) killPid(initPidNum);
-        await new Promise((r) => setTimeout(r, 1200));
-
-        let conf = {};
-        try { conf = JSON.parse(fs.readFileSync(confPath, "utf8")); } catch {}
-        conf.bazaar = conf.bazaar || {};
-        conf.bazaar.trust = true;
-        conf.bazaar.petal = true;
-        conf.lang = "zh_CN";
-        fs.mkdirSync(path.dirname(confPath), {recursive: true});
-        fs.writeFileSync(confPath, JSON.stringify(conf, null, 2), "utf8");
-        writePetalsConfig(WORKSPACE);
-        copyDistToWorkspace(WORKSPACE);
-    }
-
-    // 正式后台守护进程拉起
-    const detachedPid = execSync(
-        `powershell.exe -NoProfile -Command "(Start-Process -FilePath '${kernel}' -ArgumentList 'serve','--workspace','${WORKSPACE.replace(/'/g, "''")}','--wd','${appDir.replace(/'/g, "''")}','--port','${port}','--lang','zh-CN' -WindowStyle Hidden -PassThru).Id"`,
-        {encoding: "utf8"},
-    ).trim();
-    const pid = Number(detachedPid) || null;
+    );
+    child.unref();
+    const pid = child.pid;
 
     let isReady = false;
     for (let i = 0; i < 40; i++) {
@@ -269,7 +255,7 @@ async function main() {
     }
     if (!isReady) {
         if (pid) killPid(pid);
-        throw new Error(`隔离思源内核启动超时 (${base})`);
+        throw new Error(`隔离思源内核启动超时 (${base})，请查看日志：${logPath}`);
     }
 
     const token = readWorkspaceToken(WORKSPACE);
@@ -329,7 +315,7 @@ async function main() {
             };
             fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify(cfg, null, 2), "utf8");
 
-            // 预写入 4 条典型模板（致歉信/变量展开、SQL查询代码块、常用收件地址、今日工作汇报）
+            // 预写入 3 条典型模板（致歉信/变量展开、SQL查询代码块、常用收件地址）
             try {
                 // 1. 带变量的超级块致歉信
                 const apologyMd = `{{{row\n尊敬的{{xlc:ask:王总:客户名称}}：\n\n非常抱歉，由于近期系统机房升级，您反馈的问题预计将于{{xlc:ask:明天下午:预计解决时间}}恢复正常。\n\n感谢您的理解与支持！\n}}}`;
@@ -426,7 +412,7 @@ async function main() {
     console.log(` ⚙️ 守护进程 PID:   ${pid}`);
     console.log("----------------------------------------------------------------------");
     console.log(" 💡 使用指南：");
-    console.log("  1. 复制上方【浏览器直达网页】在 Chrome / Edge 等浏览器直接打开；");
+    console.log("  1. 复制上方【浏览器直达网页】在 Chrome / Edge / 内置浏览器直接打开；");
     console.log("  2. 已自动预置「体验与测试笔记」与已初始化的「常用内容库」；");
     console.log("  3. 在笔记正文中输入 /常用 或按 Alt+Shift+C 即可随心测试；");
     console.log("  4. 随时可以根据网页上的实际体验告诉 AI 哪里需要修改；");
