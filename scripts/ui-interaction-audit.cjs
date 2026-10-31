@@ -937,8 +937,8 @@ const check = (name, ok, detail = "") => {
         && staleTargetFallback.receipt?.downgraded === true && staleTargetFallback.clipboard === "真实执行器正文"
         && staleTargetFallback.inserted === 0 && staleTargetFallback.buttonBusy === "false", JSON.stringify(staleTargetFallback));
 
-    // 执行期间锁住主动作，避免双击/重复 Enter 产生两次写入。
-    await open({actionDelayMs: 300, query: "SLA"});
+    // 执行期间锁住主动作，避免双击/重复 Enter 产生两次写入（在固定窗口模式下核验忙态恢复）。
+    await open({actionDelayMs: 300, query: "SLA", pinWindow: true});
     await sleep(300);
     const busy = await page.evaluate(() => {
         const btn = document.querySelector('[data-xlc-pane-act="insert"]');

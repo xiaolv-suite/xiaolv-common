@@ -458,11 +458,12 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
 }
 
 (window as unknown as {XlcHarness: unknown}).XlcHarness = {
-    openDialog(overrides?: {aiEnabled?: boolean; missing?: boolean; scope?: "all" | "favorites"; query?: string; mobile?: boolean; empty?: boolean; largeResults?: boolean; insertTarget?: {docId: string; hPath: string}; filters?: {type: string; tag: string; category: string}; newItemAction?: string; activeEditor?: boolean; insertTargetAvailable?: boolean; actionDelayMs?: number; promptVariables?: boolean; realExecutor?: boolean; realClipboardAvailable?: boolean}): CommonSearchDialog {
+    openDialog(overrides?: {aiEnabled?: boolean; missing?: boolean; scope?: "all" | "favorites"; query?: string; mobile?: boolean; empty?: boolean; largeResults?: boolean; insertTarget?: {docId: string; hPath: string}; filters?: {type: string; tag: string; category: string}; newItemAction?: string; activeEditor?: boolean; insertTargetAvailable?: boolean; actionDelayMs?: number; promptVariables?: boolean; realExecutor?: boolean; realClipboardAvailable?: boolean; pinWindow?: boolean}): CommonSearchDialog {
         const dialog = new CommonSearchDialog(makeDeps(overrides));
         lastSearchDialog = dialog;
         if (overrides?.insertTarget) dialog.insertTarget = overrides.insertTarget;
         dialog.open();
+        if (overrides?.pinWindow) dialog.togglePinWindow();
         // 预填搜索与选中态，让截图呈现工作状态
         const input = document.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {

@@ -1115,6 +1115,7 @@ export class CommonSearchDialog {
             if (this.activeProvider >= 0) {
                 const row = this.providerRows[this.activeProvider];
                 if (row) void this.deps.copyProviderPayload(row.payload);
+                if (!this.pinWindow) this.destroy();
                 return;
             }
             const entry = this.results[this.activeIndex];
@@ -1125,9 +1126,10 @@ export class CommonSearchDialog {
                         if (ok) this.deps.notify?.("info", this.deps.t("copied", entry.title || "条目"));
                         else this.deps.notify?.("error", this.deps.t("copyFailed"));
                     });
-                    return;
+                } else {
+                    void this.deps.runAction(entry.id, "copy");
                 }
-                void this.deps.runAction(entry.id, "copy");
+                if (!this.pinWindow) this.destroy();
             }
         });
         // AI 变换：打开动作菜单（含 AI 变换分区；原型窗格底部第三按钮）
@@ -3448,7 +3450,8 @@ export class CommonSearchDialog {
             }
             try {
                 const execution = perform();
-                options?.beforePerform?.();
+                if (options?.beforePerform) options.beforePerform();
+                else if (!this.pinWindow) this.destroy();
                 await execution;
             } finally {
                 releaseBusy();
