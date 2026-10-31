@@ -71,8 +71,8 @@ const ZWSP = "\u200b";
 // 行首（含引用/列表前缀后）的 `{{` 会被内核解析为嵌入查询块（query_embed，真内核实测），
 // 变量/宏行因此被拆成独立块。写入时在 `{{` 前垫一个零宽空格保持段落，读回时去掉。
 const EMBED_LINE_START = /^(\s*(?:>\s*)*(?:(?:[-*+]|\d{1,9}[.)])\s+(?:\[[ xX]\]\s+)?)?)(\{\{(?!\{))/;
-// 写入时垫的零宽空格，以及内核在行内代码两侧自动补的零宽空格（复制时不应带出不可见字符）
-const READ_ZWSP_PATTERN = /\u200b(?=\{\{)|\u200b(?=`)|(`)\u200b/g;
+// 写入时垫的零宽空格，以及内核在行内代码和原生 #标签# 两侧自动补的零宽空格（复制/回读时不应带出不可见字符）
+const READ_ZWSP_PATTERN = /\u200b(?=\{\{)|\u200b(?=`)|(`)\u200b|\u200b(?=#)|(#)\u200b/g;
 
 function guardEmbedLines(markdown: string): string {
     const lines = markdown.split("\n");
@@ -96,7 +96,7 @@ export function storedKramdownToBody(kramdown: string): string {
             out.push({line, code: true});
             continue;
         }
-        const visible = line.replace(READ_ZWSP_PATTERN, "$1");
+        const visible = line.replace(READ_ZWSP_PATTERN, "$1$2");
         const stripped = visible.replace(HOST_IAL_PATTERN, "");
         if (stripped === visible) {
             out.push({line: visible, code: false});

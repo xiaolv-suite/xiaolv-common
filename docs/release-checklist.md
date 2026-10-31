@@ -33,4 +33,6 @@
 | **16** | **目标思源笔记文档真实落盘验证（正文 / 代码块 / 嵌入块 / 块引用）** | 将带变量填充的正文、代码围栏块、同步嵌入块（`insert-embed`）与块引用（`insert-ref`）插入到 `/测试笔记文档`，读取目标文档真实子块 Kramdown | 目标思源文档子块中真实存在展开后的 `邮箱：contact@example.com`、`SELECT` 代码块、`query_embed` 嵌入块与 `((blockId '...'))` 块引用 | ✅ 已通过（修复了 `insertToDoc` 在非 `blockref` 条目上忽略 `insert-embed`/`insert-ref` 模式的缺陷） |
 | **17** | **全类型块引用/嵌入、预览区「📦 库内原块」直达、块标菜单多块合并与动态块引用实时跟随** | 在 `DockView` 抽屉对普通条目点击 `((•))` 与 `{{•}}`；在主搜索预览元数据栏点击「📦 库内原块」；在思源文档触发 `click-blockicon` 框选 2 个块合并收录、单块存为 `blockref` 并修改源块正文 | 全类型条目均产出真实 `((blockId '...'))` 与 `{{select...}}`；点击「📦 库内原块」精准调用 `openDoc` 定位物理块 ID；块标多块合并入库成功；源文档原块修改后 `blockref` 条目实时返回最新正文 | ✅ 已通过（同时修复了 `getBlockKramdown` 在 `captureCurrentBlock` 链路下传空 `libraryDocId` 导致读取失败的缺陷） |
 | **18** | **思源库文档直接改块反向同步（`ws-main`）与文档页签切换实时跟随（`switch-protyle`）** | 在思源中直接修改常用库文档内的块并触发 `ws-main` `transactions`；在主搜索「📄 当前文档」范围下触发 `switch-protyle` 切换笔记页签 | 无需手动刷新，`DockView` 与主搜索自动失效缓存并同步最新块标题/正文；切换思源文档页签后「当前文档」范围自动刷新出新文档中的匹配块 | ✅ 已通过 |
+| **19** | **思源库文档手写块原地纳管、原生 `#标签#` 自动识别与来源块双向内容同步（`pullFromSource` / `pushToSource`）** | 在思源库文档直接写入带 `#手写直写标签# #高频#` 的未纳管段落并触发 `adoptLibraryBlocks`；修改 `/测试笔记文档` 中的源块后执行 `pullFromSource`，再在常用库中修改正文后执行 `pushToSource` 回写至源块 | 手写块保持原 `blockId` 原地挂上 `custom-xlc-*` 属性且自动提取思源原生 `#标签#`（剥离 Lute 引擎附加的零宽空格 `\u200b`）；`pullFromSource` 准确拉取源块最新正文与标签；`pushToSource` 将常用库修改后的正文真实写回思源笔记原块并保留原块属性 | ✅ 已通过 |
+
 

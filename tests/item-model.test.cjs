@@ -154,3 +154,10 @@ test("deriveSmartSummary：智能上下文窗口截取，长文本关键词后�
     assert.ok(sum2.startsWith("…"), "前方截断应包含前置省略号");
     assert.ok(sum2.endsWith("…"), "后方截断应包含后置省略号");
 });
+
+test("extractKramdownNativeTags：提取思源原生 #标签# 与 textmark 标签，跳过代码围栏与行内反引号", () => {
+    const kd = "客户安抚标准话术 #售后# #高频回复#，注意不要解析 `#代码内伪标签#` 以及：\n```js\nconst x = '#代码块伪标签#';\n```\n还有 <span data-type=\"tag\">紧急</span>";
+    const tags = item.extractKramdownNativeTags(kd);
+    assert.deepEqual(tags, ["紧急", "售后", "高频回复"]);
+});
+

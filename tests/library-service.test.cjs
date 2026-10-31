@@ -753,3 +753,91 @@ test("createIndependentLibrary：两步与回滚时按顺序回调 onProgress", 
     assert.equal(failRes.ok, false);
     assert.deepEqual(rollbackSteps, ["creating-notebook", "creating-doc", "rolling-back"]);
 });
+
+test("adoptUnmanagedLibraryBlocks：原地纳管库文档手写块（跳过首行标题块、自动提取原生 #标签#、不复制块）", async () => {
+    const H_TITLE = "20240101120000-head001";
+    const RAW_BLOCK = "20240101120000-hand001";
+    const attrsStore = {
+        [H_TITLE]: {},
+        [RAW_BLOCK]: {},
+    };
+    const {kernel, service} = makeService({
+        getChildBlocks: () => [
+            {id: H_TITLE, type: "h", subtype: "h1"},
+            {id: RAW_BLOCK, type: "p"},
+        ],
+        batchGetBlockAttrs: ({ids}) => Object.fromEntries(ids.map((id) => [id, {...(attrsStore[id] ?? {})}])),
+        getBlockAttrs: ({id}) => ({...(attrsStore[id] ?? {})}),
+        getBlockKramdown: ({id}) => ({
+            id,
+            kramdown: id === H_TITLE ? "# 小驴常用库" : "直接在思源库文档手写的段落 #手写标签# #高频#",
+        }),
+        setBlockAttrs: ({id, attrs}) => {
+            attrsStore[id] = {...(attrsStore[id] ?? {}), ...attrs};
+            return null;
+        },
+    });
+    const res = await service.adoptUnmanagedLibraryBlocks();
+    assert.equal(res.ok, true);
+    assert.equal(res.data.adopted, 1);
+    assert.equal(res.data.items[0].blockId, RAW_BLOCK);
+    assert.deepEqual(res.data.items[0].tags, ["手写标签", "高频"]);
+    assert.equal(kernel.calls.some((c) => c.endpoint === "appendBlock"), false, "原地纳管绝不调用 appendBlock 复制块");
+    assert.equal( Boolean(attrsStore[H_TITLE]["custom-xlc-id"]), false, "首行库标题占位块不得被误纳管");
+});
+
+test("pullFromSourceBlock 与 pushToSourceBlock：条目与思源来源块双向同步且保留原块属性", async () => {
+    const SRC_BLOCK = "20240101120000-srcblk1";
+    let libBody = "库内初始正文";
+    let srcBody = "思源原块更新后的最新正文 #同步标签#";
+    const libAttrs = {
+        "custom-xlc-id": "xlc-bidisync0001",
+        "custom-xlc-type": "markdown",
+        "custom-xlc-title": "双向同步条目",
+        "custom-xlc-src-doc": DOC,
+        "custom-xlc-src-block": SRC_BLOCK,
+        "custom-xlc-src-type": "block",
+        "custom-xlc-created": "1000",
+        "custom-xlc-updated": "1000",
+    };
+    let srcAttrs = {
+        id: SRC_BLOCK,
+        "custom-user-note": "原块自有属性不可丢失",
+    };
+    const {service} = makeService({
+        getChildBlocks: () => [{id: B1, type: "p"}],
+        batchGetBlockAttrs: () => ({[B1]: {...libAttrs}}),
+        getBlockAttrs: ({id}) => (id === SRC_BLOCK ? {...srcAttrs} : {...libAttrs}),
+        getBlockKramdown: ({id}) => ({id, kramdown: id === SRC_BLOCK ? srcBody : libBody}),
+        checkBlocksExist: ({ids}) => Object.fromEntries(ids.map((id) => [id, true])),
+        setBlockAttrs: ({id, attrs}) => {
+            if (id === SRC_BLOCK) srcAttrs = {...srcAttrs, ...attrs};
+            else Object.assign(libAttrs, attrs);
+            return null;
+        },
+        updateBlock: ({id, data}) => {
+            if (id === SRC_BLOCK) {
+                srcBody = data;
+                srcAttrs = {id: SRC_BLOCK}; // 模拟真实思源内核 updateBlock 清空块属性
+            } else {
+                libBody = data;
+            }
+            return [{doOperations: [{action: "update", id}]}];
+        },
+    });
+
+    // 1. 从思源原块拉取最新内容到库内条目
+    const pulled = await service.pullFromSourceBlock("xlc-bidisync0001");
+    assert.equal(pulled.ok, true);
+    assert.ok(libBody.includes("思源原块更新后的最新正文"));
+    assert.ok(pulled.data.item.tags.includes("同步标签"));
+
+    // 2. 修改库内正文后回写至思源来源块，验证原块正文更新且 custom-user-note 属性完整保留
+    libBody = "在常用库润色后回写给思源原块的正文";
+    const pushed = await service.pushToSourceBlock("xlc-bidisync0001");
+    assert.equal(pushed.ok, true);
+    assert.equal(pushed.data.sourceBlockId, SRC_BLOCK);
+    assert.equal(srcBody, "在常用库润色后回写给思源原块的正文");
+    assert.equal(srcAttrs["custom-user-note"], "原块自有属性不可丢失");
+});
+

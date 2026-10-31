@@ -1122,10 +1122,79 @@ function check(name, ok, detail = "") {
             step18.dockSynced && step18.dialogSynced && step18.currentDocFollowed,
             JSON.stringify(step18));
 
+        // ══════════ 第 19 步：库文档手写块原地纳管、原生 #标签# 自动识别与来源块双向内容同步（pull/push） ══════════
+        const rawHandwrittenAppend = await api(token, "/api/block/appendBlock", {
+            parentID: libDocId,
+            dataType: "markdown",
+            data: "用户在思源库文档直接手写的售后模板 #手写直写标签# #高频#",
+        });
+        const handwrittenBlockId = rawHandwrittenAppend?.data?.[0]?.doOperations?.[0]?.id ?? "";
+        // 在 /测试笔记文档 新建一个供双向同步测试的源块
+        const bidiSrcAppend = await api(token, "/api/block/appendBlock", {
+            parentID: sampleDocId,
+            dataType: "markdown",
+            data: "双向同步源块初始内容",
+        });
+        const bidiSrcBlockId = bidiSrcAppend?.data?.[0]?.doOperations?.[0]?.id ?? "";
+
+        const step19 = await page.evaluate(async ({handBlockId, srcBlockId, noteDocId}) => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            // 1. 调用库文档手写块原地纳管协议命令，验证不复制块、保持原 blockId 并自动提取 #手写直写标签# 与 #高频#
+            const adoptRes = await p.protocolCommands["xiaolv.common.adoptLibraryBlocks"]();
+            const idx = await p.library.ensureIndex(0);
+            const adoptedItem = Array.from(idx.items.values()).find((it) => it.blockId === handBlockId);
+            const adoptedOk = Boolean(
+                adoptRes?.ok
+                && adoptedItem
+                && adoptedItem.tags.includes("手写直写标签")
+                && adoptedItem.tags.includes("高频")
+            );
+
+            // 2. 创建一个关联到 srcBlockId 的拷贝型条目，测试 pullFromSource 与 pushToSource 双向同步
+            const created = await p.library.createItem({
+                itemType: "markdown",
+                markdown: "拷贝入库时的旧正文",
+                title: "来源双向同步测试条目",
+                source: {sourceDocId: noteDocId, sourceBlockId: srcBlockId, sourceType: "block"},
+            });
+            const bidiItemId = created.ok ? created.data.item.id : "";
+            return {adoptedOk, bidiItemId};
+        }, {handBlockId: handwrittenBlockId, srcBlockId: bidiSrcBlockId, noteDocId: sampleDocId});
+
+        // 在思源笔记文档中修改源块，然后触发 pullFromSource 拉取到常用库条目
+        await api(token, "/api/block/updateBlock", {
+            id: bidiSrcBlockId,
+            dataType: "markdown",
+            data: "思源笔记源块改版后的新正文 #源块新标签#",
+        });
+        const step19Bidi = await page.evaluate(async (itemId) => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const pullRes = await p.protocolCommands["xiaolv.common.pullFromSource"]({itemId});
+            const gotAfterPull = await p.library.getItem(itemId);
+            const kdAfterPull = gotAfterPull.ok ? await p.library.getStoredItemKramdown(gotAfterPull.data) : {ok: false, data: ""};
+            const pullOk = Boolean(
+                pullRes?.ok
+                && kdAfterPull.ok
+                && kdAfterPull.data.includes("思源笔记源块改版后的新正文")
+                && gotAfterPull.data.tags.includes("源块新标签")
+            );
+
+            // 在常用库中润色修改该条目正文，然后触发 pushToSource 回写至思源笔记源块
+            await p.library.updateItem(itemId, {markdown: "在小驴常用中润色后回写回思源笔记的正文_PUSHED_OK"});
+            const pushRes = await p.protocolCommands["xiaolv.common.pushToSource"]({itemId});
+            return {pullOk, pushOk: Boolean(pushRes?.ok)};
+        }, step19.bidiItemId);
+
+        const pushedSrcKd = (await api(token, "/api/block/getBlockKramdown", {id: bidiSrcBlockId}))?.data?.kramdown ?? "";
+        const srcDocPhysicallyUpdated = pushedSrcKd.includes("在小驴常用中润色后回写回思源笔记的正文_PUSHED_OK");
+        check("步骤 19：思源库文档手写块原地纳管、原生 #标签# 自动识别与来源块双向同步（pullFromSource / pushToSource 真实落盘）全部通过",
+            step19.adoptedOk && step19Bidi.pullOk && step19Bidi.pushOk && srcDocPhysicallyUpdated,
+            JSON.stringify({...step19, ...step19Bidi, srcDocPhysicallyUpdated}));
+
         cleanup();
         const pass = results.filter((r) => r.ok).length;
         const fail = results.length - pass;
-        console.log(`\n真实思源宿主 18 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
+        console.log(`\n真实思源宿主 19 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
         process.exit(fail ? 1 : 0);
     } catch (err) {
         console.error(`[real-e2e] 异常：${err.stack || err.message}`);

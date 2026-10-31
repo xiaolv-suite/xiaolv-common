@@ -18,7 +18,11 @@ import {
 import {
     CommonItem,
     cleanShortcode,
+    cleanTagList,
     deriveSummary,
+    deriveTitle,
+    extractKramdownNativeTags,
+    inferItemType,
     ISourceRef,
     ItemType,
     isBlockId,
@@ -1543,5 +1547,198 @@ export class LibraryService {
         this.notifyItemsChanged([itemId]);
         const refreshed = await this.getItem(itemId);
         return refreshed.ok ? ok({item: refreshed.data}) : {ok: false, reason: refreshed.reason, message: refreshed.message};
+    }
+
+    /**
+     * 原地纳管思源库文档中用户直接手写/粘贴的未纳管块（不移动、不复制块，直接补齐 custom-xlc-* 属性）。
+     * - 未指定 targetBlockIds 时扫描全部库文档顶层无 custom-xlc-id 块，自动跳过库文档首行 # 标题占位块；
+     * - 指定 targetBlockIds 时仅纳管库文档中匹配该列表的块。
+     */
+    async adoptUnmanagedLibraryBlocks(targetBlockIds?: readonly string[]): Promise<Receipt<{adopted: number; items: CommonItem[]}>> {
+        return this.withWriteLock("adopt-library-blocks", async () => {
+            if (!this.config) return fail("invalid-input", "no library configured");
+            const resolved = await this.resolveDocIds();
+            if (resolved.docIds.length === 0) return fail("not-found", "no library document available");
+            const targetSet = targetBlockIds && targetBlockIds.length > 0
+                ? new Set(targetBlockIds.filter((id) => isBlockId(id)))
+                : null;
+            const adoptedItems: CommonItem[] = [];
+
+            for (const docId of resolved.docIds) {
+                let children;
+                try {
+                    children = parseChildBlocks(await this.kernel.request("getChildBlocks", {id: docId}));
+                } catch (err) {
+                    return toFailureReceipt(err);
+                }
+                if (children.length === 0) continue;
+                let attrsByBlock: Record<string, Record<string, string>> = {};
+                try {
+                    attrsByBlock = parseBatchAttrs(await this.kernel.request("batchGetBlockAttrs", {
+                        ids: children.map((c) => c.id),
+                    }));
+                } catch (err) {
+                    return toFailureReceipt(err);
+                }
+                // 已被多块旧条目占用的从属块 ID 集合，不得误纳管为独立新条目
+                const managedPartIds = new Set<string>();
+                for (const child of children) {
+                    const rawParts = attrsByBlock[child.id]?.[ATTR.parts];
+                    if (typeof rawParts === "string" && rawParts.trim()) {
+                        for (const p of rawParts.split(",").map((s) => s.trim()).filter(isBlockId)) {
+                            managedPartIds.add(p);
+                        }
+                    }
+                }
+
+                for (let idx = 0; idx < children.length; idx++) {
+                    const child = children[idx]!;
+                    const existingAttrs = attrsByBlock[child.id] ?? {};
+                    if (existingAttrs[ATTR.id] || managedPartIds.has(child.id)) continue;
+                    if (targetSet && !targetSet.has(child.id)) continue;
+                    // 全文自动纳管时跳过库文档顶部的首个一级标题占位块（createLibraryDoc 写入的 # 库名）
+                    if (!targetSet && idx === 0 && child.type === "h") continue;
+
+                    let kramdown = "";
+                    try {
+                        const body = parseKramdown(await this.kernel.request("getBlockKramdown", {id: child.id}));
+                        kramdown = storedKramdownToBody(normalizeKramdownIal(body?.kramdown ?? "")).trim();
+                    } catch {
+                        continue;
+                    }
+                    if (!kramdown) continue;
+
+                    const now = Date.now();
+                    let logicalId = newLogicalId(now);
+                    while (this.createdLogicalIds.has(logicalId) || this.index?.items.has(logicalId)) {
+                        logicalId = newLogicalId(now + Math.floor(Math.random() * 1000));
+                    }
+                    const itemType = inferItemType(child.type, child.subtype ?? "", kramdown);
+                    const title = deriveTitle(kramdown, itemType, existingAttrs).slice(0, LIMITS.title);
+                    const nativeTags = itemType === "code" ? [] : extractKramdownNativeTags(kramdown);
+                    const mergedTags = cleanTagList([...cleanTagList(existingAttrs[ATTR.tags]), ...nativeTags]);
+                    const varCount = itemType === "code" ? 0 : countAskFields(kramdown);
+
+                    const newAttrs: Record<string, string> = {
+                        [ATTR.id]: logicalId,
+                        [ATTR.type]: itemType,
+                        [ATTR.title]: title,
+                        [ATTR.created]: String(now),
+                        [ATTR.updated]: String(now),
+                        [ATTR.srcDoc]: docId,
+                        [ATTR.srcBlock]: child.id,
+                        [ATTR.srcType]: "manual",
+                    };
+                    if (mergedTags.length > 0) newAttrs[ATTR.tags] = mergedTags.join(",");
+                    if (varCount > 0) newAttrs[ATTR.vars] = String(Math.min(varCount, LIMITS.maxAskFields));
+
+                    try {
+                        await this.kernel.request("setBlockAttrs", {id: child.id, attrs: newAttrs}, {maxRetries: 0});
+                    } catch (err) {
+                        return toFailureReceipt(err);
+                    }
+                    this.createdLogicalIds.add(logicalId);
+                    const item = normalizeCommonItem({
+                        blockId: child.id,
+                        libraryDocId: docId,
+                        attrs: {...existingAttrs, ...newAttrs},
+                        blockType: child.type,
+                        subtype: child.subtype,
+                        kramdown,
+                    });
+                    if (item) adoptedItems.push(item);
+                }
+            }
+
+            if (adoptedItems.length > 0) {
+                this.invalidateIndex();
+                await this.ensureIndex();
+                this.notifyItemsChanged(adoptedItems.map((i) => i.id));
+            }
+            return ok({adopted: adoptedItems.length, items: adoptedItems});
+        });
+    }
+
+    /**
+     * 从条目关联的思源来源块（sourceBlockId / targetBlockId）拉取最新 Kramdown 正文并更新本条目。
+     */
+    async pullFromSourceBlock(itemId: string): Promise<Receipt<{item: CommonItem; markdown: string}>> {
+        const got = await this.getItem(itemId);
+        if (!got.ok) return {ok: false, reason: got.reason, message: got.message};
+        const item = got.data;
+        const sourceBlockId = item.source.sourceBlockId || item.targetBlockId;
+        if (!isBlockId(sourceBlockId)) {
+            return fail("invalid-input", "该条目未关联有效的思源来源块 ID");
+        }
+        try {
+            const existMap = parseExistingMap(await this.kernel.request("checkBlocksExist", {ids: [sourceBlockId]}));
+            if (existMap[sourceBlockId] === false) {
+                return fail("not-found", "来源块在思源中已不存在");
+            }
+            const raw = parseKramdown(await this.kernel.request("getBlockKramdown", {id: sourceBlockId}));
+            if (!raw || typeof raw.kramdown !== "string") {
+                return fail("not-found", "无法读取思源来源块内容");
+            }
+            const markdown = storedKramdownToBody(normalizeKramdownIal(raw.kramdown)).trim();
+            if (!markdown) {
+                return fail("invalid-input", "思源来源块内容为空");
+            }
+            if (item.itemType === "blockref") {
+                this.invalidateIndex();
+                await this.ensureIndex();
+                this.notifyItemsChanged([itemId]);
+                return ok({item, markdown});
+            }
+            const nativeTags = item.itemType === "code" ? [] : extractKramdownNativeTags(markdown);
+            const mergedTags = cleanTagList([...item.tags, ...nativeTags]);
+            const updated = await this.updateItem(itemId, {
+                markdown,
+                tags: mergedTags,
+            });
+            if (!updated.ok) return {ok: false, reason: updated.reason, message: updated.message};
+            return ok({item: updated.data.item, markdown});
+        } catch (err) {
+            return toFailureReceipt(err);
+        }
+    }
+
+    /**
+     * 将本条目当前正文回写至其关联的思源来源块（sourceBlockId / targetBlockId），并完整保留原块属性。
+     */
+    async pushToSourceBlock(itemId: string): Promise<Receipt<{sourceBlockId: string}>> {
+        return this.withWriteLock(`push-source:${itemId}`, async () => {
+            const got = await this.getItem(itemId);
+            if (!got.ok) return {ok: false, reason: got.reason, message: got.message};
+            const item = got.data;
+            const sourceBlockId = item.source.sourceBlockId || item.targetBlockId;
+            if (!isBlockId(sourceBlockId)) {
+                return fail("invalid-input", "该条目未关联有效的思源来源块 ID");
+            }
+            const kd = await this.getStoredItemKramdown(item);
+            if (!kd.ok) return {ok: false, reason: kd.reason, message: kd.message};
+            try {
+                const existMap = parseExistingMap(await this.kernel.request("checkBlocksExist", {ids: [sourceBlockId]}));
+                if (existMap[sourceBlockId] === false) {
+                    return fail("not-found", "来源块在思源中已不存在");
+                }
+                const oldSourceAttrs = parseAttrs(await this.kernel.request("getBlockAttrs", {id: sourceBlockId}));
+                await this.kernel.request("updateBlock", {
+                    id: sourceBlockId,
+                    dataType: "markdown",
+                    data: toItemStorageMarkdown(kd.data),
+                }, {maxRetries: 0});
+                const restorable = restorableAttrs(oldSourceAttrs);
+                if (Object.keys(restorable).length > 0) {
+                    await this.kernel.request("setBlockAttrs", {
+                        id: sourceBlockId,
+                        attrs: restorable,
+                    }, {maxRetries: 0});
+                }
+                this.notifyItemsChanged([itemId]);
+                return ok({sourceBlockId});
+            } catch (err) {
+                return toFailureReceipt(err);
+            }
+        });
     }
 }

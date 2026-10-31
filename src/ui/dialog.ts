@@ -78,6 +78,8 @@ export interface DialogDeps {
     /** 批量更新条目标签与分类（G30 / ADR 0082 / T-0142） */
     batchUpdateMetadata?: (itemIds: string[], patch: BatchTagCategoryPatch) => Promise<BatchOperationReceipt>;
     openSource: (itemId: string) => Promise<{ok: boolean; message: string}>;
+    pullFromSource?: (itemId: string) => Promise<boolean>;
+    pushToSource?: (itemId: string) => Promise<boolean>;
     editItem: (itemId: string) => Promise<void>;
     deleteItem: (itemId: string) => Promise<void>;
     /** 筛选状态持久化（类型/标签/分类跨会话记忆；state.uiPrefs 承载） */
@@ -3148,6 +3150,32 @@ export class CommonSearchDialog {
                 }).catch(() => {});
             }
         }
+        if (!entry.isOmni && isBlockId(entry.sourceBlockId) && entry.sourceBlockId !== entry.blockId) {
+            if (this.deps.pullFromSource) {
+                const pullBtn = document.createElement("button");
+                pullBtn.type = "button";
+                pullBtn.className = "xlc-meta-chip";
+                pullBtn.dataset.xlcControl = "preview.pull-source";
+                pullBtn.textContent = "↻ 拉取原块";
+                pullBtn.title = "从思源来源块拉取最新内容并更新本条目";
+                pullBtn.addEventListener("click", () => {
+                    void this.deps.pullFromSource?.(entry.id);
+                });
+                meta.appendChild(pullBtn);
+            }
+            if (this.deps.pushToSource && entry.itemType !== "blockref") {
+                const pushBtn = document.createElement("button");
+                pushBtn.type = "button";
+                pushBtn.className = "xlc-meta-chip";
+                pushBtn.dataset.xlcControl = "preview.push-source";
+                pushBtn.textContent = "⤴ 回写原块";
+                pushBtn.title = "将本条目当前正文回写至思源来源块";
+                pushBtn.addEventListener("click", () => {
+                    void this.deps.pushToSource?.(entry.id);
+                });
+                meta.appendChild(pushBtn);
+            }
+        }
         if (this.deps.getAdjacentBlocks && isBlockId(resolveEntryBlockId(entry)) && isBlockId(entry.sourceDocId || entry.libraryDocId)) {
             const probeBtn = document.createElement("button");
             probeBtn.type = "button";
@@ -3709,6 +3737,14 @@ export class CommonSearchDialog {
                 addSilent("↗", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
                 if (this.deps.openDocBlock && isBlockId(entry.blockId) && isBlockId(entry.sourceDocId) && entry.sourceDocId !== entry.libraryDocId) {
                     addSilent("📦", "在思源库文档中定位本体块", () => this.deps.openDocBlock!(entry.blockId));
+                }
+                if (isBlockId(entry.sourceBlockId) && entry.sourceBlockId !== entry.blockId) {
+                    if (this.deps.pullFromSource) {
+                        addSilent("↻", "从思源来源块拉取最新内容", () => this.deps.pullFromSource!(entry.id));
+                    }
+                    if (this.deps.pushToSource && entry.itemType !== "blockref") {
+                        addSilent("⤴", "将本条内容回写至思源来源块", () => this.deps.pushToSource!(entry.id));
+                    }
                 }
                 addSilent("✎", this.deps.t("edit"), () => this.deps.editItem(entry.id));
                 addSilent("⧉", this.deps.t("duplicateItem"), () => this.deps.duplicateItem(entry.id));

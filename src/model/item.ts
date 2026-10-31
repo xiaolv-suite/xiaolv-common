@@ -140,6 +140,31 @@ export function cleanTagList(v: unknown): string[] {
     return out;
 }
 
+/**
+ * 从思源块 Kramdown 正文中提取原生双井号标签（#标签#）与 textmark 节点标签，
+ * 自动跳过代码围栏与行内代码反引号，避免把代码中的 #宏# 误识为标签。
+ */
+export function extractKramdownNativeTags(kramdown: string): string[] {
+    if (typeof kramdown !== "string" || !kramdown) return [];
+    const tags: string[] = [];
+    const spanPattern = /<span\b(?=[^>]*\bdata-type=["']tag["'])[^>]*>([^<]*)<\/span>/gi;
+    for (const match of kramdown.matchAll(spanPattern)) {
+        if (match[1]) tags.push(match[1]);
+    }
+    const stripped = kramdown
+        .replace(/```[\s\S]*?```/g, " ")
+        .replace(/`[^`\n]+`/g, " ")
+        .replace(/[\u200b-\u200d\ufeff]/g, "");
+    const hashPattern = /(?:^|[\s,，。；;、()（）[\]【】])#([^\s#`]{1,32})#(?=$|[\s,，。；;、()（）[\]【】.#])/g;
+    for (const match of stripped.matchAll(hashPattern)) {
+        const candidate = match[1]?.trim() ?? "";
+        if (candidate && !/^[0-9a-fA-F]{3,8}$/.test(candidate)) {
+            tags.push(candidate);
+        }
+    }
+    return cleanTagList(tags);
+}
+
 export function cleanShortcode(v: unknown): string {
     if (typeof v !== "string") return "";
     let s = v.trim();

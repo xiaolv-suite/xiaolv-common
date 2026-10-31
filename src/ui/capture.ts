@@ -2,7 +2,7 @@
 // 剪贴板读取失败（权限/平台）诚实回执，保留手动输入。
 import {Dialog, confirm} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
-import {ItemType, cleanShortcode, isSafeHttpUrl} from "../model/item";
+import {ItemType, cleanShortcode, extractKramdownNativeTags, isSafeHttpUrl} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {NewItemInput} from "../service/library";
 import {buildVariableBar} from "./variable-form";
@@ -644,7 +644,9 @@ export class CaptureDialog {
         // 标签 + 分类（原型：双栏行）
         const tagRow = document.createElement("div");
         tagRow.className = "xlc-form-row";
-        const initialTags = overrides?.tags ? overrides.tags.join("; ") : "";
+        const autoTags = defaultType !== "code" ? extractKramdownNativeTags(defaultText) : [];
+        const mergedInitialTags = Array.from(new Set([...(overrides?.tags ?? []), ...autoTags]));
+        const initialTags = mergedInitialTags.length > 0 ? mergedInitialTags.join("; ") : "";
         const tagsEl = field(t("tags"), initialTags, false, "xlc-form-tags", tagRow);
         tagsEl.dataset.xlcControl = "capture.tags";
         const tagsHint = document.createElement("span");

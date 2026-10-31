@@ -467,6 +467,27 @@ export default class XiaolvCommonPlugin extends Plugin {
             const value = payload as {sessionId?: string; batchId?: string} | undefined;
             return this.discovery.undoBatch(value?.sessionId ?? "", value?.batchId ?? "");
         };
+        this.protocolCommands["xiaolv.common.adoptLibraryBlocks"] = async (payload) => {
+            const blockIds = (payload as {blockIds?: string[]} | undefined)?.blockIds;
+            const res = await this.library.adoptUnmanagedLibraryBlocks(blockIds);
+            if (res.ok && res.data.adopted > 0) {
+                this.notifyExternalDataChange();
+            }
+            return res;
+        };
+        this.protocolCommands["xiaolv.common.pullFromSource"] = async (payload) => {
+            const itemId = (payload as {itemId?: string} | undefined)?.itemId ?? "";
+            const res = await this.library.pullFromSourceBlock(itemId);
+            if (res.ok) {
+                this.invalidatePreviewCache([itemId]);
+                this.notifyExternalDataChange();
+            }
+            return res;
+        };
+        this.protocolCommands["xiaolv.common.pushToSource"] = async (payload) => {
+            const itemId = (payload as {itemId?: string} | undefined)?.itemId ?? "";
+            return this.library.pushToSourceBlock(itemId);
+        };
     }
 
     /** 当前文档发现的统一入口，供命令面板、右键菜单和协议调用复用。 */
@@ -1211,7 +1232,23 @@ export default class XiaolvCommonPlugin extends Plugin {
                         },
                     });
                 }
-                if (blockIds.length > 1) {
+                const isInLibraryDoc = Boolean(docId && this.config?.containerDocIds.includes(docId));
+                if (isInLibraryDoc && !matchedEntry) {
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: `原地纳管为小驴常用条目（共 ${blockIds.length} 块，不复制块）`,
+                        click: () => {
+                            void this.library.adoptUnmanagedLibraryBlocks(blockIds).then((res) => {
+                                if (res.ok) {
+                                    this.notify("info", `已原地纳管 ${res.data.adopted} 个库文档块`);
+                                    this.notifyExternalDataChange();
+                                } else {
+                                    this.notify("error", res.message);
+                                }
+                            });
+                        },
+                    });
+                } else if (blockIds.length > 1) {
                     menu.addItem({
                         icon: "iconXlcCommon",
                         label: `合并选中的 ${blockIds.length} 个块存入小驴常用`,
@@ -1231,12 +1268,30 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
             };
             this.eventBus.on("click-blockicon" as any, this.blockIconMenuHandler as any);
-            // 文档标题图标菜单（click-editortitleicon）：定向插入到本文档、扫描本文档候选、整篇收录
+            // 文档标题图标菜单（click-editortitleicon）：定向插入到本文档、扫描本文档候选、库文档手写块一键纳管
             this.editorTitleMenuHandler = (event) => {
                 const {menu, data, protyle} = event.detail ?? ({} as any);
                 if (!menu || typeof menu.addItem !== "function") return;
                 const docId = data?.id || data?.rootID || protyle?.block?.rootID || this.host?.currentDocId() || "";
                 if (!isBlockId(docId)) return;
+                if (this.config?.containerDocIds.includes(docId)) {
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: "纳管本库文档中手写的新块",
+                        click: () => {
+                            void this.library.adoptUnmanagedLibraryBlocks().then((res) => {
+                                if (res.ok) {
+                                    this.notify("info", res.data.adopted > 0
+                                        ? `已原地纳管 ${res.data.adopted} 个手写新块`
+                                        : "当前库文档无待纳管的新块");
+                                    this.notifyExternalDataChange();
+                                } else {
+                                    this.notify("error", res.message);
+                                }
+                            });
+                        },
+                    });
+                }
                 menu.addItem({
                     icon: "iconXlcCommon",
                     label: this.i18nFn()("insertToDocMenu") || "从小驴常用插入到此文档…",
@@ -1452,6 +1507,12 @@ export default class XiaolvCommonPlugin extends Plugin {
             openSettings: () => this.openSetting(),
             openLibraryDoc: () => {
                 this.openLibraryDocument();
+            },
+            adoptLibraryBlocks: async () => {
+                const res = await this.library.adoptUnmanagedLibraryBlocks();
+                if (res.ok && res.data.adopted > 0) {
+                    this.notify("info", `已自动纳管库文档中手写的 ${res.data.adopted} 个新块`);
+                }
             },
             getUsage: () => this.state.usage,
             isSourceMissing: (entry) => {
@@ -2036,6 +2097,26 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.notify("info", this.i18nFn()("sourceOpened"));
                 return {ok: true, message: "opened"};
             },
+            pullFromSource: async (itemId) => {
+                const res = await this.library.pullFromSourceBlock(itemId);
+                if (!res.ok) {
+                    this.notify("error", res.message);
+                    return false;
+                }
+                this.invalidatePreviewCache([itemId]);
+                this.notify("info", `已从思源原块同步最新内容：「${shortTitle(res.data.item.title)}」`);
+                this.notifyExternalDataChange();
+                return true;
+            },
+            pushToSource: async (itemId) => {
+                const res = await this.library.pushToSourceBlock(itemId);
+                if (!res.ok) {
+                    this.notify("error", res.message);
+                    return false;
+                }
+                this.notify("info", "已将当前条目内容回写至思源来源块");
+                return true;
+            },
             insertRaw: (markdown, target) => withEditorTarget("insert", async () => {
                 const trimmed = (markdown ?? "").trim();
                 if (!trimmed) return false;
@@ -2337,6 +2418,28 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.host.openDoc(item.libraryDocId, item.blockId);
             });
             srcRow.appendChild(openLibBlockBtn);
+        }
+        if (isBlockId(item.source.sourceBlockId) && item.source.sourceBlockId !== item.blockId) {
+            const pullSourceBtn = document.createElement("button");
+            pullSourceBtn.type = "button";
+            pullSourceBtn.className = "b3-button b3-button--text xlc-form-ai";
+            pullSourceBtn.dataset.xlcControl = "edit.pull-source";
+            pullSourceBtn.textContent = "↻ 从原块拉取";
+            pullSourceBtn.title = "从关联的思源来源块拉取最新内容填入编辑框";
+            pullSourceBtn.addEventListener("click", () => {
+                void this.library.pullFromSourceBlock(item.id).then((res) => {
+                    if (res.ok) {
+                        contentEl.value = res.data.markdown;
+                        tagsEl.value = res.data.item.tags.join(", ");
+                        this.invalidatePreviewCache([item.id]);
+                        this.notifyExternalDataChange();
+                        this.notify("info", "已从思源来源块拉取最新内容");
+                    } else {
+                        this.notify("error", res.message);
+                    }
+                });
+            });
+            srcRow.appendChild(pullSourceBtn);
         }
         form.appendChild(srcRow);
         const actions = document.createElement("div");

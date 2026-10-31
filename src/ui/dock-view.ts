@@ -39,6 +39,7 @@ export interface DockViewDeps {
     newItem: (initialTitle?: string) => void;
     openSettings?: () => void;
     openLibraryDoc?: () => void;
+    adoptLibraryBlocks?: () => Promise<void>;
     getUsage?: () => Record<string, {count: number; lastAt?: number}>;
     isSourceMissing: (entry: SearchEntry) => boolean;
     hasActiveEditor?: () => boolean;
@@ -144,7 +145,13 @@ export class DockView {
         refreshBtn.title = this.deps.t("reindex") || "刷新内容库";
         if (typeof refreshBtn.setAttribute === "function") refreshBtn.setAttribute("aria-label", refreshBtn.title);
         refreshBtn.textContent = "↺";
-        refreshBtn.addEventListener("click", () => void this.refresh());
+        refreshBtn.addEventListener("click", () => {
+            if (this.deps.adoptLibraryBlocks) {
+                void this.deps.adoptLibraryBlocks().finally(() => void this.refresh());
+            } else {
+                void this.refresh();
+            }
+        });
         actions.appendChild(refreshBtn);
 
         if (this.deps.openLibraryDoc) {
