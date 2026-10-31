@@ -508,10 +508,138 @@ function check(name, ok, detail = "") {
             clipTest.defaultOff && clipTest.blockedWhenOff && clipAfterOptIn.enabledNow && clipAfterOptIn.recorded,
             JSON.stringify({...clipTest, ...clipAfterOptIn}));
 
+        // ══════════ 第 11 步：收尾批验证（Alt+H 真实路径、Alt+Shift+M 多选、QuickLook 双态与上下键同步、420px 窄窗不溢出） ══════════
+        await page.evaluate(() => {
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            void p.protocolCommands["xiaolv.common.open"]();
+        });
+        await page.waitForSelector(".xlc-list .xlc-row[data-xlc-index='0']", {timeout: 10000});
+        // 搜索含 {{xlc:date}} 动态宏的条目（会议纪要骨架 / 日计划模板）
+        await page.locator(".xlc-search-input").fill("会议纪要");
+        await sleep(300);
+        const step11 = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const notices = [];
+            const origNotify = p.notify.bind(p);
+            p.notify = (k, m) => { notices.push({k, m}); origNotify(k, m); };
+
+            const list = document.querySelector(".xlc-list");
+            list?.focus();
+            // Alt+H：不应再拿 category（"写作"）冒充文档路径
+            list?.dispatchEvent(new KeyboardEvent("keydown", {key: "h", altKey: true, bubbles: true, cancelable: true}));
+            const altHMsg = notices[notices.length - 1]?.m ?? "";
+            const altHHonest = altHMsg.includes("关联文档 ID") && !altHMsg.includes("所属路径: 写作");
+
+            // Alt+Shift+M：切换多选模式（不再被 Alt+M 遮蔽为死代码）
+            list?.dispatchEvent(new KeyboardEvent("keydown", {key: "M", altKey: true, shiftKey: true, bubbles: true, cancelable: true}));
+            const multiToggledOn = document.querySelector(".xlc-batch-bar") && getComputedStyle(document.querySelector(".xlc-batch-bar")).display !== "none";
+            list?.dispatchEvent(new KeyboardEvent("keydown", {key: "M", altKey: true, shiftKey: true, bubbles: true, cancelable: true}));
+            const multiToggledOff = !document.querySelector(".xlc-batch-bar") || getComputedStyle(document.querySelector(".xlc-batch-bar")).display === "none";
+
+            // 清空搜索词使列表有多条结果，按 Space 键打开 QuickLook 验证双态预览 + ArrowDown 同步刷新
+            const inp = document.querySelector(".xlc-search-input");
+            inp.value = "";
+            inp.dispatchEvent(new Event("input", {bubbles: true}));
+            await new Promise((r) => setTimeout(r, 300));
+            list?.focus();
+            list?.dispatchEvent(new KeyboardEvent("keydown", {key: " ", bubbles: true, cancelable: true}));
+            await new Promise((r) => setTimeout(r, 300));
+            const titleBefore = document.querySelector(".xlc-quicklook-title")?.textContent ?? "";
+            list?.dispatchEvent(new KeyboardEvent("keydown", {key: "ArrowDown", bubbles: true, cancelable: true}));
+            await new Promise((r) => setTimeout(r, 300));
+            const titleAfter = document.querySelector(".xlc-quicklook-title")?.textContent ?? "";
+            list?.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true}));
+
+            // 切回「会议纪要」检查 QuickLook 动态宏双态预览
+            inp.value = "会议纪要";
+            inp.dispatchEvent(new Event("input", {bubbles: true}));
+            await new Promise((r) => setTimeout(r, 300));
+            p.searchDialog?.toggleQuickLookPublic?.();
+            await new Promise((r) => setTimeout(r, 300));
+            const hasDualInQuickLook = Boolean(document.querySelector(".xlc-quicklook-body .xlc-preview-dual"));
+            p.searchDialog?.closeQuickLook?.();
+
+            return {
+                altHHonest,
+                multiToggledOn,
+                multiToggledOff,
+                titleBefore,
+                titleAfter,
+                quickLookArrowSynced: Boolean(titleBefore && titleAfter && titleBefore !== titleAfter),
+                hasDualInQuickLook,
+            };
+        });
+        await page.setViewportSize({width: 420, height: 720});
+        await sleep(100);
+        const narrowTrackFits = await page.evaluate(() => {
+            const track = document.querySelector(".xlc-segmented-track");
+            const dlg = document.querySelector(".b3-dialog__container");
+            if (!track || !dlg) return false;
+            return track.getBoundingClientRect().right <= dlg.getBoundingClientRect().right + 2;
+        });
+        await page.setViewportSize({width: 1280, height: 720});
+        check("步骤 11：Alt+H 真实路径、Alt+Shift+M 多选、QuickLook 双态与上下键同步、420px 窄窗不溢出",
+            step11.altHHonest && step11.multiToggledOn && step11.multiToggledOff
+                && step11.quickLookArrowSynced && step11.hasDualInQuickLook && narrowTrackFits,
+            JSON.stringify({...step11, narrowTrackFits}));
+
+        // ══════════ 第 12 步：DockView 完整正文拖拽、右键菜单 role="menu" 与 Esc 关闭、真实回执 ══════════
+        const step12 = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            let host = document.getElementById("xlc-e2e-dock-host");
+            if (!host) {
+                host = document.createElement("div");
+                host.id = "xlc-e2e-dock-host";
+                host.style.cssText = "position:fixed;right:0;top:0;width:300px;height:600px;z-index:9999;background:#fff;";
+                document.body.appendChild(host);
+            }
+            const dock = p.mountDockView(host);
+            await new Promise((r) => setTimeout(r, 400));
+            const search = host.querySelector(".xlc-dock-search-input");
+            search.value = "真机多段致歉";
+            search.dispatchEvent(new Event("input", {bubbles: true}));
+            await new Promise((r) => setTimeout(r, 350));
+            const row = host.querySelector(".xlc-dock-row");
+            if (!row) return {foundRow: false, reason: "no-row"};
+
+            // 触发 mouseenter 预取完整正文，再触发 dragstart 验证拖拽载荷包含完整代码块而非截断摘要
+            row.dispatchEvent(new MouseEvent("mouseenter", {bubbles: true}));
+            await new Promise((r) => setTimeout(r, 250));
+            let draggedText = "";
+            const dt = {setData(k, v) { if (k === "text/plain") draggedText = v; }};
+            const dragEv = new Event("dragstart", {bubbles: true});
+            Object.defineProperty(dragEv, "dataTransfer", {value: dt});
+            row.dispatchEvent(dragEv);
+
+            // 右键菜单 role="menu" + Escape 关闭
+            row.dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true, clientX: 100, clientY: 100}));
+            await new Promise((r) => setTimeout(r, 50));
+            const menu = document.querySelector(".xlc-dock-menu");
+            const menuRole = menu?.getAttribute("role");
+            document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true, cancelable: true}));
+            const menuClosed = !document.querySelector(".xlc-dock-menu");
+
+            dock.destroy();
+            host.remove();
+            return {
+                foundRow: true,
+                fullDragHasCode: draggedText.includes("const compensated = true;"),
+                menuRole,
+                menuClosed,
+            };
+        });
+        check("步骤 12：Dock 侧栏预取完整正文拖拽不截断、右键菜单具备 menu 语义且支持 Esc 关闭",
+            step12.foundRow && step12.fullDragHasCode && step12.menuRole === "menu" && step12.menuClosed,
+            JSON.stringify(step12));
+
         cleanup();
         const pass = results.filter((r) => r.ok).length;
         const fail = results.length - pass;
-        console.log(`\n真实思源宿主 10 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
+        console.log(`\n真实思源宿主 12 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
         process.exit(fail ? 1 : 0);
     } catch (err) {
         console.error(`[real-e2e] 异常：${err.stack || err.message}`);

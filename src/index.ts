@@ -863,7 +863,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     return;
                 }
                 const dockBtn = typeof document !== "undefined"
-                    ? document.querySelector<HTMLElement>('[data-type="xiaolv-common-dock"]')
+                    ? document.querySelector<HTMLElement>('[data-type$="xiaolv-common-dock"]')
                     : null;
                 if (dockBtn) {
                     dockBtn.click();
@@ -1161,7 +1161,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     data: {},
                     type: "xiaolv-common-dock",
                     init: (custom: any) => {
-                        this.dockView = new DockView(custom.element as HTMLElement, this.buildDockDeps());
+                        this.mountDockView(custom.element as HTMLElement);
                     },
                     destroy: () => {
                         this.dockView?.destroy();
@@ -1172,6 +1172,13 @@ export default class XiaolvCommonPlugin extends Plugin {
         } catch {
             // 宿主无 addDock API 保护
         }
+    }
+
+    /** 挂载侧边栏视图实例（供宿主 addDock.init 与真机端到端回归复用同一生产装配）。 */
+    public mountDockView(element: HTMLElement): DockView {
+        this.dockView?.destroy();
+        this.dockView = new DockView(element, this.buildDockDeps());
+        return this.dockView;
     }
 
     /** 侧栏与主搜索共用同一执行与变量填充路径（executor.run + openVariableFillCard + 变量记忆）。 */
@@ -1429,7 +1436,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             });
         };
         this.searchDialog?.destroy();
-        this.searchDialog = new CommonSearchDialog({
+        const dialogInstance = new CommonSearchDialog({
             t: this.i18nFn(),
             initialQuery,
             surroundText,
@@ -1981,11 +1988,15 @@ export default class XiaolvCommonPlugin extends Plugin {
             isFavorite: (itemId) => this.state.favorites.includes(itemId),
             close: () => {
                 dialogClosed = true;
-                this.searchDialog = null;
+                // 防止旧弹窗 130ms 销毁动画回调迟到时误清空新打开的 searchDialog 实例
+                if (this.searchDialog === dialogInstance) {
+                    this.searchDialog = null;
+                }
                 releaseTargetIfIdle();
             },
             isMobile: () => this.host.isMobile(),
         });
+        this.searchDialog = dialogInstance;
         this.searchDialog.insertTarget = insertTarget ? {docId: insertTarget.docId, hPath: insertTarget.hPath} : null;
         this.searchDialog.open();
     }

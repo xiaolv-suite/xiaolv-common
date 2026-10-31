@@ -15,7 +15,7 @@ import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics"
 import {toErrorMessage} from "../model/errors";
 import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch, findExactShortcodeMatch} from "../model/search";
 import {BatchTagCategoryPatch, BatchOperationReceipt} from "../model/batch-ops";
-import {InsertMode, buildBlockRef} from "../model/actions";
+import {InsertMode, buildBlockRef, buildEmbedBlock} from "../model/actions";
 import {TransformKind} from "../service/ai";
 import {ProviderRow} from "../model/provider-section";
 import {AskField, askFieldTag, hasCursorToken, listAskFields, listSnippetRefs, expandAsks, applyAskDefaults, stripCursorToken, stripAllVariables, hasDynamicMacros, expandMacroPreview} from "../model/variables";
@@ -32,6 +32,16 @@ import {transformCase} from "../model/placeholders";
 import {evaluateMathExpression} from "../model/calculator";
 
 import {AdjacentBlocksContext} from "../service/omni-search";
+
+/**
+ * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
+ * 全域检索条目的 entry.id 带 "xlc-omni-" 前缀，必须优先读取 targetBlockId / sourceBlockId / blockId 或剥离前缀。
+ */
+export function resolveEntryBlockId(entry: SearchEntry): string {
+    const strippedOmni = entry.id.startsWith("xlc-omni-") ? entry.id.slice("xlc-omni-".length) : entry.id;
+    const candidates = [entry.targetBlockId, entry.sourceBlockId, entry.blockId, strippedOmni];
+    return candidates.find((id): id is string => typeof id === "string" && isBlockId(id)) ?? "";
+}
 
 export interface DialogDeps {
     t: (key: string, ...args: string[]) => string;
@@ -1122,16 +1132,7 @@ export class CommonSearchDialog {
         embedBtn.setAttribute("aria-label", embedBtn.title);
         embedBtn.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
-            if (entry) {
-                const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
-                if (isBlockId(targetBlockId)) {
-                    void this.runActionFor(entry, undefined, "insert-embed");
-                    if (!this.pinWindow) this.destroy();
-                    this.deps.notify?.("info", "已插入同步嵌入块（源变动时自动同步）");
-                } else {
-                    this.deps.notify?.("error", "无法嵌入：未关联有效块 ID");
-                }
-            }
+            if (entry) void this.insertEntryEmbedOrRef(entry, "embed");
         });
 
         // 插入块引用按钮（Alt+Enter）
@@ -1144,16 +1145,7 @@ export class CommonSearchDialog {
         refBtn.setAttribute("aria-label", refBtn.title);
         refBtn.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
-            if (entry) {
-                const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
-                if (isBlockId(targetBlockId)) {
-                    void this.runActionFor(entry, undefined, "insert-ref");
-                    if (!this.pinWindow) this.destroy();
-                    this.deps.notify?.("info", "已插入块引用链接");
-                } else {
-                    this.deps.notify?.("error", "无法引用：未关联有效块 ID");
-                }
-            }
+            if (entry) void this.insertEntryEmbedOrRef(entry, "ref");
         });
 
         const spacer = document.createElement("span");
@@ -1168,7 +1160,7 @@ export class CommonSearchDialog {
             const entry = this.results[this.activeIndex];
             if (entry) {
                 if (entry.isOmni && this.deps.openDocBlock) {
-                    void this.deps.openDocBlock(entry.targetBlockId || entry.id);
+                    void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
                 } else {
                     void this.deps.openSource(entry.id);
                 }
@@ -1185,7 +1177,7 @@ export class CommonSearchDialog {
             if (entry) {
                 if (entry.isOmni) {
                     if (this.deps.quickEditBlock) {
-                        void this.deps.quickEditBlock(entry.targetBlockId || entry.id, entry.content || entry.summary || "");
+                        void this.deps.quickEditBlock(resolveEntryBlockId(entry) || entry.id, entry.content || entry.summary || "");
                     }
                 } else {
                     void this.deps.editItem(entry.id);
@@ -3272,7 +3264,38 @@ export class CommonSearchDialog {
         await this.insertEntryWithVars(entry, (fills) => this.runActionFor(entry, fills));
     }
 
+    /** 统一处理「插入嵌入块 / 插入块引用」（T-0757 / FN-02 & FN-07）：
+     *  - 全域条目提取真实 22 位块 ID 并走 insertProviderPayload；
+     *  - 库内条目统一走 runActionFor -> ActionExecutor，记录使用频次且只发一次真实回执（消除双 Toast）。 */
+    private async insertEntryEmbedOrRef(entry: SearchEntry, kind: "embed" | "ref"): Promise<void> {
+        const targetBlockId = resolveEntryBlockId(entry);
+        if (!isBlockId(targetBlockId)) {
+            this.deps.notify?.("error", kind === "embed" ? "无法嵌入：未关联有效块 ID" : "无法引用：未关联有效块 ID");
+            return;
+        }
+        await this.runActionFor(entry, undefined, kind === "embed" ? "insert-embed" : "insert-ref");
+        if (!this.pinWindow) this.destroy();
+    }
+
     private runActionFor(entry: SearchEntry, fills?: Record<string, string>, overrideMode?: InsertMode): Promise<unknown> {
+        // 全域检索条目未入库索引，按真实物理块 ID 或正文直接上屏
+        if (entry.isOmni) {
+            if (overrideMode === "insert-embed") {
+                const targetBlockId = resolveEntryBlockId(entry);
+                return this.deps.insertProviderPayload(buildEmbedBlock(targetBlockId), this.insertTarget ?? undefined);
+            }
+            if (overrideMode === "insert-ref") {
+                const targetBlockId = resolveEntryBlockId(entry);
+                const anchor = (entry.title || entry.summary || "引用").slice(0, 50).replace(/[\r\n]+/g, " ");
+                return this.deps.insertProviderPayload(buildBlockRef(targetBlockId, anchor), this.insertTarget ?? undefined);
+            }
+            let finalContent = entry.content || entry.summary || "";
+            if (fills) {
+                finalContent = expandAsks(finalContent, fills);
+            }
+            finalContent = applyAskDefaults(stripCursorToken(finalContent));
+            return this.deps.insertProviderPayload(finalContent, this.insertTarget ?? undefined);
+        }
         // 定向插入模式（文档树入口）：插入到指定文档而非活动编辑器
         if (this.insertTarget) {
             const target = this.insertTarget;
@@ -3280,23 +3303,6 @@ export class CommonSearchDialog {
                 ? overrideMode
                 : "insert";
             return this.deps.insertToDoc(entry.id, target.docId, target.hPath, fills, insertMode);
-        }
-        if (overrideMode === "insert-embed") {
-            const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
-            return this.deps.insertProviderPayload(`{{select * from blocks where id='${targetBlockId}'}}`);
-        }
-        if (overrideMode === "insert-ref") {
-            const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
-            const anchor = (entry.title || entry.summary || "引用").slice(0, 50).replace(/[\r\n]+/g, " ");
-            return this.deps.insertProviderPayload(buildBlockRef(targetBlockId, anchor));
-        }
-        if (entry.isOmni) {
-            let finalContent = entry.content || entry.summary || "";
-            if (fills) {
-                finalContent = expandAsks(finalContent, fills);
-            }
-            finalContent = applyAskDefaults(stripCursorToken(finalContent));
-            return this.deps.insertProviderPayload(finalContent);
         }
         const mode: InsertMode = overrideMode || (entry.itemType === "blockref" ? "insert-ref" : "insert");
         return fills
@@ -3536,7 +3542,7 @@ export class CommonSearchDialog {
             }
 
             // 快捷复制块引用语法 (Alt+R)
-            const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
+            const targetBlockId = resolveEntryBlockId(entry);
             if (isBlockId(targetBlockId)) {
                 addAction("((•))", "复制块引用语法 (Alt+R)", async () => {
                     const anchor = (entry.title || entry.summary || "引用").slice(0, 50).replace(/[\r\n]+/g, " ");
@@ -3623,10 +3629,10 @@ export class CommonSearchDialog {
                     }
                 } else {
                     if (this.deps.openDocBlock) {
-                        addSilent("↗", this.deps.t("locateInDoc"), () => this.deps.openDocBlock!(entry.targetBlockId || entry.id));
+                        addSilent("↗", this.deps.t("locateInDoc"), () => this.deps.openDocBlock!(resolveEntryBlockId(entry) || entry.id));
                     }
                     if (this.deps.quickEditBlock) {
-                        addSilent("✎", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock!(entry.targetBlockId || entry.id, entry.content || entry.summary || ""));
+                        addSilent("✎", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock!(resolveEntryBlockId(entry) || entry.id, entry.content || entry.summary || ""));
                     }
                     if (this.deps.captureOmniWithForm) {
                         addSilent("✦", this.deps.t("editAndCapture"), () => this.deps.captureOmniWithForm!(entry));
@@ -5568,25 +5574,20 @@ export class CommonSearchDialog {
             if (total > 0) this.setNav(Math.min(this.navPosition() + 1, total - 1));
             this.paintActive();
             this.updatePreview();
+            if (this.quickLookOpen) this.refreshQuickLookContent();
         } else if (e.key === "ArrowUp") {
             e.preventDefault();
             this.setNav(Math.max(this.navPosition() - 1, 0));
             this.paintActive();
             this.updatePreview();
+            if (this.quickLookOpen) this.refreshQuickLookContent();
         } else if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
             // Shift+Enter: 作为思源原生嵌入块（insert-embed，Notion Synced Block 同款实时同步）直接插入
             e.preventDefault();
             if (this.quickLookOpen) this.closeQuickLook();
             const entry = this.results[this.activeIndex];
             if (entry) {
-                const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
-                if (isBlockId(targetBlockId)) {
-                    await this.runActionFor(entry, undefined, "insert-embed");
-                    if (!this.pinWindow) this.destroy();
-                    this.deps.notify?.("info", "已插入同步嵌入块（源变动时自动同步）");
-                } else {
-                    this.deps.notify?.("error", "无法嵌入：未关联有效块 ID");
-                }
+                await this.insertEntryEmbedOrRef(entry, "embed");
             }
             return;
         } else if (e.key === "Enter" && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -5595,14 +5596,7 @@ export class CommonSearchDialog {
             if (this.quickLookOpen) this.closeQuickLook();
             const entry = this.results[this.activeIndex];
             if (entry) {
-                const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
-                if (isBlockId(targetBlockId)) {
-                    await this.runActionFor(entry, undefined, "insert-ref");
-                    if (!this.pinWindow) this.destroy();
-                    this.deps.notify?.("info", "已插入块引用链接");
-                } else {
-                    this.deps.notify?.("error", "无法引用：未关联有效块 ID");
-                }
+                await this.insertEntryEmbedOrRef(entry, "ref");
             }
             return;
         } else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
@@ -5708,7 +5702,7 @@ export class CommonSearchDialog {
             if (this.quickLookOpen) this.closeQuickLook();
             const entry = this.results[this.activeIndex];
             if (entry) {
-                const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
+                const targetBlockId = resolveEntryBlockId(entry);
                 if (isBlockId(targetBlockId)) {
                     const anchor = (entry.title || entry.summary || "引用").slice(0, 50).replace(/[\r\n]+/g, " ");
                     try {
@@ -5732,7 +5726,7 @@ export class CommonSearchDialog {
             if (entry) {
                 if (entry.isOmni) {
                     if (this.deps.openDocBlock) {
-                        void this.deps.openDocBlock(entry.targetBlockId || entry.id);
+                        void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
                     } else {
                         void this.deps.openSource(entry.id);
                     }
@@ -5741,6 +5735,11 @@ export class CommonSearchDialog {
                 }
                 if (!this.pinWindow) this.destroy();
             }
+            return;
+        } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
+            // Alt+Shift+M 切换多选模式（置于 Alt+M 之前，避免被无 Shift 分支遮蔽）
+            e.preventDefault();
+            this.toggleMultiSelectMode();
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
             // Alt+M: 复制条目原始 Markdown 语法到剪贴板
@@ -5760,13 +5759,18 @@ export class CommonSearchDialog {
             void this.toggleAdjacentContextProbe();
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "h" || e.key === "H")) {
-            // Alt+H: 上下文层级探针（查看当前块所属完整路径大纲）
+            // Alt+H: 查看当前块所属真实源文档路径（绝不拿 category 冒充文档路径，T-0758 / FN-05）
             e.preventDefault();
             const entry = this.results[this.activeIndex];
             if (entry) {
-                const docPath = entry.sourceDocPath || (entry.category && entry.category !== "全库内容" && entry.category !== "剪贴板" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : "未关联文档");
-                const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
-                this.deps.notify?.("info", `📍 所属路径: ${docPath}${targetBlockId ? ` · [${targetBlockId.slice(0, 16)}]` : ""}`);
+                const targetBlockId = resolveEntryBlockId(entry);
+                if (entry.sourceDocPath) {
+                    this.deps.notify?.("info", `📍 所属文档路径: ${entry.sourceDocPath}${targetBlockId ? ` · [${targetBlockId}]` : ""}`);
+                } else if (entry.sourceDocId || entry.libraryDocId) {
+                    this.deps.notify?.("info", `📍 关联文档 ID: ${entry.sourceDocId || entry.libraryDocId}${targetBlockId ? ` · 块 [${targetBlockId}]` : ""}（按 Alt+D 可打开来源定位）`);
+                } else {
+                    this.deps.notify?.("info", "当前条目未关联思源源文档路径");
+                }
             }
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "p" || e.key === "P")) {
@@ -5776,11 +5780,23 @@ export class CommonSearchDialog {
             return;
         } else if (e.key === "Escape") {
             e.preventDefault();
+            if (this.quickLookOpen) {
+                this.closeQuickLook();
+                return;
+            }
             if (this.multiSelectMode) {
                 this.exitMultiSelectMode();
                 return;
             }
             this.destroy();
+        } else if (
+            e.key === " " && !isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+            && !(e.target as HTMLElement | null)?.closest?.("input, textarea, select, button")
+        ) {
+            if (e.repeat) return;
+            e.preventDefault();
+            this.toggleQuickLook();
+            return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (/^[1-9]$/.test(e.key) || /^Digit[1-9]$/.test(e.code))) {
             let num: number | null = null;
             if (/^[1-9]$/.test(e.key)) {
@@ -5874,14 +5890,14 @@ export class CommonSearchDialog {
                 e.preventDefault();
                 if (entry.isOmni) {
                     if (this.deps.quickEditBlock) {
-                        void this.deps.quickEditBlock(entry.targetBlockId || entry.id, entry.content || entry.summary || "");
+                        void this.deps.quickEditBlock(resolveEntryBlockId(entry) || entry.id, entry.content || entry.summary || "");
                     }
                 } else {
                     this.destroy();
                     await this.deps.editItem(entry.id);
                 }
             }
-        } else if ((e.ctrlKey || e.metaKey || e.altKey) && (e.key === "d" || e.key === "D")) {
+        } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "d" || e.key === "D")) {
             if (e.repeat) return;
             if (this.activeProvider >= 0) return;
             const entry = this.results[this.activeIndex];
@@ -5921,13 +5937,7 @@ export class CommonSearchDialog {
                 await this.deps.deleteItem(entry.id);
             }
         } else if (
-            e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")
-        ) {
-            e.preventDefault();
-            this.toggleMultiSelectMode();
-        } else if (
-            e.altKey && !e.ctrlKey && !e.metaKey &&
-            (e.key === "f" || e.key === "F" || e.key === "s" || e.key === "S")
+            e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "f" || e.key === "F")
         ) {
             if (e.repeat) return;
             if (this.activeProvider >= 0) return;
@@ -6004,7 +6014,6 @@ export class CommonSearchDialog {
         if (!root || !entry || this.quickLookOpen) return false;
 
         this.quickLookOpen = true;
-        const seq = ++this.quickLookSeq;
         const active = root.ownerDocument?.activeElement as HTMLElement | null;
         this.quickLookReturnFocus = active && active !== root ? active : null;
 
@@ -6078,32 +6087,73 @@ export class CommonSearchDialog {
             this.closeQuickLook();
         });
         host.appendChild(overlay);
+        this.refreshQuickLookContent();
+        return true;
+    }
+
+    /** 刷新极速预览大卡片（打开时以及上下方向键切换条目时同步更新，含动态宏双态预览，UI-07 / T-0759）。 */
+    private refreshQuickLookContent(): void {
+        const root = this.dialog?.element;
+        const overlay = root?.querySelector<HTMLElement>(".xlc-quicklook");
+        const entry = this.getActiveEntry();
+        if (!overlay || !entry || !this.quickLookOpen) return;
+
+        const seq = ++this.quickLookSeq;
+        overlay.setAttribute("aria-label", entry.title || "");
+        const title = overlay.querySelector<HTMLElement>(".xlc-quicklook-title");
+        const meta = overlay.querySelector<HTMLElement>(".xlc-quicklook-meta");
+        const hints = overlay.querySelector<HTMLElement>(".xlc-quicklook-hints");
+        const body = overlay.querySelector<HTMLElement>(".xlc-quicklook-body");
+        if (!title || !meta || !hints || !body) return;
+
+        title.textContent = entry.title || "";
+        meta.setAttribute("aria-label", `条目元数据：${entry.itemType}`);
+        const baseMeta = `${entry.itemType}${entry.varCount ? ` · {${entry.varCount}} 变量` : ""}${entry.alias ? ` · 别名: ${entry.alias}` : ""}`;
+        meta.textContent = baseMeta;
+        hints.textContent = entry.isOmni
+            ? "Space / Esc 关闭　Enter 插入　Alt+S 收录到常用库"
+            : "Space / Esc 关闭　Enter 插入　Alt+C 复制";
+
+        const paintBody = (text: string) => {
+            body.innerHTML = "";
+            if (text) {
+                const metrics = calculateTextMetrics(text);
+                if (metrics.nonWhitespaceChars > 0) {
+                    meta.textContent = `${baseMeta} · ${formatReadingMetrics(metrics)}`;
+                }
+            }
+            if (entry.itemType !== "code" && hasDynamicMacros(text)) {
+                renderDualMacroPreview(
+                    body,
+                    text,
+                    expandMacroPreview(text),
+                    entry.itemType,
+                    {
+                        templateSource: this.deps.t("previewTemplateSource") || "模板源码",
+                        expandedEffect: this.deps.t("previewExpandedEffect") || "展开后真实效果",
+                    },
+                );
+            } else {
+                renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
+            }
+        };
 
         if (entry.isOmni) {
-            loading.remove();
-            const text = entry.content || entry.summary || "";
-            const metrics = calculateTextMetrics(text);
-            if (metrics.nonWhitespaceChars > 0) {
-                meta.textContent += ` · ${formatReadingMetrics(metrics)}`;
-            }
-            renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
+            paintBody(entry.content || entry.summary || "");
         } else {
-            const id = entry.id;
-            void this.deps.preview(id).then((text) => {
+            body.innerHTML = "";
+            const loading = document.createElement("div");
+            loading.className = "xlc-quicklook-loading";
+            loading.textContent = "加载中…";
+            body.appendChild(loading);
+            void this.deps.preview(entry.id).then((text) => {
                 if (this.quickLookSeq !== seq || !this.quickLookOpen) return;
-                loading.remove();
-                if (text) {
-                    const metrics = calculateTextMetrics(text);
-                    if (metrics.nonWhitespaceChars > 0) {
-                        meta.textContent += ` · ${formatReadingMetrics(metrics)}`;
-                    }
-                }
-                renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
+                paintBody(text || "");
             }).catch(() => {
+                if (this.quickLookSeq !== seq || !this.quickLookOpen) return;
                 loading.textContent = "预览加载失败";
             });
         }
-        return true;
     }
 
     /** 切换多选模式（G30 / ADR 0082） */
@@ -6257,20 +6307,36 @@ export class CommonSearchDialog {
             batchCaptureBtn.disabled = true;
             batchCaptureBtn.textContent = "正在收录…";
             let successCount = 0;
-            for (const item of omniSelected) {
-                try {
-                    const ok = await this.deps.createFromOmni(item);
-                    if (ok) {
-                        successCount++;
-                        this.capturedOmniIds.add(item.id);
+            let failedCount = 0;
+            try {
+                for (const item of omniSelected) {
+                    try {
+                        const ok = await this.deps.createFromOmni(item);
+                        if (ok) {
+                            successCount++;
+                            this.capturedOmniIds.add(item.id);
+                        } else {
+                            failedCount++;
+                        }
+                    } catch {
+                        failedCount++;
                     }
-                } catch {
-                    // 隔离错误
                 }
+                if (successCount === 0) {
+                    this.deps.notify?.("error", `批量收录失败（共 ${failedCount} 项未能写入），请检查内容或重试`);
+                    return;
+                }
+                this.deps.notify?.(
+                    failedCount > 0 ? "error" : "info",
+                    failedCount > 0
+                        ? `批量收录完成：成功 ${successCount} 项，失败 ${failedCount} 项`
+                        : `已成功批量收录 ${successCount} 项到常用语库`,
+                );
+                this.exitMultiSelectMode();
+                await this.refresh();
+            } finally {
+                this.renderBatchBar();
             }
-            this.deps.notify?.("info", `已成功批量收录 ${successCount} 项到常用语库`);
-            this.exitMultiSelectMode();
-            await this.refresh();
         });
 
         // 剪贴板/全域多条合并沉淀按钮
@@ -6518,7 +6584,7 @@ export class CommonSearchDialog {
     private async toggleAdjacentContextProbe(): Promise<void> {
         const entry = this.results[this.activeIndex];
         if (!entry) return;
-        const targetBlockId = entry.isOmni ? entry.id : (entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id);
+        const targetBlockId = resolveEntryBlockId(entry);
         const sourceDocId = entry.sourceDocId || entry.libraryDocId;
         if (!isBlockId(targetBlockId) || !isBlockId(sourceDocId) || !this.deps.getAdjacentBlocks) {
             this.deps.notify?.("info", "当前条目未关联思源源文档，无法调取上下文");

@@ -57,6 +57,8 @@ export class DockView {
     private static sharedCollapsedCategories = new Set<string>();
     private collapsedCategories: Set<string>;
     private activeMenuEl: HTMLElement | null = null;
+    private menuCleanup: (() => void) | null = null;
+    private fullBodyCache = new Map<string, string>();
     private isInsertBusy = false;
     private isCopyBusy = false;
 
@@ -332,6 +334,7 @@ export class DockView {
 
     public async refresh(): Promise<void> {
         if (this.isDestroyed) return;
+        this.fullBodyCache.clear();
         const seq = ++this.searchSeq;
         const queryText = this.searchInput ? this.searchInput.value.trim() : "";
         const scope = this.currentScope === "common" ? "all" : this.currentScope;
@@ -455,11 +458,20 @@ export class DockView {
             row.setAttribute("aria-selected", index === this.activeIndex ? "true" : "false");
         }
 
-        // 原生 HTML5 拖拽属性支持（F2：支持按住 Alt 拖出块引用、按住 Shift 拖出嵌入块；优先取物理块 ID 避免落入逻辑 ID）
+        const prefetchFullBody = () => {
+            if (this.fullBodyCache.has(entry.id) || typeof this.deps.preview !== "function") return;
+            void this.deps.preview(entry.id).then((text) => {
+                if (text) this.fullBodyCache.set(entry.id, text);
+            }).catch(() => {});
+        };
+        row.addEventListener("mouseenter", prefetchFullBody);
+        row.addEventListener("pointerdown", prefetchFullBody);
+
+        // 原生 HTML5 拖拽属性支持（F2：支持按住 Alt 拖出块引用、按住 Shift 拖出嵌入块；普通拖拽优先使用完整正文而非 240 字截断摘要）
         row.draggable = true;
         row.addEventListener("dragstart", (e) => {
             const targetId = entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
-            let dragPayload = entry.content || entry.summary || entry.title || "";
+            let dragPayload = this.fullBodyCache.get(entry.id) || entry.content || entry.summary || entry.title || "";
             if (e.altKey && targetId) {
                 dragPayload = `((${targetId} '${entry.title || "引用"}'))`;
                 this.deps.notify?.("info", "已拖出块引用链接");
@@ -592,6 +604,10 @@ export class DockView {
 
         const menu = document.createElement("div");
         menu.className = "xlc-dock-menu";
+        if (typeof menu.setAttribute === "function") {
+            menu.setAttribute("role", "menu");
+            menu.setAttribute("aria-label", entry.title || "条目操作菜单");
+        }
         const posX = typeof window !== "undefined" ? Math.min(e.clientX, window.innerWidth - 180) : e.clientX;
         const posY = typeof window !== "undefined" ? Math.min(e.clientY, window.innerHeight - 200) : e.clientY;
         menu.style.position = "fixed";
@@ -602,6 +618,9 @@ export class DockView {
             const it = document.createElement("button");
             it.type = "button";
             it.className = "xlc-dock-menu-item";
+            if (typeof it.setAttribute === "function") {
+                it.setAttribute("role", "menuitem");
+            }
             it.innerHTML = `<span class="xlc-dock-menu-ic">${escapeDockHtml(icon)}</span><span>${escapeDockHtml(label)}</span>`;
             it.addEventListener("click", () => {
                 this.closeContextMenu();
@@ -636,21 +655,51 @@ export class DockView {
             const dismiss = (ev: MouseEvent) => {
                 if (!menu.contains(ev.target as Node)) {
                     this.closeContextMenu();
-                    if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
-                        document.removeEventListener("pointerdown", dismiss);
-                    }
                 }
             };
+            const onKeydown = (ev: KeyboardEvent) => {
+                if (ev.key === "Escape") {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    this.closeContextMenu();
+                    return;
+                }
+                if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+                    const items = Array.from(menu.querySelectorAll<HTMLButtonElement>(".xlc-dock-menu-item"));
+                    if (!items.length) return;
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    const cur = items.indexOf(document.activeElement as HTMLButtonElement);
+                    const next = ev.key === "ArrowDown"
+                        ? (cur + 1) % items.length
+                        : (cur - 1 + items.length) % items.length;
+                    items[next]?.focus();
+                }
+            };
+            this.menuCleanup = () => {
+                if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+                    document.removeEventListener("pointerdown", dismiss);
+                    document.removeEventListener("keydown", onKeydown, true);
+                }
+            };
+            if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+                document.addEventListener("keydown", onKeydown, true);
+            }
             setTimeout(() => {
                 if (this.isDestroyed || !this.activeMenuEl) return;
                 if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
                     document.addEventListener("pointerdown", dismiss);
                 }
+                menu.querySelector<HTMLButtonElement>(".xlc-dock-menu-item")?.focus();
             }, 0);
         }
     }
 
     private closeContextMenu(): void {
+        if (this.menuCleanup) {
+            this.menuCleanup();
+            this.menuCleanup = null;
+        }
         if (this.activeMenuEl) {
             this.activeMenuEl.remove();
             this.activeMenuEl = null;
@@ -684,9 +733,14 @@ export class DockView {
         try {
             const res = await this.deps.runAction(entry.id, "insert");
             if (res.ok) {
-                this.deps.notify?.("info", this.deps.t("providerInserted") || "已插入条目");
+                const msg = res.message && res.message !== "ok"
+                    ? res.message
+                    : (this.deps.t("inserted", entry.title || entry.id) || "已插入条目");
+                this.deps.notify?.("info", msg);
+            } else if (res.message) {
+                this.deps.notify?.("error", res.message);
             } else {
-                this.deps.notify?.("error", res.message || this.deps.t("insertFailed") || "插入失败");
+                this.deps.notify?.("error", this.deps.t("insertFailed") || "插入失败");
             }
         } catch (err) {
             this.deps.notify?.("error", toErrorMessage(err));
@@ -701,7 +755,10 @@ export class DockView {
         try {
             const res = await this.deps.runAction(entry.id, "copy");
             if (res.ok) {
-                this.deps.notify?.("info", this.deps.t("copied", entry.title || entry.id) || "已复制到剪贴板");
+                const msg = res.message && res.message !== "ok"
+                    ? res.message
+                    : (this.deps.t("copied", entry.title || entry.id) || "已复制到剪贴板");
+                this.deps.notify?.("info", msg);
             } else {
                 this.deps.notify?.("error", res.message || this.deps.t("copyFailed") || "复制失败");
             }
@@ -745,6 +802,7 @@ export class DockView {
         this.drawerContainer.appendChild(body);
 
         void this.deps.preview(entry.id).then((text) => {
+            if (text) this.fullBodyCache.set(entry.id, text);
             if (this.isDestroyed) return;
             body.innerHTML = "";
             const rawText = text || entry.summary || "";

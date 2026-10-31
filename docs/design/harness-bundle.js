@@ -26974,6 +26974,12 @@ fi`;
   init_clipboard();
   init_placeholders();
   init_calculator();
+  function resolveEntryBlockId(entry) {
+    var _a;
+    const strippedOmni = entry.id.startsWith("xlc-omni-") ? entry.id.slice("xlc-omni-".length) : entry.id;
+    const candidates = [entry.targetBlockId, entry.sourceBlockId, entry.blockId, strippedOmni];
+    return (_a = candidates.find((id) => typeof id === "string" && isBlockId(id))) != null ? _a : "";
+  }
   var TYPE_BADGES2 = {
     text: "TXT",
     markdown: "MD",
@@ -27909,18 +27915,8 @@ fi`;
       embedBtn.dataset.xlcControl = "preview.embed";
       embedBtn.setAttribute("aria-label", embedBtn.title);
       embedBtn.addEventListener("click", () => {
-        var _a, _b, _c, _d;
         const entry = this.results[this.activeIndex];
-        if (entry) {
-          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
-          if (isBlockId(targetBlockId)) {
-            void this.runActionFor(entry, void 0, "insert-embed");
-            if (!this.pinWindow) this.destroy();
-            (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", "\u5DF2\u63D2\u5165\u540C\u6B65\u5D4C\u5165\u5757\uFF08\u6E90\u53D8\u52A8\u65F6\u81EA\u52A8\u540C\u6B65\uFF09");
-          } else {
-            (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "error", "\u65E0\u6CD5\u5D4C\u5165\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
-          }
-        }
+        if (entry) void this.insertEntryEmbedOrRef(entry, "embed");
       });
       const refBtn = document.createElement("button");
       refBtn.className = "b3-button b3-button--text xlc-btn-ghost";
@@ -27930,18 +27926,8 @@ fi`;
       refBtn.dataset.xlcControl = "preview.ref";
       refBtn.setAttribute("aria-label", refBtn.title);
       refBtn.addEventListener("click", () => {
-        var _a, _b, _c, _d;
         const entry = this.results[this.activeIndex];
-        if (entry) {
-          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
-          if (isBlockId(targetBlockId)) {
-            void this.runActionFor(entry, void 0, "insert-ref");
-            if (!this.pinWindow) this.destroy();
-            (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", "\u5DF2\u63D2\u5165\u5757\u5F15\u7528\u94FE\u63A5");
-          } else {
-            (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "error", "\u65E0\u6CD5\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
-          }
-        }
+        if (entry) void this.insertEntryEmbedOrRef(entry, "ref");
       });
       const spacer = document.createElement("span");
       spacer.className = "xlc-foot-spacer";
@@ -27955,7 +27941,7 @@ fi`;
         const entry = this.results[this.activeIndex];
         if (entry) {
           if (entry.isOmni && this.deps.openDocBlock) {
-            void this.deps.openDocBlock(entry.targetBlockId || entry.id);
+            void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
           } else {
             void this.deps.openSource(entry.id);
           }
@@ -27972,7 +27958,7 @@ fi`;
         if (entry) {
           if (entry.isOmni) {
             if (this.deps.quickEditBlock) {
-              void this.deps.quickEditBlock(entry.targetBlockId || entry.id, entry.content || entry.summary || "");
+              void this.deps.quickEditBlock(resolveEntryBlockId(entry) || entry.id, entry.content || entry.summary || "");
             }
           } else {
             void this.deps.editItem(entry.id);
@@ -29913,28 +29899,42 @@ fi`;
       }
       await this.insertEntryWithVars(entry, (fills) => this.runActionFor(entry, fills));
     }
+    /** 统一处理「插入嵌入块 / 插入块引用」（T-0757 / FN-02 & FN-07）：
+     *  - 全域条目提取真实 22 位块 ID 并走 insertProviderPayload；
+     *  - 库内条目统一走 runActionFor -> ActionExecutor，记录使用频次且只发一次真实回执（消除双 Toast）。 */
+    async insertEntryEmbedOrRef(entry, kind) {
+      var _a, _b;
+      const targetBlockId = resolveEntryBlockId(entry);
+      if (!isBlockId(targetBlockId)) {
+        (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "error", kind === "embed" ? "\u65E0\u6CD5\u5D4C\u5165\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID" : "\u65E0\u6CD5\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
+        return;
+      }
+      await this.runActionFor(entry, void 0, kind === "embed" ? "insert-embed" : "insert-ref");
+      if (!this.pinWindow) this.destroy();
+    }
     runActionFor(entry, fills, overrideMode) {
-      if (this.insertTarget) {
-        const target = this.insertTarget;
-        const insertMode = overrideMode === "insert-embed" || overrideMode === "insert-ref" || overrideMode === "insert-content" ? overrideMode : "insert";
-        return this.deps.insertToDoc(entry.id, target.docId, target.hPath, fills, insertMode);
-      }
-      if (overrideMode === "insert-embed") {
-        const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
-        return this.deps.insertProviderPayload(`{{select * from blocks where id='${targetBlockId}'}}`);
-      }
-      if (overrideMode === "insert-ref") {
-        const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
-        const anchor = (entry.title || entry.summary || "\u5F15\u7528").slice(0, 50).replace(/[\r\n]+/g, " ");
-        return this.deps.insertProviderPayload(buildBlockRef(targetBlockId, anchor));
-      }
+      var _a, _b, _c;
       if (entry.isOmni) {
+        if (overrideMode === "insert-embed") {
+          const targetBlockId = resolveEntryBlockId(entry);
+          return this.deps.insertProviderPayload(buildEmbedBlock(targetBlockId), (_a = this.insertTarget) != null ? _a : void 0);
+        }
+        if (overrideMode === "insert-ref") {
+          const targetBlockId = resolveEntryBlockId(entry);
+          const anchor = (entry.title || entry.summary || "\u5F15\u7528").slice(0, 50).replace(/[\r\n]+/g, " ");
+          return this.deps.insertProviderPayload(buildBlockRef(targetBlockId, anchor), (_b = this.insertTarget) != null ? _b : void 0);
+        }
         let finalContent = entry.content || entry.summary || "";
         if (fills) {
           finalContent = expandAsks(finalContent, fills);
         }
         finalContent = applyAskDefaults(stripCursorToken(finalContent));
-        return this.deps.insertProviderPayload(finalContent);
+        return this.deps.insertProviderPayload(finalContent, (_c = this.insertTarget) != null ? _c : void 0);
+      }
+      if (this.insertTarget) {
+        const target = this.insertTarget;
+        const insertMode = overrideMode === "insert-embed" || overrideMode === "insert-ref" || overrideMode === "insert-content" ? overrideMode : "insert";
+        return this.deps.insertToDoc(entry.id, target.docId, target.hPath, fills, insertMode);
       }
       const mode = overrideMode || (entry.itemType === "blockref" ? "insert-ref" : "insert");
       return fills ? this.deps.runActionWithFills(entry.id, mode, fills) : this.deps.runAction(entry.id, mode);
@@ -30158,7 +30158,7 @@ fi`;
             });
           }
         }
-        const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+        const targetBlockId = resolveEntryBlockId(entry);
         if (isBlockId(targetBlockId)) {
           addAction("((\u2022))", "\u590D\u5236\u5757\u5F15\u7528\u8BED\u6CD5 (Alt+R)", async () => {
             var _a3, _b3;
@@ -30242,10 +30242,10 @@ fi`;
             }
           } else {
             if (this.deps.openDocBlock) {
-              addSilent("\u2197", this.deps.t("locateInDoc"), () => this.deps.openDocBlock(entry.targetBlockId || entry.id));
+              addSilent("\u2197", this.deps.t("locateInDoc"), () => this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id));
             }
             if (this.deps.quickEditBlock) {
-              addSilent("\u270E", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock(entry.targetBlockId || entry.id, entry.content || entry.summary || ""));
+              addSilent("\u270E", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock(resolveEntryBlockId(entry) || entry.id, entry.content || entry.summary || ""));
             }
             if (this.deps.captureOmniWithForm) {
               addSilent("\u2726", this.deps.t("editAndCapture"), () => this.deps.captureOmniWithForm(entry));
@@ -32268,7 +32268,7 @@ ${progress.progressBar}`);
       (_f = menu.querySelector(".xlc-menu-item")) == null ? void 0 : _f.focus();
     }
     async onKeydown(e) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N;
       if (e.isComposing || e.keyCode === 229) return;
       const list = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-list");
       const input = (_b = this.dialog) == null ? void 0 : _b.element.querySelector(".xlc-search-input");
@@ -32345,24 +32345,19 @@ ${progress.progressBar}`);
         if (total > 0) this.setNav(Math.min(this.navPosition() + 1, total - 1));
         this.paintActive();
         this.updatePreview();
+        if (this.quickLookOpen) this.refreshQuickLookContent();
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         this.setNav(Math.max(this.navPosition() - 1, 0));
         this.paintActive();
         this.updatePreview();
+        if (this.quickLookOpen) this.refreshQuickLookContent();
       } else if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         if (this.quickLookOpen) this.closeQuickLook();
         const entry = this.results[this.activeIndex];
         if (entry) {
-          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
-          if (isBlockId(targetBlockId)) {
-            await this.runActionFor(entry, void 0, "insert-embed");
-            if (!this.pinWindow) this.destroy();
-            (_l = (_k = this.deps).notify) == null ? void 0 : _l.call(_k, "info", "\u5DF2\u63D2\u5165\u540C\u6B65\u5D4C\u5165\u5757\uFF08\u6E90\u53D8\u52A8\u65F6\u81EA\u52A8\u540C\u6B65\uFF09");
-          } else {
-            (_n = (_m = this.deps).notify) == null ? void 0 : _n.call(_m, "error", "\u65E0\u6CD5\u5D4C\u5165\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
-          }
+          await this.insertEntryEmbedOrRef(entry, "embed");
         }
         return;
       } else if (e.key === "Enter" && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -32370,18 +32365,11 @@ ${progress.progressBar}`);
         if (this.quickLookOpen) this.closeQuickLook();
         const entry = this.results[this.activeIndex];
         if (entry) {
-          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
-          if (isBlockId(targetBlockId)) {
-            await this.runActionFor(entry, void 0, "insert-ref");
-            if (!this.pinWindow) this.destroy();
-            (_p = (_o = this.deps).notify) == null ? void 0 : _p.call(_o, "info", "\u5DF2\u63D2\u5165\u5757\u5F15\u7528\u94FE\u63A5");
-          } else {
-            (_r = (_q = this.deps).notify) == null ? void 0 : _r.call(_q, "error", "\u65E0\u6CD5\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
-          }
+          await this.insertEntryEmbedOrRef(entry, "ref");
         }
         return;
       } else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
-        if ((_t = (_s = e.target).closest) == null ? void 0 : _t.call(_s, ".xlc-row-action")) return;
+        if ((_l = (_k = e.target).closest) == null ? void 0 : _l.call(_k, ".xlc-row-action")) return;
         if (e.repeat) return;
         e.preventDefault();
         if (this.quickLookOpen) this.closeQuickLook();
@@ -32391,10 +32379,10 @@ ${progress.progressBar}`);
           try {
             const row = this.providerRows[this.activeProvider];
             if (row) {
-              const execution = this.deps.insertProviderPayload(row.payload, (_u = this.insertTarget) != null ? _u : void 0);
+              const execution = this.deps.insertProviderPayload(row.payload, (_m = this.insertTarget) != null ? _m : void 0);
               if (!this.pinWindow) this.destroy();
               await execution;
-              if (this.pinWindow) (_w = (_v = this.deps).notify) == null ? void 0 : _w.call(_v, "info", "\u5DF2\u63D2\u5165\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u9009\u62E9\uFF09");
+              if (this.pinWindow) (_o = (_n = this.deps).notify) == null ? void 0 : _o.call(_n, "info", "\u5DF2\u63D2\u5165\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u9009\u62E9\uFF09");
             }
           } finally {
             this.primaryBusy = false;
@@ -32437,7 +32425,7 @@ ${progress.progressBar}`);
             const plain = kramdownToPlainText(raw || entry.summary || "");
             await this.deps.copyProviderPayload(plain);
             if (!this.pinWindow) this.destroy();
-            (_y = (_x = this.deps).notify) == null ? void 0 : _y.call(_x, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\u5230\u526A\u8D34\u677F (\u9002\u7528\u4E8E\u5FAE\u4FE1/QQ)");
+            (_q = (_p = this.deps).notify) == null ? void 0 : _q.call(_p, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\u5230\u526A\u8D34\u677F (\u9002\u7528\u4E8E\u5FAE\u4FE1/QQ)");
           }
         } finally {
           this.primaryBusy = false;
@@ -32454,7 +32442,7 @@ ${progress.progressBar}`);
             if (row) {
               await this.deps.copyProviderPayload(row.payload);
               if (!this.pinWindow) this.destroy();
-              (_A = (_z = this.deps).notify) == null ? void 0 : _A.call(_z, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+              (_s = (_r = this.deps).notify) == null ? void 0 : _s.call(_r, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
             }
             return;
           }
@@ -32466,7 +32454,7 @@ ${progress.progressBar}`);
               await this.deps.runAction(entry.id, "copy");
             }
             if (!this.pinWindow) this.destroy();
-            (_C = (_B = this.deps).notify) == null ? void 0 : _C.call(_B, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+            (_u = (_t = this.deps).notify) == null ? void 0 : _u.call(_t, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
           }
         } finally {
           this.primaryBusy = false;
@@ -32477,19 +32465,19 @@ ${progress.progressBar}`);
         if (this.quickLookOpen) this.closeQuickLook();
         const entry = this.results[this.activeIndex];
         if (entry) {
-          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+          const targetBlockId = resolveEntryBlockId(entry);
           if (isBlockId(targetBlockId)) {
             const anchor = (entry.title || entry.summary || "\u5F15\u7528").slice(0, 50).replace(/[\r\n]+/g, " ");
             try {
               const refCode = buildBlockRef(targetBlockId, anchor);
               await this.deps.copyProviderPayload(refCode);
               if (!this.pinWindow) this.destroy();
-              (_E = (_D = this.deps).notify) == null ? void 0 : _E.call(_D, "info", `\u5DF2\u590D\u5236\u5757\u5F15\u7528: ${refCode}`);
+              (_w = (_v = this.deps).notify) == null ? void 0 : _w.call(_v, "info", `\u5DF2\u590D\u5236\u5757\u5F15\u7528: ${refCode}`);
             } catch {
-              (_G = (_F = this.deps).notify) == null ? void 0 : _G.call(_F, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u76EE\u6807\u5757 ID \u65E0\u6548");
+              (_y = (_x = this.deps).notify) == null ? void 0 : _y.call(_x, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u76EE\u6807\u5757 ID \u65E0\u6548");
             }
           } else {
-            (_I = (_H = this.deps).notify) == null ? void 0 : _I.call(_H, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
+            (_A = (_z = this.deps).notify) == null ? void 0 : _A.call(_z, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
           }
         }
         return;
@@ -32500,7 +32488,7 @@ ${progress.progressBar}`);
         if (entry) {
           if (entry.isOmni) {
             if (this.deps.openDocBlock) {
-              void this.deps.openDocBlock(entry.targetBlockId || entry.id);
+              void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
             } else {
               void this.deps.openSource(entry.id);
             }
@@ -32510,6 +32498,10 @@ ${progress.progressBar}`);
           if (!this.pinWindow) this.destroy();
         }
         return;
+      } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
+        e.preventDefault();
+        this.toggleMultiSelectMode();
+        return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
         e.preventDefault();
         if (this.quickLookOpen) this.closeQuickLook();
@@ -32518,7 +32510,7 @@ ${progress.progressBar}`);
           const text = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
           await this.deps.copyProviderPayload(text || entry.summary || "");
           if (!this.pinWindow) this.destroy();
-          (_K = (_J = this.deps).notify) == null ? void 0 : _K.call(_J, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u539F\u59CB Markdown\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u539F\u59CB Markdown \u8BED\u6CD5\u5230\u526A\u8D34\u677F");
+          (_C = (_B = this.deps).notify) == null ? void 0 : _C.call(_B, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u539F\u59CB Markdown\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u539F\u59CB Markdown \u8BED\u6CD5\u5230\u526A\u8D34\u677F");
         }
         return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "j" || e.key === "J")) {
@@ -32529,9 +32521,14 @@ ${progress.progressBar}`);
         e.preventDefault();
         const entry = this.results[this.activeIndex];
         if (entry) {
-          const docPath = entry.sourceDocPath || (entry.category && entry.category !== "\u5168\u5E93\u5185\u5BB9" && entry.category !== "\u526A\u8D34\u677F" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : "\u672A\u5173\u8054\u6587\u6863");
-          const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
-          (_M = (_L = this.deps).notify) == null ? void 0 : _M.call(_L, "info", `\u{1F4CD} \u6240\u5C5E\u8DEF\u5F84: ${docPath}${targetBlockId ? ` \xB7 [${targetBlockId.slice(0, 16)}]` : ""}`);
+          const targetBlockId = resolveEntryBlockId(entry);
+          if (entry.sourceDocPath) {
+            (_E = (_D = this.deps).notify) == null ? void 0 : _E.call(_D, "info", `\u{1F4CD} \u6240\u5C5E\u6587\u6863\u8DEF\u5F84: ${entry.sourceDocPath}${targetBlockId ? ` \xB7 [${targetBlockId}]` : ""}`);
+          } else if (entry.sourceDocId || entry.libraryDocId) {
+            (_G = (_F = this.deps).notify) == null ? void 0 : _G.call(_F, "info", `\u{1F4CD} \u5173\u8054\u6587\u6863 ID: ${entry.sourceDocId || entry.libraryDocId}${targetBlockId ? ` \xB7 \u5757 [${targetBlockId}]` : ""}\uFF08\u6309 Alt+D \u53EF\u6253\u5F00\u6765\u6E90\u5B9A\u4F4D\uFF09`);
+          } else {
+            (_I = (_H = this.deps).notify) == null ? void 0 : _I.call(_H, "info", "\u5F53\u524D\u6761\u76EE\u672A\u5173\u8054\u601D\u6E90\u6E90\u6587\u6863\u8DEF\u5F84");
+          }
         }
         return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "p" || e.key === "P")) {
@@ -32540,11 +32537,20 @@ ${progress.progressBar}`);
         return;
       } else if (e.key === "Escape") {
         e.preventDefault();
+        if (this.quickLookOpen) {
+          this.closeQuickLook();
+          return;
+        }
         if (this.multiSelectMode) {
           this.exitMultiSelectMode();
           return;
         }
         this.destroy();
+      } else if (e.key === " " && !isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !((_K = (_J = e.target) == null ? void 0 : _J.closest) == null ? void 0 : _K.call(_J, "input, textarea, select, button"))) {
+        if (e.repeat) return;
+        e.preventDefault();
+        this.toggleQuickLook();
+        return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (/^[1-9]$/.test(e.key) || /^Digit[1-9]$/.test(e.code))) {
         let num = null;
         if (/^[1-9]$/.test(e.key)) {
@@ -32572,7 +32578,7 @@ ${progress.progressBar}`);
           }
         }
       } else if (e.key === "Tab") {
-        const root = (_N = this.dialog) == null ? void 0 : _N.element;
+        const root = (_L = this.dialog) == null ? void 0 : _L.element;
         if (!root) return;
         const focusables = Array.from(root.querySelectorAll(
           'input:not([disabled]):not([type="hidden"]), select:not([disabled]), button:not([disabled]), [tabindex="0"]:not([disabled])'
@@ -32629,14 +32635,14 @@ ${progress.progressBar}`);
           e.preventDefault();
           if (entry.isOmni) {
             if (this.deps.quickEditBlock) {
-              void this.deps.quickEditBlock(entry.targetBlockId || entry.id, entry.content || entry.summary || "");
+              void this.deps.quickEditBlock(resolveEntryBlockId(entry) || entry.id, entry.content || entry.summary || "");
             }
           } else {
             this.destroy();
             await this.deps.editItem(entry.id);
           }
         }
-      } else if ((e.ctrlKey || e.metaKey || e.altKey) && (e.key === "d" || e.key === "D")) {
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "d" || e.key === "D")) {
         if (e.repeat) return;
         if (this.activeProvider >= 0) return;
         const entry = this.results[this.activeIndex];
@@ -32651,7 +32657,7 @@ ${progress.progressBar}`);
         const scopeOrder = ["all", "favorites", "recent", "clipboard", "current-doc", "all-notes"];
         const currentIdx = scopeOrder.indexOf(this.currentScope);
         const nextIdx = (currentIdx + 1) % scopeOrder.length;
-        this.currentScope = (_O = scopeOrder[nextIdx]) != null ? _O : "all";
+        this.currentScope = (_M = scopeOrder[nextIdx]) != null ? _M : "all";
         this.syncScopeChips();
         void this.refresh().then(() => this.restoreFocusToSearch());
         return;
@@ -32662,7 +32668,7 @@ ${progress.progressBar}`);
         this.syncScopeChips();
         void this.refresh().then(() => this.restoreFocusToSearch());
         return;
-      } else if (e.altKey && (e.key === "Delete" || e.key === "Backspace") || !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Delete" && !((_P = document.activeElement) == null ? void 0 : _P.matches("input, textarea"))) {
+      } else if (e.altKey && (e.key === "Delete" || e.key === "Backspace") || !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Delete" && !((_N = document.activeElement) == null ? void 0 : _N.matches("input, textarea"))) {
         if (e.repeat) return;
         if (this.activeProvider >= 0) return;
         const entry = this.results[this.activeIndex];
@@ -32670,10 +32676,7 @@ ${progress.progressBar}`);
           e.preventDefault();
           await this.deps.deleteItem(entry.id);
         }
-      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
-        e.preventDefault();
-        this.toggleMultiSelectMode();
-      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "f" || e.key === "F" || e.key === "s" || e.key === "S")) {
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "f" || e.key === "F")) {
         if (e.repeat) return;
         if (this.activeProvider >= 0) return;
         const entry = this.results[this.activeIndex];
@@ -32743,7 +32746,6 @@ ${progress.progressBar}`);
       const entry = this.getActiveEntry();
       if (!root || !entry || this.quickLookOpen) return false;
       this.quickLookOpen = true;
-      const seq = ++this.quickLookSeq;
       const active2 = (_b = root.ownerDocument) == null ? void 0 : _b.activeElement;
       this.quickLookReturnFocus = active2 && active2 !== root ? active2 : null;
       const host = (_e = (_d = root.querySelector(".xlc-root")) != null ? _d : (_c = root.querySelector(".xlc-search-input")) == null ? void 0 : _c.closest(".xlc-search")) != null ? _e : root;
@@ -32806,31 +32808,67 @@ ${progress.progressBar}`);
         this.closeQuickLook();
       });
       host.appendChild(overlay);
-      if (entry.isOmni) {
-        loading.remove();
-        const text = entry.content || entry.summary || "";
-        const metrics = calculateTextMetrics(text);
-        if (metrics.nonWhitespaceChars > 0) {
-          meta.textContent += ` \xB7 ${formatReadingMetrics(metrics)}`;
-        }
-        renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
-      } else {
-        const id = entry.id;
-        void this.deps.preview(id).then((text) => {
-          if (this.quickLookSeq !== seq || !this.quickLookOpen) return;
-          loading.remove();
-          if (text) {
-            const metrics = calculateTextMetrics(text);
-            if (metrics.nonWhitespaceChars > 0) {
-              meta.textContent += ` \xB7 ${formatReadingMetrics(metrics)}`;
-            }
+      this.refreshQuickLookContent();
+      return true;
+    }
+    /** 刷新极速预览大卡片（打开时以及上下方向键切换条目时同步更新，含动态宏双态预览，UI-07 / T-0759）。 */
+    refreshQuickLookContent() {
+      var _a;
+      const root = (_a = this.dialog) == null ? void 0 : _a.element;
+      const overlay = root == null ? void 0 : root.querySelector(".xlc-quicklook");
+      const entry = this.getActiveEntry();
+      if (!overlay || !entry || !this.quickLookOpen) return;
+      const seq = ++this.quickLookSeq;
+      overlay.setAttribute("aria-label", entry.title || "");
+      const title = overlay.querySelector(".xlc-quicklook-title");
+      const meta = overlay.querySelector(".xlc-quicklook-meta");
+      const hints = overlay.querySelector(".xlc-quicklook-hints");
+      const body = overlay.querySelector(".xlc-quicklook-body");
+      if (!title || !meta || !hints || !body) return;
+      title.textContent = entry.title || "";
+      meta.setAttribute("aria-label", `\u6761\u76EE\u5143\u6570\u636E\uFF1A${entry.itemType}`);
+      const baseMeta = `${entry.itemType}${entry.varCount ? ` \xB7 {${entry.varCount}} \u53D8\u91CF` : ""}${entry.alias ? ` \xB7 \u522B\u540D: ${entry.alias}` : ""}`;
+      meta.textContent = baseMeta;
+      hints.textContent = entry.isOmni ? "Space / Esc \u5173\u95ED\u3000Enter \u63D2\u5165\u3000Alt+S \u6536\u5F55\u5230\u5E38\u7528\u5E93" : "Space / Esc \u5173\u95ED\u3000Enter \u63D2\u5165\u3000Alt+C \u590D\u5236";
+      const paintBody = (text) => {
+        body.innerHTML = "";
+        if (text) {
+          const metrics = calculateTextMetrics(text);
+          if (metrics.nonWhitespaceChars > 0) {
+            meta.textContent = `${baseMeta} \xB7 ${formatReadingMetrics(metrics)}`;
           }
+        }
+        if (entry.itemType !== "code" && hasDynamicMacros(text)) {
+          renderDualMacroPreview(
+            body,
+            text,
+            expandMacroPreview(text),
+            entry.itemType,
+            {
+              templateSource: this.deps.t("previewTemplateSource") || "\u6A21\u677F\u6E90\u7801",
+              expandedEffect: this.deps.t("previewExpandedEffect") || "\u5C55\u5F00\u540E\u771F\u5B9E\u6548\u679C"
+            }
+          );
+        } else {
           renderSafePreview(body, text, entry.itemType === "code" ? "code" : entry.itemType);
+        }
+      };
+      if (entry.isOmni) {
+        paintBody(entry.content || entry.summary || "");
+      } else {
+        body.innerHTML = "";
+        const loading = document.createElement("div");
+        loading.className = "xlc-quicklook-loading";
+        loading.textContent = "\u52A0\u8F7D\u4E2D\u2026";
+        body.appendChild(loading);
+        void this.deps.preview(entry.id).then((text) => {
+          if (this.quickLookSeq !== seq || !this.quickLookOpen) return;
+          paintBody(text || "");
         }).catch(() => {
+          if (this.quickLookSeq !== seq || !this.quickLookOpen) return;
           loading.textContent = "\u9884\u89C8\u52A0\u8F7D\u5931\u8D25";
         });
       }
-      return true;
     }
     /** 切换多选模式（G30 / ADR 0082） */
     toggleMultiSelectMode() {
@@ -32967,26 +33005,42 @@ ${progress.progressBar}`);
       batchCaptureBtn.textContent = "\u2726 \u6279\u91CF\u6536\u5F55";
       batchCaptureBtn.style.display = "none";
       batchCaptureBtn.addEventListener("click", async () => {
-        var _a, _b;
+        var _a, _b, _c, _d;
         if (this.selectedIds.size === 0 || !this.deps.createFromOmni) return;
         const omniSelected = this.results.filter((r) => this.selectedIds.has(r.id) && r.isOmni);
         if (omniSelected.length === 0) return;
         batchCaptureBtn.disabled = true;
         batchCaptureBtn.textContent = "\u6B63\u5728\u6536\u5F55\u2026";
         let successCount = 0;
-        for (const item of omniSelected) {
-          try {
-            const ok2 = await this.deps.createFromOmni(item);
-            if (ok2) {
-              successCount++;
-              this.capturedOmniIds.add(item.id);
+        let failedCount = 0;
+        try {
+          for (const item of omniSelected) {
+            try {
+              const ok2 = await this.deps.createFromOmni(item);
+              if (ok2) {
+                successCount++;
+                this.capturedOmniIds.add(item.id);
+              } else {
+                failedCount++;
+              }
+            } catch {
+              failedCount++;
             }
-          } catch {
           }
+          if (successCount === 0) {
+            (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "error", `\u6279\u91CF\u6536\u5F55\u5931\u8D25\uFF08\u5171 ${failedCount} \u9879\u672A\u80FD\u5199\u5165\uFF09\uFF0C\u8BF7\u68C0\u67E5\u5185\u5BB9\u6216\u91CD\u8BD5`);
+            return;
+          }
+          (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(
+            _c,
+            failedCount > 0 ? "error" : "info",
+            failedCount > 0 ? `\u6279\u91CF\u6536\u5F55\u5B8C\u6210\uFF1A\u6210\u529F ${successCount} \u9879\uFF0C\u5931\u8D25 ${failedCount} \u9879` : `\u5DF2\u6210\u529F\u6279\u91CF\u6536\u5F55 ${successCount} \u9879\u5230\u5E38\u7528\u8BED\u5E93`
+          );
+          this.exitMultiSelectMode();
+          await this.refresh();
+        } finally {
+          this.renderBatchBar();
         }
-        (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", `\u5DF2\u6210\u529F\u6279\u91CF\u6536\u5F55 ${successCount} \u9879\u5230\u5E38\u7528\u8BED\u5E93`);
-        this.exitMultiSelectMode();
-        await this.refresh();
       });
       const batchMergeBtn = document.createElement("button");
       batchMergeBtn.type = "button";
@@ -33214,7 +33268,7 @@ ${progress.progressBar}`);
       var _a, _b, _c;
       const entry = this.results[this.activeIndex];
       if (!entry) return;
-      const targetBlockId = entry.isOmni ? entry.id : entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+      const targetBlockId = resolveEntryBlockId(entry);
       const sourceDocId = entry.sourceDocId || entry.libraryDocId;
       if (!isBlockId(targetBlockId) || !isBlockId(sourceDocId) || !this.deps.getAdjacentBlocks) {
         (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", "\u5F53\u524D\u6761\u76EE\u672A\u5173\u8054\u601D\u6E90\u6E90\u6587\u6863\uFF0C\u65E0\u6CD5\u8C03\u53D6\u4E0A\u4E0B\u6587");
