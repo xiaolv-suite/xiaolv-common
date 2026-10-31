@@ -234,6 +234,7 @@ export interface LibraryServiceOptions {
 export interface WriteOptions {
     batchToken?: string;
     idempotencyKey?: string;
+    seedInitialDoc?: boolean;
 }
 
 export class LibraryService {
@@ -404,9 +405,9 @@ export class LibraryService {
                 if (previous) return previous;
             }
             try {
-                const initialMd = (options as {emptyDoc?: boolean}).emptyDoc
-                    ? `# ${normalizedTitle}\n\n`
-                    : buildInitialLibraryDocMarkdown(normalizedTitle);
+                const initialMd = (options as {seedInitialDoc?: boolean}).seedInitialDoc
+                    ? buildInitialLibraryDocMarkdown(normalizedTitle)
+                    : `# ${normalizedTitle}\n\n`;
                 const docId = parseDocId(await this.kernel.request("createDocWithMd", {
                     notebook: notebookId,
                     path: "/" + normalizedTitle.replace(/\//g, "-"),
@@ -493,7 +494,10 @@ export class LibraryService {
             const createdNotebookId = notebook.data.notebookId;
 
             options.onProgress?.("creating-doc");
-            const doc = await this.createLibraryDoc(createdNotebookId, normalizedTitle, {idempotencyKey: scopedIdempotencyKey(baseKey, "doc")});
+            const doc = await this.createLibraryDoc(createdNotebookId, normalizedTitle, {
+                idempotencyKey: scopedIdempotencyKey(baseKey, "doc"),
+                seedInitialDoc: options.seedInitialDoc,
+            });
             if (doc.ok) return ok({notebookId: createdNotebookId, docId: doc.data.docId});
 
             options.onProgress?.("rolling-back");

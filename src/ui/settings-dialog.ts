@@ -1018,7 +1018,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
             const defaultDocTitle = t("setupNewDocName") || "常用内容库";
             if (nbRes.ok && nbRes.data.length > 0) {
                 const targetNbId = nbRes.data[0]!.id;
-                const docRes = await ctx.library.createLibraryDoc(targetNbId, defaultDocTitle);
+                const docRes = await ctx.library.createLibraryDoc(targetNbId, defaultDocTitle, {seedInitialDoc: true});
                 if (!docRes.ok) throw new Error(docRes.message);
                 ctx.applyConfig({
                     configVersion: CONFIG_VERSION,
@@ -1029,7 +1029,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
                     configuredAt: Date.now(),
                 });
             } else {
-                const indepRes = await ctx.library.createIndependentLibrary(t("pluginName") || "小驴常用", defaultDocTitle);
+                const indepRes = await ctx.library.createIndependentLibrary(t("pluginName") || "小驴常用", defaultDocTitle, {seedInitialDoc: true});
                 if (!indepRes.ok) throw new Error(indepRes.message);
                 ctx.applyConfig({
                     configVersion: CONFIG_VERSION,
