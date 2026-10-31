@@ -423,6 +423,7 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     const configSanitizeBtn = document.createElement("button");
     configSanitizeBtn.type = "button";
     configSanitizeBtn.className = "b3-button b3-button--text";
+    configSanitizeBtn.dataset.xlcControl = "settings.pack-export.sanitizer-config";
     configSanitizeBtn.textContent = t("packSanitizeConfigBtn");
     configSanitizeBtn.setAttribute("aria-label", t("packSanitizeConfigBtn"));
     configSanitizeBtn.style.fontSize = "12px";

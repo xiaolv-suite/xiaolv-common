@@ -170,10 +170,15 @@ function check(name, ok, detail = "") {
             if (!nbId) await sleep(600);
         }
         if (!nbId) throw new Error("无法创建测试笔记本");
+        let sampleDocId = "";
         for (let i = 0; i < 30; i++) {
-            const w = await api(token, "/api/filetree/createDocWithMd", {notebook: nbId, path: `/warmup-${i}`, markdown: "就绪探针"});
+            const w = await api(token, "/api/filetree/createDocWithMd", {
+                notebook: nbId,
+                path: "/测试笔记文档",
+                markdown: "第一段测试笔记内容\n\n第二段包含唯一检索词 雷切联动探针 的真实块内容",
+            });
             if (w.code === 0 && w.data) {
-                await api(token, "/api/filetree/removeDoc", {notebook: nbId, path: `/${w.data}.sy`});
+                sampleDocId = String(w.data);
                 break;
             }
             await sleep(800);
@@ -636,10 +641,86 @@ function check(name, ok, detail = "") {
             step12.foundRow && step12.fullDragHasCode && step12.menuRole === "menu" && step12.menuClosed,
             JSON.stringify(step12));
 
+        // ══════════ 第 13 步：全范围预览底栏零溢出、全域快编块回写与剪贴板多条合并收录 ══════════
+        await page.evaluate((docId) => {
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            p.host.currentDocId = () => docId;
+            p.host.currentDocInfo = () => ({docId, hPath: "/测试笔记文档"});
+            p.recordClipboard("剪贴板合并第一段内容");
+            p.recordClipboard("剪贴板合并第二段内容");
+            void p.protocolCommands["xiaolv.common.open"]();
+        }, sampleDocId);
+        await page.waitForSelector(".xlc-dialog", {timeout: 10000});
+        await sleep(300);
+
+        const checkFootNoOverflow = async (scopeName) => {
+            return page.evaluate((sc) => {
+                const dlg = document.querySelector(".b3-dialog__container");
+                const foot = document.querySelector(".xlc-pane-foot");
+                if (!dlg || !foot) return {sc, ok: false};
+                const dr = dlg.getBoundingClientRect();
+                const btns = Array.from(foot.querySelectorAll("button")).filter((b) => getComputedStyle(b).display !== "none");
+                const overflow = btns.filter((b) => {
+                    const r = b.getBoundingClientRect();
+                    return r.right > dr.right + 4 || r.left < dr.left - 4;
+                });
+                return {sc, ok: btns.length > 0 && overflow.length === 0, visibleBtns: btns.length};
+            }, scopeName);
+        };
+        const footAll = await checkFootNoOverflow("all");
+
+        // 切到 current-doc 检索「雷切联动探针」，点击「✎ 就地修改块内容...」打开快编弹窗并保存回真实块
+        await page.locator("[data-xlc-control='filter.scope.current-doc']").click();
+        await page.locator(".xlc-search-input").fill("雷切联动探针");
+        await sleep(450);
+        const footCurrentDoc = await checkFootNoOverflow("current-doc");
+        await page.locator("[data-xlc-control='preview.edit']").click();
+        await page.waitForSelector("[data-xlc-control='quick-edit.textarea']", {timeout: 5000});
+        await page.locator("[data-xlc-control='quick-edit.textarea']").fill("第二段包含唯一检索词 雷切联动探针 的真实块内容（已快编更新）");
+        await page.locator("[data-xlc-control='quick-edit.save']").click();
+        await page.waitForFunction(() => !document.querySelector("[data-xlc-control='quick-edit.textarea']"), null, {timeout: 10000});
+
+        // 切到 clipboard 范围，多选 2 条并点击「⊞ 合并收录」，保存为多段超级块
+        await page.locator("[data-xlc-control='filter.scope.clipboard']").click();
+        await page.locator(".xlc-search-input").fill("");
+        await sleep(350);
+        const footClipboard = await checkFootNoOverflow("clipboard");
+        await page.evaluate(() => {
+            document.querySelector(".xlc-list .xlc-row[data-xlc-index='0']")
+                ?.dispatchEvent(new MouseEvent("click", {bubbles: true, ctrlKey: true}));
+        });
+        await sleep(80);
+        await page.evaluate(() => {
+            document.querySelector(".xlc-list .xlc-row[data-xlc-index='1']")
+                ?.dispatchEvent(new MouseEvent("click", {bubbles: true, ctrlKey: true}));
+        });
+        await sleep(100);
+        await page.locator("[data-xlc-control='search.batch.merge-omni']").click();
+        await page.waitForSelector("[data-xlc-control='capture.save']", {timeout: 5000});
+        await page.locator("[data-xlc-control='capture.save']").click();
+        await page.waitForFunction(() => !document.querySelector(".xlc-capture"), null, {timeout: 10000});
+
+        const mergedSaved = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const idx = await p.library.ensureIndex(0);
+            const entry = idx.entries.find((e) => (e.title ?? "").startsWith("合并沉淀"));
+            if (!entry) return false;
+            const item = idx.items.get(entry.id);
+            const kd = await p.library.getItemKramdown(item);
+            return Boolean(kd.ok && kd.data.includes("剪贴板合并第一段内容") && kd.data.includes("剪贴板合并第二段内容"));
+        });
+        check("步骤 13：全范围预览底栏零溢出、全域快编块回写与剪贴板多条合并收录保存成功",
+            footAll.ok && footCurrentDoc.ok && footClipboard.ok && mergedSaved,
+            JSON.stringify({footAll, footCurrentDoc, footClipboard, mergedSaved}));
+
         cleanup();
         const pass = results.filter((r) => r.ok).length;
         const fail = results.length - pass;
-        console.log(`\n真实思源宿主 12 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
+        console.log(`\n真实思源宿主 13 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
         process.exit(fail ? 1 : 0);
     } catch (err) {
         console.error(`[real-e2e] 异常：${err.stack || err.message}`);

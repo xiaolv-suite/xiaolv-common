@@ -156,7 +156,10 @@ function restorableAttrs(attrs: Record<string, string>): Record<string, string> 
 }
 
 function normalizeConditionalMarkdown(markdown: string): string {
-    return normalizeKramdownIal(markdown);
+    return storedKramdownToBody(normalizeKramdownIal(markdown))
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .join("\n");
 }
 
 function sameCustomAttrs(actual: Record<string, string>, expected: Record<string, string>): boolean {

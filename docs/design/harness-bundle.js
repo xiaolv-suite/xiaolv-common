@@ -23121,6 +23121,7 @@ ${exception.mark.snippet}`;
     const configSanitizeBtn = document.createElement("button");
     configSanitizeBtn.type = "button";
     configSanitizeBtn.className = "b3-button b3-button--text";
+    configSanitizeBtn.dataset.xlcControl = "settings.pack-export.sanitizer-config";
     configSanitizeBtn.textContent = t("packSanitizeConfigBtn");
     configSanitizeBtn.setAttribute("aria-label", t("packSanitizeConfigBtn"));
     configSanitizeBtn.style.fontSize = "12px";
@@ -27006,6 +27007,7 @@ fi`;
       this.quickLookSeq = 0;
       this.quickLookReturnFocus = null;
       this.currentScope = "all";
+      this.autoSwitchedToAllNotes = false;
       this.lastPreviewId = null;
       /** 窗口固定模式（连续调用时不关闭弹窗，Alt+P 切换） */
       this.pinWindow = false;
@@ -27167,8 +27169,12 @@ fi`;
         updateHistoryBar();
         const rawVal = input.value.trim();
         if (rawVal.startsWith("@") || rawVal.startsWith("/") || rawVal.startsWith("sy:")) {
-          this.currentScope = "all-notes";
-        } else if (this.currentScope === "all-notes" && !rawVal) {
+          if (this.currentScope !== "all-notes") {
+            this.autoSwitchedToAllNotes = true;
+            this.currentScope = "all-notes";
+          }
+        } else if (this.currentScope === "all-notes" && !rawVal && this.autoSwitchedToAllNotes) {
+          this.autoSwitchedToAllNotes = false;
           this.currentScope = "all";
         }
         this.syncScopeChips();
@@ -27449,6 +27455,7 @@ fi`;
         else if (scope === "all-notes") text = "\u{1F50D} " + this.deps.t("scopeAllNotes");
         chip.textContent = text;
         chip.addEventListener("click", () => {
+          this.autoSwitchedToAllNotes = false;
           this.currentScope = scope === "all" ? "all" : this.currentScope === scope ? "all" : scope;
           this.syncScopeChips();
           void this.refresh();
@@ -29293,10 +29300,19 @@ fi`;
         const unavailable = !entry || act === "ai" && !this.deps.aiEnabled() || act === "source" && (isOmniScope ? !this.deps.openDocBlock : this.deps.isSourceMissing(entry)) || act === "edit" && isOmniScope && !this.deps.quickEditBlock;
         const showOmniSave = act === "save-omni" && isOmniScope && Boolean(this.deps.createFromOmni);
         const showOmniEditCapture = act === "edit-and-capture-omni" && isOmniScope && Boolean(this.deps.captureOmniWithForm);
+        const isClipScope = this.currentScope === "clipboard" || isClipEntry;
         if (act === "clean-clip") {
           btn.style.display = isClipEntry ? "" : "none";
+        } else if (act === "save-omni") {
+          btn.style.display = showOmniSave ? "" : "none";
+        } else if (act === "edit-and-capture-omni") {
+          btn.style.display = showOmniEditCapture ? "" : "none";
+        } else if (isOmniScope && (act === "embed" || act === "ref" || act === "ai")) {
+          btn.style.display = "none";
+        } else if (isClipScope && (act === "source" || act === "edit")) {
+          btn.style.display = "none";
         } else {
-          btn.style.display = act === "save-omni" || act === "edit-and-capture-omni" ? showOmniSave && act === "save-omni" ? "" : showOmniEditCapture && act === "edit-and-capture-omni" ? "" : "none" : "";
+          btn.style.display = "";
         }
         if (act === "save-omni") {
           const isCaptured = entry ? this.capturedOmniIds.has(entry.id) : false;
@@ -35770,7 +35786,7 @@ ${details.join("\n")}` : ""}`;
     return out;
   }
   function normalizeConditionalMarkdown(markdown) {
-    return normalizeKramdownIal(markdown);
+    return storedKramdownToBody(normalizeKramdownIal(markdown)).split("\n").filter((line) => line.trim().length > 0).join("\n");
   }
   function sameCustomAttrs(actual, expected) {
     const actualKeys = Object.keys(actual).filter((key) => key.startsWith(ATTR_PREFIX)).sort();

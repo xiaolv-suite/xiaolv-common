@@ -166,6 +166,7 @@ export class CommonSearchDialog {
     private quickLookSeq = 0;
     private quickLookReturnFocus: HTMLElement | null = null;
     private currentScope: SearchScope = "all";
+    private autoSwitchedToAllNotes = false;
     private lastPreviewId: string | null = null;
     /** 窗口固定模式（连续调用时不关闭弹窗，Alt+P 切换） */
     private pinWindow = false;
@@ -326,10 +327,15 @@ export class CommonSearchDialog {
             syncQMark();
             updateHistoryBar();
             const rawVal = input.value.trim();
-            // 穿透前缀识别：输入以 @ 或 / 或 sy: 开头，自动切换为全库笔记范围 (all-notes)
+            // 穿透前缀识别：输入以 @ 或 / 或 sy: 开头，自动切换为全库笔记范围 (all-notes)；
+            // 仅当由前缀自动进入 all-notes 时，清空输入才退回 all（用户手动点击全库胶囊时不退回）。
             if (rawVal.startsWith("@") || rawVal.startsWith("/") || rawVal.startsWith("sy:")) {
-                this.currentScope = "all-notes";
-            } else if (this.currentScope === "all-notes" && !rawVal) {
+                if (this.currentScope !== "all-notes") {
+                    this.autoSwitchedToAllNotes = true;
+                    this.currentScope = "all-notes";
+                }
+            } else if (this.currentScope === "all-notes" && !rawVal && this.autoSwitchedToAllNotes) {
+                this.autoSwitchedToAllNotes = false;
                 this.currentScope = "all";
             }
             this.syncScopeChips(); // 范围切换后同步 chip 选中态（R138）
@@ -630,6 +636,7 @@ export class CommonSearchDialog {
             else if (scope === "all-notes") text = "🔍 " + this.deps.t("scopeAllNotes");
             chip.textContent = text;
             chip.addEventListener("click", () => {
+                this.autoSwitchedToAllNotes = false;
                 this.currentScope = scope === "all" ? "all" : (this.currentScope === scope ? "all" : scope);
                 this.syncScopeChips();
                 void this.refresh();
@@ -2612,12 +2619,21 @@ export class CommonSearchDialog {
                     || (act === "edit" && isOmniScope && !this.deps.quickEditBlock);
                 const showOmniSave = act === "save-omni" && isOmniScope && Boolean(this.deps.createFromOmni);
                 const showOmniEditCapture = act === "edit-and-capture-omni" && isOmniScope && Boolean(this.deps.captureOmniWithForm);
+                const isClipScope = this.currentScope === "clipboard" || isClipEntry;
                 if (act === "clean-clip") {
                     btn.style.display = isClipEntry ? "" : "none";
+                } else if (act === "save-omni") {
+                    btn.style.display = showOmniSave ? "" : "none";
+                } else if (act === "edit-and-capture-omni") {
+                    btn.style.display = showOmniEditCapture ? "" : "none";
+                } else if (isOmniScope && (act === "embed" || act === "ref" || act === "ai")) {
+                    // 全域/剪贴板范围底栏优先展示定位、快编与收录按钮，避免 9 个按钮同排挤出视口
+                    btn.style.display = "none";
+                } else if (isClipScope && (act === "source" || act === "edit")) {
+                    // 剪贴板侧车暂存项无物理思源块与源文档，不显示「在文档中定位 / 就地修改块内容」
+                    btn.style.display = "none";
                 } else {
-                    btn.style.display = (act === "save-omni" || act === "edit-and-capture-omni")
-                        ? (showOmniSave && act === "save-omni" ? "" : (showOmniEditCapture && act === "edit-and-capture-omni" ? "" : "none"))
-                        : "";
+                    btn.style.display = "";
                 }
                 if (act === "save-omni") {
                     const isCaptured = entry ? this.capturedOmniIds.has(entry.id) : false;

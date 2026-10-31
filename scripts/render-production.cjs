@@ -2369,6 +2369,8 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     await page.waitForFunction(() => Boolean(document.querySelector("[data-xlc-discovery-action='undo-batch']"))
         && document.querySelector("[data-xlc-discovery-action='close']")?.disabled === false);
     const deferredBatchClose = await page.evaluate(() => window.XlcHarness.closeDiscovery());
+    // 等关闭确认弹窗的首次 requestAnimationFrame(cancel.focus) 执行完毕，防止与下方裁剪负向夹具竞态滚动窗口
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
     const closeFormIsVisible = () => {
         const form = document.querySelector(".xlc-discovery-close-form");
         const rect = form?.getBoundingClientRect();

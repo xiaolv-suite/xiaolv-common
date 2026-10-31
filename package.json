@@ -12,6 +12,7 @@
     "test:ix": "node scripts/ui-interaction-audit.cjs",
     "e2e": "node scripts/e2e-acceptance.cjs",
     "e2e:iso": "node scripts/e2e-isolated.cjs",
+    "e2e:isolated": "node scripts/e2e-isolated.cjs",
     "e2e:real": "node scripts/e2e-real-checklist.cjs",
     "e2e:discovery": "node scripts/e2e-discovery.cjs",
     "e2e:discovery:iso": "node scripts/e2e-isolated.cjs --discovery-only",
