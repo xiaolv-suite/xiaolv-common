@@ -8,7 +8,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
-import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
+import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
@@ -24,6 +24,8 @@ import {formatScopeFallbackQuery, shouldShowOmniSearchFallback, shouldShowScopeF
 import {findPinyinMatches} from "../model/pinyin-tiny";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
+import {formatPlatformShortcut, detectShortcutConflicts} from "../model/hotkeys";
+import {calculateVirtualScrollWindow} from "./performance-utils";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
 import {renderWechatArticleHtml, writeRichClipboard} from "../model/clipboard";
 import {transformCase} from "../model/placeholders";
@@ -500,27 +502,29 @@ export class CommonSearchDialog {
             kbdLabel.className = "xlc-kbdrow-label";
             kbdLabel.textContent = this.deps.t("shortcutLabel");
             kbdRow.appendChild(kbdLabel);
-            for (const hint of [
-                {key: "Enter", action: "插入文本快照"},
-                {key: "Shift+Enter", action: "嵌入同步块"},
-                {key: "Alt+Enter", action: "插入块引用"},
-                {key: `${isApple ? "⌥" : "Alt"} + J`, action: "前后文探针"},
-                {key: `${isApple ? "⌘" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy")},
-                {key: `${isApple ? "⌥" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert")},
-                {key: `${isApple ? "⌥ + ⇧" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy")},
-                {key: `${isApple ? "⌥" : "Alt"} + S`, action: "收录全库块"},
-                {key: `${isApple ? "⌥" : "Alt"} + R`, action: "复制块引用"},
-                {key: `${isApple ? "⌥" : "Alt"} + D`, action: "打开来源定位"},
-                {key: `${isApple ? "⌥" : "Alt"} + M`, action: "复制 Markdown"},
-                {key: `${isApple ? "⌥" : "Alt"} + H`, action: "层级大纲"},
-                {key: `${isApple ? "⌥" : "Alt"} + P`, action: "固定窗口"},
-                {key: `${isApple ? "⌥" : "Alt"} + C`, action: "复制并关闭"},
-                {key: `${isApple ? "⌥" : "Alt"} + T`, action: "轮转范围"},
-                {key: "@ /", action: "全库穿透"},
-                {key: `${isApple ? "⌥" : "Alt"} + F`, action: this.deps.t("kbdFavorite")},
-                {key: "Tab", action: this.deps.t("kbdTabActions")},
-                {key: "Esc", action: this.deps.t("kbdClose")},
-            ]) {
+            const kbdDefinitions = [
+                {id: "insert", key: "Enter", action: "插入文本快照"},
+                {id: "embed", key: formatPlatformShortcut("Shift+Enter", isApple), action: "嵌入同步块"},
+                {id: "blockref", key: formatPlatformShortcut("Alt+Enter", isApple), action: "插入块引用"},
+                {id: "adjacent", key: `${isApple ? "⌥" : "Alt"} + J`, action: "前后文探针"},
+                {id: "copy", key: `${isApple ? "⌘" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy")},
+                {id: "quickInsert", key: `${isApple ? "⌥" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert")},
+                {id: "quickCopy", key: `${isApple ? "⌥ + ⇧" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy")},
+                {id: "captureOmni", key: `${isApple ? "⌥" : "Alt"} + S`, action: "收录全库块"},
+                {id: "copyRef", key: `${isApple ? "⌥" : "Alt"} + R`, action: "复制块引用"},
+                {id: "openSource", key: `${isApple ? "⌥" : "Alt"} + D`, action: "打开来源定位"},
+                {id: "copyMd", key: `${isApple ? "⌥" : "Alt"} + M`, action: "复制 Markdown"},
+                {id: "hierarchy", key: `${isApple ? "⌥" : "Alt"} + H`, action: "层级大纲"},
+                {id: "pin", key: `${isApple ? "⌥" : "Alt"} + P`, action: "固定窗口"},
+                {id: "copyClose", key: `${isApple ? "⌥" : "Alt"} + C`, action: "复制并关闭"},
+                {id: "cycleScope", key: `${isApple ? "⌥" : "Alt"} + T`, action: "轮转范围"},
+                {id: "omniPrefix", key: "@ /", action: "全库穿透"},
+                {id: "favorite", key: `${isApple ? "⌥" : "Alt"} + F`, action: this.deps.t("kbdFavorite")},
+                {id: "tab", key: "Tab", action: this.deps.t("kbdTabActions")},
+                {id: "close", key: "Esc", action: this.deps.t("kbdClose")},
+            ];
+            kbdRow.dataset.xlcHotkeyConflicts = String(detectShortcutConflicts(kbdDefinitions).length);
+            for (const hint of kbdDefinitions) {
                 const kbd = document.createElement("span");
                 kbd.className = "xlc-kbd xlc-kbd-hint";
                 kbd.title = `${hint.key}：${hint.action}`;
@@ -2537,12 +2541,18 @@ export class CommonSearchDialog {
             bottomSpacer.dataset.xlcSpacer = "bottom";
             const renderWindow = (requestedIndex?: number): void => {
                 const viewport = Math.max(list.clientHeight || 480, rowHeight * 6);
-                const rawStart = requestedIndex === undefined
-                    ? Math.floor(list.scrollTop / rowHeight)
-                    : Math.max(0, requestedIndex - overscan);
-                const visible = Math.ceil(viewport / rowHeight);
-                const start = Math.max(0, Math.min(rawStart, this.results.length - 1));
-                const end = Math.min(this.results.length, start + visible + overscan * 2);
+                let start: number;
+                let end: number;
+                if (requestedIndex === undefined) {
+                    const win = calculateVirtualScrollWindow(this.results.length, list.scrollTop, rowHeight, viewport, overscan);
+                    start = win.startIndex;
+                    end = win.endIndex;
+                } else {
+                    const visible = Math.ceil(viewport / rowHeight);
+                    const rawStart = Math.max(0, requestedIndex - overscan);
+                    start = Math.max(0, Math.min(rawStart, this.results.length - 1));
+                    end = Math.min(this.results.length, start + visible + overscan * 2);
+                }
                 topSpacer.style.height = `${start * rowHeight}px`;
                 bottomSpacer.style.height = `${Math.max(0, (this.results.length - end) * rowHeight)}px`;
                 list.replaceChildren(topSpacer);
@@ -5165,6 +5175,15 @@ export class CommonSearchDialog {
                         });
                     }
                 }
+                if (entry.content && entry.content.trim().startsWith("{")) {
+                    const jsonPropRes = jsonToProperties(entry.content);
+                    if (jsonPropRes.ok && jsonPropRes.count > 0) {
+                        addSilent("🌐", `JSON 转键值对 (Properties) 并复制 (${jsonPropRes.count}项)`, async () => {
+                            await this.deps.copyProviderPayload(jsonPropRes.result);
+                            this.deps.notify?.("info", `已转换 ${jsonPropRes.count} 项 JSON 属性为键值对并复制`);
+                        });
+                    }
+                }
                 if (entry.content && (/\d{11}/.test(entry.content) || /@/.test(entry.content))) {
                     addSilent("🔒", "敏感信息掩码脱敏并复制", async () => {
                         const raw = entry.content || await this.deps.preview(entry.id) || "";
@@ -6544,40 +6563,62 @@ export class CommonSearchDialog {
         host = document.createElement("div");
         host.className = "xlc-adjacent-context-box";
         host.style.cssText = "margin-top:16px; padding:12px; background:var(--xlc-soft, #f1f1f9); border:1px solid var(--b3-border-color); border-radius:8px; font-size:12px; display:flex; flex-direction:column; gap:8px;";
-        host.innerHTML = `<div style="font-weight:600; opacity:0.8;">🔍 上下文语境探针 (前后相邻块 · Alt+J 收起)：</div><div>正在调取前后文…</div>`;
+        const loadingTitle = document.createElement("div");
+        loadingTitle.style.cssText = "font-weight:600; opacity:0.8;";
+        loadingTitle.textContent = "🔍 上下文语境探针 (前后相邻块 · Alt+J 收起)：";
+        const loadingBody = document.createElement("div");
+        loadingBody.textContent = "正在调取前后文…";
+        host.append(loadingTitle, loadingBody);
         paneBody.appendChild(host);
+
+        const buildBlockRow = (tagLabel: string, contentText: string, isCurrent: boolean): HTMLDivElement => {
+            const rowEl = document.createElement("div");
+            rowEl.style.cssText = isCurrent
+                ? "padding:8px; background:var(--b3-theme-background); border-left:3px solid var(--b3-theme-primary); border-radius:4px; font-weight:500;"
+                : "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
+            const strongEl = document.createElement("strong");
+            strongEl.style.cssText = isCurrent ? "color:var(--b3-theme-primary);" : "opacity:0.6;";
+            strongEl.textContent = tagLabel;
+            rowEl.append(strongEl, document.createTextNode(" " + contentText));
+            return rowEl;
+        };
 
         try {
             const data = await this.deps.getAdjacentBlocks(targetBlockId, sourceDocId);
             if (!data) {
-                host.innerHTML = `<div style="opacity:0.7;">未检索到相邻上下文块或源文档无其它子块</div>`;
+                host.textContent = "";
+                const emptyEl = document.createElement("div");
+                emptyEl.style.opacity = "0.7";
+                emptyEl.textContent = "未检索到相邻上下文块或源文档无其它子块";
+                host.appendChild(emptyEl);
                 return;
             }
-            host.innerHTML = `<div style="font-weight:600; color:var(--b3-theme-primary); display:flex; align-items:center; justify-content:space-between;">
-                <span>🔍 源文档前后相邻块语境 (Alt+J 收起)</span>
-                <span style="font-size:11px; opacity:0.7; font-weight:normal;">来源：${entry.sourceDocPath || "源文档"}</span>
-            </div>`;
+            host.textContent = "";
+            const headRow = document.createElement("div");
+            headRow.style.cssText = "font-weight:600; color:var(--b3-theme-primary); display:flex; align-items:center; justify-content:space-between;";
+            const headTitle = document.createElement("span");
+            headTitle.textContent = "🔍 源文档前后相邻块语境 (Alt+J 收起)";
+            const headSrc = document.createElement("span");
+            headSrc.style.cssText = "font-size:11px; opacity:0.7; font-weight:normal;";
+            headSrc.textContent = `来源：${entry.sourceDocPath || "源文档"}`;
+            headRow.append(headTitle, headSrc);
+            host.appendChild(headRow);
 
             if (data.prev) {
-                const prevEl = document.createElement("div");
-                prevEl.style.cssText = "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
-                prevEl.innerHTML = `<strong style="opacity:0.6;">[上文]</strong> ${kramdownToPlainText(data.prev.content) || "(空)"}`;
-                host.appendChild(prevEl);
+                host.appendChild(buildBlockRow("[上文]", kramdownToPlainText(data.prev.content) || "(空)", false));
             }
 
-            const curEl = document.createElement("div");
-            curEl.style.cssText = "padding:8px; background:var(--b3-theme-background); border-left:3px solid var(--b3-theme-primary); border-radius:4px; font-weight:500;";
-            curEl.innerHTML = `<strong style="color:var(--b3-theme-primary);">[当前]</strong> ${kramdownToPlainText(data.current.content) || "(当前块内容)"}`;
-            host.appendChild(curEl);
+            host.appendChild(buildBlockRow("[当前]", kramdownToPlainText(data.current.content) || "(当前块内容)", true));
 
             if (data.next) {
-                const nextEl = document.createElement("div");
-                nextEl.style.cssText = "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
-                nextEl.innerHTML = `<strong style="opacity:0.6;">[下文]</strong> ${kramdownToPlainText(data.next.content) || "(空)"}`;
-                host.appendChild(nextEl);
+                host.appendChild(buildBlockRow("[下文]", kramdownToPlainText(data.next.content) || "(空)", false));
             }
         } catch {
-            host.innerHTML = `<div style="color:var(--b3-theme-error);">调取相邻上下文失败</div>`;
+            host.textContent = "";
+            const errEl = document.createElement("div");
+            errEl.style.color = "var(--b3-theme-error)";
+            errEl.textContent = "调取相邻上下文失败";
+            host.appendChild(errEl);
         }
     }
 }

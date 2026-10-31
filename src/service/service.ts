@@ -3,11 +3,11 @@
 import {CAPABILITIES, ActionResult, CapabilityDescriptor, CommonItemRef, ProviderDescriptor, envelope, failureEnvelope, negotiateProtocol, normalizeSaveInput, successEnvelope, type CaptureQuoteInput} from "../model/protocol";
 import {SearchQuery, SearchContext, SearchEntry, searchEntries, listByScope} from "../model/search";
 import {InsertMode} from "../model/actions";
-import {CommonItem, isItemType} from "../model/item";
+import {CommonItem, cleanShortcode, isItemType} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {PluginState} from "../model/storage";
 import {EVENTS, PROTOCOL_VERSION} from "../constants";
-import {listAskFields} from "../model/variables";
+import {extractCursorPosition, listAskFields} from "../model/variables";
 import {ActionExecutor, type EditorInsertTargetSnapshot} from "./commands";
 import {kramdownToPlainText} from "../model/item";
 import {renderSafeHtmlFromMarkdown, isMarkdownFormattingPresent} from "../model/clipboard";
@@ -46,6 +46,8 @@ export interface ResolvedItemData {
     plainText: string;
     /** 针对 Word、飞书、富文本邮件等渲染的 HTML 排版 */
     richHtml?: string;
+    /** 模板内若含 {{cursor}} / {{xlc:cursor}} / $|$ 锚点，返回展开后的光标字符偏移量 */
+    cursorOffset?: number | null;
 }
 
 export type RecallMatchMode = "exact" | "multiple" | "none";
@@ -215,6 +217,7 @@ export class XiaolvCommonService {
         const richHtml = (item.itemType === "markdown" || (item.itemType === "text" && isMarkdownFormattingPresent(resolvedText)))
             ? renderSafeHtmlFromMarkdown(resolvedText)
             : undefined;
+        const cursorPos = item.itemType === "code" ? {cursorOffset: null} : extractCursorPosition(expandedForVars);
 
         return successEnvelope({
             id: item.id,
@@ -232,6 +235,7 @@ export class XiaolvCommonService {
             missingVariables,
             plainText,
             richHtml,
+            ...(cursorPos.cursorOffset !== null ? {cursorOffset: cursorPos.cursorOffset} : {}),
         });
     }
 
@@ -251,6 +255,29 @@ export class XiaolvCommonService {
             idx = await this.deps.library.ensureIndex();
         } catch (err) {
             return failureEnvelope("kernel-error", toErrorMessage(err));
+        }
+
+        // 0. 查找简码 (:shortcode) 完全匹配项（支持带或不带前导冒号）
+        const cleanSc = key.startsWith(":") ? key : ":" + key;
+        const exactShortcodeMatches: SearchEntry[] = [];
+        for (const entry of idx.entries) {
+            const sc = (entry.shortcode ?? "").trim().toLowerCase();
+            if (sc && (sc === cleanSc || sc === key)) {
+                exactShortcodeMatches.push(entry);
+            }
+        }
+        if (exactShortcodeMatches.length === 1) {
+            const target = exactShortcodeMatches[0];
+            if (target) {
+                const resolved = await this.resolve(target.id, fills);
+                if (resolved.ok && resolved.data) {
+                    this.touchRecent(target.id);
+                    this.recordUsage(target.id);
+                    return successEnvelope({ matched: "exact" as const, item: resolved.data });
+                }
+            }
+        } else if (exactShortcodeMatches.length > 1) {
+            return successEnvelope({ matched: "multiple" as const, candidates: exactShortcodeMatches.map(toRef) });
         }
 
         // 1. 查找别名完全匹配项
@@ -362,6 +389,7 @@ export class XiaolvCommonService {
             markdown,
             title,
             alias: alias || undefined,
+            shortcode: input.shortcode ? cleanShortcode(input.shortcode) : undefined,
             tags,
             category,
             source: {
@@ -382,6 +410,7 @@ export class XiaolvCommonService {
             logicalId: parsed.input.logicalId,
             title: parsed.input.title,
             alias: parsed.input.alias,
+            shortcode: parsed.input.shortcode ? cleanShortcode(parsed.input.shortcode) : undefined,
             tags: parsed.input.tags,
             category: parsed.input.category,
             url: parsed.input.url,
@@ -408,6 +437,7 @@ export class XiaolvCommonService {
         const updated = await this.deps.library.updateItem(String(itemId ?? ""), {
             title: typeof obj.title === "string" ? obj.title : undefined,
             alias: typeof obj.alias === "string" ? obj.alias : undefined,
+            shortcode: typeof obj.shortcode === "string" ? cleanShortcode(obj.shortcode) : undefined,
             tags: Array.isArray(obj.tags) ? obj.tags.filter((t): t is string => typeof t === "string") : undefined,
             category: typeof obj.category === "string" ? obj.category : undefined,
         }, {idempotencyKey});

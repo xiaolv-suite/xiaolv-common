@@ -107,6 +107,7 @@ export async function buildMarkdownExport(
             `id: ${item.id}`,
             `type: ${item.itemType}`,
             item.alias ? `alias: ${oneLine(item.alias)}` : "",
+            item.shortcode ? `shortcode: ${oneLine(item.shortcode)}` : "",
             item.tags.length ? `tags: ${item.tags.map(oneLine).join(",")}` : "",
             item.category ? `category: ${oneLine(item.category)}` : "",
             item.source.sourceDocId ? `source-doc: ${oneLine(item.source.sourceDocId)}` : "",

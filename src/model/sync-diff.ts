@@ -12,6 +12,7 @@ export interface SyncEntry {
     itemType: string;
     title: string;
     alias?: string;
+    shortcode?: string;
     tags?: readonly string[];
     category?: string;
     kramdown?: string;
@@ -117,6 +118,7 @@ export function computeItemFingerprint(entry: SyncEntry): string {
         entry.itemType || "text",
         (entry.title || "").trim(),
         (entry.alias || "").trim(),
+        ...(entry.shortcode ? [(entry.shortcode || "").trim()] : []),
         normTags,
         (entry.category || "").trim(),
         (entry.url || "").trim(),
@@ -138,6 +140,7 @@ export function detectChangedFields(local: SyncEntry, remote: SyncEntry): string
     if (local.itemType !== remote.itemType) fields.push("itemType");
     if ((local.title || "").trim() !== (remote.title || "").trim()) fields.push("title");
     if ((local.alias || "").trim() !== (remote.alias || "").trim()) fields.push("alias");
+    if ((local.shortcode || "").trim() !== (remote.shortcode || "").trim()) fields.push("shortcode");
     if ((local.category || "").trim() !== (remote.category || "").trim()) fields.push("category");
     if ((local.url || "").trim() !== (remote.url || "").trim()) fields.push("url");
     if ((local.targetBlockId || "").trim() !== (remote.targetBlockId || "").trim()) fields.push("targetBlockId");

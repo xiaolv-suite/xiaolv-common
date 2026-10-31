@@ -6,7 +6,7 @@ import {getActiveEditor, openTab} from "siyuan";
 import {EVENTS, PROTOCOL_VERSION} from "../constants";
 import {ActionContext, InsertMode, InsertPlan, OpenTarget, planAction, planOpenSource} from "../model/actions";
 import {applyPlaceholders, listPlaceholders} from "../model/placeholders";
-import {applyAskDefaults, expandAsks, stripCursorToken} from "../model/variables";
+import {applyAskDefaults, expandAsks, extractCursorPosition, stripCursorToken} from "../model/variables";
 import {CommonItem} from "../model/item";
 import {LibraryService, SourceHealth} from "./library";
 import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown, writeRichClipboard} from "../model/clipboard";
@@ -227,6 +227,8 @@ export interface ExecutionReceipt {
     pendingVerification: string[];
     /** 实际打开的目标类型；仅 open-source 成功时存在。 */
     opened?: OpenTarget["kind"];
+    /** 当模板包含 {{cursor}} / {{xlc:cursor}} / $|$ 锚点时，展开后的光标字符偏移量 */
+    cursorOffset?: number | null;
 }
 
 export class ActionExecutor {
@@ -414,15 +416,19 @@ export class ActionExecutor {
     }
 
     private async execute(item: CommonItem, plan: InsertPlan, editorTarget?: EditorInsertTargetSnapshot | null): Promise<ExecutionReceipt> {
-        // 插入语义输出：未填充 ask 兜底为 __名称__（可见可改），光标标记移除；复制路径保持模板原样
-        const insertRender = (text: string | undefined): Promise<string | undefined> => {
-            if (text === undefined) return Promise.resolve(undefined);
-            if (item.itemType === "code") return Promise.resolve(text);
-            return this.applyOutput(applyAskDefaults(stripCursorToken(text)), item);
+        // 插入语义输出：未填充 ask 兜底为 __名称__（可见可改），计算光标偏移并移除光标标记；复制路径保持模板原样
+        const insertRenderWithCursor = async (text: string | undefined): Promise<{text: string | undefined; cursorOffset: number | null}> => {
+            if (text === undefined) return {text: undefined, cursorOffset: null};
+            if (item.itemType === "code") return {text, cursorOffset: null};
+            const withDefaults = applyAskDefaults(text);
+            const withOutput = (await this.applyOutput(withDefaults, item)) ?? withDefaults;
+            const extracted = extractCursorPosition(withOutput);
+            return {text: stripCursorToken(extracted.text), cursorOffset: extracted.cursorOffset};
         };
         // 移动端插入未验证：诚实降级为复制（B-002 解除后复核）
         if ((plan.mode === "insert" || plan.mode === "insert-content" || plan.mode === "insert-ref" || plan.mode === "insert-embed") && this.host.isMobile()) {
-            const text = (await insertRender(plan.markdown)) ?? "";
+            const rendered = await insertRenderWithCursor(plan.markdown);
+            const text = rendered.text ?? "";
             let html: string | undefined;
             if (item.itemType === "markdown" || (item.itemType === "text" && isMarkdownFormattingPresent(text))) {
                 html = renderSafeHtmlFromMarkdown(text);
@@ -437,10 +443,12 @@ export class ActionExecutor {
                 message: copied ? "insert-downgraded-copied" : "copy-failed",
                 downgraded: true,
                 pendingVerification: ["mobile-insert-unverified", ...plan.pendingVerification],
+                ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
             };
         }
         if (plan.mode === "insert" || plan.mode === "insert-content" || plan.mode === "insert-ref" || plan.mode === "insert-embed") {
-            const md = (await insertRender(plan.markdown)) ?? "";
+            const rendered = await insertRenderWithCursor(plan.markdown);
+            const md = rendered.text ?? "";
             if (!md) {
                 return {ok: false, mode: plan.mode, message: "empty-plan", downgraded: plan.downgraded, pendingVerification: plan.pendingVerification};
             }
@@ -464,11 +472,15 @@ export class ActionExecutor {
                         : "no-editor-copy-failed",
                     downgraded: true,
                     pendingVerification: plan.pendingVerification,
+                    ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
                 };
             }
             const inserted = this.host.insertMarkdown(md, editorTarget);
             if (inserted) {
-                this.emitEvent(EVENTS.itemInserted, item, {insertMode: plan.mode});
+                this.emitEvent(EVENTS.itemInserted, item, {
+                    insertMode: plan.mode,
+                    ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
+                });
                 this.noteUsed(item);
             }
             return {
@@ -477,6 +489,7 @@ export class ActionExecutor {
                 message: inserted ? "inserted" : "insert-failed",
                 downgraded: false,
                 pendingVerification: plan.pendingVerification,
+                ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
             };
         }
         if (plan.mode === "copy" || plan.mode === "copy-content") {

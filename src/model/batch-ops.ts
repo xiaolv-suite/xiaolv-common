@@ -3,6 +3,7 @@
 
 import {LIMITS} from "../constants";
 import {cleanTagList, CommonItem} from "./item";
+import {renameHierarchyNode, reparentHierarchyPath} from "./hierarchy";
 
 export interface BatchTagCategoryPatch {
     /** 要追加的标签列表（自动去重、清洗前后 #、按上限截断） */
@@ -11,6 +12,12 @@ export interface BatchTagCategoryPatch {
     removeTags?: string[];
     /** 要统一设定的分类名称（空串或纯空白表示清空分类） */
     setCategory?: string;
+    /** 级联重命名分类前缀（如 {from: "客服/售后", to: "客服/技术支持"}） */
+    renameCategoryPrefix?: {from: string; to: string};
+    /** 改变当前分类的父级路径（如 "财务" 将 "客服/退款" 迁为 "财务/退款"） */
+    reparentCategory?: string;
+    /** 级联重命名标签前缀（如 {from: "项目/一期", to: "项目/二期"}） */
+    renameTagPrefix?: {from: string; to: string};
 }
 
 export interface BatchItemReceipt {
@@ -88,6 +95,15 @@ export function applyBatchTagCategoryOps(
         }
     }
 
+    // 2.5 标签前缀级联重命名
+    if (patch.renameTagPrefix && patch.renameTagPrefix.from.trim()) {
+        const renamed = cleanTagList(nextTags.map((t) => renameHierarchyNode(t, patch.renameTagPrefix!.from, patch.renameTagPrefix!.to)));
+        if (renamed.length !== nextTags.length || renamed.some((t, i) => t !== nextTags[i])) {
+            nextTags = renamed;
+            tagsChanged = true;
+        }
+    }
+
     // 3. 分类判定
     let nextCategory = item.category ?? "";
     let categoryChanged = false;
@@ -95,6 +111,18 @@ export function applyBatchTagCategoryOps(
         const cleanCat = patch.setCategory.trim().slice(0, LIMITS.category);
         if (cleanCat !== (item.category ?? "")) {
             nextCategory = cleanCat;
+            categoryChanged = true;
+        }
+    } else if (patch.renameCategoryPrefix && patch.renameCategoryPrefix.from.trim() && nextCategory) {
+        const renamedCat = renameHierarchyNode(nextCategory, patch.renameCategoryPrefix.from, patch.renameCategoryPrefix.to).slice(0, LIMITS.category);
+        if (renamedCat !== nextCategory) {
+            nextCategory = renamedCat;
+            categoryChanged = true;
+        }
+    } else if (typeof patch.reparentCategory === "string" && nextCategory) {
+        const reparented = reparentHierarchyPath(nextCategory, patch.reparentCategory).slice(0, LIMITS.category);
+        if (reparented !== nextCategory) {
+            nextCategory = reparented;
             categoryChanged = true;
         }
     }

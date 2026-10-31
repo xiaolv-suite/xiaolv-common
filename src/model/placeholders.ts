@@ -2501,7 +2501,7 @@ export function applyPlaceholders(text: string, now: Date, enabled: boolean, doc
         return resolveDateArg(now, trimmed) || formatDateTime(now, trimmed) || _match;
     });
 
-    // 4. 扩展当前文档上下文：{{doc.title}} 与 {{doc.path}}
+    // 4. 扩展当前文档上下文：{{doc.title}} 与 {{doc.path}}（裸 {{date}} 留给思源原生模板，避免误伤，见 R6 契约）
     result = result.replace(/\{\{doc\.title\}\}/g, () => doc?.title ?? "");
     result = result.replace(/\{\{doc\.path\}\}/g, () => doc?.path ?? "");
 
@@ -2589,6 +2589,11 @@ export function listPlaceholders(text: string): PlaceholderKind[] {
                                                                                                                                                             ? "csv"
                                                                                                                                                             : rawKind) as PlaceholderKind;
         if (!kinds.includes(kind)) kinds.push(kind);
+    }
+    if (text && text.includes("{{")) {
+        if (/\{\{date(?:[+-]\d{1,4}[dwmy]|:[^}]+)\}\}/.test(text) && !kinds.includes("date")) kinds.push("date");
+        if (/\{\{doc\.title\}\}/.test(text) && !kinds.includes("title")) kinds.push("title");
+        if (/\{\{doc\.path\}\}/.test(text) && !kinds.includes("path")) kinds.push("path");
     }
     return kinds;
 }

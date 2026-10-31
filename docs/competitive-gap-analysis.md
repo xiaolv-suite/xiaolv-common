@@ -1,5 +1,7 @@
 # 竞品功能差距分析与进阶演进规划（2026-10-20 全面更新）
 
+> **单一事实来源迁移说明（2026-10-31）**：本文件中的 G22~G26 均已在 v0.6.x~v0.10.x 落地（状态更新为「已落地」）；其余受宿主阻塞或待收口的待办项已统一归入全仓唯一待办池 [`docs/todo-pool.md`](todo-pool.md)。原文件保留作竞品调研基线。
+
 > 对标工具：[Espanso](https://espanso.org)、[TextExpander](https://textexpander.com)、[PhraseExpress](https://phraseexpress.com)、[Raycast Snippets](https://raycast.com)、[Quicker](https://getquicker.net)
 > 思源生态：[思源集市](https://github.com/siyuan-note/bazaar)、思源内置模板系统、思源社区各类文本扩展工具
 > 基线轮次：v0.5.0 + R273~R279 进阶演进（已完成 T-0086–T-0132 共计 47 项核心与进阶研发）
@@ -43,11 +45,11 @@
 
 | # | 功能方向 | 对标竞品 | 用户痛点与业务价值 | 实现难度 | 规划状态 |
 |---|---|---|---|---|---|
-| **G22** | **变量历史填写值记忆与智能预填** | TextExpander Form History / Raycast | 对于客服姓名、工单号、联系人等高频变量，每次都要重新手打。侧车记忆最近输入值并作为默认值预填，回车直接沿用，大幅提升效率。 | 低 | 待实现 (T-0133) |
-| **G23** | **光标选区包裹模式 (Surround Selection)** | VSCode / Raycast Surround | 用户在编辑器中选中一段文本后，呼出常用语可选择“选区包裹模板”（如包裹进代码块、引用块、翻译指令、固定表格等），将原选区内容嵌入 `{{xlc:selection}}`。 | 中 | 待实现 (T-0134) |
-| **G24** | **模板变量交互式实时求值与动态预览** | Raycast Live Preview / TextExpander | 在变量填写卡片（Variable Fill Card）输入值时，下方实时展现最终展开后的文本预览，让用户在按下回车前 100% 确认无误。 | 中 | 待实现 (T-0135) |
-| **G25** | **正则提取与文本动态替换过滤器** | Espanso Regex / TextExpander | 允许在占位符中执行安全正则提取与文本替换（如从剪贴板提取纯数字单号 `{{xlc:regex:extract\|\d+\|text}}` 或格式脱敏），防灾难性回溯。 | 中 | 待实现 (T-0136) |
-| **G26** | **常用内容库健康度与语法体检中心** | PhraseExpress Macro Checker / Lint | 在设置面板提供条目体检：批量扫描检测死循环片段引用、不存在的子片段、格式损坏的占位符、超长受限正文，给出诊断清单与一键跳转修复。 | 中 | 待实现 (T-0137) |
+| **G22** | **变量历史填写值记忆与智能预填** | TextExpander Form History / Raycast | 对于客服姓名、工单号、联系人等高频变量，每次都要重新手打。侧车记忆最近输入值并作为默认值预填，回车直接沿用，大幅提升效率。 | 低 | 已落地 (T-0133 / R280；设置清理入口归入 `docs/todo-pool.md` `TD-006`) |
+| **G23** | **光标选区包裹模式 (Surround Selection)** | VSCode / Raycast Surround | 用户在编辑器中选中一段文本后，呼出常用语可选择“选区包裹模板”（如包裹进代码块、引用块、翻译指令、固定表格等），将原选区内容嵌入 `{{xlc:selection}}`。 | 中 | 已落地 (T-0134 / R281) |
+| **G24** | **模板变量交互式实时求值与动态预览** | Raycast Live Preview / TextExpander | 在变量填写卡片（Variable Fill Card）输入值时，下方实时展现最终展开后的文本预览，让用户在按下回车前 100% 确认无误。 | 中 | 已落地 (T-0135 / R282) |
+| **G25** | **正则提取与文本动态替换过滤器** | Espanso Regex / TextExpander | 允许在占位符中执行安全正则提取与文本替换（如从剪贴板提取纯数字单号 `{{xlc:regex:extract\|\d+\|text}}` 或格式脱敏），防灾难性回溯。 | 中 | 已落地 (T-0136 / R283) |
+| **G26** | **常用内容库健康度与语法体检中心** | PhraseExpress Macro Checker / Lint | 在设置面板提供条目体检：批量扫描检测死循环片段引用、不存在的子片段、格式损坏的占位符、超长受限正文，给出诊断清单与一键跳转修复。 | 中 | 已落地 (T-0137 / R284) |
 
 ---
 

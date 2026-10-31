@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.78";
+      PLUGIN_VERSION = "0.10.79";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -2079,6 +2079,30 @@
       count,
       ok: true
     };
+  }
+  function jsonToProperties(text) {
+    if (!text || typeof text !== "string") {
+      return { result: "", count: 0, ok: false };
+    }
+    try {
+      const parsed = JSON.parse(text.trim());
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        return { result: text, count: 0, ok: false };
+      }
+      const lines = [];
+      let count = 0;
+      for (const [key, val] of Object.entries(parsed)) {
+        lines.push(`${key}=${val !== null && val !== void 0 ? String(val) : ""}`);
+        count++;
+      }
+      return {
+        result: lines.join("\n"),
+        count,
+        ok: true
+      };
+    } catch {
+      return { result: text, count: 0, ok: false };
+    }
   }
   function maskSensitiveText(text, options = "auto") {
     if (!text || typeof text !== "string") return text != null ? text : "";
@@ -9299,6 +9323,11 @@ ${codeText}`;
       const kind = rawKind.startsWith("case") ? "case" : rawKind.startsWith("regex") ? "regex" : rawKind.startsWith("url") ? "url" : rawKind.startsWith("base64") ? "base64" : rawKind.startsWith("html") ? "html" : rawKind.startsWith("count") ? "count" : rawKind.startsWith("kv") ? "kv" : rawKind.startsWith("match") ? "match" : rawKind.startsWith("valid") ? "valid" : rawKind.startsWith("path") ? "path" : rawKind.startsWith("nanoid") ? "nanoid" : rawKind.startsWith("template") ? "template" : rawKind.startsWith("obfuscate") ? "obfuscate" : rawKind.startsWith("scramble") ? "scramble" : rawKind.startsWith("thousands") ? "thousands" : rawKind.startsWith("checksum") ? "checksum" : rawKind.startsWith("pad") ? "pad" : rawKind.startsWith("seq") ? "seq" : rawKind.startsWith("fingerprint") ? "fingerprint" : rawKind.startsWith("randomcolor") ? "randomcolor" : rawKind.startsWith("btruncate") ? "btruncate" : rawKind.startsWith("initials") ? "initials" : rawKind.startsWith("plural") ? "plural" : rawKind.startsWith("escape") ? "escape" : rawKind.startsWith("repeat") ? "repeat" : rawKind.startsWith("center") ? "center" : rawKind.startsWith("slash") ? "slash" : rawKind.startsWith("revwords") ? "revwords" : rawKind.startsWith("randomname") ? "randomname" : rawKind.startsWith("if") ? "if" : rawKind.startsWith("smask") ? "smask" : rawKind.startsWith("censor") ? "censor" : rawKind.startsWith("shuffle") ? "shuffle" : rawKind.startsWith("progress") ? "progress" : rawKind.startsWith("json") ? "json" : rawKind.startsWith("line") ? "line" : rawKind.startsWith("csv") ? "csv" : rawKind;
       if (!kinds.includes(kind)) kinds.push(kind);
     }
+    if (text && text.includes("{{")) {
+      if (/\{\{date(?:[+-]\d{1,4}[dwmy]|:[^}]+)\}\}/.test(text) && !kinds.includes("date")) kinds.push("date");
+      if (/\{\{doc\.title\}\}/.test(text) && !kinds.includes("title")) kinds.push("title");
+      if (/\{\{doc\.path\}\}/.test(text) && !kinds.includes("path")) kinds.push("path");
+    }
     return kinds;
   }
   var PLACEHOLDER_PATTERN, WEEKDAYS_ZH, WEEKDAYS_FULL_ZH, WEEKDAYS_EN, WEEKDAYS_SHORT_EN, ZH_RELATIVE_DAYS, ZH_NEXT_WEEKDAY, RELATIVE_ARG, RELATIVE_TIME_ARG, NEXT_WEEKDAY_ARG, WEEKDAY_INDEX, FORMAT_TOKEN_PATTERN, UNAMBIGUOUS_CHARS, PWD_LOWER, PWD_UPPER, PWD_DIGITS, PWD_SYMBOLS, PWD_HEX, DANGEROUS_QUANTIFIER_PATTERN;
@@ -9473,6 +9502,28 @@ ${codeText}`;
     if (!text) return false;
     return text.includes("{{cursor}}") || text.includes("{{xlc:cursor}}") || text.includes("$|$");
   }
+  function extractCursorPosition(text) {
+    if (!text) return { text: "", cursorOffset: null };
+    let firstIdx = -1;
+    let matchedToken = "";
+    for (const token of CURSOR_TOKENS) {
+      const idx = text.indexOf(token);
+      if (idx !== -1 && (firstIdx === -1 || idx < firstIdx)) {
+        firstIdx = idx;
+        matchedToken = token;
+      }
+    }
+    if (firstIdx === -1) {
+      return { text, cursorOffset: null };
+    }
+    const before = text.slice(0, firstIdx);
+    const after = text.slice(firstIdx + matchedToken.length);
+    const cleanedAfter = after.replace(/\{\{cursor\}\}|\{\{xlc:cursor\}\}|\$\|\$/g, "");
+    return {
+      text: before + cleanedAfter,
+      cursorOffset: before.length
+    };
+  }
   function listSnippetRefs(text) {
     var _a;
     if (!text || !text.includes("{{xlc:snippet:")) return [];
@@ -9521,13 +9572,14 @@ ${codeText}`;
     }
     return out;
   }
-  var ASK_PATTERN, SNIPPET_PATTERN;
+  var ASK_PATTERN, CURSOR_TOKENS, SNIPPET_PATTERN;
   var init_variables = __esm({
     "src/model/variables.ts"() {
       "use strict";
       init_constants();
       init_placeholders();
       ASK_PATTERN = /\{\{(?:xlc:ask:|input:|select:|choice:)([^:|}]+)(?:[:|]([^}]*))?\}\}/g;
+      CURSOR_TOKENS = ["{{cursor}}", "{{xlc:cursor}}", "$|$"];
       SNIPPET_PATTERN = /\{\{xlc:snippet:([^}]+)\}\}/g;
     }
   });
@@ -10910,6 +10962,32 @@ ${codeText}`;
       }
     });
     bar.appendChild(propsJsonBtn);
+    const jsonPropsBtn = document.createElement("button");
+    jsonPropsBtn.type = "button";
+    jsonPropsBtn.className = "xlc-varbtn xlc-btn-ghost";
+    jsonPropsBtn.dataset.xlcControl = "capture.format.json-props";
+    jsonPropsBtn.textContent = "\u2726 JSON\u8F6C\u952E\u503C";
+    jsonPropsBtn.title = "\u5C06 JSON \u5BF9\u8C61\u5B57\u7B26\u4E32\u8F6C\u6362\u4E3A Properties (key=value) \u952E\u503C\u5BF9\u6587\u672C";
+    jsonPropsBtn.addEventListener("click", () => {
+      var _a, _b;
+      const el = getTarget();
+      const start = (_a = el.selectionStart) != null ? _a : 0;
+      const end = (_b = el.selectionEnd) != null ? _b : el.value.length;
+      const hasSel = start !== end;
+      const targetText = hasSel ? el.value.slice(start, end) : el.value;
+      const res = jsonToProperties(targetText);
+      if (res.ok && res.count > 0) {
+        if (hasSel) {
+          el.value = el.value.slice(0, start) + res.result + el.value.slice(end);
+          el.setSelectionRange(start, start + res.result.length);
+        } else {
+          el.value = res.result;
+        }
+        el.focus();
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    bar.appendChild(jsonPropsBtn);
     const maskTextBtn = document.createElement("button");
     maskTextBtn.type = "button";
     maskTextBtn.className = "xlc-varbtn xlc-btn-ghost";
@@ -14472,6 +14550,24 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
     }
     return result;
   }
+  function reparentHierarchyPath(currentPath, newParentPath) {
+    const segments = splitHierarchyPath(currentPath);
+    if (segments.length === 0) return "";
+    const leafName = segments[segments.length - 1];
+    const parentSegments = splitHierarchyPath(newParentPath);
+    if (parentSegments.length === 0) return leafName;
+    return `${parentSegments.join("/")}/${leafName}`;
+  }
+  function renameHierarchyNode(fullPath, oldPrefix, newPrefix) {
+    const c = fullPath.trim();
+    const o = oldPrefix.trim();
+    const n = newPrefix.trim();
+    if (c === o) return n;
+    if (c.startsWith(o + "/")) {
+      return `${n}/${c.slice(o.length + 1)}`;
+    }
+    return c;
+  }
   var init_hierarchy = __esm({
     "src/model/hierarchy.ts"() {
       "use strict";
@@ -14926,7 +15022,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           });
         }
         openForm(defaultText, defaultType, sourceBlockId, overrides) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
           if (this.deps.isConfigured && !this.deps.isConfigured()) {
             (_b = (_a = this.deps).onNotConfigured) == null ? void 0 : _b.call(_a);
             return;
@@ -14943,6 +15039,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           let contentElRef = null;
           let titleElRef = null;
           let aliasElRef = null;
+          let shortcodeElRef = null;
           let tagsElRef = null;
           let categoryElRef = null;
           let typeSelectRef = null;
@@ -14962,6 +15059,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
                     content: contentElRef.value,
                     title: titleElRef == null ? void 0 : titleElRef.value,
                     alias: aliasElRef == null ? void 0 : aliasElRef.value,
+                    shortcode: shortcodeElRef == null ? void 0 : shortcodeElRef.value,
                     tags: tagsElRef == null ? void 0 : tagsElRef.value,
                     category: categoryElRef == null ? void 0 : categoryElRef.value,
                     type: typeSelectRef == null ? void 0 : typeSelectRef.value
@@ -15226,9 +15324,13 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
             categoryEl.parentElement.appendChild(catDatalist);
           }
           form.appendChild(tagRow);
+          const shortcodeEl = field(t("shortcode") || "\u7B80\u7801 (:shortcode)", (_l = overrides == null ? void 0 : overrides.shortcode) != null ? _l : "", false, "xlc-form-shortcode");
+          shortcodeEl.dataset.xlcControl = "capture.shortcode";
+          shortcodeEl.placeholder = t("shortcodePlaceholder") || "\u5982 :wk\u3001:bug\uFF08\u9009\u586B\uFF0C\u641C\u7D22\u6846\u8F93\u5165\u5373\u7F6E\u9876\u76F4\u8FBE\uFF09";
           contentElRef = contentEl;
           titleElRef = titleEl;
           aliasElRef = aliasEl;
+          shortcodeElRef = shortcodeEl;
           tagsElRef = tagsEl;
           categoryElRef = categoryEl;
           typeSelectRef = typeSelect;
@@ -15276,6 +15378,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
                 titleElRef.value = draft.title;
               }
               if (draft.alias && aliasElRef) aliasElRef.value = draft.alias;
+              if (draft.shortcode && shortcodeElRef) shortcodeElRef.value = draft.shortcode;
               if (draft.tags && tagsElRef) tagsElRef.value = draft.tags;
               if (draft.category && categoryElRef) categoryElRef.value = draft.category;
               if (draft.type && typeSelectRef) typeSelectRef.value = draft.type;
@@ -15614,7 +15717,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
               }
             });
           };
-          [titleEl, aliasEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el));
+          [titleEl, aliasEl, shortcodeEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el));
           form.addEventListener("keydown", (ev) => {
             var _a2, _b2;
             if (ev.isComposing || ev.keyCode === 229 || ev.repeat) return;
@@ -15630,6 +15733,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
                   content: contentElRef.value,
                   title: titleElRef == null ? void 0 : titleElRef.value,
                   alias: aliasElRef == null ? void 0 : aliasElRef.value,
+                  shortcode: shortcodeElRef == null ? void 0 : shortcodeElRef.value,
                   tags: tagsElRef == null ? void 0 : tagsElRef.value,
                   category: categoryElRef == null ? void 0 : categoryElRef.value,
                   type: typeSelectRef == null ? void 0 : typeSelectRef.value
@@ -15680,11 +15784,15 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
               saveBtn.textContent = t("saving");
               cancelBtn.disabled = true;
               const docId = overrides && "docId" in overrides ? overrides.docId : (overrides == null ? void 0 : overrides.sourceType) === "clipboard" ? void 0 : this.deps.currentDocId();
+              const rawShortcode = shortcodeEl.value.trim();
+              const rawAlias = aliasEl.value.trim();
+              const resolvedShortcode = rawShortcode ? cleanShortcode(rawShortcode) : rawAlias.startsWith(":") ? cleanShortcode(rawAlias) : "";
               void this.deps.createItem({
                 itemType: type,
                 markdown,
                 title: titleEl.value || void 0,
                 alias: aliasEl.value || void 0,
+                ...resolvedShortcode ? { shortcode: resolvedShortcode } : {},
                 tags: tagsEl.value ? tagsEl.value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : void 0,
                 category: categoryEl.value || void 0,
                 url: type === "url" ? markdown : void 0,
@@ -15998,7 +16106,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
 
   // src/model/transfer.ts
   function computeBundleChecksum(items) {
-    const raw = items.map((i) => `${i.id}::${i.title}::${i.kramdown}::${i.itemType}::${i.alias}`).join(";;");
+    const raw = items.map((i) => `${i.id}::${i.title}::${i.kramdown}::${i.itemType}::${i.alias}${i.shortcode ? `::${i.shortcode}` : ""}`).join(";;");
     return calculateChecksum(raw, "crc32");
   }
   function buildBundle(items, kramdownById, now, sanitizer) {
@@ -16407,6 +16515,13 @@ ${finalHtml}
   });
 
   // src/model/variable-memory.ts
+  function clearAllMemory(memory) {
+    return { enabled: memory ? memory.enabled : true, values: {} };
+  }
+  function countRememberedFields(memory) {
+    if (!memory || !memory.values) return 0;
+    return Object.keys(memory.values).length;
+  }
   var init_variable_memory = __esm({
     "src/model/variable-memory.ts"() {
       "use strict";
@@ -16607,6 +16722,7 @@ ${finalHtml}
         `id: ${item.id}`,
         `type: ${item.itemType}`,
         item.alias ? `alias: ${oneLine(item.alias)}` : "",
+        item.shortcode ? `shortcode: ${oneLine(item.shortcode)}` : "",
         item.tags.length ? `tags: ${item.tags.map(oneLine).join(",")}` : "",
         item.category ? `category: ${oneLine(item.category)}` : "",
         item.source.sourceDocId ? `source-doc: ${oneLine(item.source.sourceDocId)}` : "",
@@ -16747,7 +16863,7 @@ ${finalHtml}
       chunks.push(md.slice(chunkStart, chunkEnd));
     }
     chunks.forEach((chunk, index) => {
-      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
       const endIdx = chunk.indexOf(ITEM_COMMENT_END);
       if (endIdx === -1) {
         issues.push({ index, reason: "metadata-comment-unclosed" });
@@ -16783,22 +16899,24 @@ ${finalHtml}
       }
       if (!title && fields.get("alias")) title = (_d = fields.get("alias")) != null ? _d : "";
       const body = chunk.slice(endIdx + ITEM_COMMENT_END.length).replace(/^\s*\n/, "").replace(/\n\s*$/, "");
+      const shortcode = cleanShortcode((_e = fields.get("shortcode")) != null ? _e : "");
       seenIds.add(id);
       items.push({
         id,
         itemType,
         title: title.slice(0, LIMITS.title),
-        alias: ((_e = fields.get("alias")) != null ? _e : "").slice(0, LIMITS.alias),
-        tags: ((_f = fields.get("tags")) != null ? _f : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.tags),
-        category: ((_g = fields.get("category")) != null ? _g : "").slice(0, LIMITS.category),
+        alias: ((_f = fields.get("alias")) != null ? _f : "").slice(0, LIMITS.alias),
+        ...shortcode ? { shortcode } : {},
+        tags: ((_g = fields.get("tags")) != null ? _g : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.tags),
+        category: ((_h = fields.get("category")) != null ? _h : "").slice(0, LIMITS.category),
         kramdown: body.slice(0, LIMITS.contentChars),
         source: {
-          sourceDocId: (_h = fields.get("source-doc")) != null ? _h : "",
-          sourceBlockId: (_i = fields.get("source-block")) != null ? _i : "",
-          sourceType: (_j = fields.get("source-type")) != null ? _j : "external"
+          sourceDocId: (_i = fields.get("source-doc")) != null ? _i : "",
+          sourceBlockId: (_j = fields.get("source-block")) != null ? _j : "",
+          sourceType: (_k = fields.get("source-type")) != null ? _k : "external"
         },
         url,
-        targetBlockId: (_k = fields.get("target")) != null ? _k : "",
+        targetBlockId: (_l = fields.get("target")) != null ? _l : "",
         createdAt: 0,
         updatedAt: Date.now()
       });
@@ -18828,12 +18946,31 @@ ${finalHtml}
         tagsChanged = true;
       }
     }
+    if (patch.renameTagPrefix && patch.renameTagPrefix.from.trim()) {
+      const renamed = cleanTagList(nextTags.map((t) => renameHierarchyNode(t, patch.renameTagPrefix.from, patch.renameTagPrefix.to)));
+      if (renamed.length !== nextTags.length || renamed.some((t, i) => t !== nextTags[i])) {
+        nextTags = renamed;
+        tagsChanged = true;
+      }
+    }
     let nextCategory = (_b = item.category) != null ? _b : "";
     let categoryChanged = false;
     if (typeof patch.setCategory === "string") {
       const cleanCat = patch.setCategory.trim().slice(0, LIMITS.category);
       if (cleanCat !== ((_c = item.category) != null ? _c : "")) {
         nextCategory = cleanCat;
+        categoryChanged = true;
+      }
+    } else if (patch.renameCategoryPrefix && patch.renameCategoryPrefix.from.trim() && nextCategory) {
+      const renamedCat = renameHierarchyNode(nextCategory, patch.renameCategoryPrefix.from, patch.renameCategoryPrefix.to).slice(0, LIMITS.category);
+      if (renamedCat !== nextCategory) {
+        nextCategory = renamedCat;
+        categoryChanged = true;
+      }
+    } else if (typeof patch.reparentCategory === "string" && nextCategory) {
+      const reparented = reparentHierarchyPath(nextCategory, patch.reparentCategory).slice(0, LIMITS.category);
+      if (reparented !== nextCategory) {
+        nextCategory = reparented;
         categoryChanged = true;
       }
     }
@@ -18849,6 +18986,7 @@ ${finalHtml}
       "use strict";
       init_constants();
       init_item();
+      init_hierarchy();
     }
   });
 
@@ -18860,6 +18998,7 @@ ${finalHtml}
       entry.itemType || "text",
       (entry.title || "").trim(),
       (entry.alias || "").trim(),
+      ...entry.shortcode ? [(entry.shortcode || "").trim()] : [],
       normTags,
       (entry.category || "").trim(),
       (entry.url || "").trim(),
@@ -18879,6 +19018,7 @@ ${finalHtml}
     if (local.itemType !== remote.itemType) fields.push("itemType");
     if ((local.title || "").trim() !== (remote.title || "").trim()) fields.push("title");
     if ((local.alias || "").trim() !== (remote.alias || "").trim()) fields.push("alias");
+    if ((local.shortcode || "").trim() !== (remote.shortcode || "").trim()) fields.push("shortcode");
     if ((local.category || "").trim() !== (remote.category || "").trim()) fields.push("category");
     if ((local.url || "").trim() !== (remote.url || "").trim()) fields.push("url");
     if ((local.targetBlockId || "").trim() !== (remote.targetBlockId || "").trim()) fields.push("targetBlockId");
@@ -22374,11 +22514,13 @@ ${exception.mark.snippet}`;
       } else if (!trimmed.includes("\n") && /[*_~`\[\]]/.test(trimmed)) {
         itemType = "markdown";
       }
+      const sc = trigger.trim().startsWith(":") ? cleanShortcode(trigger) : "";
       items.push({
         id: espansoLogicalId(trigger),
         itemType,
         title: trigger.replace(/^:+/, "").trim() || trigger,
         alias: trigger,
+        ...sc ? { shortcode: sc } : {},
         tags: ["espanso"],
         category: "",
         kramdown,
@@ -22934,6 +23076,37 @@ ${exception.mark.snippet}`;
     });
     foot.appendChild(clearBtn);
     sec.appendChild(foot);
+    const memRow = document.createElement("div");
+    memRow.className = "xlc-setting-row";
+    const memHint = document.createElement("span");
+    memHint.className = "xlc-setting-text";
+    memHint.textContent = t("variableMemoryHint") || "\u53D8\u91CF\u586B\u5199\u5386\u53F2\u8BB0\u5FC6\u4FDD\u5B58\u5728\u672C\u673A\u4FA7\u8F66\uFF0C\u63D2\u5165\u586B\u5199\u65F6\u81EA\u52A8\u9884\u586B\u4E0A\u6B21\u8F93\u5165\u503C\u3002";
+    memRow.appendChild(memHint);
+    const clearMemBtn = document.createElement("button");
+    clearMemBtn.type = "button";
+    clearMemBtn.className = "b3-button";
+    clearMemBtn.dataset.xlcControl = "settings.variable-memory.clear";
+    const syncClearMem = () => {
+      const memCount = countRememberedFields(ctx.state.variableMemory);
+      clearMemBtn.disabled = memCount === 0;
+      const labelText = memCount > 0 ? `${t("clearVariableMemoryBtn") || "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6"} (${memCount})` : t("clearVariableMemoryEmpty") || "\u6682\u65E0\u53D8\u91CF\u8BB0\u5FC6";
+      clearMemBtn.textContent = labelText;
+      clearMemBtn.setAttribute("aria-label", labelText);
+    };
+    syncClearMem();
+    clearMemBtn.addEventListener("click", () => {
+      if (countRememberedFields(ctx.state.variableMemory) === 0) return;
+      const confirmTitle = "\u26A0\uFE0F " + (t("clearVariableMemoryBtn") || "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6");
+      const confirmBody = t("clearVariableMemoryConfirm") || "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u8BB0\u4F4F\u7684\u6240\u6709\u53D8\u91CF\u5386\u53F2\u586B\u5199\u503C\u5417\uFF1F\u6761\u76EE\u6A21\u677F\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002";
+      (0, import_siyuan7.confirm)(confirmTitle, confirmBody, () => {
+        ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
+        ctx.persistSoon();
+        syncClearMem();
+        ctx.notify("info", t("clearVariableMemoryDone") || "\u5DF2\u6E05\u7A7A\u53D8\u91CF\u586B\u5199\u5386\u53F2\u8BB0\u5FC6");
+      });
+    });
+    memRow.appendChild(clearMemBtn);
+    sec.appendChild(memRow);
     const summary = document.createElement("div");
     summary.className = "xlc-usage-summary";
     summary.dataset.xlcControl = "settings.usage.summary";
@@ -24777,22 +24950,42 @@ fi`;
             return;
           }
           const idx = await ctx.library.ensureIndex();
-          const localList = Array.from(idx.items.values()).map((it) => ({
-            id: it.id,
-            title: it.title,
-            kramdown: it.summary || "",
-            itemType: it.itemType,
-            tags: it.tags || [],
-            category: it.category || "",
-            updatedAt: it.updatedAt || Date.now()
-          }));
+          const localList = [];
+          for (const it of idx.items.values()) {
+            let body = it.summary || "";
+            try {
+              const kd = await ctx.library.getStoredItemKramdown(it);
+              if (kd.ok) body = kd.data;
+            } catch {
+              body = it.summary || "";
+            }
+            localList.push({
+              id: it.id,
+              title: it.title,
+              alias: it.alias || "",
+              ...it.shortcode ? { shortcode: it.shortcode } : {},
+              kramdown: body,
+              itemType: it.itemType,
+              tags: it.tags || [],
+              category: it.category || "",
+              url: it.url || "",
+              targetBlockId: it.targetBlockId || "",
+              createdAt: it.createdAt || 0,
+              updatedAt: it.updatedAt || Date.now()
+            });
+          }
           const remoteList = validation.parsed.items.map((it) => ({
             id: it.id,
             title: it.title,
-            kramdown: it.markdown || it.content || it.summary || "",
+            alias: it.alias || "",
+            ...it.shortcode ? { shortcode: it.shortcode } : {},
+            kramdown: it.kramdown || it.markdown || it.content || it.summary || "",
             itemType: it.itemType,
             tags: it.tags || [],
             category: it.category || "",
+            url: it.url || "",
+            targetBlockId: it.targetBlockId || "",
+            createdAt: it.createdAt || 0,
             updatedAt: it.updatedAt || Date.now()
           }));
           const report = diffLibraries(localList, remoteList);
@@ -24801,12 +24994,13 @@ fi`;
             localEntries: localList,
             onConfirm: async (receipt, plan) => {
               var _a3;
-              const toImport = plan.items.filter((pi) => pi.entry && (pi.action === "create" || pi.action === "update" || pi.action === "fork")).map((pi) => {
+              const toExported = (pi) => {
                 const src = pi.entry;
                 return {
-                  id: pi.action === "fork" ? `xlc-fork-${Date.now().toString(36)}` : src.id,
-                  title: pi.action === "fork" ? `${src.title} (\u526F\u672C)` : src.title,
+                  id: pi.action === "fork" ? pi.forkedId || newLogicalId() : src.id,
+                  title: pi.action === "fork" && !src.title.includes("\u526F\u672C") ? `${src.title} (\u526F\u672C)` : src.title,
                   alias: src.alias || "",
+                  ...src.shortcode ? { shortcode: src.shortcode } : {},
                   itemType: src.itemType || "text",
                   kramdown: src.kramdown || "",
                   tags: [...src.tags || []],
@@ -24814,12 +25008,23 @@ fi`;
                   source: { sourceDocId: "", sourceBlockId: "", sourceType: "manual" },
                   url: src.url || "",
                   targetBlockId: src.targetBlockId || "",
-                  createdAt: Date.now(),
+                  createdAt: src.createdAt || Date.now(),
                   updatedAt: Date.now()
                 };
-              });
-              if (toImport.length > 0) {
-                await ctx.importMarkdownItems(toImport, "rename");
+              };
+              const toUpdate = plan.items.filter((pi) => pi.entry && pi.action === "update").map(toExported);
+              const toCreateOrFork = plan.items.filter((pi) => pi.entry && (pi.action === "create" || pi.action === "fork")).map(toExported);
+              const toDelete = plan.items.filter((pi) => pi.action === "delete");
+              if (toUpdate.length > 0) {
+                await ctx.importMarkdownItems(toUpdate, "overwrite");
+              }
+              if (toCreateOrFork.length > 0) {
+                await ctx.importMarkdownItems(toCreateOrFork, "rename");
+              }
+              for (const del of toDelete) {
+                await ctx.library.removeItem(del.id);
+              }
+              if (toUpdate.length > 0 || toCreateOrFork.length > 0 || toDelete.length > 0) {
                 (_a3 = ctx.refreshSearch) == null ? void 0 : _a3.call(ctx);
                 ctx.notify("info", `\u540C\u6B65\u5408\u5E76\u5B8C\u6210\uFF1A\u5904\u7406 ${receipt.success} \u9879\u6761\u76EE`);
               }
@@ -25485,6 +25690,7 @@ fi`;
       init_zip();
       init_export_markdown();
       init_import_markdown();
+      init_item();
       init_errors();
       init_search();
       init_prompt_pack();
@@ -25495,6 +25701,7 @@ fi`;
       init_export_sanitizer_modal();
       init_sync_diff_modal();
       init_sync_diff();
+      init_variable_memory();
       activeSetupDialog = null;
       activeSettingsDialog = null;
       espansoParserPromise = null;
@@ -26437,6 +26644,78 @@ fi`;
 
   // src/ui/dialog.ts
   init_hierarchy();
+
+  // src/model/hotkeys.ts
+  function normalizeShortcutKey(keyStr) {
+    if (!keyStr) return "";
+    const clean = keyStr.replace(/⌥/g, "alt").replace(/⌘/g, "ctrl").replace(/⇧/g, "shift").toLowerCase();
+    const parts = clean.split(/[+\-\s]+/).map((p) => p.trim()).filter(Boolean);
+    parts.sort();
+    return parts.join("+");
+  }
+  function formatPlatformShortcut(shortcut, isApple) {
+    const apple = isApple != null ? isApple : typeof navigator !== "undefined" ? /Mac|iPhone|iPad/i.test(navigator.platform || "") : false;
+    if (!shortcut) return "";
+    if (apple) {
+      return shortcut.replace(/\bAlt\b/gi, "\u2325").replace(/\bCtrl\b/gi, "\u2318").replace(/\bShift\b/gi, "\u21E7").replace(/\s*\+\s*/g, " ").trim();
+    }
+    return shortcut.replace(/⌥/g, "Alt").replace(/⌘/g, "Ctrl").replace(/⇧/g, "Shift").replace(/\s*\+\s*/g, " + ").trim();
+  }
+  function detectShortcutConflicts(shortcuts) {
+    var _a;
+    const keyMap = /* @__PURE__ */ new Map();
+    for (const sc of shortcuts) {
+      const norm = normalizeShortcutKey(sc.key);
+      if (!norm) continue;
+      const list = (_a = keyMap.get(norm)) != null ? _a : [];
+      list.push(sc.id);
+      keyMap.set(norm, list);
+    }
+    const conflicts = [];
+    for (const [normalizedKey, ids] of keyMap.entries()) {
+      if (ids.length > 1) {
+        conflicts.push({ normalizedKey, conflictingIds: ids });
+      }
+    }
+    return conflicts.sort((a, b) => a.normalizedKey.localeCompare(b.normalizedKey));
+  }
+
+  // src/ui/performance-utils.ts
+  var eventListenerCount = 0;
+  if (typeof window !== "undefined") {
+    const originalAddEventListener = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function(type, callback, options) {
+      eventListenerCount++;
+      return originalAddEventListener.call(this, type, callback, options);
+    };
+    const originalRemoveEventListener = EventTarget.prototype.removeEventListener;
+    EventTarget.prototype.removeEventListener = function(type, callback, options) {
+      eventListenerCount--;
+      return originalRemoveEventListener.call(this, type, callback, options);
+    };
+    window.__xlcEventListeners = () => eventListenerCount;
+  }
+  function calculateVirtualScrollWindow(totalCount, scrollTop, itemHeight, viewportHeight, buffer = 4) {
+    if (totalCount <= 0 || itemHeight <= 0 || viewportHeight <= 0) {
+      return { startIndex: 0, endIndex: 0, offsetY: 0, totalHeight: 0, visibleCount: 0 };
+    }
+    const totalHeight = totalCount * itemHeight;
+    const clampedScrollTop = Math.max(0, Math.min(scrollTop, Math.max(0, totalHeight - viewportHeight)));
+    const rawStart = Math.floor(clampedScrollTop / itemHeight);
+    const visibleCount = Math.ceil(viewportHeight / itemHeight);
+    const startIndex = Math.max(0, rawStart - buffer);
+    const endIndex = Math.min(totalCount, rawStart + visibleCount + buffer);
+    const offsetY = startIndex * itemHeight;
+    return {
+      startIndex,
+      endIndex,
+      offsetY,
+      totalHeight,
+      visibleCount
+    };
+  }
+
+  // src/ui/dialog.ts
   init_transfer();
   init_clipboard();
   init_placeholders();
@@ -26801,27 +27080,29 @@ fi`;
         kbdLabel.className = "xlc-kbdrow-label";
         kbdLabel.textContent = this.deps.t("shortcutLabel");
         kbdRow.appendChild(kbdLabel);
-        for (const hint of [
-          { key: "Enter", action: "\u63D2\u5165\u6587\u672C\u5FEB\u7167" },
-          { key: "Shift+Enter", action: "\u5D4C\u5165\u540C\u6B65\u5757" },
-          { key: "Alt+Enter", action: "\u63D2\u5165\u5757\u5F15\u7528" },
-          { key: `${isApple ? "\u2325" : "Alt"} + J`, action: "\u524D\u540E\u6587\u63A2\u9488" },
-          { key: `${isApple ? "\u2318" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy") },
-          { key: `${isApple ? "\u2325" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert") },
-          { key: `${isApple ? "\u2325 + \u21E7" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy") },
-          { key: `${isApple ? "\u2325" : "Alt"} + S`, action: "\u6536\u5F55\u5168\u5E93\u5757" },
-          { key: `${isApple ? "\u2325" : "Alt"} + R`, action: "\u590D\u5236\u5757\u5F15\u7528" },
-          { key: `${isApple ? "\u2325" : "Alt"} + D`, action: "\u6253\u5F00\u6765\u6E90\u5B9A\u4F4D" },
-          { key: `${isApple ? "\u2325" : "Alt"} + M`, action: "\u590D\u5236 Markdown" },
-          { key: `${isApple ? "\u2325" : "Alt"} + H`, action: "\u5C42\u7EA7\u5927\u7EB2" },
-          { key: `${isApple ? "\u2325" : "Alt"} + P`, action: "\u56FA\u5B9A\u7A97\u53E3" },
-          { key: `${isApple ? "\u2325" : "Alt"} + C`, action: "\u590D\u5236\u5E76\u5173\u95ED" },
-          { key: `${isApple ? "\u2325" : "Alt"} + T`, action: "\u8F6E\u8F6C\u8303\u56F4" },
-          { key: "@ /", action: "\u5168\u5E93\u7A7F\u900F" },
-          { key: `${isApple ? "\u2325" : "Alt"} + F`, action: this.deps.t("kbdFavorite") },
-          { key: "Tab", action: this.deps.t("kbdTabActions") },
-          { key: "Esc", action: this.deps.t("kbdClose") }
-        ]) {
+        const kbdDefinitions = [
+          { id: "insert", key: "Enter", action: "\u63D2\u5165\u6587\u672C\u5FEB\u7167" },
+          { id: "embed", key: formatPlatformShortcut("Shift+Enter", isApple), action: "\u5D4C\u5165\u540C\u6B65\u5757" },
+          { id: "blockref", key: formatPlatformShortcut("Alt+Enter", isApple), action: "\u63D2\u5165\u5757\u5F15\u7528" },
+          { id: "adjacent", key: `${isApple ? "\u2325" : "Alt"} + J`, action: "\u524D\u540E\u6587\u63A2\u9488" },
+          { id: "copy", key: `${isApple ? "\u2318" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy") },
+          { id: "quickInsert", key: `${isApple ? "\u2325" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert") },
+          { id: "quickCopy", key: `${isApple ? "\u2325 + \u21E7" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy") },
+          { id: "captureOmni", key: `${isApple ? "\u2325" : "Alt"} + S`, action: "\u6536\u5F55\u5168\u5E93\u5757" },
+          { id: "copyRef", key: `${isApple ? "\u2325" : "Alt"} + R`, action: "\u590D\u5236\u5757\u5F15\u7528" },
+          { id: "openSource", key: `${isApple ? "\u2325" : "Alt"} + D`, action: "\u6253\u5F00\u6765\u6E90\u5B9A\u4F4D" },
+          { id: "copyMd", key: `${isApple ? "\u2325" : "Alt"} + M`, action: "\u590D\u5236 Markdown" },
+          { id: "hierarchy", key: `${isApple ? "\u2325" : "Alt"} + H`, action: "\u5C42\u7EA7\u5927\u7EB2" },
+          { id: "pin", key: `${isApple ? "\u2325" : "Alt"} + P`, action: "\u56FA\u5B9A\u7A97\u53E3" },
+          { id: "copyClose", key: `${isApple ? "\u2325" : "Alt"} + C`, action: "\u590D\u5236\u5E76\u5173\u95ED" },
+          { id: "cycleScope", key: `${isApple ? "\u2325" : "Alt"} + T`, action: "\u8F6E\u8F6C\u8303\u56F4" },
+          { id: "omniPrefix", key: "@ /", action: "\u5168\u5E93\u7A7F\u900F" },
+          { id: "favorite", key: `${isApple ? "\u2325" : "Alt"} + F`, action: this.deps.t("kbdFavorite") },
+          { id: "tab", key: "Tab", action: this.deps.t("kbdTabActions") },
+          { id: "close", key: "Esc", action: this.deps.t("kbdClose") }
+        ];
+        kbdRow.dataset.xlcHotkeyConflicts = String(detectShortcutConflicts(kbdDefinitions).length);
+        for (const hint of kbdDefinitions) {
           const kbd = document.createElement("span");
           kbd.className = "xlc-kbd xlc-kbd-hint";
           kbd.title = `${hint.key}\uFF1A${hint.action}`;
@@ -28699,10 +28980,18 @@ fi`;
         bottomSpacer.dataset.xlcSpacer = "bottom";
         const renderWindow = (requestedIndex) => {
           const viewport = Math.max(list.clientHeight || 480, rowHeight * 6);
-          const rawStart = requestedIndex === void 0 ? Math.floor(list.scrollTop / rowHeight) : Math.max(0, requestedIndex - overscan);
-          const visible = Math.ceil(viewport / rowHeight);
-          const start = Math.max(0, Math.min(rawStart, this.results.length - 1));
-          const end = Math.min(this.results.length, start + visible + overscan * 2);
+          let start;
+          let end;
+          if (requestedIndex === void 0) {
+            const win = calculateVirtualScrollWindow(this.results.length, list.scrollTop, rowHeight, viewport, overscan);
+            start = win.startIndex;
+            end = win.endIndex;
+          } else {
+            const visible = Math.ceil(viewport / rowHeight);
+            const rawStart = Math.max(0, requestedIndex - overscan);
+            start = Math.max(0, Math.min(rawStart, this.results.length - 1));
+            end = Math.min(this.results.length, start + visible + overscan * 2);
+          }
           topSpacer.style.height = `${start * rowHeight}px`;
           bottomSpacer.style.height = `${Math.max(0, (this.results.length - end) * rowHeight)}px`;
           list.replaceChildren(topSpacer);
@@ -31428,6 +31717,16 @@ ${progress.progressBar}`);
               });
             }
           }
+          if (entry.content && entry.content.trim().startsWith("{")) {
+            const jsonPropRes = jsonToProperties(entry.content);
+            if (jsonPropRes.ok && jsonPropRes.count > 0) {
+              addSilent("\u{1F310}", `JSON \u8F6C\u952E\u503C\u5BF9 (Properties) \u5E76\u590D\u5236 (${jsonPropRes.count}\u9879)`, async () => {
+                var _a3, _b3;
+                await this.deps.copyProviderPayload(jsonPropRes.result);
+                (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", `\u5DF2\u8F6C\u6362 ${jsonPropRes.count} \u9879 JSON \u5C5E\u6027\u4E3A\u952E\u503C\u5BF9\u5E76\u590D\u5236`);
+              });
+            }
+          }
           if (entry.content && (/\d{11}/.test(entry.content) || /@/.test(entry.content))) {
             addSilent("\u{1F512}", "\u654F\u611F\u4FE1\u606F\u63A9\u7801\u8131\u654F\u5E76\u590D\u5236", async () => {
               var _a3, _b3;
@@ -32695,36 +32994,55 @@ ${progress.progressBar}`);
       host = document.createElement("div");
       host.className = "xlc-adjacent-context-box";
       host.style.cssText = "margin-top:16px; padding:12px; background:var(--xlc-soft, #f1f1f9); border:1px solid var(--b3-border-color); border-radius:8px; font-size:12px; display:flex; flex-direction:column; gap:8px;";
-      host.innerHTML = `<div style="font-weight:600; opacity:0.8;">\u{1F50D} \u4E0A\u4E0B\u6587\u8BED\u5883\u63A2\u9488 (\u524D\u540E\u76F8\u90BB\u5757 \xB7 Alt+J \u6536\u8D77)\uFF1A</div><div>\u6B63\u5728\u8C03\u53D6\u524D\u540E\u6587\u2026</div>`;
+      const loadingTitle = document.createElement("div");
+      loadingTitle.style.cssText = "font-weight:600; opacity:0.8;";
+      loadingTitle.textContent = "\u{1F50D} \u4E0A\u4E0B\u6587\u8BED\u5883\u63A2\u9488 (\u524D\u540E\u76F8\u90BB\u5757 \xB7 Alt+J \u6536\u8D77)\uFF1A";
+      const loadingBody = document.createElement("div");
+      loadingBody.textContent = "\u6B63\u5728\u8C03\u53D6\u524D\u540E\u6587\u2026";
+      host.append(loadingTitle, loadingBody);
       paneBody.appendChild(host);
+      const buildBlockRow = (tagLabel, contentText, isCurrent) => {
+        const rowEl = document.createElement("div");
+        rowEl.style.cssText = isCurrent ? "padding:8px; background:var(--b3-theme-background); border-left:3px solid var(--b3-theme-primary); border-radius:4px; font-weight:500;" : "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
+        const strongEl = document.createElement("strong");
+        strongEl.style.cssText = isCurrent ? "color:var(--b3-theme-primary);" : "opacity:0.6;";
+        strongEl.textContent = tagLabel;
+        rowEl.append(strongEl, document.createTextNode(" " + contentText));
+        return rowEl;
+      };
       try {
         const data = await this.deps.getAdjacentBlocks(targetBlockId, sourceDocId);
         if (!data) {
-          host.innerHTML = `<div style="opacity:0.7;">\u672A\u68C0\u7D22\u5230\u76F8\u90BB\u4E0A\u4E0B\u6587\u5757\u6216\u6E90\u6587\u6863\u65E0\u5176\u5B83\u5B50\u5757</div>`;
+          host.textContent = "";
+          const emptyEl = document.createElement("div");
+          emptyEl.style.opacity = "0.7";
+          emptyEl.textContent = "\u672A\u68C0\u7D22\u5230\u76F8\u90BB\u4E0A\u4E0B\u6587\u5757\u6216\u6E90\u6587\u6863\u65E0\u5176\u5B83\u5B50\u5757";
+          host.appendChild(emptyEl);
           return;
         }
-        host.innerHTML = `<div style="font-weight:600; color:var(--b3-theme-primary); display:flex; align-items:center; justify-content:space-between;">
-                <span>\u{1F50D} \u6E90\u6587\u6863\u524D\u540E\u76F8\u90BB\u5757\u8BED\u5883 (Alt+J \u6536\u8D77)</span>
-                <span style="font-size:11px; opacity:0.7; font-weight:normal;">\u6765\u6E90\uFF1A${entry.sourceDocPath || "\u6E90\u6587\u6863"}</span>
-            </div>`;
+        host.textContent = "";
+        const headRow = document.createElement("div");
+        headRow.style.cssText = "font-weight:600; color:var(--b3-theme-primary); display:flex; align-items:center; justify-content:space-between;";
+        const headTitle = document.createElement("span");
+        headTitle.textContent = "\u{1F50D} \u6E90\u6587\u6863\u524D\u540E\u76F8\u90BB\u5757\u8BED\u5883 (Alt+J \u6536\u8D77)";
+        const headSrc = document.createElement("span");
+        headSrc.style.cssText = "font-size:11px; opacity:0.7; font-weight:normal;";
+        headSrc.textContent = `\u6765\u6E90\uFF1A${entry.sourceDocPath || "\u6E90\u6587\u6863"}`;
+        headRow.append(headTitle, headSrc);
+        host.appendChild(headRow);
         if (data.prev) {
-          const prevEl = document.createElement("div");
-          prevEl.style.cssText = "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
-          prevEl.innerHTML = `<strong style="opacity:0.6;">[\u4E0A\u6587]</strong> ${kramdownToPlainText(data.prev.content) || "(\u7A7A)"}`;
-          host.appendChild(prevEl);
+          host.appendChild(buildBlockRow("[\u4E0A\u6587]", kramdownToPlainText(data.prev.content) || "(\u7A7A)", false));
         }
-        const curEl = document.createElement("div");
-        curEl.style.cssText = "padding:8px; background:var(--b3-theme-background); border-left:3px solid var(--b3-theme-primary); border-radius:4px; font-weight:500;";
-        curEl.innerHTML = `<strong style="color:var(--b3-theme-primary);">[\u5F53\u524D]</strong> ${kramdownToPlainText(data.current.content) || "(\u5F53\u524D\u5757\u5185\u5BB9)"}`;
-        host.appendChild(curEl);
+        host.appendChild(buildBlockRow("[\u5F53\u524D]", kramdownToPlainText(data.current.content) || "(\u5F53\u524D\u5757\u5185\u5BB9)", true));
         if (data.next) {
-          const nextEl = document.createElement("div");
-          nextEl.style.cssText = "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
-          nextEl.innerHTML = `<strong style="opacity:0.6;">[\u4E0B\u6587]</strong> ${kramdownToPlainText(data.next.content) || "(\u7A7A)"}`;
-          host.appendChild(nextEl);
+          host.appendChild(buildBlockRow("[\u4E0B\u6587]", kramdownToPlainText(data.next.content) || "(\u7A7A)", false));
         }
       } catch {
-        host.innerHTML = `<div style="color:var(--b3-theme-error);">\u8C03\u53D6\u76F8\u90BB\u4E0A\u4E0B\u6587\u5931\u8D25</div>`;
+        host.textContent = "";
+        const errEl = document.createElement("div");
+        errEl.style.color = "var(--b3-theme-error)";
+        errEl.textContent = "\u8C03\u53D6\u76F8\u90BB\u4E0A\u4E0B\u6587\u5931\u8D25";
+        host.appendChild(errEl);
       }
     }
   };
@@ -34997,13 +35315,18 @@ ${details.join("\n")}` : ""}`;
     }
     async execute(item, plan, editorTarget) {
       var _a, _b, _c;
-      const insertRender = (text) => {
-        if (text === void 0) return Promise.resolve(void 0);
-        if (item.itemType === "code") return Promise.resolve(text);
-        return this.applyOutput(applyAskDefaults(stripCursorToken(text)), item);
+      const insertRenderWithCursor = async (text) => {
+        var _a2;
+        if (text === void 0) return { text: void 0, cursorOffset: null };
+        if (item.itemType === "code") return { text, cursorOffset: null };
+        const withDefaults = applyAskDefaults(text);
+        const withOutput = (_a2 = await this.applyOutput(withDefaults, item)) != null ? _a2 : withDefaults;
+        const extracted = extractCursorPosition(withOutput);
+        return { text: stripCursorToken(extracted.text), cursorOffset: extracted.cursorOffset };
       };
       if ((plan.mode === "insert" || plan.mode === "insert-content" || plan.mode === "insert-ref" || plan.mode === "insert-embed") && this.host.isMobile()) {
-        const text = (_a = await insertRender(plan.markdown)) != null ? _a : "";
+        const rendered = await insertRenderWithCursor(plan.markdown);
+        const text = (_a = rendered.text) != null ? _a : "";
         let html;
         if (item.itemType === "markdown" || item.itemType === "text" && isMarkdownFormattingPresent(text)) {
           html = renderSafeHtmlFromMarkdown(text);
@@ -35017,11 +35340,13 @@ ${details.join("\n")}` : ""}`;
           mode: plan.mode,
           message: copied ? "insert-downgraded-copied" : "copy-failed",
           downgraded: true,
-          pendingVerification: ["mobile-insert-unverified", ...plan.pendingVerification]
+          pendingVerification: ["mobile-insert-unverified", ...plan.pendingVerification],
+          ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
         };
       }
       if (plan.mode === "insert" || plan.mode === "insert-content" || plan.mode === "insert-ref" || plan.mode === "insert-embed") {
-        const md = (_b = await insertRender(plan.markdown)) != null ? _b : "";
+        const rendered = await insertRenderWithCursor(plan.markdown);
+        const md = (_b = rendered.text) != null ? _b : "";
         if (!md) {
           return { ok: false, mode: plan.mode, message: "empty-plan", downgraded: plan.downgraded, pendingVerification: plan.pendingVerification };
         }
@@ -35040,12 +35365,16 @@ ${details.join("\n")}` : ""}`;
             mode: plan.mode,
             message: copied ? (editorTarget == null ? void 0 : editorTarget.editor) ? "target-unavailable-copied" : "no-editor-copied" : "no-editor-copy-failed",
             downgraded: true,
-            pendingVerification: plan.pendingVerification
+            pendingVerification: plan.pendingVerification,
+            ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
           };
         }
         const inserted = this.host.insertMarkdown(md, editorTarget);
         if (inserted) {
-          this.emitEvent(EVENTS.itemInserted, item, { insertMode: plan.mode });
+          this.emitEvent(EVENTS.itemInserted, item, {
+            insertMode: plan.mode,
+            ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
+          });
           this.noteUsed(item);
         }
         return {
@@ -35053,7 +35382,8 @@ ${details.join("\n")}` : ""}`;
           mode: plan.mode,
           message: inserted ? "inserted" : "insert-failed",
           downgraded: false,
-          pendingVerification: plan.pendingVerification
+          pendingVerification: plan.pendingVerification,
+          ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
         };
       }
       if (plan.mode === "copy" || plan.mode === "copy-content") {
@@ -36542,6 +36872,13 @@ ${details.join("\n")}` : ""}`;
     previewUnavailable: "\u6682\u65E0\u9884\u89C8",
     previewTemplateSource: "\u6A21\u677F\u6E90\u7801",
     previewExpandedEffect: "\u5C55\u5F00\u540E\u771F\u5B9E\u6548\u679C",
+    shortcode: "\u7B80\u7801 (:shortcode)",
+    shortcodePlaceholder: "\u5982 :wk\u3001:bug\uFF08\u9009\u586B\uFF0C\u641C\u7D22\u6846\u8F93\u5165\u5373\u7F6E\u9876\u76F4\u8FBE\uFF09",
+    variableMemoryHint: "\u53D8\u91CF\u586B\u5199\u5386\u53F2\u8BB0\u5FC6\u4FDD\u5B58\u5728\u672C\u673A\u4FA7\u8F66\uFF0C\u63D2\u5165\u586B\u5199\u65F6\u81EA\u52A8\u9884\u586B\u4E0A\u6B21\u8F93\u5165\u503C\u3002",
+    clearVariableMemoryBtn: "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6",
+    clearVariableMemoryEmpty: "\u6682\u65E0\u53D8\u91CF\u8BB0\u5FC6",
+    clearVariableMemoryConfirm: "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u8BB0\u4F4F\u7684\u6240\u6709\u53D8\u91CF\u5386\u53F2\u586B\u5199\u503C\u5417\uFF1F\u6761\u76EE\u6A21\u677F\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002",
+    clearVariableMemoryDone: "\u5DF2\u6E05\u7A7A\u53D8\u91CF\u586B\u5199\u5386\u53F2\u8BB0\u5FC6",
     previewNoResult: "\u9009\u62E9\u5DE6\u4FA7\u6761\u76EE\u540E\uFF0C\u8FD9\u91CC\u4F1A\u663E\u793A\u9884\u89C8",
     usageHint: "\u2191 \u2193 \u9009\u62E9 \xB7 Enter \u63D2\u5165 \xB7 Ctrl/\u2318 + Enter \u590D\u5236 \xB7 Alt + 1-9 \u5FEB\u901F\u63D2\u5165 \xB7 Esc \u5173\u95ED",
     usageHintMobile: "\u70B9\u6309\u9009\u62E9\u6761\u76EE\uFF0C\u518D\u70B9\u5E95\u680F\u4E3B\u6309\u94AE\u4F7F\u7528 \xB7 \u957F\u6309\u67E5\u770B\u64CD\u4F5C",

@@ -5,7 +5,7 @@ import {ExportedItem, ImportReceipt, ParsedImport} from "../model/transfer";
 import {LIMITS} from "../constants";
 import {LibraryService} from "./library";
 import {importBundle as importJsonBundleCore} from "./importer";
-import {isItemType, isSafeHttpUrl} from "../model/item";
+import {cleanShortcode, isItemType, isSafeHttpUrl} from "../model/item";
 import {listSnippetRefs} from "../model/variables";
 const ITEM_COMMENT_START = "<!-- xlc-item";
 const ITEM_COMMENT_END = "-->";
@@ -153,12 +153,14 @@ export function parseMarkdownPack(md: string): MarkdownPackParseResult {
         if (!title && fields.get("alias")) title = fields.get("alias") ?? "";
         // 正文：注释结束后去掉紧跟的空行
         const body = chunk.slice(endIdx + ITEM_COMMENT_END.length).replace(/^\s*\n/, "").replace(/\n\s*$/, "");
+        const shortcode = cleanShortcode(fields.get("shortcode") ?? "");
         seenIds.add(id);
         items.push({
             id,
             itemType,
             title: title.slice(0, LIMITS.title),
             alias: (fields.get("alias") ?? "").slice(0, LIMITS.alias),
+            ...(shortcode ? {shortcode} : {}),
             tags: (fields.get("tags") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.tags),
             category: (fields.get("category") ?? "").slice(0, LIMITS.category),
             kramdown: body.slice(0, LIMITS.contentChars),
@@ -225,6 +227,7 @@ export function renderItemMetadata(item: ExportedItem): string {
         `type: ${item.itemType}`,
     ];
     if (item.alias) lines.push(`alias: ${item.alias}`);
+    if (item.shortcode) lines.push(`shortcode: ${item.shortcode}`);
     if (item.tags.length) lines.push(`tags: ${item.tags.join(",")}`);
     if (item.category) lines.push(`category: ${item.category}`);
     if (item.source.sourceDocId) lines.push(`source-doc: ${item.source.sourceDocId}`);

@@ -9,10 +9,20 @@
  * 6. 底部微型抽屉：选中条目即时轻量预览与主操作
  */
 
-import {SearchEntry, SearchQuery} from "../model/search";
+import {SearchEntry, SearchQuery, findExactAliasMatch, findExactShortcodeMatch} from "../model/search";
 import {InsertMode} from "../model/actions";
 import {toErrorMessage} from "../model/errors";
-import {renderSafePreview} from "./preview-renderer";
+import {hasDynamicMacros, expandMacroPreview} from "../model/variables";
+import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
+
+function escapeDockHtml(raw: string): string {
+    return String(raw ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 
 export interface DockViewDeps {
     t: (key: string, ...args: string[]) => string;
@@ -89,7 +99,7 @@ export class DockView {
 
         const titleBox = document.createElement("div");
         titleBox.className = "xlc-dock-title";
-        titleBox.innerHTML = `<span class="xlc-dock-icon">🐴</span><strong>${this.deps.t("pluginName") || "小驴常用"}</strong>`;
+        titleBox.innerHTML = `<span class="xlc-dock-icon">🐴</span><strong>${escapeDockHtml(this.deps.t("pluginName") || "小驴常用")}</strong>`;
         head.appendChild(titleBox);
 
         const actions = document.createElement("div");
@@ -184,6 +194,15 @@ export class DockView {
                     this.scrollToActiveRow();
                 }
                 return;
+            }
+            if (e.key === "Tab" && !e.shiftKey) {
+                const exactMatch = findExactShortcodeMatch(this.results, this.searchInput.value)
+                    || findExactAliasMatch(this.results, this.searchInput.value);
+                if (exactMatch && !this.isInsertBusy) {
+                    e.preventDefault();
+                    void this.insertEntry(exactMatch);
+                    return;
+                }
             }
             if (e.key === "Enter") {
                 if (e.repeat) return;
@@ -386,9 +405,10 @@ export class DockView {
                     groupHead.setAttribute("aria-expanded", !isCollapsed ? "true" : "false");
                     groupHead.setAttribute("aria-label", `分类：${catName}，共 ${catEntries.length} 项，${isCollapsed ? "已折叠" : "已展开"}`);
                 }
+                const safeCatName = escapeDockHtml(catName);
                 groupHead.innerHTML = `
                     <span class="xlc-dock-group-arrow">${isCollapsed ? "▸" : "▾"}</span>
-                    <span class="xlc-dock-group-name">${catName}</span>
+                    <span class="xlc-dock-group-name">${safeCatName}</span>
                     <span class="xlc-dock-group-count">${catEntries.length}</span>
                 `;
                 const toggleGroup = () => {
@@ -435,10 +455,10 @@ export class DockView {
             row.setAttribute("aria-selected", index === this.activeIndex ? "true" : "false");
         }
 
-        // 原生 HTML5 拖拽属性支持（F2：支持按住 Alt 拖出块引用、按住 Shift 拖出嵌入块）
+        // 原生 HTML5 拖拽属性支持（F2：支持按住 Alt 拖出块引用、按住 Shift 拖出嵌入块；优先取物理块 ID 避免落入逻辑 ID）
         row.draggable = true;
         row.addEventListener("dragstart", (e) => {
-            const targetId = entry.targetBlockId || entry.sourceBlockId || entry.id;
+            const targetId = entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
             let dragPayload = entry.content || entry.summary || entry.title || "";
             if (e.altKey && targetId) {
                 dragPayload = `((${targetId} '${entry.title || "引用"}'))`;
@@ -463,14 +483,30 @@ export class DockView {
         badge.textContent = cType.toUpperCase().slice(0, 4);
         row.appendChild(badge);
 
-        // 中间：标题与别名
+        // 中间：标题、简码与别名
         const titleWrap = document.createElement("div");
         titleWrap.className = "xlc-dock-row-title-wrap";
+
+        if (this.deps.isSourceMissing?.(entry)) {
+            const warnSpan = document.createElement("span");
+            warnSpan.className = "xlc-row-warn";
+            warnSpan.textContent = "⚠";
+            warnSpan.title = this.deps.t("sourceGone") || "来源块或文档已失效";
+            titleWrap.appendChild(warnSpan);
+        }
 
         const title = document.createElement("span");
         title.className = "xlc-dock-row-title";
         title.textContent = entry.title || entry.summary || "未命名条目";
         titleWrap.appendChild(title);
+
+        if (entry.shortcode) {
+            const scBadge = document.createElement("span");
+            scBadge.className = "xlc-badge xlc-badge--shortcode";
+            scBadge.textContent = entry.shortcode;
+            scBadge.title = `简码：输入 ${entry.shortcode} 触发`;
+            titleWrap.appendChild(scBadge);
+        }
 
         if (entry.alias) {
             const alias = document.createElement("span");
@@ -566,7 +602,7 @@ export class DockView {
             const it = document.createElement("button");
             it.type = "button";
             it.className = "xlc-dock-menu-item";
-            it.innerHTML = `<span class="xlc-dock-menu-ic">${icon}</span><span>${label}</span>`;
+            it.innerHTML = `<span class="xlc-dock-menu-ic">${escapeDockHtml(icon)}</span><span>${escapeDockHtml(label)}</span>`;
             it.addEventListener("click", () => {
                 this.closeContextMenu();
                 action();
@@ -576,7 +612,7 @@ export class DockView {
 
         addItem("＋", this.deps.t("insert") || "插入到当前光标", () => void this.insertEntry(entry));
         addItem("⧉", this.deps.t("copy") || "复制纯文本", () => void this.copyEntry(entry));
-        const targetId = entry.targetBlockId || entry.sourceBlockId || entry.id;
+        const targetId = entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
         if (targetId) {
             addItem("((•))", "复制块引用语法", async () => {
                 const code = `((${targetId} '${entry.title || "引用"}'))`;
@@ -711,7 +747,21 @@ export class DockView {
         void this.deps.preview(entry.id).then((text) => {
             if (this.isDestroyed) return;
             body.innerHTML = "";
-            renderSafePreview(body, text || entry.summary || "", entry.itemType);
+            const rawText = text || entry.summary || "";
+            if (entry.itemType !== "code" && hasDynamicMacros(rawText)) {
+                renderDualMacroPreview(
+                    body,
+                    rawText,
+                    expandMacroPreview(rawText),
+                    entry.itemType,
+                    {
+                        templateSource: this.deps.t("previewTemplateSource") || "模板源码",
+                        expandedEffect: this.deps.t("previewExpandedEffect") || "展开后真实效果",
+                    },
+                );
+            } else {
+                renderSafePreview(body, rawText, entry.itemType);
+            }
         }).catch(() => {
             if (this.isDestroyed) return;
             body.textContent = entry.summary || "(暂无详细内容)";

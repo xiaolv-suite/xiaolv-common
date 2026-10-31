@@ -124,11 +124,12 @@ export function forgetValue(memory: VariableMemory, label: string): VariableMemo
 }
 
 /** 清空全部记忆（保留开关状态） */
-export function clearAllMemory(memory: VariableMemory): VariableMemory {
-    return {enabled: memory.enabled, values: {}};
+export function clearAllMemory(memory?: VariableMemory | null): VariableMemory {
+    return {enabled: memory ? memory.enabled : true, values: {}};
 }
 
 /** 记忆条目数（设置页展示用） */
-export function countRememberedFields(memory: VariableMemory): number {
+export function countRememberedFields(memory?: VariableMemory | null): number {
+    if (!memory || !memory.values) return 0;
     return Object.keys(memory.values).length;
 }

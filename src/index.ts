@@ -7,11 +7,11 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {getDialogBody} from "./ui/dialog-dom";
+import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
-import {LIMITS, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
+import {LIMITS, PLUGIN_VERSION, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
 import {createKernelClient, parseExistingMap, type IKernelClient, type SyncPost, type SyncPostContext} from "./kernel/client";
-import {CommonItem, isBlockId, isItemType, isSafeHttpUrl, resolveBlockRefTarget} from "./model/item";
+import {CommonItem, cleanShortcode, isBlockId, isItemType, isSafeHttpUrl, resolveBlockRefTarget} from "./model/item";
 import {toErrorMessage} from "./model/errors";
 import {getSingleDocTreeDiscoveryTarget} from "./model/discovery-target";
 import {buildBlockRef, buildEmbedBlock} from "./model/actions";
@@ -1226,7 +1226,11 @@ export default class XiaolvCommonPlugin extends Plugin {
             newItem: (initialTitle) => void this.capture?.newManual(initialTitle),
             openSettings: () => this.openSetting(),
             getUsage: () => this.state.usage,
-            isSourceMissing: (entry) => this.missingSources.has(entry.id),
+            isSourceMissing: (entry) => {
+                const block = entry.sourceBlockId;
+                const doc = entry.sourceDocId;
+                return (!!block && this.missingSources.has(block)) || (!!doc && this.missingSources.has(doc) && !entry.sourceBlockId);
+            },
             hasActiveEditor: () => this.host.hasActiveEditor(),
             editItem: async (itemId) => {
                 const got = await this.library.getItem(itemId);
@@ -1957,46 +1961,60 @@ export default class XiaolvCommonPlugin extends Plugin {
         const t = this.i18nFn();
         const kd = await this.library.getStoredItemKramdown(item);
         const initialKramdown = kd.ok ? kd.data : "";
+        const dialogTitle = `${t("edit")} · ${(item.title || t("unknownType")).slice(0, 24)}${item.title.length > 24 ? "…" : ""}`;
         const dialog = new Dialog({
             // 标题带条目名（截断 24 字）：确认正在编辑哪一条
-            title: `${t("edit")} · ${(item.title || t("unknownType")).slice(0, 24)}${item.title.length > 24 ? "…" : ""}`,
+            title: dialogTitle,
             content: "",
             width: "min(620px, 92vw)",
             height: "min(860px, 92vh)",
         });
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+        mountPlatformDialogTitleWrap(dialog.element, dialogTitle);
         const body = getDialogBody(dialog.element);
         if (!body) return;
         body.innerHTML = "";
         const form = document.createElement("div");
         form.className = "xlc-form";
-        const mkField = (label: string, value: string): HTMLInputElement => {
+        let fieldIdx = 0;
+        const mkField = (label: string, value: string, controlId?: string): HTMLInputElement => {
             const wrap = document.createElement("label");
             wrap.className = "xlc-form-field";
+            const inputId = `xlc-edit-field-${++fieldIdx}`;
+            wrap.htmlFor = inputId;
             const cap = document.createElement("span");
             cap.className = "xlc-form-label";
             cap.textContent = label;
             wrap.appendChild(cap);
             const input = document.createElement("input");
+            input.id = inputId;
             input.className = "b3-text-field";
+            input.setAttribute("aria-label", label);
+            if (controlId) input.dataset.xlcControl = controlId;
             input.value = value;
             wrap.appendChild(input);
             form.appendChild(wrap);
             return input;
         };
-        const titleEl = mkField(t("title"), item.title);
-        const aliasEl = mkField(t("alias"), item.alias);
-        const tagsEl = mkField(t("tags"), item.tags.join(","));
-        const categoryEl = mkField(t("category"), item.category);
+        const titleEl = mkField(t("title"), item.title, "edit.title");
+        const aliasEl = mkField(t("alias"), item.alias, "edit.alias");
+        const shortcodeEl = mkField(t("shortcode") || "简码 (:shortcode)", item.shortcode ?? "", "edit.shortcode");
+        shortcodeEl.placeholder = t("shortcodePlaceholder") || "如 :wk、:bug（选填，搜索框输入即置顶直达）";
+        const tagsEl = mkField(t("tags"), item.tags.join(", "), "edit.tags");
+        const categoryEl = mkField(t("category"), item.category, "edit.category");
         // 内容编辑（kramdown；保存走 updateBlock，保留类型语义由内容本身决定）
         const contentWrap = document.createElement("label");
         contentWrap.className = "xlc-form-field";
+        contentWrap.htmlFor = "xlc-edit-field-content";
         const contentCap = document.createElement("span");
         contentCap.className = "xlc-form-label";
         contentCap.textContent = t("editContentLabel");
         contentWrap.appendChild(contentCap);
         const contentEl = document.createElement("textarea");
+        contentEl.id = "xlc-edit-field-content";
         contentEl.className = "b3-text-field";
+        contentEl.dataset.xlcControl = "edit.content";
+        contentEl.setAttribute("aria-label", t("editContentLabel"));
         contentEl.rows = 8;
         contentEl.value = initialKramdown;
         // 行内必填反馈：内容为空保存时红描边（R109），输入即清除
@@ -2079,7 +2097,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
             });
         };
-        [titleEl, aliasEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el));
+        [titleEl, aliasEl, shortcodeEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el));
         // 保存防重入 + 按钮禁用（连点会双写块）；失败恢复并诚实回执（R106）
         let saving = false;
         save.addEventListener("click", () => {
@@ -2100,10 +2118,15 @@ export default class XiaolvCommonPlugin extends Plugin {
             save.disabled = true;
             save.textContent = t("saving");
             cancel.disabled = true;
+            const rawShortcode = shortcodeEl.value.trim();
+            const resolvedShortcode = rawShortcode
+                ? cleanShortcode(rawShortcode)
+                : (aliasEl.value.trim().startsWith(":") ? cleanShortcode(aliasEl.value.trim()) : "");
             void this.library.updateItem(item.id, {
                 title: titleEl.value,
                 alias: aliasEl.value,
-                tags: tagsEl.value.split(/[,,]/).map((s) => s.trim()).filter(Boolean),
+                shortcode: resolvedShortcode,
+                tags: tagsEl.value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean),
                 category: categoryEl.value,
                 markdown: contentEl.value !== initialKramdown ? contentEl.value : undefined,
                 // URL 条目的真实打开/插入目标来自 custom-xlc-url；编辑正文时同步更新，避免预览与实际动作分叉。
@@ -2112,7 +2135,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 if (result.ok) {
                     this.invalidatePreviewCache([item.id]);
                     this.notify("info", t("updated", shortTitle(result.data.item.title)));
-                    this.searchDialog?.refreshAfterExternalChange();
+                    this.notifyExternalDataChange();
                     dialog.destroy();
                 } else {
                     saving = false;
@@ -2145,7 +2168,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             source: {
                 pluginId: "xiaolv-common",
                 name: "小驴常用",
-                version: "0.6.4",
+                version: PLUGIN_VERSION,
             },
             read: async () => {
                 const res = await this.service.getRecent(5);

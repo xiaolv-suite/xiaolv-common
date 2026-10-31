@@ -11,7 +11,7 @@ import {parseMarkdownPack} from "../service/import-markdown";
 import {LibraryService} from "../service/library";
 import {AiAssistant} from "../service/ai";
 import {ProviderRegistry} from "../service/providers";
-import {CommonItem} from "../model/item";
+import {CommonItem, newLogicalId} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {collectTags} from "../model/search";
 import {PROMPT_PACK_MD, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_MD, CALLOUT_PACK_MD, ACADEMIC_CITATION_PACK_MD} from "../service/prompt-pack";
@@ -24,6 +24,7 @@ import {openSanitizerOptionsDialog} from "./export-sanitizer-modal";
 import type {SanitizerOptions} from "../model/export-sanitizer";
 import {openSyncDiffModal} from "./sync-diff-modal";
 import {diffLibraries, SyncEntry} from "../model/sync-diff";
+import {countRememberedFields, clearAllMemory} from "../model/variable-memory";
 
 type TFn = (key: string, ...args: string[]) => string;
 
@@ -630,6 +631,42 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     });
     foot.appendChild(clearBtn);
     sec.appendChild(foot);
+
+    // 变量填写历史记忆管理（G22 / TD-006：提供侧车变量记忆项数可视化与一键清空入口）
+    const memRow = document.createElement("div");
+    memRow.className = "xlc-setting-row";
+    const memHint = document.createElement("span");
+    memHint.className = "xlc-setting-text";
+    memHint.textContent = t("variableMemoryHint") || "变量填写历史记忆保存在本机侧车，插入填写时自动预填上次输入值。";
+    memRow.appendChild(memHint);
+    const clearMemBtn = document.createElement("button");
+    clearMemBtn.type = "button";
+    clearMemBtn.className = "b3-button";
+    clearMemBtn.dataset.xlcControl = "settings.variable-memory.clear";
+    const syncClearMem = (): void => {
+        const memCount = countRememberedFields(ctx.state.variableMemory);
+        clearMemBtn.disabled = memCount === 0;
+        const labelText = memCount > 0
+            ? `${t("clearVariableMemoryBtn") || "清空变量记忆"} (${memCount})`
+            : (t("clearVariableMemoryEmpty") || "暂无变量记忆");
+        clearMemBtn.textContent = labelText;
+        clearMemBtn.setAttribute("aria-label", labelText);
+    };
+    syncClearMem();
+    clearMemBtn.addEventListener("click", () => {
+        if (countRememberedFields(ctx.state.variableMemory) === 0) return;
+        const confirmTitle = "⚠️ " + (t("clearVariableMemoryBtn") || "清空变量记忆");
+        const confirmBody = t("clearVariableMemoryConfirm") || "确定清空本机记住的所有变量历史填写值吗？条目模板本身不会受影响。";
+        confirm(confirmTitle, confirmBody, () => {
+            ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
+            ctx.persistSoon();
+            syncClearMem();
+            ctx.notify("info", t("clearVariableMemoryDone") || "已清空变量填写历史记忆");
+        });
+    });
+    memRow.appendChild(clearMemBtn);
+    sec.appendChild(memRow);
+
     const summary = document.createElement("div");
     summary.className = "xlc-usage-summary";
     summary.dataset.xlcControl = "settings.usage.summary";
@@ -2605,22 +2642,42 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
                     return;
                 }
                 const idx = await ctx.library.ensureIndex();
-                const localList: SyncEntry[] = Array.from(idx.items.values()).map((it) => ({
-                    id: it.id,
-                    title: it.title,
-                    kramdown: it.summary || "",
-                    itemType: it.itemType,
-                    tags: it.tags || [],
-                    category: it.category || "",
-                    updatedAt: it.updatedAt || Date.now(),
-                }));
+                const localList: SyncEntry[] = [];
+                for (const it of idx.items.values()) {
+                    let body = it.summary || "";
+                    try {
+                        const kd = await ctx.library.getStoredItemKramdown(it);
+                        if (kd.ok) body = kd.data;
+                    } catch {
+                        body = it.summary || "";
+                    }
+                    localList.push({
+                        id: it.id,
+                        title: it.title,
+                        alias: it.alias || "",
+                        ...(it.shortcode ? {shortcode: it.shortcode} : {}),
+                        kramdown: body,
+                        itemType: it.itemType,
+                        tags: it.tags || [],
+                        category: it.category || "",
+                        url: it.url || "",
+                        targetBlockId: it.targetBlockId || "",
+                        createdAt: it.createdAt || 0,
+                        updatedAt: it.updatedAt || Date.now(),
+                    });
+                }
                 const remoteList: SyncEntry[] = validation.parsed.items.map((it: any) => ({
                     id: it.id,
                     title: it.title,
-                    kramdown: it.markdown || it.content || it.summary || "",
+                    alias: it.alias || "",
+                    ...(it.shortcode ? {shortcode: it.shortcode} : {}),
+                    kramdown: it.kramdown || it.markdown || it.content || it.summary || "",
                     itemType: it.itemType,
                     tags: it.tags || [],
                     category: it.category || "",
+                    url: it.url || "",
+                    targetBlockId: it.targetBlockId || "",
+                    createdAt: it.createdAt || 0,
                     updatedAt: it.updatedAt || Date.now(),
                 }));
                 const report = diffLibraries(localList, remoteList);
@@ -2628,27 +2685,42 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
                     report,
                     localEntries: localList,
                     onConfirm: async (receipt, plan) => {
-                        const toImport: ExportedItem[] = plan.items
-                            .filter((pi) => pi.entry && (pi.action === "create" || pi.action === "update" || pi.action === "fork"))
-                            .map((pi) => {
-                                const src = pi.entry!;
-                                return {
-                                    id: pi.action === "fork" ? `xlc-fork-${Date.now().toString(36)}` : src.id,
-                                    title: pi.action === "fork" ? `${src.title} (副本)` : src.title,
-                                    alias: src.alias || "",
-                                    itemType: src.itemType || "text",
-                                    kramdown: src.kramdown || "",
-                                    tags: [...(src.tags || [])],
-                                    category: src.category || "",
-                                    source: {sourceDocId: "", sourceBlockId: "", sourceType: "manual"},
-                                    url: src.url || "",
-                                    targetBlockId: src.targetBlockId || "",
-                                    createdAt: Date.now(),
-                                    updatedAt: Date.now(),
-                                };
-                            });
-                        if (toImport.length > 0) {
-                            await ctx.importMarkdownItems(toImport, "rename");
+                        const toExported = (pi: typeof plan.items[number]): ExportedItem => {
+                            const src = pi.entry!;
+                            return {
+                                id: pi.action === "fork" ? (pi.forkedId || newLogicalId()) : src.id,
+                                title: pi.action === "fork" && !src.title.includes("副本") ? `${src.title} (副本)` : src.title,
+                                alias: src.alias || "",
+                                ...(src.shortcode ? {shortcode: src.shortcode} : {}),
+                                itemType: src.itemType || "text",
+                                kramdown: src.kramdown || "",
+                                tags: [...(src.tags || [])],
+                                category: src.category || "",
+                                source: {sourceDocId: "", sourceBlockId: "", sourceType: "manual"},
+                                url: src.url || "",
+                                targetBlockId: src.targetBlockId || "",
+                                createdAt: src.createdAt || Date.now(),
+                                updatedAt: Date.now(),
+                            };
+                        };
+                        const toUpdate = plan.items
+                            .filter((pi) => pi.entry && pi.action === "update")
+                            .map(toExported);
+                        const toCreateOrFork = plan.items
+                            .filter((pi) => pi.entry && (pi.action === "create" || pi.action === "fork"))
+                            .map(toExported);
+                        const toDelete = plan.items.filter((pi) => pi.action === "delete");
+
+                        if (toUpdate.length > 0) {
+                            await ctx.importMarkdownItems(toUpdate, "overwrite");
+                        }
+                        if (toCreateOrFork.length > 0) {
+                            await ctx.importMarkdownItems(toCreateOrFork, "rename");
+                        }
+                        for (const del of toDelete) {
+                            await ctx.library.removeItem(del.id);
+                        }
+                        if (toUpdate.length > 0 || toCreateOrFork.length > 0 || toDelete.length > 0) {
                             ctx.refreshSearch?.();
                             ctx.notify("info", `同步合并完成：处理 ${receipt.success} 项条目`);
                         }

@@ -35,7 +35,7 @@ export interface ExportedItem {
 
 /** 计算条目集合的防伪哈希签名与校验和 (CRC-32) */
 export function computeBundleChecksum(items: readonly ExportedItem[]): string {
-    const raw = items.map((i) => `${i.id}::${i.title}::${i.kramdown}::${i.itemType}::${i.alias}`).join(";;");
+    const raw = items.map((i) => `${i.id}::${i.title}::${i.kramdown}::${i.itemType}::${i.alias}${i.shortcode ? `::${i.shortcode}` : ""}`).join(";;");
     return calculateChecksum(raw, "crc32");
 }
 

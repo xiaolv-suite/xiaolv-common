@@ -2,7 +2,7 @@
 // 剪贴板读取失败（权限/平台）诚实回执，保留手动输入。
 import {Dialog, confirm} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
-import {ItemType, isSafeHttpUrl} from "../model/item";
+import {ItemType, cleanShortcode, isSafeHttpUrl} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {NewItemInput} from "../service/library";
 import {buildVariableBar} from "./variable-form";
@@ -73,6 +73,7 @@ export class CaptureDialog {
         content: string;
         title?: string;
         alias?: string;
+        shortcode?: string;
         tags?: string;
         category?: string;
         type?: ItemType;
@@ -369,7 +370,7 @@ export class CaptureDialog {
         });
     }
 
-    openForm(defaultText: string, defaultType: ItemType, sourceBlockId: string | null, overrides?: {title?: string; alias?: string; docId?: string; targetBlockId?: string; tags?: string[]; category?: string; sourceType?: "selection" | "block" | "doc-fragment" | "clipboard" | "manual" | "resource"}): void {
+    openForm(defaultText: string, defaultType: ItemType, sourceBlockId: string | null, overrides?: {title?: string; alias?: string; shortcode?: string; docId?: string; targetBlockId?: string; tags?: string[]; category?: string; sourceType?: "selection" | "block" | "doc-fragment" | "clipboard" | "manual" | "resource"}): void {
         if (this.deps.isConfigured && !this.deps.isConfigured()) {
             this.deps.onNotConfigured?.();
             return;
@@ -386,6 +387,7 @@ export class CaptureDialog {
         let contentElRef: HTMLTextAreaElement | null = null;
         let titleElRef: HTMLInputElement | null = null;
         let aliasElRef: HTMLInputElement | null = null;
+        let shortcodeElRef: HTMLInputElement | null = null;
         let tagsElRef: HTMLInputElement | null = null;
         let categoryElRef: HTMLInputElement | null = null;
         let typeSelectRef: HTMLSelectElement | null = null;
@@ -405,6 +407,7 @@ export class CaptureDialog {
                             content: contentElRef.value,
                             title: titleElRef?.value,
                             alias: aliasElRef?.value,
+                            shortcode: shortcodeElRef?.value,
                             tags: tagsElRef?.value,
                             category: categoryElRef?.value,
                             type: typeSelectRef?.value as ItemType,
@@ -689,9 +692,14 @@ export class CaptureDialog {
         }
         form.appendChild(tagRow);
 
+        const shortcodeEl = field(t("shortcode") || "简码 (:shortcode)", overrides?.shortcode ?? "", false, "xlc-form-shortcode");
+        shortcodeEl.dataset.xlcControl = "capture.shortcode";
+        (shortcodeEl as HTMLInputElement).placeholder = t("shortcodePlaceholder") || "如 :wk、:bug（选填，搜索框输入即置顶直达）";
+
         contentElRef = contentEl as HTMLTextAreaElement;
         titleElRef = titleEl as HTMLInputElement;
         aliasElRef = aliasEl as HTMLInputElement;
+        shortcodeElRef = shortcodeEl as HTMLInputElement;
         tagsElRef = tagsEl as HTMLInputElement;
         categoryElRef = categoryEl as HTMLInputElement;
         typeSelectRef = typeSelect;
@@ -744,6 +752,7 @@ export class CaptureDialog {
                     titleElRef.value = draft.title;
                 }
                 if (draft.alias && aliasElRef) aliasElRef.value = draft.alias;
+                if (draft.shortcode && shortcodeElRef) shortcodeElRef.value = draft.shortcode;
                 if (draft.tags && tagsElRef) tagsElRef.value = draft.tags;
                 if (draft.category && categoryElRef) categoryElRef.value = draft.category;
                 if (draft.type && typeSelectRef) typeSelectRef.value = draft.type;
@@ -1098,7 +1107,7 @@ export class CaptureDialog {
                 }
             });
         };
-        [titleEl, aliasEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el as HTMLInputElement));
+        [titleEl, aliasEl, shortcodeEl, tagsEl, categoryEl].forEach((el) => submitOnEnter(el as HTMLInputElement));
         form.addEventListener("keydown", (ev) => {
             if (ev.isComposing || (ev as KeyboardEvent).keyCode === 229 || (ev as KeyboardEvent).repeat) return;
             // Ctrl+Enter / Cmd+Enter: 全局快捷保存 (G46)
@@ -1114,6 +1123,7 @@ export class CaptureDialog {
                         content: contentElRef!.value,
                         title: titleElRef?.value,
                         alias: aliasElRef?.value,
+                        shortcode: shortcodeElRef?.value,
                         tags: tagsElRef?.value,
                         category: categoryElRef?.value,
                         type: typeSelectRef?.value as ItemType,
@@ -1172,11 +1182,17 @@ export class CaptureDialog {
                 const docId = overrides && "docId" in overrides
                     ? overrides.docId
                     : overrides?.sourceType === "clipboard" ? undefined : this.deps.currentDocId();
+                const rawShortcode = (shortcodeEl as HTMLInputElement).value.trim();
+                const rawAlias = (aliasEl as HTMLInputElement).value.trim();
+                const resolvedShortcode = rawShortcode
+                    ? cleanShortcode(rawShortcode)
+                    : (rawAlias.startsWith(":") ? cleanShortcode(rawAlias) : "");
                 void this.deps.createItem({
                     itemType: type,
                     markdown,
                     title: (titleEl as HTMLInputElement).value || undefined,
                     alias: (aliasEl as HTMLInputElement).value || undefined,
+                    ...(resolvedShortcode ? {shortcode: resolvedShortcode} : {}),
                     tags: (tagsEl as HTMLInputElement).value ? (tagsEl as HTMLInputElement).value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : undefined,
                     category: (categoryEl as HTMLInputElement).value || undefined,
                     url: type === "url" ? markdown : undefined,

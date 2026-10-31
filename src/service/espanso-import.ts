@@ -13,7 +13,7 @@
 import {load as loadYaml} from "js-yaml";
 import {ExportedItem} from "../model/transfer";
 import {toErrorMessage} from "../model/errors";
-import {isSafeHttpUrl, ItemType} from "../model/item";
+import {cleanShortcode, isSafeHttpUrl, ItemType} from "../model/item";
 
 export interface EspansoImportResult {
     items: ExportedItem[];
@@ -143,11 +143,13 @@ export function parseEspansoYaml(text: string, now = Date.now()): EspansoImportR
             itemType = "markdown";
         }
 
+        const sc = trigger.trim().startsWith(":") ? cleanShortcode(trigger) : "";
         items.push({
             id: espansoLogicalId(trigger),
             itemType,
             title: trigger.replace(/^:+/, "").trim() || trigger,
             alias: trigger,
+            ...(sc ? {shortcode: sc} : {}),
             tags: ["espanso"],
             category: "",
             kramdown,

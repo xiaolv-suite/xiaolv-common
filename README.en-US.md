@@ -41,6 +41,15 @@ Traditional solutions fall short:
 
 ---
 
+## 📦 Installation & Upgrade
+
+1. **SiYuan Marketplace (Recommended)**: Open `Settings → Marketplace → Plugins` in SiYuan, search for **"Lv Common"** (`小驴常用`), and click Install & Enable.
+2. **Manual Offline Install / Rollback**:
+   - Extract `package.zip` (or rollback archive `package-v0.10.78.zip`) into `<workspace>/data/plugins/xiaolv-common/`;
+   - Enable **Lv Common (Beta)** in `Settings → Plugins`.
+
+---
+
 ## 🚀 3-Step Quick Start
 
 ### 1. Configure Library Document
@@ -114,6 +123,32 @@ Upon first launch, an onboarding dialog will appear:
 
 ---
 
+## ⚙️ Settings Reference
+
+| Section | Setting | Default | Description |
+| :--- | :--- | :--- | :--- |
+| **📦 Library** | Library Mode & Target | Unconfigured | Choose Dedicated Doc (recommended), Independent Notebook, or Document Tree |
+| **⚙️ Preferences** | Prompt for Variables (`promptVariables`) | `true` | Prompt a fill-in card when an item contains `{{xlc:ask:...}}` / `{{input:...}}` |
+| **⚙️ Preferences** | Record Usage (`recordUsage`) | `true` | Track usage count & recency locally for Frecency ranking and ROI insights |
+| **⚙️ Preferences** | Clear Variable Memory | On-demand | Clear locally remembered variable prefill history without touching templates |
+| **🤖 AI Assistant** | Enable AI / Share Content | `false` | Reuse SiYuan's configured AI model (zero plugin API keys) for tidy, draft, and `?` search |
+| **🔍 Search** | Pinyin Search / Dynamic Placeholders | `true` | Enable Chinese Pinyin matching and `{{xlc:...}}` macro evaluation on insert/copy |
+| **🏥 Health Doctor** | Run Health Check | On-demand | Diagnose snippet cycles, missing child snippets, broken placeholders, and dead links |
+| **💾 Data & Sync** | Export / Import / Sync Diff | On-demand | JSON backup, Markdown pack (with privacy sanitizer), CSV/TSV wizard, Espanso import, and Diff merge |
+
+---
+
+## ❓ Frequently Asked Questions (FAQ)
+
+- **Q1: Where is my data stored? Will uninstalling the plugin lose my snippets?**
+  All items are stored as real SiYuan blocks inside your chosen library document/notebook with `custom-xlc-*` block attributes. Even if you uninstall the plugin, your notes and blocks remain intact.
+- **Q2: Why are multi-paragraph Markdown bodies restricted when creating/updating (B-006)?**
+  To prevent multi-block append operations from leaving trailing blocks unanchored, direct writes accept a single line or a complete code fence. For multi-block structures, wrap them in a code fence or save them as block references (`blockref`).
+- **Q3: How do `:shortcode` triggers work?**
+  Assign a shortcode like `:wk` or `:bug` when creating/editing an item (or import from Espanso). Typing `:wk` in search boosts it to the top (+500) and lets you press `Tab` or `Enter` to insert immediately.
+
+---
+
 ## 🔒 Security Baseline & Known Boundaries
 
 - **B-006 Kramdown Pre-write Safeguards**: To prevent parser runaway, single-line text or a complete code fence is accepted for writes. Multi-line snippets should use code blocks or block references.
@@ -124,31 +159,25 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.78] — 2026-10-30 (Latest Release)
+### [v0.10.79] — 2026-10-31 (Latest Release)
 
-v0.10.78 Local Official Release: Full-spectrum usability closure, 6 core modern visual design systems, and comprehensive user-facing manual overhaul:
-- **Six Core Modern Visual Systems Implemented**:
-  - Dual-Layer Floating Architecture: Primary hue-derived (243°) ultra-light canvas (`#f6f6fb`, L=97.6%) combined with pure white cards (L=100%) for a 2.4% subtle float difference;
-  - Decoupled Semantics: Primary violet reserved strictly for interactive operations, while emerald green (25° offset) handles usage frequency and telemetry metrics;
-  - Contrast Rhythm Bento Cards: Deep theme-tinted dark cards (L=11.5%) with inverse text and dramatic ~3x typography scaling;
-  - Diffused Soft Shadows & Hairline Dividers: Layered shadows replacing harsh outlines; 7% opacity dividers for retina clarity;
-  - Asymmetric Motion Curves: Fast-in-slow-out (140ms) entering and crisp exiting (110ms) with `scale(0.98)` tactile feedback;
-  - Monospace Numerics: Enforced `tabular-nums` across ordinals, counters, and line numbers.
-- **Full-Spectrum Usability Closures**:
-  - Fixed P0 selection caret blockId loss (collapsed carets accurately resolve enclosing blocks for instant block capture);
-  - Dedicated command palette mode routing (`insertCmd`/`copyCmd`/`openSourceCmd`);
-  - Single-item instant addition to Paste Queue (⌥⇧Q) from context menus;
-  - Dynamic option population and auto-inference in CSV/TSV table import wizard;
-  - Complete SiYuan Dialog host mounting and destruction lifecycle for Sync Diff modal;
-  - Clean container hierarchy for Export Sanitizer settings dialog.
-- **Comprehensive User-Facing Documentation Overhaul**: Re-architected with 3-step quick start, panel-by-panel guide, settings breakdown with defaults, full hotkey index, FAQ, and local-first zero-network privacy declarations.
-- **Quality Gates**: Unit test suite expanded to **1045/1045 passing tests** with verified negative mutation gate (mutation 149), with all 25 UI render snapshots and 77/77 interaction audits green.
+v0.10.79 Local Official Release: Single source-of-truth material convergence, `:shortcode` end-to-end closure, Sync Diff & adjacent block probe fixes, and dynamic macro evaluation consistency:
+- **Sync Diff, Adjacent Context Probe & Edit Dialog Fixes (TD-001 ~ TD-003)**:
+  - Fixed Settings Sync Diff (`syncDiffBtn`) reading `it.kramdown` from standard exported JSON bundles and routed `update` (`overwrite`), `create`/`fork` (`rename` with valid `xlc-...` IDs), and `delete` actions accurately;
+  - Eliminated unescaped `innerHTML` concatenation in the adjacent block context probe (`Alt+J`) and Dock category group headers;
+  - Fixed Chinese punctuation tag splitting in `openEditDialog`, synchronized Dock sidebar refresh on edit save, fixed Dock `isSourceMissing` ID lookup, and added physical `entry.blockId` fallback for Dock drag/context block references.
+- **`:shortcode` & Dynamic Macro End-to-End Closure (TD-004 ~ TD-006)**:
+  - Added `:shortcode` input fields to Capture and Edit dialogs, preserved `shortcode` across JSON/Markdown pack roundtrips, Espanso imports, and bundle checksum verification, and wired `:shortcode` recall and Dock badges;
+  - Aligned `expandMacroPreview` with `applyPlaceholders` / `listPlaceholders` (`{{doc.title}}`, `{{doc.path}}`, `{{date+Nd}}`) and exposed `cursorOffset` on `ExecutionReceipt` and `service.resolve`;
+  - Added Variable Memory clearing in Settings, wired `jsonToProperties` into action menu & variable bar, and integrated hierarchy prefix rename/reparent into `BatchTagCategoryPatch`.
+- **Quality Gates**: **1162/1162 unit tests passing** with negative mutation verification, 25 UI render snapshots, and 77/77 interaction audits green.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.77, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.78, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.78** | Full-spectrum usability closure, 6 modern visual design systems, and user manual overhaul | [ADR 0163](./docs/adr/0163-github-benchmark-fusion-shortcode-macro-frecency.md) |
 | **v0.10.77** | Export sanitizer options dialog hierarchy cleanup and design token convergence | [ADR 0159](./docs/adr/0159-export-sanitizer-modal-closure.md) |
 | **v0.10.76** | Sync diff visualization modal host mount closure, and settings data management integration | [ADR 0158](./docs/adr/0158-sync-diff-ui-closure.md) |
 | **v0.10.75** | CSV/TSV interactive wizard column mapping closure, dynamic option generation, and automatic initial inference | [ADR 0157](./docs/adr/0157-csv-tsv-wizard-closure.md) |

@@ -2,6 +2,25 @@
 
 本文件记录「小驴常用（内测版）」的面向用户的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.10.79] — 2026-10-31
+
+v0.10.79 本地正式发版：存量材料单一事实源收敛、`:shortcode` 简码全链路闭环、多源同步比对与相邻块探针缺陷修复、动态宏求值一致性对齐与 README 全景优化。
+
+### 修复（已有功能问题）
+- **修复多源同步冲突比对与合并 (`settings-dialog.ts`, `sync-diff.ts`) 正文丢失与策略错配 (TD-001)**：修复导入标准 JSON 导出包时遗漏 `it.kramdown` 字段导致远端正文被读为空串的问题；补全本地与远端条目的 `alias`、`shortcode`、`url`、`targetBlockId` 与真实 `kramdown` 读取；合并执行时按 `update`（`overwrite` 覆盖更新）、`create`/`fork`（`rename` 并生成合法 `xlc-...` 逻辑 ID）和 `delete` 精准分流。
+- **修复相邻块语境探针 (`Alt+J`) 与侧栏分类组头的未转义 `innerHTML` 注入缺陷 (TD-002)**：`dialog.ts` 相邻块探针改用安全文本节点挂载，`dock-view.ts` 分类组头与菜单执行 HTML 实体转义，彻底消除含 `<script>` 或泛型代码 `<T>` 时的吞字与注入隐患。
+- **修复编辑弹窗 (`openEditDialog`) 标签切分、侧栏联动与物理块 ID 回退缺陷 (TD-003)**：修复 `index.ts` 编辑弹窗 `/[,,]/` 笔误，支持中英文逗号、顿号、分号与空白切分标签；编辑保存后调用 `notifyExternalDataChange()` 同步刷新 Dock 侧栏；修复侧栏 `isSourceMissing` 误传逻辑 ID 的问题；修复侧栏 `Alt`/`Shift` 拖拽与右键复制块引用时优先回退物理块 `entry.blockId`；修复雷切桥硬编码旧版本号，统一绑定 `PLUGIN_VERSION`。
+
+### 新增与补齐（半成品收口）
+- **`:shortcode` 简码触发全链路闭环 (TD-004)**：在新建表单（`capture.shortcode`）与编辑弹窗（`edit.shortcode`）补齐简码输入框及 `:别名` 自动归一化回退；打通 JSON 导入导出（`importer.ts`）、Markdown 模板包双向读写（`export-markdown.ts`/`import-markdown.ts`）、Espanso `:trigger` 自动提取、防伪签名 `computeBundleChecksum` 校验、`service.save/update/recall` 协议直达以及 Dock 侧栏 `.xlc-badge--shortcode` 徽标展示与 `Tab` 键直达插入。
+- **动态宏预览与执行求值一致性及光标偏移透传 (TD-005)**：`listPlaceholders` 完整识别 `{{doc.title}}`、`{{doc.path}}` 与 `{{date+Nd}}`，确保执行器按需拉取当前文档信息并使预览与实际插入/复制结果 100% 一致；`ActionExecutor` 与 `service.resolve` 计算并透传 `cursorOffset` 光标落点偏移；Dock 侧栏底部抽屉接入含宏条目的源码/展开双态实时预览。
+- **变量填写历史记忆清理、JSON 转键值对与层级批处理接线 (TD-006)**：设置中心「变量与插入」分区新增变量填写历史记忆计数展示与一键清空按钮（`settings.variable-memory.clear`）；动作菜单与表单格式栏双向接入 `jsonToProperties`（`✦ JSON转键值`）；`BatchTagCategoryPatch` 接入 `renameCategoryPrefix`、`reparentCategory`、`renameTagPrefix` 层级治理；`dialog.ts` 虚拟列表与快捷键栏接入 `calculateVirtualScrollWindow` 与 `detectShortcutConflicts`。
+
+### 文档与工程门禁
+- **存量材料盘点与单一事实源整合**：建立 [`docs/todo-pool.md`](./docs/todo-pool.md) 统一待办池与原型对照表，归档过期原型至 `docs/design/archive/prototype-r187.html`。
+- **README 优化**：首屏聚焦解决痛点，补齐安装与升级方式、设置项明细表与常见问题 (FAQ)，更新日志仅展开最新 `v0.10.79` 并折叠历史版本。
+- **全套质量门禁**：单元测试提升至 **1162/1162 项全绿**，通过负向突变验证，UI 生产渲染截图与 77/77 交互审计全部通过，保留上一版可回滚产物 `package-v0.10.78.zip`。
+
 ## [0.10.78] — 2026-10-30
 
 v0.10.78 本地正式发版：全链路可用性闭环、六大视觉现代品质规范落地、全面重构面向使用者的说明书。
