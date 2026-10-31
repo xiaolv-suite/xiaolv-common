@@ -1344,7 +1344,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.eventBus.on("click-editortitleicon" as any, this.editorTitleMenuHandler as any);
             // 页签切换与静态加载联动：记录最近活动 Protyle 编辑器并刷新「当前文档」范围与插入目标
             this.switchProtyleHandler = (event) => {
-                const raw = (event?.detail?.protyle ?? event?.detail ?? event?.protyle) as any;
+                const raw = (event?.detail?.protyle ?? event?.detail ?? (event as any)?.protyle) as any;
                 if (raw) {
                     const normalized = raw.protyle ? raw : (raw.block?.rootID ? {protyle: raw} : raw);
                     this.host?.recordActiveEditor(normalized);

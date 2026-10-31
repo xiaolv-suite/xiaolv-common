@@ -276,12 +276,19 @@ async function main() {
     // 预置笔记本与开箱即用的测试文档及常用语库
     let nbId = "";
     try {
-        const nbs = ((await api(base, token, "/api/notebook/lsNotebooks")).data?.notebooks ?? []).filter((n) => !n.closed);
-        if (nbs.length > 0) {
+        const nbs = ((await api(base, token, "/api/notebook/lsNotebooks")).data?.notebooks ?? []);
+        const opened = nbs.filter((n) => !n.closed);
+        if (opened.length > 0) {
+            nbId = opened[0].id;
+        } else if (nbs.length > 0) {
             nbId = nbs[0].id;
+            await api(base, token, "/api/notebook/openNotebook", {notebook: nbId});
         } else {
             const nbCreated = await api(base, token, "/api/notebook/createNotebook", {name: "小驴常用体验空间"});
             nbId = nbCreated.data?.notebook?.id ?? "";
+            if (nbId) {
+                await api(base, token, "/api/notebook/openNotebook", {notebook: nbId});
+            }
         }
     } catch {}
 
@@ -336,7 +343,7 @@ async function main() {
                     await api(base, token, "/api/attr/setBlockAttrs", {
                         id: apId,
                         attrs: {
-                            "custom-xlc-id": "xlc-live-demo-001",
+                            "custom-xlc-id": "xlc-livedemo0001",
                             "custom-xlc-type": "structure",
                             "custom-xlc-title": "客户故障致歉与预计恢复说明",
                             "custom-xlc-shortcode": ":apology",
@@ -361,7 +368,7 @@ async function main() {
                     await api(base, token, "/api/attr/setBlockAttrs", {
                         id: sqlId,
                         attrs: {
-                            "custom-xlc-id": "xlc-live-demo-002",
+                            "custom-xlc-id": "xlc-livedemo0002",
                             "custom-xlc-type": "code",
                             "custom-xlc-title": "活跃用户分页查询 SQL",
                             "custom-xlc-tags": "开发,SQL,数据库",
@@ -384,7 +391,7 @@ async function main() {
                     await api(base, token, "/api/attr/setBlockAttrs", {
                         id: addrId,
                         attrs: {
-                            "custom-xlc-id": "xlc-live-demo-003",
+                            "custom-xlc-id": "xlc-livedemo0003",
                             "custom-xlc-type": "text",
                             "custom-xlc-title": "北京总部收件地址",
                             "custom-xlc-tags": "快递,常用地址",

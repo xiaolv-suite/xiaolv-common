@@ -978,6 +978,76 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     root.appendChild(quickStart);
     if (!showQuickStart) quickStart.style.display = "none";
 
+    // 🚀 最简一键快速建库卡片（直达极简无脑完成路径）
+    const oneClickCard = document.createElement("section");
+    oneClickCard.className = "xlc-setup-oneclick-card";
+    oneClickCard.setAttribute("role", "region");
+    oneClickCard.setAttribute("aria-label", "最简极速方案");
+    oneClickCard.style.cssText = "display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--b3-theme-primary); border-radius: var(--xlc-radius-sm); background: color-mix(in srgb, var(--b3-theme-primary) 8%, var(--b3-theme-surface)); margin-bottom: 12px;";
+
+    const oneClickHead = document.createElement("div");
+    oneClickHead.style.cssText = "display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;";
+    oneClickHead.innerHTML = `<strong>🚀 极速一键方案（最省心 · 推荐）</strong><span class="xlc-form-hint" style="font-size:12px;">自动建库与初始化，无脑点击即完成</span>`;
+    oneClickCard.appendChild(oneClickHead);
+
+    const oneClickBtn = document.createElement("button");
+    oneClickBtn.type = "button";
+    oneClickBtn.className = "b3-button xlc-btn-primary";
+    oneClickBtn.dataset.xlcControl = "setup.oneclick.create";
+    oneClickBtn.style.cssText = "min-height: 36px; font-size: 14px; font-weight: 600; justify-content: center;";
+    oneClickBtn.textContent = "✨ 一键创建并开始使用（全自动）";
+    let oneClickBusy = false;
+    oneClickBtn.addEventListener("click", async () => {
+        if (oneClickBusy) return;
+        oneClickBusy = true;
+        oneClickBtn.disabled = true;
+        oneClickBtn.textContent = t("saving");
+        try {
+            const nbRes = await ctx.library.listNotebooks();
+            const defaultDocTitle = t("setupNewDocName") || "常用内容库";
+            if (nbRes.ok && nbRes.data.length > 0) {
+                const targetNbId = nbRes.data[0]!.id;
+                const docRes = await ctx.library.createLibraryDoc(targetNbId, defaultDocTitle);
+                if (!docRes.ok) throw new Error(docRes.message);
+                ctx.applyConfig({
+                    configVersion: CONFIG_VERSION,
+                    mode: "doc",
+                    notebookIds: [],
+                    containerDocIds: [docRes.data.docId],
+                    createdDocIds: [docRes.data.docId],
+                    configuredAt: Date.now(),
+                });
+            } else {
+                const indepRes = await ctx.library.createIndependentLibrary(t("pluginName") || "小驴常用", defaultDocTitle);
+                if (!indepRes.ok) throw new Error(indepRes.message);
+                ctx.applyConfig({
+                    configVersion: CONFIG_VERSION,
+                    mode: "notebook",
+                    notebookIds: [indepRes.data.notebookId],
+                    containerDocIds: [indepRes.data.docId],
+                    createdDocIds: [indepRes.data.docId],
+                    createdNotebookIds: [indepRes.data.notebookId],
+                    configuredAt: Date.now(),
+                });
+            }
+            ctx.notify("info", t("libDocCreated", defaultDocTitle));
+            onConfigured();
+        } catch (err) {
+            oneClickBusy = false;
+            oneClickBtn.disabled = false;
+            oneClickBtn.textContent = "✨ 一键创建并开始使用（全自动）";
+            ctx.notify("error", t("kernelError", toErrorMessage(err)));
+        }
+    });
+    oneClickCard.appendChild(oneClickBtn);
+
+    const manualDivider = document.createElement("div");
+    manualDivider.style.cssText = "display: flex; align-items: center; gap: 8px; margin: 4px 0 10px 0; color: var(--b3-theme-on-surface); font-size: 12px;";
+    manualDivider.innerHTML = `<span style="flex:1; height:1px; background:var(--b3-border-color);"></span><span>或者：手动选择其他方式 ▼</span><span style="flex:1; height:1px; background:var(--b3-border-color);"></span>`;
+
+    root.appendChild(oneClickCard);
+    root.appendChild(manualDivider);
+
     // ---- 第 1 步：选库方式 ----
     const step1 = document.createElement("div");
     const modeWrap = document.createElement("div");
@@ -1356,7 +1426,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     nameInput.value = t("setupNewDocName");
     nameRow.appendChild(nameInput);
     const createBtn = document.createElement("button");
-    createBtn.className = "b3-button";
+    createBtn.className = "b3-button xlc-btn-primary";
     createBtn.dataset.xlcControl = "setup.newdoc.create";
     createBtn.style.whiteSpace = "nowrap";
     createBtn.textContent = t("create");
@@ -1498,11 +1568,13 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
 
     function syncCreateState(): void {
         const mode = modeSelect.value;
-        createBtn.disabled = creatingLibrary
-            || (mode === "new-doc" && (!notebooksLoaded || !nbSelect.value))
-            || (mode !== "new-doc" && mode !== "new-notebook")
-            || (mode === "new-notebook" && !independentNotebookInput.value.trim())
-            || !nameInput.value.trim();
+        const canCreate = !creatingLibrary
+            && ((mode === "new-doc" && notebooksLoaded && Boolean(nbSelect.value) && Boolean(nameInput.value.trim()))
+                || (mode === "new-notebook" && Boolean(independentNotebookInput.value.trim()) && Boolean(nameInput.value.trim())));
+        createBtn.disabled = !canCreate;
+        if (mode === "new-doc" || mode === "new-notebook") {
+            nextBtn.disabled = !canCreate;
+        }
     }
     nbSelect.addEventListener("change", () => {
         setupRevision++;
@@ -1516,9 +1588,21 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
         clearOrphanReceipt();
         syncCreateState();
     });
+    nameInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey && !e.altKey && !createBtn.disabled) {
+            e.preventDefault();
+            createBtn.click();
+        }
+    });
     independentNotebookInput.addEventListener("input", () => {
         clearOrphanReceipt();
         syncCreateState();
+    });
+    independentNotebookInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey && !e.altKey && !createBtn.disabled) {
+            e.preventDefault();
+            createBtn.click();
+        }
     });
 
     const step1Actions = document.createElement("div");
@@ -1541,7 +1625,11 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     nextBtn.setAttribute("aria-label", t("setupNext"));
     nextBtn.disabled = true;
     nextBtn.addEventListener("click", () => {
-        const mode = modeSelect.value as LibraryConfig["mode"];
+        const mode = modeSelect.value;
+        if (mode === "new-doc" || mode === "new-notebook") {
+            createBtn.click();
+            return;
+        }
         if (mode === "notebook" && !nbSelect.value) {
             ctx.notify("error", nbSelect.disabled ? t("setupNotebookNotReady") : t("pickNotebookFirst"));
             return;

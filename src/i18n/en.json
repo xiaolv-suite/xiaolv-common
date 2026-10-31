@@ -690,5 +690,6 @@
   "clipboardHistoryToggle": "Record clipboard history (opt-in)",
   "clipboardHistorySub": "When enabled, stores the last 30 copied text items locally; when off, the system clipboard is not read and existing items are kept",
   "openLibraryDoc": "Open Library Document in SiYuan",
-  "insertBlockRef": "Insert as Block Reference"
+  "insertBlockRef": "Insert as Block Reference",
+  "setupCreateAndEnter": "Create & Enter (Enter)"
 }
