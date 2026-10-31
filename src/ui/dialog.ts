@@ -58,6 +58,7 @@ export interface DialogDeps {
     captureOmniWithForm?: (entry: SearchEntry) => void;
     quickEditBlock?: (blockId: string, currentContent: string) => Promise<void> | void;
     openDocBlock?: (blockId: string) => Promise<void> | void;
+    getDocPath?: (docId: string) => Promise<string>;
     getAdjacentBlocks?: (blockId: string, docId: string) => Promise<AdjacentBlocksContext | null>;
     insertToDoc: (itemId: string, docId: string, hPath: string, fills?: Record<string, string>, mode?: "insert" | "insert-content" | "insert-ref" | "insert-embed") => Promise<boolean>;
     duplicateItem: (itemId: string) => Promise<void>;
@@ -2746,6 +2747,18 @@ export class CommonSearchDialog {
         void this.refreshPreservingPosition();
     }
 
+    /** 思源文档页签切换后的上下文联动：同步插入目标横幅，若处于「当前文档」范围则自动刷新当前文档块列表。 */
+    public syncActiveContextAfterTabSwitch(): void {
+        this.syncPaneActions();
+        if (this.currentScope === "current-doc" && !this.isComposing) {
+            if (this.inputDebounce) {
+                clearTimeout(this.inputDebounce);
+                this.inputDebounce = null;
+            }
+            void this.refresh();
+        }
+    }
+
     /** 鉴权/权限错误由统一内核处理器调用；旧列表失效后保留查询条件并提供显式重试。 */
     public showKernelAccessIssue(kind: "auth" | "permission", message: string): void {
         ++this.searchSeq;
@@ -3084,14 +3097,16 @@ export class CommonSearchDialog {
             || (entry.isOmni && entry.category && entry.category !== "全库内容" && entry.category !== "剪贴板"
                 ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "")
                 : undefined);
-        if (effectiveDocPath) {
+        const hasExternalSourceDoc = !entry.isOmni && isBlockId(entry.sourceDocId) && entry.sourceDocId !== entry.libraryDocId;
+        if (effectiveDocPath || hasExternalSourceDoc) {
             const pathBtn = document.createElement("button");
             pathBtn.type = "button";
             pathBtn.className = "xlc-meta-chip xlc-meta-chip--path";
             pathBtn.dataset.xlcControl = "preview.open-path";
-            pathBtn.textContent = "📄 " + effectiveDocPath;
+            pathBtn.textContent = "📄 " + (effectiveDocPath || "来源文档");
             pathBtn.title = "点击在思源中打开并定位此文档或块 (Alt+D)";
             pathBtn.addEventListener("click", () => {
+                if (!this.pinWindow) this.destroy();
                 if (entry.isOmni && this.deps.openDocBlock) {
                     void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
                 } else {
@@ -3099,6 +3114,39 @@ export class CommonSearchDialog {
                 }
             });
             meta.appendChild(pathBtn);
+            if (!effectiveDocPath && hasExternalSourceDoc && this.deps.getDocPath && entry.sourceDocId) {
+                void this.deps.getDocPath(entry.sourceDocId).then((resolvedPath) => {
+                    if (!resolvedPath) return;
+                    entry.sourceDocPath = resolvedPath;
+                    if (pathBtn.isConnected) {
+                        pathBtn.textContent = "📄 " + resolvedPath;
+                    }
+                }).catch(() => {});
+            }
+        }
+        if (!entry.isOmni && isBlockId(entry.blockId)) {
+            const libBlockBtn = document.createElement("button");
+            libBlockBtn.type = "button";
+            libBlockBtn.className = "xlc-meta-chip xlc-meta-chip--path";
+            libBlockBtn.dataset.xlcControl = "preview.open-lib-block";
+            libBlockBtn.textContent = "📦 库内原块";
+            libBlockBtn.title = "点击在思源常用库文档中直接定位此条目的本体块";
+            libBlockBtn.addEventListener("click", () => {
+                if (!this.pinWindow) this.destroy();
+                if (this.deps.openDocBlock) {
+                    void this.deps.openDocBlock(entry.blockId);
+                } else {
+                    void this.deps.openSource(entry.id);
+                }
+            });
+            meta.appendChild(libBlockBtn);
+            if (this.deps.getDocPath && isBlockId(entry.libraryDocId)) {
+                void this.deps.getDocPath(entry.libraryDocId).then((libPath) => {
+                    if (libPath && libBlockBtn.isConnected) {
+                        libBlockBtn.title = `在思源常用库文档 (${libPath}) 中定位此块`;
+                    }
+                }).catch(() => {});
+            }
         }
         if (this.deps.getAdjacentBlocks && isBlockId(resolveEntryBlockId(entry)) && isBlockId(entry.sourceDocId || entry.libraryDocId)) {
             const probeBtn = document.createElement("button");
@@ -3553,9 +3601,13 @@ export class CommonSearchDialog {
                 }
             }
 
-            // 快捷复制块引用语法 (Alt+R)
+            // 快捷插入块引用/嵌入块 + 复制块引用语法 (Alt+B / Alt+E / Alt+R)
             const targetBlockId = resolveEntryBlockId(entry);
             if (isBlockId(targetBlockId)) {
+                if (entry.itemType !== "blockref") {
+                    addAction("((•))", (this.deps.t("insertBlockRef") || "插入为思源块引用") + " (Alt+B)", () => this.insertEntryEmbedOrRef(entry, "ref"), "xlc-menu-item", false);
+                    addAction("{{•}}", (this.deps.t("insertEmbed") || "插入为思源同步嵌入块") + " (Alt+E)", () => this.insertEntryEmbedOrRef(entry, "embed"), "xlc-menu-item", false);
+                }
                 addAction("((•))", "复制块引用语法 (Alt+R)", async () => {
                     const anchor = (entry.title || entry.summary || "引用").slice(0, 50).replace(/[\r\n]+/g, " ");
                     const refCode = buildBlockRef(targetBlockId, anchor);
@@ -3655,6 +3707,9 @@ export class CommonSearchDialog {
                 }
             } else {
                 addSilent("↗", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
+                if (this.deps.openDocBlock && isBlockId(entry.blockId) && isBlockId(entry.sourceDocId) && entry.sourceDocId !== entry.libraryDocId) {
+                    addSilent("📦", "在思源库文档中定位本体块", () => this.deps.openDocBlock!(entry.blockId));
+                }
                 addSilent("✎", this.deps.t("edit"), () => this.deps.editItem(entry.id));
                 addSilent("⧉", this.deps.t("duplicateItem"), () => this.deps.duplicateItem(entry.id));
                 const rawContent = (entry.content || "").trim();

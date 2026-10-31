@@ -38,6 +38,7 @@ export interface DockViewDeps {
     openSource: (itemId: string) => Promise<{ok: boolean; message: string}>;
     newItem: (initialTitle?: string) => void;
     openSettings?: () => void;
+    openLibraryDoc?: () => void;
     getUsage?: () => Record<string, {count: number; lastAt?: number}>;
     isSourceMissing: (entry: SearchEntry) => boolean;
     hasActiveEditor?: () => boolean;
@@ -145,6 +146,17 @@ export class DockView {
         refreshBtn.textContent = "↺";
         refreshBtn.addEventListener("click", () => void this.refresh());
         actions.appendChild(refreshBtn);
+
+        if (this.deps.openLibraryDoc) {
+            const libDocBtn = document.createElement("button");
+            libDocBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
+            libDocBtn.dataset.xlcDockAct = "open-lib-doc";
+            libDocBtn.title = "在思源中打开常用库文档";
+            if (typeof libDocBtn.setAttribute === "function") libDocBtn.setAttribute("aria-label", libDocBtn.title);
+            libDocBtn.textContent = "📄";
+            libDocBtn.addEventListener("click", () => this.deps.openLibraryDoc?.());
+            actions.appendChild(libDocBtn);
+        }
 
         if (this.deps.openSettings) {
             const gearBtn = document.createElement("button");
@@ -630,8 +642,12 @@ export class DockView {
         };
 
         addItem("＋", this.deps.t("insert") || "插入到当前光标", () => void this.insertEntry(entry));
-        addItem("⧉", this.deps.t("copy") || "复制纯文本", () => void this.copyEntry(entry));
         const targetId = entry.targetBlockId || entry.sourceBlockId || entry.blockId || entry.id;
+        if (targetId) {
+            addItem("((•))", this.deps.t("insertBlockRef") || "插入为思源块引用", () => void this.insertEntry(entry, "insert-ref"));
+            addItem("{{•}}", this.deps.t("insertEmbed") || "插入为思源同步嵌入块", () => void this.insertEntry(entry, "insert-embed"));
+        }
+        addItem("⧉", this.deps.t("copy") || "复制纯文本", () => void this.copyEntry(entry));
         if (targetId) {
             addItem("((•))", "复制块引用语法", async () => {
                 const code = `((${targetId} '${entry.title || "引用"}'))`;
@@ -727,11 +743,11 @@ export class DockView {
         }
     }
 
-    private async insertEntry(entry: SearchEntry): Promise<void> {
+    private async insertEntry(entry: SearchEntry, mode: InsertMode = "insert"): Promise<void> {
         if (this.isInsertBusy) return;
         this.isInsertBusy = true;
         try {
-            const res = await this.deps.runAction(entry.id, "insert");
+            const res = await this.deps.runAction(entry.id, mode);
             if (res.ok) {
                 const msg = res.message && res.message !== "ok"
                     ? res.message
@@ -869,6 +885,41 @@ export class DockView {
         }
         copyBtn.addEventListener("click", () => void this.copyEntry(entry));
         foot.appendChild(copyBtn);
+
+        const refBtn = document.createElement("button");
+        refBtn.className = "b3-button";
+        refBtn.dataset.xlcDockAct = "insert-ref";
+        refBtn.textContent = "((•))";
+        refBtn.title = this.deps.t("insertBlockRef") || "插入为思源块引用";
+        if (typeof refBtn.setAttribute === "function") {
+            refBtn.setAttribute("aria-label", refBtn.title);
+        }
+        refBtn.addEventListener("mousedown", (e) => e.preventDefault());
+        refBtn.addEventListener("click", () => void this.insertEntry(entry, "insert-ref"));
+        foot.appendChild(refBtn);
+
+        const embedBtn = document.createElement("button");
+        embedBtn.className = "b3-button";
+        embedBtn.dataset.xlcDockAct = "insert-embed";
+        embedBtn.textContent = "{{•}}";
+        embedBtn.title = this.deps.t("insertEmbed") || "插入为思源同步嵌入块";
+        if (typeof embedBtn.setAttribute === "function") {
+            embedBtn.setAttribute("aria-label", embedBtn.title);
+        }
+        embedBtn.addEventListener("mousedown", (e) => e.preventDefault());
+        embedBtn.addEventListener("click", () => void this.insertEntry(entry, "insert-embed"));
+        foot.appendChild(embedBtn);
+
+        const openBtn = document.createElement("button");
+        openBtn.className = "b3-button";
+        openBtn.dataset.xlcDockAct = "open-source";
+        openBtn.textContent = "↗";
+        openBtn.title = this.deps.t("openSource") || "在思源文档中打开定位此块";
+        if (typeof openBtn.setAttribute === "function") {
+            openBtn.setAttribute("aria-label", openBtn.title);
+        }
+        openBtn.addEventListener("click", () => void this.deps.openSource(entry.id));
+        foot.appendChild(openBtn);
 
         this.drawerContainer.appendChild(foot);
     }

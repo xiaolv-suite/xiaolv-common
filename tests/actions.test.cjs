@@ -128,3 +128,16 @@ test("open 模式在来源失效时降级且不产出 open 目标", () => {
     assert.equal(plan.downgraded, true);
     assert.ok(!plan.open);
 });
+
+test("非 blockref 库内条目（text/markdown/structure/code）同样支持 insert-ref 与 insert-embed，且 openSource 直达库内物理块 ID", () => {
+    for (const itemType of ["text", "markdown", "structure", "code"]) {
+        const it = makeItem({itemType, title: "库内本体块"});
+        const refPlan = actions.planAction(it, "insert-ref", ctx({content: {kramdown: "普通正文", sourceMissing: false, assetMissing: false}}));
+        assert.equal(refPlan.markdown, `((${BLOCK} '库内本体块'))`, `${itemType} insert-ref`);
+        const embedPlan = actions.planAction(it, "insert-embed", ctx({content: {kramdown: "普通正文", sourceMissing: false, assetMissing: false}}));
+        assert.equal(embedPlan.markdown, `{{select * from blocks where id='${BLOCK}'}}`, `${itemType} insert-embed`);
+    }
+    const openLib = actions.planOpenSource(makeItem(), {kramdown: "x", sourceMissing: false, assetMissing: false});
+    assert.deepEqual(openLib.target, {kind: "block", docId: DOC, blockId: BLOCK});
+});
+

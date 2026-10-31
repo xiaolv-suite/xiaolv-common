@@ -104,6 +104,11 @@ export default class XiaolvCommonPlugin extends Plugin {
     private linkMenuHandler: ((event: {detail: {menu: {addItem: (item: {icon: string; label: string; click: () => void}) => void}; element?: Element}}) => void) | null = null;
     private imageMenuHandler: ((event: {detail: {menu: {addItem: (item: {icon: string; label: string; click: () => void}) => void}; element?: Element}}) => void) | null = null;
     private docTreeMenuHandler: ((event: {detail: {menu: {addItem: (item: {icon: string; label: string; click: () => void}) => void}; elements?: Array<Element | null> | NodeListOf<HTMLElement>; type?: string; items?: Array<{id: string; path: string; notebookId: string}>}}) => void) | null = null;
+    private blockIconMenuHandler: ((event: {detail: {menu: {addItem: (item: {icon: string; label: string; click: () => void}) => void}; blockElements?: Array<HTMLElement | null>; protyle?: {block?: {rootID?: string}}}}) => void) | null = null;
+    private editorTitleMenuHandler: ((event: {detail: {menu: {addItem: (item: {icon: string; label: string; click: () => void}) => void}; data?: {id?: string; rootID?: string; name?: string}; protyle?: {block?: {rootID?: string}}}}) => void) | null = null;
+    private switchProtyleHandler: ((event: {detail?: {protyle?: unknown}}) => void) | null = null;
+    private wsMainHandler: ((event: {detail?: {cmd?: string; data?: unknown}}) => void) | null = null;
+    private wsSyncTimer: ReturnType<typeof setTimeout> | null = null;
     /** 来源失效预检缓存（每次搜索刷新时批量重建；仅为列表徽标，打开来源仍实时校验） */
     private missingSources = new Set<string>();
     /** 协议命令 ID → 执行器（xiaolv.common.*，供雷切等按稳定 ID 调用） */
@@ -294,9 +299,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             notify: this.notify,
             getBlockKramdown: async (blockId) => {
                 const kd = await this.library.getItemKramdown({
-                    id: "xlc-proxy", blockId, libraryDocId: "", itemType: "text", title: "", alias: "",
-                    tags: [], category: "", summary: "", varCount: 0, source: {sourceDocId: "", sourceBlockId: "", sourceType: "manual"},
-                    url: "", targetBlockId: "", createdAt: 0, updatedAt: 0, droppedFields: [],
+                    id: "xlc-proxy", blockId, libraryDocId: "", itemType: "blockref", title: "", alias: "",
+                    tags: [], category: "", summary: "", varCount: 0, source: {sourceDocId: "", sourceBlockId: blockId, sourceType: "block"},
+                    url: "", targetBlockId: blockId, createdAt: 0, updatedAt: 0, droppedFields: [],
                 });
                 return kd.ok ? kd.data : null;
             },
@@ -953,7 +958,36 @@ export default class XiaolvCommonPlugin extends Plugin {
             langKey: "discoverCurrentNotebook",
             callback: () => this.openDiscoveryForCurrentDocument("notebook"),
         });
+        this.addCommand({
+            langKey: "openLibraryDoc",
+            callback: () => {
+                this.openLibraryDocument();
+            },
+        });
         void t;
+    }
+
+    /** 在思源编辑器中直接打开当前配置的常用库文档（或定位指定库块）。 */
+    public openLibraryDocument(blockId?: string): boolean {
+        if (blockId && isBlockId(blockId)) {
+            return this.host.openDoc("", blockId);
+        }
+        const cfg = this.config;
+        if (!cfg) {
+            this.openSetup();
+            return false;
+        }
+        const firstDocId = cfg.containerDocIds[0];
+        if (firstDocId && isBlockId(firstDocId)) {
+            return this.host.openDoc(firstDocId);
+        }
+        const idx = this.library?.getIndex();
+        const fallbackDocId = idx?.entries[0]?.libraryDocId;
+        if (fallbackDocId && isBlockId(fallbackDocId)) {
+            return this.host.openDoc(fallbackDocId);
+        }
+        this.notify("info", "当前为笔记本模式且尚无条目，请先新建一条常用内容以定位库文档");
+        return false;
     }
 
     /** 划选浮动工具栏点击：智能感知当前活动选区 */
@@ -1145,6 +1179,135 @@ export default class XiaolvCommonPlugin extends Plugin {
                 });
             };
             this.eventBus.on("open-menu-doctree", this.docTreeMenuHandler);
+            // 思源块标菜单（click-blockicon）：支持单块/多块框选收录、存为跟随原块的块引用、已入库块直接编辑
+            this.blockIconMenuHandler = (event) => {
+                const {menu, blockElements, protyle} = event.detail ?? ({} as any);
+                if (!menu || typeof menu.addItem !== "function") return;
+                const elements = Array.from(blockElements ?? []).filter((el): el is HTMLElement => Boolean(el));
+                const blockIds = elements
+                    .map((el) => el.getAttribute?.("data-node-id") ?? "")
+                    .filter((id) => isBlockId(id));
+                if (blockIds.length === 0) return;
+                const docId = protyle?.block?.rootID || this.host?.currentDocId() || null;
+                const firstBlockId = blockIds[0]!;
+                const firstEl = elements[0];
+                const customLogicalId = firstEl?.getAttribute?.("custom-xlc-id") ?? "";
+                const idx = this.library?.getIndex();
+                const matchedEntry = idx?.entries.find((e) =>
+                    (customLogicalId && e.id === customLogicalId)
+                    || e.blockId === firstBlockId
+                    || e.targetBlockId === firstBlockId
+                    || e.sourceBlockId === firstBlockId
+                );
+                if (matchedEntry && blockIds.length === 1) {
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: `在小驴常用中编辑「${shortTitle(matchedEntry.title || matchedEntry.id)}」`,
+                        click: () => {
+                            void this.library.getItem(matchedEntry.id).then((got) => {
+                                if (got.ok) void this.openEditDialog(got.data);
+                                else this.notify("error", got.message);
+                            });
+                        },
+                    });
+                }
+                if (blockIds.length > 1) {
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: `合并选中的 ${blockIds.length} 个块存入小驴常用`,
+                        click: () => void this.capture?.captureBlocksById(blockIds, docId),
+                    });
+                } else {
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: this.i18nFn()("captureBlock") || "存入小驴常用（复制块正文）",
+                        click: () => void this.capture?.captureBlocksById(blockIds, docId),
+                    });
+                    menu.addItem({
+                        icon: "iconXlcCommon",
+                        label: this.i18nFn()("captureBlockRefMenu") || "存为小驴块引用（跟随原块实时变化）",
+                        click: () => this.capture?.captureBlockRef(firstBlockId, firstEl?.textContent ?? "", docId),
+                    });
+                }
+            };
+            this.eventBus.on("click-blockicon" as any, this.blockIconMenuHandler as any);
+            // 文档标题图标菜单（click-editortitleicon）：定向插入到本文档、扫描本文档候选、整篇收录
+            this.editorTitleMenuHandler = (event) => {
+                const {menu, data, protyle} = event.detail ?? ({} as any);
+                if (!menu || typeof menu.addItem !== "function") return;
+                const docId = data?.id || data?.rootID || protyle?.block?.rootID || this.host?.currentDocId() || "";
+                if (!isBlockId(docId)) return;
+                menu.addItem({
+                    icon: "iconXlcCommon",
+                    label: this.i18nFn()("insertToDocMenu") || "从小驴常用插入到此文档…",
+                    click: () => {
+                        void this.library.getDocPath(docId).then((path) => {
+                            this.openSearch({docId, hPath: path || data?.name || docId});
+                        }).catch((err) => this.notify("error", this.i18nFn()("kernelError", toErrorMessage(err))));
+                    },
+                });
+                menu.addItem({
+                    icon: "iconXlcCommon",
+                    label: this.i18nFn()("discoverCurrentDocument") || "扫描本文档发现常用候选…",
+                    click: () => this.openDiscoveryForCurrentDocument("document"),
+                });
+            };
+            this.eventBus.on("click-editortitleicon" as any, this.editorTitleMenuHandler as any);
+            // 页签切换与静态加载联动：记录最近活动 Protyle 编辑器并刷新「当前文档」范围与插入目标
+            this.switchProtyleHandler = (event) => {
+                const raw = event?.detail?.protyle as any;
+                if (raw) {
+                    const normalized = raw.protyle ? raw : {protyle: raw};
+                    this.host?.recordActiveEditor(normalized);
+                }
+                this.searchDialog?.syncActiveContextAfterTabSwitch();
+            };
+            this.eventBus.on("switch-protyle" as any, this.switchProtyleHandler as any);
+            this.eventBus.on("loaded-protyle-static" as any, this.switchProtyleHandler as any);
+            // 思源内核事务监听（ws-main）：用户在思源编辑器直接修改库文档或被引用源块时，自动无感同步到 Dock 与主搜索
+            this.wsMainHandler = (event) => {
+                const cmd = event?.detail?.cmd;
+                if (cmd !== "transactions" && cmd !== "savedoc" && cmd !== "rename") return;
+                if (!this.config || !this.library) return;
+                const idx = this.library.getIndex();
+                const currentDocId = this.host?.currentDocId() ?? "";
+                const libDocIds = new Set<string>(this.config.containerDocIds);
+                const watchedIds = new Set<string>(this.config.containerDocIds);
+                if (idx) {
+                    for (const e of idx.entries) {
+                        if (e.libraryDocId) {
+                            libDocIds.add(e.libraryDocId);
+                            watchedIds.add(e.libraryDocId);
+                        }
+                        if (e.blockId) watchedIds.add(e.blockId);
+                        if (e.sourceBlockId) watchedIds.add(e.sourceBlockId);
+                        if (e.targetBlockId) watchedIds.add(e.targetBlockId);
+                        if (e.sourceDocId) watchedIds.add(e.sourceDocId);
+                    }
+                }
+                let relevant = Boolean(currentDocId && libDocIds.has(currentDocId));
+                if (!relevant && Array.isArray(event?.detail?.data)) {
+                    for (const tx of event.detail.data as Array<{doOperations?: Array<{id?: string; parentID?: string}>}>) {
+                        for (const op of tx?.doOperations ?? []) {
+                            if ((op?.id && watchedIds.has(op.id)) || (op?.parentID && watchedIds.has(op.parentID))) {
+                                relevant = true;
+                                break;
+                            }
+                        }
+                        if (relevant) break;
+                    }
+                }
+                if (!relevant) return;
+                if (this.wsSyncTimer) clearTimeout(this.wsSyncTimer);
+                this.wsSyncTimer = setTimeout(() => {
+                    this.wsSyncTimer = null;
+                    if (this.unloading) return;
+                    this.library?.invalidateIndex();
+                    this.invalidatePreviewCache();
+                    this.notifyExternalDataChange();
+                }, 320);
+            };
+            this.eventBus.on("ws-main" as any, this.wsMainHandler as any);
         } catch {
             // 事件契约变化时降级：右键入口缺席，其余入口仍可用
         }
@@ -1190,7 +1353,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         const got = await this.library.getItem(itemId);
         if (!got.ok) return {ok: false, message: got.message};
         const item = got.data;
-        if (!fills && this.state.insert.promptVariables && item.itemType !== "code") {
+        if (!fills && mode !== "insert-ref" && mode !== "insert-embed" && this.state.insert.promptVariables && item.itemType !== "code") {
             const kd = await this.library.getItemKramdown(item);
             if (kd.ok) {
                 const expanded = await this.library.expandSnippetRefs(kd.data);
@@ -1287,6 +1450,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             },
             newItem: (initialTitle) => void this.capture?.newManual(initialTitle),
             openSettings: () => this.openSetting(),
+            openLibraryDoc: () => {
+                this.openLibraryDocument();
+            },
             getUsage: () => this.state.usage,
             isSourceMissing: (entry) => {
                 const block = entry.sourceBlockId;
@@ -1513,6 +1679,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             openDocBlock: (blockId: string) => {
                 this.host.openDoc("", blockId);
             },
+            getDocPath: (docId: string) => {
+                return this.library.getDocPath(docId);
+            },
             getAdjacentBlocks: (blockId: string, docId: string) => {
                 return this.omniSearch.getAdjacentBlocks(blockId, docId);
             },
@@ -1524,7 +1693,9 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
                 const item = got.data;
                 let markdown: string;
-                const blockrefTarget = resolveBlockRefTarget(item) || item.source.sourceBlockId || item.blockId;
+                const blockrefTarget = item.itemType === "blockref"
+                    ? (resolveBlockRefTarget(item) || item.source.sourceBlockId || item.blockId)
+                    : (isBlockId(item.blockId) ? item.blockId : (resolveBlockRefTarget(item) || item.source.sourceBlockId));
                 if (mode === "insert-embed" && blockrefTarget) {
                     markdown = buildEmbedBlock(blockrefTarget);
                 } else if ((mode === "insert-ref" || (item.itemType === "blockref" && mode !== "insert-content")) && blockrefTarget) {
@@ -2154,6 +2325,19 @@ export default class XiaolvCommonPlugin extends Plugin {
             });
             srcRow.appendChild(clearBtn);
         }
+        if (isBlockId(item.blockId)) {
+            const openLibBlockBtn = document.createElement("button");
+            openLibBlockBtn.type = "button";
+            openLibBlockBtn.className = "b3-button b3-button--text xlc-form-ai";
+            openLibBlockBtn.dataset.xlcControl = "edit.open-lib-block";
+            openLibBlockBtn.textContent = "📦 在思源中定位此块";
+            openLibBlockBtn.title = "关闭弹窗并在思源笔记编辑器中直接打开定位该条目所在的真实块";
+            openLibBlockBtn.addEventListener("click", () => {
+                dialog.destroy();
+                this.host.openDoc(item.libraryDocId, item.blockId);
+            });
+            srcRow.appendChild(openLibBlockBtn);
+        }
         form.appendChild(srcRow);
         const actions = document.createElement("div");
         actions.className = "xlc-form-actions";
@@ -2288,6 +2472,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             aiErrorText: (err) => this.aiErrorText(err),
             applyPinyinAdapter: () => this.applyPinyinAdapter(),
             refreshSearch: () => this.notifyExternalDataChange(),
+            openLibraryDoc: () => {
+                this.openLibraryDocument();
+            },
             getSavedDiscoveryViews: () => this.state.search.savedDiscoveryViews ?? [],
             openSavedDiscoveryView: (view) => this.openSavedDiscoveryView(view),
             deleteSavedDiscoveryView: (id) => this.deleteSavedDiscoveryView(id),
@@ -2449,6 +2636,10 @@ export default class XiaolvCommonPlugin extends Plugin {
         const removeLinkHandler = this.linkMenuHandler;
         const removeImageHandler = this.imageMenuHandler;
         const removeDoctreeHandler = this.docTreeMenuHandler;
+        const removeBlockIconHandler = this.blockIconMenuHandler;
+        const removeEditorTitleHandler = this.editorTitleMenuHandler;
+        const removeSwitchProtyleHandler = this.switchProtyleHandler;
+        const removeWsMainHandler = this.wsMainHandler;
         try {
             if (removeBlockrefHandler) this.eventBus.off("open-menu-blockref", removeBlockrefHandler);
         } catch {
@@ -2469,10 +2660,41 @@ export default class XiaolvCommonPlugin extends Plugin {
         } catch {
             // 宿主事件总线已销毁：忽略
         }
+        try {
+            if (removeBlockIconHandler) this.eventBus.off("click-blockicon" as any, removeBlockIconHandler as any);
+        } catch {
+            // 忽略
+        }
+        try {
+            if (removeEditorTitleHandler) this.eventBus.off("click-editortitleicon" as any, removeEditorTitleHandler as any);
+        } catch {
+            // 忽略
+        }
+        try {
+            if (removeSwitchProtyleHandler) {
+                this.eventBus.off("switch-protyle" as any, removeSwitchProtyleHandler as any);
+                this.eventBus.off("loaded-protyle-static" as any, removeSwitchProtyleHandler as any);
+            }
+        } catch {
+            // 忽略
+        }
+        try {
+            if (removeWsMainHandler) this.eventBus.off("ws-main" as any, removeWsMainHandler as any);
+        } catch {
+            // 忽略
+        }
         this.blockRefMenuHandler = null;
         this.linkMenuHandler = null;
         this.imageMenuHandler = null;
         this.docTreeMenuHandler = null;
+        this.blockIconMenuHandler = null;
+        this.editorTitleMenuHandler = null;
+        this.switchProtyleHandler = null;
+        this.wsMainHandler = null;
+        if (this.wsSyncTimer) {
+            clearTimeout(this.wsSyncTimer);
+            this.wsSyncTimer = null;
+        }
         this.searchDialog?.destroy();
         this.searchDialog = null;
         this.capture?.destroy();

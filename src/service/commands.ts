@@ -53,25 +53,68 @@ export interface EditorInsertTargetSnapshot {
 }
 
 export class HostBridge implements IHostBridge {
+    private lastActiveEditor: Protyle | null = null;
+
     constructor(private readonly app: App, private readonly owner: Plugin) {}
+
+    public recordActiveEditor(editor: Protyle | null | undefined): void {
+        if (editor?.protyle?.block?.rootID) {
+            this.lastActiveEditor = editor;
+        }
+    }
+
+    private resolveActiveEditor(): Protyle | null {
+        try {
+            const active = getActiveEditor() ?? null;
+            if (active?.protyle?.block?.rootID) {
+                const el = active.protyle?.wysiwyg?.element;
+                const isVisible = !el || (el.isConnected && !el.closest?.(".fn__none, [inert]"));
+                if (isVisible) {
+                    const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+                    const focusedInActive = Boolean(activeEl && active.protyle?.element?.contains?.(activeEl));
+                    if (focusedInActive || !this.lastActiveEditor) {
+                        this.lastActiveEditor = active;
+                        return active;
+                    }
+                }
+            }
+        } catch {
+            // ignore
+        }
+        const fallback = this.lastActiveEditor;
+        if (fallback?.protyle?.block?.rootID) {
+            const el = fallback.protyle?.wysiwyg?.element;
+            if (!el || (el.isConnected && !el.closest?.(".fn__none, [inert]"))) {
+                return fallback;
+            }
+        }
+        try {
+            const active = getActiveEditor() ?? null;
+            if (active?.protyle?.block?.rootID) {
+                const el = active.protyle?.wysiwyg?.element;
+                if (!el || (el.isConnected && !el.closest?.(".fn__none, [inert]"))) {
+                    return active;
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return null;
+    }
 
     isMobile(): boolean {
         return (window.siyuan?.mobile as unknown) === true || document.body.classList.contains("body--mobile");
     }
 
     hasActiveEditor(): boolean {
-        try {
-            return !!getActiveEditor();
-        } catch {
-            return false;
-        }
+        return !!this.resolveActiveEditor();
     }
 
     captureInsertTarget(): EditorInsertTargetSnapshot {
         let editor: Protyle | null = null;
         let docId: string | null = null;
         try {
-            editor = getActiveEditor() ?? null;
+            editor = this.resolveActiveEditor();
             if (!editor) return {editor: null, handle: null, docId: null};
             docId = editor.protyle.block.rootID ?? null;
             const protyleEl = editor.protyle.element;
@@ -146,7 +189,7 @@ export class HostBridge implements IHostBridge {
 
     insertMarkdown(markdown: string, target?: EditorInsertTargetSnapshot | null): boolean {
         try {
-            const editor = target === undefined ? getActiveEditor() : target?.editor;
+            const editor = target === undefined ? this.resolveActiveEditor() : target?.editor;
             if (!editor) return false;
 
             // 宿主编辑器可见性防御（对齐 SiYuan Issue #20566 官方稳定插入契约）：
@@ -238,7 +281,7 @@ export class HostBridge implements IHostBridge {
 
     currentDocId(): string | null {
         try {
-            const editor = getActiveEditor();
+            const editor = this.resolveActiveEditor();
             const rootID = editor?.protyle?.block?.rootID;
             return typeof rootID === "string" && rootID.length > 0 ? rootID : null;
         } catch {
@@ -248,7 +291,7 @@ export class HostBridge implements IHostBridge {
 
     currentDocInfo(): {docId: string; hPath?: string} | null {
         try {
-            const editor = getActiveEditor();
+            const editor = this.resolveActiveEditor();
             const rootID = editor?.protyle?.block?.rootID;
             if (typeof rootID === "string" && rootID.length > 0) {
                 const hPath = editor?.protyle?.title?.editElement?.textContent?.trim() || undefined;
@@ -461,7 +504,7 @@ export class ActionExecutor {
         // 插入语义输出：未填充 ask 兜底为 __名称__（可见可改），计算光标偏移并移除光标标记；复制路径保持模板原样
         const insertRenderWithCursor = async (text: string | undefined): Promise<{text: string | undefined; cursorOffset: number | null}> => {
             if (text === undefined) return {text: undefined, cursorOffset: null};
-            if (item.itemType === "code") return {text, cursorOffset: null};
+            if (item.itemType === "code" || plan.mode === "insert-ref" || plan.mode === "insert-embed") return {text, cursorOffset: null};
             const withDefaults = applyAskDefaults(text);
             const withOutput = (await this.applyOutput(withDefaults, item)) ?? withDefaults;
             const extracted = extractCursorPosition(withOutput);

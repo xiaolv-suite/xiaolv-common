@@ -688,5 +688,7 @@
   "filterCommon": "常用",
   "syncDiffBtn": "同步冲突比对",
   "clipboardHistoryToggle": "记录剪贴板历史（需主动开启）",
-  "clipboardHistorySub": "开启后暂存最近 30 条复制文本，仅保存在本机侧车；关闭时不读取系统剪贴板，已有记录保留"
+  "clipboardHistorySub": "开启后暂存最近 30 条复制文本，仅保存在本机侧车；关闭时不读取系统剪贴板，已有记录保留",
+  "openLibraryDoc": "在思源中打开常用库文档",
+  "insertBlockRef": "插入为思源块引用"
 }

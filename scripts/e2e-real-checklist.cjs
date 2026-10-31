@@ -885,10 +885,247 @@ function check(name, ok, detail = "") {
                 && docHasInsertedContent && docHasInsertedCode && docHasInsertedEmbed && docHasInsertedRef,
             JSON.stringify({...step16, docHasInsertedContent, docHasInsertedCode, docHasInsertedEmbed, docHasInsertedRef}));
 
+        // ══════════ 第 17 步：全类型块引用/嵌入块、预览区「📦 库内原块」定位、思源块标菜单多块合并收录与动态块引用跟随 ══════════
+        const step17 = await page.evaluate(async ({targetDocId, childIds}) => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+
+            // 1. 挂载 Dock 并捕获活动编辑器 insertMarkdown 载荷，验证普通 markdown 条目在 Dock 抽屉点 ((•)) 与 {{•}} 产出真实块引用与嵌入块
+            const insertedPayloads = [];
+            const origCanInsert = p.host.canInsertAtTarget.bind(p.host);
+            const origHasEditor = p.host.hasActiveEditor.bind(p.host);
+            const origInsertMd = p.host.insertMarkdown.bind(p.host);
+            p.host.canInsertAtTarget = () => true;
+            p.host.hasActiveEditor = () => true;
+            p.host.insertMarkdown = (md) => {
+                insertedPayloads.push(md);
+                return true;
+            };
+
+            const host = document.createElement("div");
+            host.style.cssText = "position:fixed;right:0;top:0;width:300px;height:680px;z-index:9990;background:#fff;";
+            document.body.appendChild(host);
+            const dock = p.mountDockView(host);
+            await dock.refresh();
+
+            const firstDockRow = host.querySelector(".xlc-dock-row");
+            firstDockRow?.click();
+            await new Promise((r) => setTimeout(r, 150));
+            host.querySelector("[data-xlc-dock-act='insert-ref']")?.click();
+            await new Promise((r) => setTimeout(r, 150));
+            host.querySelector("[data-xlc-dock-act='insert-embed']")?.click();
+            await new Promise((r) => setTimeout(r, 150));
+
+            const dockRefOk = insertedPayloads.some((m) => /^\(\(\d{14}-[0-9a-z]{7}\s+'/.test(m));
+            const dockEmbedOk = insertedPayloads.some((m) => /^\{\{select \* from blocks where id='\d{14}-[0-9a-z]{7}'\}\}$/.test(m));
+
+            p.host.canInsertAtTarget = origCanInsert;
+            p.host.hasActiveEditor = origHasEditor;
+            p.host.insertMarkdown = origInsertMd;
+
+            // 2. 打开主搜索面板，验证预览元数据栏显示「📦 库内原块」且点击后调用 openDoc 定位到条目的真实 blockId
+            let openedDocCall = null;
+            const origOpenDoc = p.host.openDoc.bind(p.host);
+            p.host.openDoc = (dId, bId) => {
+                openedDocCall = {dId, bId};
+                return true;
+            };
+            void p.protocolCommands["xiaolv.common.open"]();
+            await new Promise((r) => setTimeout(r, 350));
+            const libBlockChip = document.querySelector("[data-xlc-control='preview.open-lib-block']");
+            const activeEntry = p.searchDialog?.getActiveEntry?.();
+            libBlockChip?.click();
+            const libBlockLocated = Boolean(libBlockChip && openedDocCall && openedDocCall.bId === activeEntry?.blockId);
+            p.host.openDoc = origOpenDoc;
+
+            // 3. 触发思源 click-blockicon 块标事件（框选 2 个真实笔记块），验证「合并选中的 2 个块存入小驴常用」菜单项并保存入库
+            const el1 = document.createElement("div");
+            el1.setAttribute("data-node-id", childIds[0]);
+            el1.textContent = "第一段测试块";
+            const el2 = document.createElement("div");
+            el2.setAttribute("data-node-id", childIds[1]);
+            el2.textContent = "第二段测试块";
+            const blockMenuItems = [];
+            p.eventBus.emit("click-blockicon", {
+                menu: {addItem: (it) => blockMenuItems.push(it)},
+                blockElements: [el1, el2],
+                protyle: {block: {rootID: targetDocId}},
+            });
+            const mergeMenuItem = blockMenuItems.find((it) => (it.label ?? "").includes("合并选中的 2 个块"));
+            mergeMenuItem?.click();
+            await new Promise((r) => setTimeout(r, 400));
+            const captureTitle = document.querySelector("[data-xlc-control='capture.title']");
+            if (captureTitle) {
+                captureTitle.value = "块标多块合并条目";
+                captureTitle.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+            document.querySelector("[data-xlc-control='capture.save']")?.click();
+            await new Promise((r) => setTimeout(r, 600));
+
+            // 4. 触发单块 click-blockicon 块标事件，点击「存为块引用」保存 blockref 条目，随后修改源文档原块正文，验证小驴常用实时读取源块最新内容
+            const singleMenuItems = [];
+            p.eventBus.emit("click-blockicon", {
+                menu: {addItem: (it) => singleMenuItems.push(it)},
+                blockElements: [el1],
+                protyle: {block: {rootID: targetDocId}},
+            });
+            const refMenuItem = singleMenuItems.find((it) => (it.label ?? "").includes("块引用"));
+            refMenuItem?.click();
+            await new Promise((r) => setTimeout(r, 350));
+            const refTitle = document.querySelector("[data-xlc-control='capture.title']");
+            if (refTitle) {
+                refTitle.value = "跟随源块的动态块引用";
+                refTitle.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+            document.querySelector("[data-xlc-control='capture.save']")?.click();
+            await new Promise((r) => setTimeout(r, 600));
+
+            const idxAfter = await p.library.ensureIndex(0);
+            const mergedEntry = idxAfter.entries.find((e) => e.title === "块标多块合并条目");
+            const refEntry = idxAfter.entries.find((e) => e.title === "跟随源块的动态块引用" && e.itemType === "blockref");
+
+            dock.destroy();
+            host.remove();
+            return {
+                dockRefOk,
+                dockEmbedOk,
+                libBlockLocated,
+                mergedCreated: Boolean(mergedEntry),
+                refCreated: Boolean(refEntry),
+                refId: refEntry?.id ?? "",
+                trackedSourceBlockId: childIds[0],
+            };
+        }, {targetDocId: sampleDocId, childIds: targetChildIds});
+
+        // 在思源笔记文档中直接修改被引用源块的正文，核验小驴常用 blockref 条目预览自动跟随源块最新正文
+        await api(token, "/api/block/updateBlock", {
+            id: step17.trackedSourceBlockId,
+            dataType: "markdown",
+            data: "源文档原块在思源中被直接修改后的最新正文_LIVE_SYNC",
+        });
+        const refLiveFollowed = await page.evaluate(async (refId) => {
+            if (!refId) return false;
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const got = await p.library.getItem(refId);
+            if (!got.ok) return false;
+            const kd = await p.library.getItemKramdown(got.data);
+            return Boolean(kd.ok && kd.data.includes("源文档原块在思源中被直接修改后的最新正文_LIVE_SYNC"));
+        }, step17.refId);
+        check("步骤 17：全类型条目块引用/嵌入块、预览区「📦 库内原块」直达、思源块标多块合并收录与动态块引用实时跟随原块全部通过",
+            step17.dockRefOk && step17.dockEmbedOk && step17.libBlockLocated && step17.mergedCreated && step17.refCreated && refLiveFollowed,
+            JSON.stringify({...step17, refLiveFollowed}));
+
+        // ══════════ 第 18 步：在思源编辑器直接修改库文档块自动反向同步（ws-main）与切换文档页签实时跟随（switch-protyle） ══════════
+        const step18Prep = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const idx = await p.library.ensureIndex(0);
+            const target = idx.entries.find((e) => e.title === "块标多块合并条目") ?? idx.entries[0];
+            return {id: target.id, blockId: target.blockId, libraryDocId: target.libraryDocId};
+        });
+        // 模拟用户在思源编辑器中直接修改库文档中的该块正文，并广播 ws-main transactions 事件
+        await api(token, "/api/block/updateBlock", {
+            id: step18Prep.blockId,
+            dataType: "markdown",
+            data: "{{{row\n思源库文档内直接改块后的新段落一\n\n思源库文档内直接改块后的新段落二\n}}}",
+        });
+        // 补回块属性（模拟思源编辑器内修改超级块内部段落保持外层块属性）
+        await api(token, "/api/attr/setBlockAttrs", {
+            id: step18Prep.blockId,
+            attrs: {
+                "custom-xlc-id": step18Prep.id,
+                "custom-xlc-type": "markdown",
+                "custom-xlc-title": "思源编辑器直改后同步标题",
+                "custom-xlc-summary": "思源库文档内直接改块后的新段落一",
+                "custom-xlc-updated": String(Date.now()),
+            },
+        });
+        const step18 = await page.evaluate(async ({prep, noteDocId}) => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+
+            const host = document.createElement("div");
+            host.style.cssText = "position:fixed;right:0;top:0;width:300px;height:680px;z-index:9990;background:#fff;";
+            document.body.appendChild(host);
+            const dock = p.mountDockView(host);
+            await dock.refresh();
+
+            void p.protocolCommands["xiaolv.common.open"]();
+            await new Promise((r) => setTimeout(r, 300));
+            const searchInp = document.querySelector(".xlc-search-input");
+            if (searchInp && searchInp.value) {
+                searchInp.value = "";
+                searchInp.dispatchEvent(new Event("input", {bubbles: true}));
+                await new Promise((r) => setTimeout(r, 250));
+            }
+
+            // 触发 ws-main transactions 事件，验证 350ms 防抖后 Dock 与主搜索自动刷新出「思源编辑器直改后同步标题」
+            p.eventBus.emit("ws-main", {
+                cmd: "transactions",
+                data: [{doOperations: [{id: prep.blockId, parentID: prep.libraryDocId}]}],
+            });
+            await new Promise((r) => setTimeout(r, 650));
+
+            const dockSynced = Array.from(host.querySelectorAll(".xlc-dock-row-title"))
+                .some((el) => (el.textContent ?? "").includes("思源编辑器直改后同步标题"));
+            const dialogSynced = (p.searchDialog?.results ?? [])
+                .some((e) => e.title === "思源编辑器直改后同步标题");
+
+            // 切换到「📄 当前文档」范围并输入检索词 LIVE_SYNC：先切到库文档（0 命中），再通过 switch-protyle 切换到 /测试笔记文档，验证自动刷新出命中块
+            delete p.host.currentDocId;
+            delete p.host.currentDocInfo;
+            const fakeLibWysiwyg = document.createElement("div");
+            document.body.appendChild(fakeLibWysiwyg);
+            p.eventBus.emit("switch-protyle", {
+                protyle: {
+                    block: {rootID: prep.libraryDocId},
+                    wysiwyg: {element: fakeLibWysiwyg},
+                    element: fakeLibWysiwyg,
+                },
+            });
+            document.querySelector("[data-xlc-control='filter.scope.current-doc']")?.click();
+            if (searchInp) {
+                searchInp.value = "LIVE_SYNC";
+                searchInp.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+            await new Promise((r) => setTimeout(r, 350));
+            const beforeSwitchHits = (p.searchDialog?.results ?? []).length;
+
+            const fakeWysiwyg = document.createElement("div");
+            document.body.appendChild(fakeWysiwyg);
+            p.eventBus.emit("switch-protyle", {
+                protyle: {
+                    block: {rootID: noteDocId},
+                    wysiwyg: {element: fakeWysiwyg},
+                    element: fakeWysiwyg,
+                },
+            });
+            await new Promise((r) => setTimeout(r, 400));
+            const currentDocFollowed = beforeSwitchHits === 0
+                && p.host.currentDocId() === noteDocId
+                && (p.searchDialog?.results ?? []).some((e) => (e.summary ?? "").includes("LIVE_SYNC") || (e.content ?? "").includes("LIVE_SYNC"));
+
+            fakeLibWysiwyg.remove();
+            fakeWysiwyg.remove();
+            dock.destroy();
+            host.remove();
+            const afterDocId = p.host.currentDocId();
+            const afterResults = (p.searchDialog?.results ?? []).map((e) => ({id: e.id, title: e.title, summary: e.summary}));
+            return {dockSynced, dialogSynced, beforeSwitchHits, afterDocId, noteDocId, afterResults, currentDocFollowed};
+        }, {prep: step18Prep, noteDocId: sampleDocId});
+        check("步骤 18：在思源编辑器直接修改库文档块自动同步 Dock/主搜索（ws-main），切换文档页签自动跟随当前文档上下文（switch-protyle）",
+            step18.dockSynced && step18.dialogSynced && step18.currentDocFollowed,
+            JSON.stringify(step18));
+
         cleanup();
         const pass = results.filter((r) => r.ok).length;
         const fail = results.length - pass;
-        console.log(`\n真实思源宿主 16 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
+        console.log(`\n真实思源宿主 18 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
         process.exit(fail ? 1 : 0);
     } catch (err) {
         console.error(`[real-e2e] 异常：${err.stack || err.message}`);

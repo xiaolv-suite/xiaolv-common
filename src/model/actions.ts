@@ -111,6 +111,22 @@ export function planAction(item: CommonItem, mode: InsertMode, ctx: ActionContex
     if (ctx.content.assetMissing) {
         base.pendingVerification.push("asset-missing");
     }
+    if (item.itemType !== "blockref" && (mode === "insert-ref" || mode === "insert-embed")) {
+        const target = BLOCK_ID_RE.test(item.blockId)
+            ? item.blockId
+            : (BLOCK_ID_RE.test(item.source.sourceBlockId)
+                ? item.source.sourceBlockId
+                : (BLOCK_ID_RE.test(item.targetBlockId) ? item.targetBlockId : ""));
+        if (!target) {
+            return {...base, downgraded: true, downgradeReason: "source-missing", warnings: ["target-block-invalid"]};
+        }
+        return {
+            ...base,
+            markdown: mode === "insert-ref"
+                ? buildBlockRef(target, refAnchorText(item))
+                : buildEmbedBlock(target),
+        };
+    }
 
     switch (item.itemType) {
         case "text": {
@@ -236,6 +252,9 @@ export function planOpenSource(
     if (item.source.sourceDocId) {
         if (resolved.sourceMissing) return {failure: "source-missing"};
         return {target: {kind: "doc", docId: item.source.sourceDocId}};
+    }
+    if (BLOCK_ID_RE.test(item.blockId)) {
+        return {target: {kind: "block", docId: item.libraryDocId, blockId: item.blockId}};
     }
     return {target: {kind: "doc", docId: item.libraryDocId}};
 }

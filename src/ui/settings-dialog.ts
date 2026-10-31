@@ -89,6 +89,7 @@ export interface SettingsUiContext {
     aiErrorText(err: unknown): string;
     applyPinyinAdapter(): void;
     refreshSearch?(): void;
+    openLibraryDoc?(): void;
     /** Saved tag-scoped discovery shortcuts. The source blocks remain canonical. */
     getSavedDiscoveryViews?(): readonly SavedDiscoveryView[];
     openSavedDiscoveryView?(view: SavedDiscoveryView): void;
@@ -250,7 +251,25 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     statusText.className = "xlc-setting-text";
     statusText.textContent = libStatus.textContent;
     libRow.appendChild(statusText);
-    libRow.appendChild(changeBtn);
+    const libBtnWrap = document.createElement("div");
+    libBtnWrap.style.display = "inline-flex";
+    libBtnWrap.style.alignItems = "center";
+    libBtnWrap.style.gap = "8px";
+    if (cfg && ctx.openLibraryDoc) {
+        const openLibBtn = document.createElement("button");
+        openLibBtn.type = "button";
+        openLibBtn.className = "b3-button";
+        openLibBtn.dataset.xlcControl = "settings.library.open-doc";
+        openLibBtn.textContent = "📄 打开库文档";
+        openLibBtn.title = "在思源笔记编辑器中直接打开当前常用库文档";
+        openLibBtn.addEventListener("click", () => {
+            dialog.destroy();
+            ctx.openLibraryDoc?.();
+        });
+        libBtnWrap.appendChild(openLibBtn);
+    }
+    libBtnWrap.appendChild(changeBtn);
+    libRow.appendChild(libBtnWrap);
     libSec.appendChild(libRow);
     const pickerHost = document.createElement("div");
     pickerHost.style.display = "none";

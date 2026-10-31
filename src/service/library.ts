@@ -960,7 +960,7 @@ export class LibraryService {
         try {
             const data = parseKramdown(await this.kernel.request("getBlockKramdown", {id: target}));
             if (!data) return fail("not-found", `target block ${target} kramdown unavailable`);
-            return ok(normalizeKramdownIal(data.kramdown));
+            return ok(storedKramdownToBody(normalizeKramdownIal(data.kramdown)));
         } catch (err) {
             return toFailureReceipt(err);
         }

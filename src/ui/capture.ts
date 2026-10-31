@@ -262,18 +262,50 @@ export class CaptureDialog {
         });
     }
 
-    /** 右键块引用捕获：把被引用块存为 blockref 条目（目标块=引用目标） */
-    captureBlockRef(blockId: string, refText: string): void {
+    /** 右键块引用或块标捕获：把指定思源块存为 blockref 条目（目标块=引用目标，正文随原块实时变化） */
+    captureBlockRef(blockId: string, refText: string, docId?: string | null): void {
         if (!this.ensureConfigured()) return;
         if (!isBlockRefTarget(blockId)) {
             this.deps.notify("error", this.deps.t("invalidItem"));
             return;
         }
-        this.openForm(`((${blockId}))`, "blockref", null, {
-            title: (refText || blockId).slice(0, 120),
+        const cleanTitle = (refText || "").replace(/\s+/g, " ").trim().slice(0, 120) || blockId;
+        this.openForm(`((${blockId}))`, "blockref", blockId, {
+            title: cleanTitle,
             targetBlockId: blockId,
-            docId: this.deps.currentDocId() ?? undefined,
+            docId: docId || this.deps.currentDocId() || undefined,
             sourceType: "block",
+        });
+    }
+
+    /** 块标菜单捕获：按给定的 1 个或多个真实块 ID 读取 Kramdown 并打开收录表单（多块自动合并为多段正文） */
+    async captureBlocksById(blockIds: readonly string[], docId?: string | null): Promise<void> {
+        if (!this.ensureConfigured()) return;
+        const validIds = blockIds.filter((id) => isBlockRefTarget(id)).slice(0, 32);
+        if (validIds.length === 0) {
+            this.deps.notify("error", this.deps.t("captureBlockNone"));
+            return;
+        }
+        const resolvedDocId = docId || this.deps.currentDocId() || undefined;
+        await this.withCaptureLock("block", async () => {
+            const parts: string[] = [];
+            for (const id of validIds) {
+                const kd = await this.deps.getBlockKramdown(id);
+                if (kd && kd.trim()) {
+                    parts.push(kd.trim());
+                }
+            }
+            if (parts.length === 0) {
+                this.deps.notify("error", this.deps.t("captureBlockFailed"));
+                return;
+            }
+            const content = parts.join("\n\n");
+            if (!this.checkCaptureSize(content)) return;
+            const firstBlockId = validIds[0] ?? null;
+            this.openForm(content, validIds.length > 1 ? "markdown" : inferTypeFromText(content), firstBlockId, {
+                docId: resolvedDocId,
+                sourceType: "block",
+            });
         });
     }
 

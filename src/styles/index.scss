@@ -5059,13 +5059,15 @@
 
     .xlc-dock-drawer-foot {
       display: flex;
-      gap: var(--xlc-space-2);
+      flex-wrap: wrap;
+      gap: 4px;
       margin-top: 6px;
 
       .b3-button {
         min-height: 28px;
         font-size: 12px;
         padding: 2px 8px;
+        white-space: nowrap;
       }
     }
   }
