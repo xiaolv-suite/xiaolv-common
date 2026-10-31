@@ -14358,6 +14358,14 @@ ${res.progressBar}`;
       }
     });
     toolsSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        toolsPanel.hidden = true;
+        toolsToggleBtn.setAttribute("aria-expanded", "false");
+        toolsToggleBtn.focus();
+        return;
+      }
       e.stopPropagation();
     });
     toolsToggleBtn.addEventListener("click", () => {
@@ -30301,7 +30309,7 @@ fi`;
           textToolsSearch.placeholder = "\u641C\u7D22\u6587\u672C\u5DE5\u5177\u2026";
           textToolsSearch.setAttribute("aria-label", "\u641C\u7D22\u6587\u672C\u5DE5\u5177");
           textToolsSearch.addEventListener("keydown", (ev) => {
-            ev.stopPropagation();
+            if (ev.key !== "Escape") ev.stopPropagation();
           });
           const textToolsList = document.createElement("div");
           textToolsList.className = "xlc-menu-text-tools-list";

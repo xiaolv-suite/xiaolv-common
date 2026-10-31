@@ -151,7 +151,7 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🔒 Security Baseline & Known Boundaries
 
-- **Item container (superblock)**: Each item is one top-level block in the library document; multi-paragraph bodies live inside one superblock and item metadata stays on that block's `custom-xlc-*` attributes. Write, read-back, update, delete, and per-item read-back of all 5 example packs were verified against an isolated SiYuan 3.8.9 kernel; the full desktop (Electron) regression is listed in the [release checklist](docs/release-checklist.md) and has not been run yet.
+- **Item container (superblock)**: Each item is one top-level block in the library document; multi-paragraph bodies live inside one superblock and item metadata stays on that block's `custom-xlc-*` attributes. Write, read-back, update, delete, per-item read-back of all 5 example packs, and the [10-step real-host release checklist](docs/release-checklist.md) (10/10 green) have been verified against an isolated SiYuan 3.8.9 kernel + real SiYuan desktop frontend.
 - **Zero-SQL Redline**: Strictly zero calls to `/api/query/sql`; all operations rely on official structured APIs.
 - **Mobile Environment**: Touch and image clipboard operations on Android operate under graceful fallbacks.
 

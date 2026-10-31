@@ -4711,6 +4711,14 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     toolsSearch.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            toolsPanel.hidden = true;
+            toolsToggleBtn.setAttribute("aria-expanded", "false");
+            toolsToggleBtn.focus();
+            return;
+        }
         e.stopPropagation();
     });
 

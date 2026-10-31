@@ -3690,7 +3690,7 @@ export class CommonSearchDialog {
                 textToolsSearch.placeholder = "搜索文本工具…";
                 textToolsSearch.setAttribute("aria-label", "搜索文本工具");
                 textToolsSearch.addEventListener("keydown", (ev) => {
-                    ev.stopPropagation();
+                    if (ev.key !== "Escape") ev.stopPropagation();
                 });
 
                 const textToolsList = document.createElement("div");

@@ -128,13 +128,30 @@ async function main() {
         process.exit(1);
     }
 
-    // 验收脚本要求至少一个打开的笔记本；隔离工作区首启为空，就地补建
+    // 验收脚本要求至少一个打开的笔记本；隔离工作区首启为空，就地补建并等待元数据就绪
     try {
-        const nb = await api(ORIGIN, token, "/api/notebook/lsNotebooks");
-        const list = (nb.data?.notebooks ?? []).filter((n) => !n.closed);
+        let nb = await api(ORIGIN, token, "/api/notebook/lsNotebooks");
+        let list = (nb.data?.notebooks ?? []).filter((n) => !n.closed);
         if (list.length === 0) {
             await api(ORIGIN, token, "/api/notebook/createNotebook", {name: "xiaolv-e2e"});
             console.log('[isolated] 空工作区，已创建笔记本 "xiaolv-e2e"');
+            nb = await api(ORIGIN, token, "/api/notebook/lsNotebooks");
+            list = (nb.data?.notebooks ?? []).filter((n) => !n.closed);
+        }
+        const nbId = list[0]?.id;
+        if (nbId) {
+            for (let i = 0; i < 30; i++) {
+                const probeDoc = await api(ORIGIN, token, "/api/filetree/createDocWithMd", {
+                    notebook: nbId,
+                    path: `/__xlc_warmup_${Date.now()}`,
+                    markdown: "",
+                });
+                if (probeDoc && probeDoc.code === 0 && probeDoc.data) {
+                    await api(ORIGIN, token, "/api/filetree/removeDoc", {notebook: nbId, path: `/${probeDoc.data}.sy`});
+                    break;
+                }
+                await new Promise((r) => setTimeout(r, 800));
+            }
         }
     } catch (err) {
         console.error(`[isolated] 笔记本检查失败：${err.message}`);
