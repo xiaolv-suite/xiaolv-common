@@ -14,7 +14,15 @@ const DIST = path.join(ROOT, "dist");
 const KEEP = process.argv.includes("--keep");
 const PORT = String(process.env.SIYUAN_REAL_PORT || 16825);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const WS = process.env.SIYUAN_REAL_WS || path.join(os.tmpdir(), `xlc-real-checklist-${PORT}`);
+function resolveRealWs(prefix) {
+    if (process.env.SIYUAN_REAL_WS) return path.resolve(process.env.SIYUAN_REAL_WS);
+    const dTemp = "D:\\Temp";
+    if (fs.existsSync(dTemp) || fs.existsSync("D:\\")) {
+        return path.join(dTemp, prefix);
+    }
+    return path.join(os.tmpdir(), prefix);
+}
+const WS = resolveRealWs(`xlc-real-checklist-${PORT}`);
 
 let chromium;
 try {

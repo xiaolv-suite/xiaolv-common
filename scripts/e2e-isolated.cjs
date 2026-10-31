@@ -87,7 +87,13 @@ function readToken(ws) {
 
 async function main() {
     const kernel = resolveKernel();
-    const ws = process.env.SIYUAN_E2E_WS || path.join(os.tmpdir(), "xiaolv-e2e-ws");
+    const resolveE2eWs = () => {
+        if (process.env.SIYUAN_E2E_WS) return path.resolve(process.env.SIYUAN_E2E_WS);
+        const dTemp = "D:\\Temp";
+        if (fs.existsSync(dTemp) || fs.existsSync("D:\\")) return path.join(dTemp, "xiaolv-e2e-ws");
+        return path.join(os.tmpdir(), "xiaolv-e2e-ws");
+    };
+    const ws = resolveE2eWs();
     fs.mkdirSync(ws, {recursive: true});
 
     // Never send test writes to an instance whose workspace identity is unknown.

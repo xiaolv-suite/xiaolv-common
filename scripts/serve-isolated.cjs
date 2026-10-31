@@ -23,7 +23,17 @@ const PLUGIN_ID = "xiaolv-common";
 const HOST = "127.0.0.1";
 const PREFERRED_PORT = 43920;
 const INSTANCE_RECORD = path.join(ROOT, "scripts", ".last-live-instance.json");
-const WORKSPACE = path.join(os.tmpdir(), "xiaolv-common-live-workspace");
+
+function resolveWorkspace() {
+    if (process.env.SIYUAN_LIVE_WS) return path.resolve(process.env.SIYUAN_LIVE_WS);
+    // 优先使用 D:\Temp 目录，避免占用 C 盘系统盘空间
+    const dTemp = "D:\\Temp";
+    if (fs.existsSync(dTemp) || fs.existsSync("D:\\")) {
+        return path.join(dTemp, "xiaolv-common-live-workspace");
+    }
+    return path.join(os.tmpdir(), "xiaolv-common-live-workspace");
+}
+const WORKSPACE = resolveWorkspace();
 
 const args = process.argv.slice(2);
 const IS_STOP = args.includes("--stop");
