@@ -21,12 +21,19 @@ const ROOT = path.resolve(__dirname, "..");
 const DIST = path.join(ROOT, "dist");
 const PLUGIN_ID = "xiaolv-common";
 const HOST = "127.0.0.1";
-const PREFERRED_PORT = 43920;
+// 专属独立测试端口：43925（避开日常思源 6806、小驴管家 43919、小驴人脉 43920、小驴考试 43921 与小驴拾遗 46919）
+const PREFERRED_PORT = 43925;
+const FORBIDDEN_PORTS = new Set([6806, 14680, 43919, 43920, 43921, 43929, 46919]);
 const INSTANCE_RECORD = path.join(ROOT, "scripts", ".last-live-instance.json");
 
 function resolveWorkspace() {
     if (process.env.SIYUAN_LIVE_WS) return path.resolve(process.env.SIYUAN_LIVE_WS);
-    // 优先使用 D:\Temp 目录，避免占用 C 盘系统盘空间
+    // 优先放置在 D:\思源插件\小驴常用-isolated-preview（与小驴人脉规范保持一致，完全在 D 盘，零占用 C 盘）
+    const parentDir = path.dirname(ROOT);
+    const dPreview = path.join(parentDir, "小驴常用-isolated-preview");
+    if (fs.existsSync(parentDir)) {
+        return dPreview;
+    }
     const dTemp = "D:\\Temp";
     if (fs.existsSync(dTemp) || fs.existsSync("D:\\")) {
         return path.join(dTemp, "xiaolv-common-live-workspace");
@@ -49,9 +56,9 @@ function checkPortFree(port) {
 }
 
 async function findAvailablePort(startPort = PREFERRED_PORT) {
-    if (await checkPortFree(startPort)) return startPort;
+    if (!FORBIDDEN_PORTS.has(startPort) && (await checkPortFree(startPort))) return startPort;
     for (let p = startPort + 1; p < startPort + 50; p++) {
-        if (p === 6806 || p === 14680 || p === 43919) continue;
+        if (FORBIDDEN_PORTS.has(p)) continue;
         if (await checkPortFree(p)) return p;
     }
     throw new Error("未找到可用的回环测试端口");
