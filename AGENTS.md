@@ -12,6 +12,7 @@
 - 门禁：新增或修改任何门禁/契约测试，须做负向验证（注入违规确认它真的失败，再恢复源码复验通过）；只跑"改完仍通过"不构成证据。
 - 独立性：不修改「小驴雷切」等兄弟插件生产代码；联动只走 `xiaolv-common/v1` 公开协议（`src/model/protocol.ts`）。
 - 诚实性：能力未在真实宿主验证时，产品内显示降级提示，文档记录「尚未验证」，不以测试通过冒充宿主验收。
+- 浏览器：Playwright 启动一律显式带 `channel: "chrome"`（或 `executablePath` 指向 chrome.exe），**禁止裸 `chromium.launch()`**。Playwright 自带的 `chrome-headless-shell.exe` 是 CONSOLE 子系统程序，被无控制台的父进程拉起时会弹一个空白控制台黑框（标题为完整 exe 路径、带滚动条），`--window-position` 之类的 Chromium 参数管不到它。`scripts/` 下的 debug / repro / acceptance 脚本同样适用。
 
 ## 项目上下文
 

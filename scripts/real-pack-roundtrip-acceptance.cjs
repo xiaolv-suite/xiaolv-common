@@ -17,7 +17,7 @@ async function api(endpoint, payload = {}) {
 }
 
 (async () => {
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({channel: "chrome", headless: true});
     const context = await browser.newContext({viewport: {width: 1280, height: 780}, locale: "zh-CN", acceptDownloads: true});
     const page = await context.newPage();
     const logs = [];

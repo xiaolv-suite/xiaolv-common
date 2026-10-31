@@ -19,7 +19,7 @@ async function api(endpoint, payload = {}) {
     const sourceBlockId = appended.data?.[0]?.doOperations?.[0]?.id ?? "";
     check("0 内核创建来源块", /^\d{14}-[0-9a-z]{7}$/.test(sourceBlockId), sourceBlockId);
 
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({channel: "chrome", headless: true});
     const page = await browser.newPage({viewport: {width: 1280, height: 780}, locale: "zh-CN"});
     const logs = [];
     page.on("pageerror", (e) => logs.push("PAGEERROR: " + String(e).slice(0, 160)));

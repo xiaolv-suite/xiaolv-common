@@ -13,7 +13,7 @@ try {
 }
 
 (async () => {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({channel: "chrome"});
     const page = await browser.newPage({viewport: {width: 1600, height: 1400}, deviceScaleFactor: 2});
     await page.goto("file:///" + path.join(OUT, "prototype.html").replace(/\\/g, "/"));
     await page.waitForTimeout(400);

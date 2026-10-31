@@ -381,15 +381,18 @@ export default class XiaolvCommonPlugin extends Plugin {
             return {ok: true};
         };
         this.protocolCommands["xiaolv.common.insert"] = async (payload) => {
-            const itemId = (payload as {itemId?: string})?.itemId ?? "";
-            return this.service.insert(itemId, {mode: (payload as {mode?: string})?.mode ?? "insert"});
+            const raw = payload as {itemId?: string; id?: string; mode?: string} | undefined;
+            const itemId = raw?.itemId ?? raw?.id ?? "";
+            return this.service.insert(itemId, {mode: raw?.mode ?? "insert"});
         };
         this.protocolCommands["xiaolv.common.copy"] = async (payload) => {
-            const itemId = (payload as {itemId?: string})?.itemId ?? "";
+            const raw = payload as {itemId?: string; id?: string} | undefined;
+            const itemId = raw?.itemId ?? raw?.id ?? "";
             return this.service.copy(itemId);
         };
         this.protocolCommands["xiaolv.common.openSource"] = async (payload) => {
-            const itemId = (payload as {itemId?: string})?.itemId ?? "";
+            const raw = payload as {itemId?: string; id?: string} | undefined;
+            const itemId = raw?.itemId ?? raw?.id ?? "";
             return this.service.openSource(itemId);
         };
         // 供 Quicker、外部脚本或兄弟插件无 UI 纯数据调用的 Headless 接口

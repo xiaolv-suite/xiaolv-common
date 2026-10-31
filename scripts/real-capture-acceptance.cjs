@@ -27,7 +27,7 @@ async function api(endpoint, payload = {}) {
     const richDoc = await api("/api/filetree/createDocWithMd", {notebook: nb.id, path: "/测试文档", markdown: richMd});
     const richDocId = String(richDoc.data);
 
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({channel: "chrome", headless: true});
     const page = await browser.newPage({locale: "zh-CN"});
     const logs = [];
     page.on("pageerror", (e) => logs.push("PAGEERROR: " + String(e).slice(0, 200)));

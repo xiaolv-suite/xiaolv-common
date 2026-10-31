@@ -1,7 +1,7 @@
 // R159 诊断：axe 残留违规的精确色彩数据
 const {chromium} = require("playwright");
 (async () => {
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({channel: "chrome", headless: true});
     const page = await browser.newPage({locale: "zh-CN"});
     await page.goto("http://127.0.0.1:6812", {waitUntil: "domcontentloaded"});
     await page.waitForFunction(() => Boolean(window.siyuan), null, {timeout: 30000});

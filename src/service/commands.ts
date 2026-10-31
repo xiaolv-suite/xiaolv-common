@@ -7,7 +7,7 @@ import {EVENTS, PROTOCOL_VERSION} from "../constants";
 import {ActionContext, InsertMode, InsertPlan, OpenTarget, planAction, planOpenSource} from "../model/actions";
 import {applyPlaceholders, listPlaceholders} from "../model/placeholders";
 import {applyAskDefaults, expandAsks, extractCursorPosition, stripCursorToken} from "../model/variables";
-import {CommonItem} from "../model/item";
+import {CommonItem, extractCleanPayload} from "../model/item";
 import {LibraryService, SourceHealth} from "./library";
 import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown, writeRichClipboard} from "../model/clipboard";
 import {callBridge} from "../ecosystem-bridge-kit";
@@ -361,7 +361,7 @@ export class ActionExecutor {
             if (fills) {
                 payload = expandAsks(payload, fills);
             }
-            payload = applyAskDefaults(stripCursorToken(payload));
+            payload = extractCleanPayload(applyAskDefaults(stripCursorToken(payload)));
         }
         return (await this.applyOutput(payload, item)) ?? payload;
     }

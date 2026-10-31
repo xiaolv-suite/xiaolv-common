@@ -141,3 +141,24 @@ test("非 blockref 库内条目（text/markdown/structure/code）同样支持 in
     assert.deepEqual(openLib.target, {kind: "block", docId: DOC, blockId: BLOCK});
 });
 
+test("智能注释剥离规则：插入与复制自动剥离 @标签、// 注释、#标签# 与 [说明]，仅输出核心内容", () => {
+    const cases = [
+        { raw: "13800138000 @手机号", expected: "13800138000" },
+        { raw: "18588888888@手机号", expected: "18588888888" },
+        { raw: "contact@company.com @工作邮箱", expected: "contact@company.com" },
+        { raw: "zhangsan@gmail.com@张三的邮箱", expected: "zhangsan@gmail.com" },
+        { raw: "13800138000 // 手机号", expected: "13800138000" },
+        { raw: "18588888888//手机号", expected: "18588888888" },
+        { raw: "13800138000 #手机号#", expected: "13800138000" },
+        { raw: "[公司税号] 91110108MA000000", expected: "91110108MA000000" },
+        { raw: "91110108MA000000 [公司税号]", expected: "91110108MA000000" },
+    ];
+    for (const c of cases) {
+        const it = makeItem({itemType: "text", title: "测试条目"});
+        const insertPlan = actions.planAction(it, "insert", ctx({content: {kramdown: c.raw, sourceMissing: false, assetMissing: false}}));
+        assert.equal(insertPlan.markdown, c.expected, `insert: ${c.raw}`);
+        const copyPlan = actions.planAction(it, "copy", ctx({content: {kramdown: c.raw, sourceMissing: false, assetMissing: false}}));
+        assert.equal(copyPlan.clipboardText, c.expected, `copy: ${c.raw}`);
+    }
+});
+

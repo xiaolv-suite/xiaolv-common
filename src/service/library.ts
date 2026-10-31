@@ -23,6 +23,7 @@ import {
     deriveTitle,
     extractKramdownNativeTags,
     inferItemType,
+    parseSnippetAnnotations,
     ISourceRef,
     ItemType,
     isBlockId,
@@ -1614,9 +1615,10 @@ export class LibraryService {
                         logicalId = newLogicalId(now + Math.floor(Math.random() * 1000));
                     }
                     const itemType = inferItemType(child.type, child.subtype ?? "", kramdown);
-                    const title = deriveTitle(kramdown, itemType, existingAttrs).slice(0, LIMITS.title);
+                    const parsedAnnotation = parseSnippetAnnotations(kramdown);
+                    const title = (existingAttrs[ATTR.title] || parsedAnnotation.title || deriveTitle(kramdown, itemType, existingAttrs)).slice(0, LIMITS.title);
                     const nativeTags = itemType === "code" ? [] : extractKramdownNativeTags(kramdown);
-                    const mergedTags = cleanTagList([...cleanTagList(existingAttrs[ATTR.tags]), ...nativeTags]);
+                    const mergedTags = cleanTagList([...cleanTagList(existingAttrs[ATTR.tags]), ...nativeTags, ...parsedAnnotation.tags]);
                     const varCount = itemType === "code" ? 0 : countAskFields(kramdown);
 
                     const newAttrs: Record<string, string> = {

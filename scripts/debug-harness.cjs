@@ -8,7 +8,7 @@ try {
     process.exit(1);
 }
 (async () => {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({channel: "chrome"});
     const page = await browser.newPage();
     page.on("console", (m) => console.log("[console]", m.text().slice(0, 200)));
     page.on("pageerror", (e) => console.log("[pageerror]", String(e).slice(0, 300)));

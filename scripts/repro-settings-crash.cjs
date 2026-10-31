@@ -10,7 +10,7 @@ try {
 }
 (async () => {
     const udd = path.join(ROOT, "tmp-udd");
-    const browser = await chromium.launch({viewport: {width: 1280, height: 900}});
+    const browser = await chromium.launch({channel: "chrome", viewport: {width: 1280, height: 900}});
     const page = await browser.newPage({viewport: {width: 1280, height: 900}});
     const pageErrors = [];
     const consoleErrors = [];

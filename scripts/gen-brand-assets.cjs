@@ -112,7 +112,7 @@ const PREVIEW_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
             process.exit(1);
         }
     }
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({channel: "chrome"});
     const page = await browser.newPage({viewport: {width: 260, height: 260}, deviceScaleFactor: 1});
     // icon.png（260×260）
     await page.setContent(ICON_HTML);

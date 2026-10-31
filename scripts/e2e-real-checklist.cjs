@@ -198,7 +198,7 @@ function check(name, ok, detail = "") {
             console.log(`[real-e2e] setPetalEnabled(${frontend}) => code=${pr.code} msg=${pr.msg || ""}`);
         }
 
-        browser = await chromium.launch({headless: true});
+        browser = await chromium.launch({channel: "chrome", headless: true});
         const context = await browser.newContext({viewport: {width: 1280, height: 720}, locale: "zh-CN"});
         const page = await context.newPage();
         await page.goto(ORIGIN, {waitUntil: "domcontentloaded", timeout: 45000});

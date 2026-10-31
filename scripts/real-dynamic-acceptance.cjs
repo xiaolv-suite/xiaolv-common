@@ -19,7 +19,7 @@ const EXP_PLUS3 = fmt(plus3);
 const EXP_WED = fmt(wed);
 
 (async () => {
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({channel: "chrome", headless: true});
     const page = await browser.newPage({locale: "zh-CN"});
     const logs = [];
     page.on("pageerror", (e) => logs.push("PAGEERROR: " + String(e).slice(0, 200)));

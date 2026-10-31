@@ -47,7 +47,7 @@ async function api(endpoint, payload = {}) {
     }
 
 
-    const browser = await chromium.launch({
+    const browser = await chromium.launch({channel: "chrome",
         headless: false,
         args: [`--app=${ORIGIN}`, "--window-size=1380,900"],
     });

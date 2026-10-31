@@ -2,7 +2,7 @@
 // 剪贴板读取失败（权限/平台）诚实回执，保留手动输入。
 import {Dialog, confirm} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
-import {ItemType, cleanShortcode, extractKramdownNativeTags, isSafeHttpUrl} from "../model/item";
+import {ItemType, cleanShortcode, extractKramdownNativeTags, isSafeHttpUrl, parseSnippetAnnotations} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {NewItemInput} from "../service/library";
 import {buildVariableBar} from "./variable-form";
@@ -251,12 +251,14 @@ export class CaptureDialog {
         if (!this.checkCaptureSize(text)) return;
         const safeText = text;
         const inferredType = inferTypeFromText(safeText);
+        const parsed = parseSnippetAnnotations(safeText);
         const derived = inferredType === "url"
             ? safeText
-            : (safeText.split("\n")[0] || "").slice(0, 60).trim();
+            : (parsed.title || safeText.split("\n")[0] || "").slice(0, 60).trim();
         const title = options?.title || derived || this.deps.t("unknownType");
         this.openForm(safeText, inferredType, null, {
             title,
+            tags: parsed.tags.length > 0 ? parsed.tags : undefined,
             docId: this.deps.currentDocId() ?? undefined,
             sourceType: options?.sourceType ?? "manual",
         });
@@ -1215,13 +1217,24 @@ export class CaptureDialog {
                 const resolvedShortcode = rawShortcode
                     ? cleanShortcode(rawShortcode)
                     : (rawAlias.startsWith(":") ? cleanShortcode(rawAlias) : "");
+                const parsedAnnotation = parseSnippetAnnotations(markdown);
+                let finalTitle = (titleEl as HTMLInputElement).value.trim();
+                let finalTags = (tagsEl as HTMLInputElement).value ? (tagsEl as HTMLInputElement).value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : [];
+                if (parsedAnnotation.tags.length > 0 || parsedAnnotation.title) {
+                    if (!finalTitle && parsedAnnotation.title) {
+                        finalTitle = parsedAnnotation.title;
+                    }
+                    for (const t of parsedAnnotation.tags) {
+                        if (!finalTags.includes(t)) finalTags.push(t);
+                    }
+                }
                 void this.deps.createItem({
                     itemType: type,
                     markdown,
-                    title: (titleEl as HTMLInputElement).value || undefined,
+                    title: finalTitle || undefined,
                     alias: (aliasEl as HTMLInputElement).value || undefined,
                     ...(resolvedShortcode ? {shortcode: resolvedShortcode} : {}),
-                    tags: (tagsEl as HTMLInputElement).value ? (tagsEl as HTMLInputElement).value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : undefined,
+                    tags: finalTags.length > 0 ? finalTags : undefined,
                     category: (categoryEl as HTMLInputElement).value || undefined,
                     url: type === "url" ? markdown : undefined,
                     targetBlockId: overrides?.targetBlockId,

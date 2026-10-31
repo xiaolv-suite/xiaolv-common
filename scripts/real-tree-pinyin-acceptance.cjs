@@ -33,7 +33,7 @@ async function api(endpoint, payload = {}, attempt = 0) {
         configVersion: 1, mode: "tree", notebookIds: [], containerDocIds: [LIB_DOC], createdDocIds: [LIB_DOC], configuredAt: Date.now(),
     }));
 
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({channel: "chrome", headless: true});
     const page = await browser.newPage({viewport: {width: 1280, height: 780}, locale: "zh-CN"});
     const logs = [];
     page.on("pageerror", (e) => logs.push("PAGEERROR: " + String(e).slice(0, 160)));

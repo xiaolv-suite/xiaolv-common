@@ -5,7 +5,7 @@ const {chromium} = require("playwright");
 const ORIGIN = process.env.IT_ORIGIN;
 
 (async () => {
-    const browser = await chromium.launch({headless: false, args: [`--app=${ORIGIN}`, "--window-size=1380,900"]});
+    const browser = await chromium.launch({channel: "chrome", headless: false, args: [`--app=${ORIGIN}`, "--window-size=1380,900"]});
     const context = await browser.newContext({viewport: {width: 1360, height: 880}, locale: "zh-CN"});
     const page = await context.newPage();
     let count = 0;

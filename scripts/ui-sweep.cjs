@@ -46,7 +46,7 @@ const SURFACES = [
 ];
 
 (async () => {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({channel: "chrome"});
     const page = await browser.newPage({viewport: {width: 1280, height: 900}});
     const problems = [];
     let errors = [];

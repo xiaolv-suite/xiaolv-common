@@ -1,7 +1,7 @@
 // 动作计划：纯函数层。给定条目 + 已解析内容 + 动作意图 + 端侧上下文 → 输出InsertPlan。
 // 不触碰宿主，全部可单测；宿主执行在 service/commands.ts。
 import {LIMITS} from "../constants";
-import {BLOCK_ID_RE, CommonItem, isSafeHttpUrl, resolveBlockRefTarget} from "./item";
+import {BLOCK_ID_RE, CommonItem, extractCleanPayload, isSafeHttpUrl, resolveBlockRefTarget} from "./item";
 
 export type InsertMode =
     | "insert"          // 插入到当前文档光标处
@@ -130,18 +130,20 @@ export function planAction(item: CommonItem, mode: InsertMode, ctx: ActionContex
 
     switch (item.itemType) {
         case "text": {
-            const text = asInlineText(ctx.content.kramdown);
+            const text = extractCleanPayload(asInlineText(ctx.content.kramdown));
             if (mode === "copy" || mode === "copy-content") return {...base, clipboardText: text, clipboardKind: "text"};
             return {...base, markdown: text};
         }
         case "markdown":
         case "structure": {
-            const md = ctx.content.kramdown.slice(0, LIMITS.contentChars);
+            const raw = ctx.content.kramdown.slice(0, LIMITS.contentChars);
+            const md = item.itemType === "markdown" && !raw.includes("\n") ? extractCleanPayload(raw) : raw;
             if (mode === "copy" || mode === "copy-content") return {...base, clipboardText: md, clipboardKind: "markdown"};
             return {...base, markdown: md};
         }
         case "url": {
-            const url = item.url || extractFirstUrl(ctx.content.kramdown);
+            const rawUrl = item.url || extractFirstUrl(ctx.content.kramdown);
+            const url = extractCleanPayload(rawUrl);
             if (!url || !isSafeHttpUrl(url)) {
                 return {...base, downgraded: true, downgradeReason: "type-unsupported", warnings: ["url-empty"]};
             }

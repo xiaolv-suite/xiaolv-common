@@ -161,3 +161,46 @@ test("extractKramdownNativeTags：提取思源原生 #标签# 与 textmark 标�
     assert.deepEqual(tags, ["紧急", "售后", "高频回复"]);
 });
 
+test("parseSnippetAnnotations & extractCleanPayload：智能解析并剥离 @手机号、// 备注、#标签# 与 [说明]", () => {
+    const s1 = item.parseSnippetAnnotations("13800138000 @手机号 @常用电话");
+    assert.equal(s1.cleanText, "13800138000");
+    assert.deepEqual(s1.tags, ["手机号", "常用电话"]);
+    assert.equal(s1.title, "手机号");
+    assert.equal(item.extractCleanPayload("13800138000 @手机号"), "13800138000");
+
+    const s2 = item.parseSnippetAnnotations("contact@company.com @工作邮箱");
+    assert.equal(s2.cleanText, "contact@company.com");
+    assert.deepEqual(s2.tags, ["工作邮箱"]);
+    assert.equal(s2.title, "工作邮箱");
+
+    const s3 = item.parseSnippetAnnotations("13800138000 // 备用手机");
+    assert.equal(s3.cleanText, "13800138000");
+    assert.deepEqual(s3.tags, ["备用手机"]);
+
+    const s4 = item.parseSnippetAnnotations("[公司税号] 91110108MA000000");
+    assert.equal(s4.cleanText, "91110108MA000000");
+    assert.deepEqual(s4.tags, ["公司税号"]);
+    assert.equal(s4.title, "公司税号");
+
+    const s5 = item.parseSnippetAnnotations("https://example.com @常用网址");
+    assert.equal(s5.cleanText, "https://example.com");
+    assert.deepEqual(s5.tags, ["常用网址"]);
+
+    const s6 = item.parseSnippetAnnotations("纯净普通文本没有任何注释");
+    assert.equal(s6.cleanText, "纯净普通文本没有任何注释");
+    assert.deepEqual(s6.tags, []);
+
+    const s7 = item.parseSnippetAnnotations("18588888888@手机号");
+    assert.equal(s7.cleanText, "18588888888");
+    assert.deepEqual(s7.tags, ["手机号"]);
+    assert.equal(s7.title, "手机号");
+
+    const s8 = item.parseSnippetAnnotations("zhangsan@gmail.com@张三的邮箱");
+    assert.equal(s8.cleanText, "zhangsan@gmail.com");
+    assert.deepEqual(s8.tags, ["张三的邮箱"]);
+
+    const s9 = item.parseSnippetAnnotations("18588888888//手机号");
+    assert.equal(s9.cleanText, "18588888888");
+    assert.deepEqual(s9.tags, ["手机号"]);
+});
+

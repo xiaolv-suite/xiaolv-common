@@ -383,12 +383,105 @@
     }
     return out;
   }
+  function extractKramdownNativeTags(kramdown) {
+    var _a, _b;
+    if (typeof kramdown !== "string" || !kramdown) return [];
+    const tags = [];
+    const spanPattern = /<span\b(?=[^>]*\bdata-type=["']tag["'])[^>]*>([^<]*)<\/span>/gi;
+    for (const match of kramdown.matchAll(spanPattern)) {
+      if (match[1]) tags.push(match[1]);
+    }
+    const stripped = kramdown.replace(/```[\s\S]*?```/g, " ").replace(/`[^`\n]+`/g, " ").replace(/[\u200b-\u200d\ufeff]/g, "");
+    const hashPattern = /(?:^|[\s,，。；;、()（）[\]【】])#([^\s#`]{1,32})#(?=$|[\s,，。；;、()（）[\]【】.#])/g;
+    for (const match of stripped.matchAll(hashPattern)) {
+      const candidate = (_b = (_a = match[1]) == null ? void 0 : _a.trim()) != null ? _b : "";
+      if (candidate && !/^[0-9a-fA-F]{3,8}$/.test(candidate)) {
+        tags.push(candidate);
+      }
+    }
+    return cleanTagList(tags);
+  }
   function cleanShortcode(v) {
     if (typeof v !== "string") return "";
     let s = v.trim();
     if (!s) return "";
     if (!s.startsWith(":")) s = ":" + s;
     return cleanString(s.toLowerCase(), LIMITS.shortcode);
+  }
+  function parseSnippetAnnotations(text) {
+    if (!text || typeof text !== "string") return { cleanText: text || "", tags: [], title: "" };
+    const trimmed = text.trim();
+    if (trimmed.startsWith("```") || trimmed.startsWith("{{{") || trimmed.includes("\n\n")) {
+      return { cleanText: text, tags: [], title: "" };
+    }
+    let clean = trimmed;
+    const tags = [];
+    let title = "";
+    const leadingBracket = clean.match(/^\[([^\]\n]{1,64})\]\s*([^\n]+)$/);
+    if (leadingBracket && !/^\(https?:\/\//.test(leadingBracket[2])) {
+      title = leadingBracket[1].trim();
+      tags.push(title);
+      clean = leadingBracket[2].trim();
+    }
+    const trailingBracket = clean.match(/^([^\n]+?)\s*\[([^\]\n]{1,64})\]$/);
+    if (trailingBracket) {
+      clean = trailingBracket[1].trim();
+      const tag = trailingBracket[2].trim();
+      if (!tags.includes(tag)) tags.push(tag);
+      if (!title) title = tag;
+    }
+    const slashComment = clean.match(/^([^\n]+?)\s*\/\/\s*([^\n\r]+)$/);
+    if (slashComment && !slashComment[1].endsWith(":")) {
+      clean = slashComment[1].trim();
+      const comment = slashComment[2].trim();
+      if (!tags.includes(comment)) tags.push(comment);
+      if (!title) title = comment;
+    }
+    const emailWithAnnotation = clean.match(/^([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)\s*@([^\s@\n]{1,64})$/);
+    if (emailWithAnnotation) {
+      clean = emailWithAnnotation[1].trim();
+      const tag = emailWithAnnotation[2].trim();
+      if (!tags.includes(tag)) tags.push(tag);
+      if (!title) title = tag;
+    }
+    const codeWithAnnotation = clean.match(/^([a-zA-Z0-9_.-]+)@([\u4e00-\u9fa5][^\s@\n]{0,63})$/);
+    if (codeWithAnnotation) {
+      clean = codeWithAnnotation[1].trim();
+      const tag = codeWithAnnotation[2].trim();
+      if (!tags.includes(tag)) tags.push(tag);
+      if (!title) title = tag;
+    }
+    const atPattern = /(?:^|\s)@([^\s@\n]{1,64})(?=\s|$)/g;
+    let match;
+    const atMatches = [];
+    while ((match = atPattern.exec(clean)) !== null) {
+      if (match[1]) atMatches.push(match[1]);
+    }
+    if (atMatches.length > 0) {
+      for (const tag of atMatches) {
+        const cleanTag = tag.trim();
+        if (cleanTag && !tags.includes(cleanTag)) tags.push(cleanTag);
+        if (!title) title = cleanTag;
+      }
+      clean = clean.replace(/(?:^|\s)@([^\s@\n]{1,64})(?=\s|$)/g, "").trim();
+    }
+    const hashPattern = /(?:^|\s)#([^\s#`\n]{1,32})#(?=\s|$)/g;
+    const hashMatches = [];
+    while ((match = hashPattern.exec(clean)) !== null) {
+      if (match[1]) hashMatches.push(match[1]);
+    }
+    if (hashMatches.length > 0) {
+      for (const tag of hashMatches) {
+        const cleanTag = tag.trim();
+        if (cleanTag && !tags.includes(cleanTag)) tags.push(cleanTag);
+        if (!title) title = cleanTag;
+      }
+      clean = clean.replace(/(?:^|\s)#([^\s#`\n]{1,32})#(?=\s|$)/g, "").trim();
+    }
+    return { cleanText: clean, tags: cleanTagList(tags), title };
+  }
+  function extractCleanPayload(text) {
+    return parseSnippetAnnotations(text).cleanText;
   }
   function inferItemType(blockType, subtype, kramdown) {
     if (blockType === "c" || blockType === "code_block" || subtype === "code") return "code";
@@ -14455,7 +14548,7 @@ ${res.progressBar}`;
         out.push({ line, code: true });
         continue;
       }
-      const visible = line.replace(READ_ZWSP_PATTERN, "$1");
+      const visible = line.replace(READ_ZWSP_PATTERN, "$1$2");
       const stripped = visible.replace(HOST_IAL_PATTERN, "");
       if (stripped === visible) {
         out.push({ line: visible, code: false });
@@ -14619,7 +14712,7 @@ ${res.progressBar}`;
       SUPERBLOCK_MARKER_LINE = /^\s*(?:\{\{\{|\}\}\})/;
       ZWSP = "\u200B";
       EMBED_LINE_START = /^(\s*(?:>\s*)*(?:(?:[-*+]|\d{1,9}[.)])\s+(?:\[[ xX]\]\s+)?)?)(\{\{(?!\{))/;
-      READ_ZWSP_PATTERN = /\u200b(?=\{\{)|\u200b(?=`)|(`)\u200b/g;
+      READ_ZWSP_PATTERN = /\u200b(?=\{\{)|\u200b(?=`)|(`)\u200b|\u200b(?=#)|(#)\u200b/g;
       HOST_IAL_PATTERN = /\{:[^{}]*\bid="\d{14}-[0-9a-z]{7}"[^{}]*\}/g;
       ATTRIBUTE_PATTERN = /(^|\s)([\w:-]+)=(?:"[^"]*"|'[^']*'|[^\s}]+)(?=\s|$)/g;
       IAL_TOKEN_PATTERN = /(`+)|(\{:[^{}]*\})/g;
@@ -15154,27 +15247,60 @@ ${res.progressBar}`;
           if (!this.checkCaptureSize(text)) return;
           const safeText = text;
           const inferredType = inferTypeFromText(safeText);
-          const derived = inferredType === "url" ? safeText : (safeText.split("\n")[0] || "").slice(0, 60).trim();
+          const parsed = parseSnippetAnnotations(safeText);
+          const derived = inferredType === "url" ? safeText : (parsed.title || safeText.split("\n")[0] || "").slice(0, 60).trim();
           const title = (options == null ? void 0 : options.title) || derived || this.deps.t("unknownType");
           this.openForm(safeText, inferredType, null, {
             title,
+            tags: parsed.tags.length > 0 ? parsed.tags : void 0,
             docId: (_a = this.deps.currentDocId()) != null ? _a : void 0,
             sourceType: (_b = options == null ? void 0 : options.sourceType) != null ? _b : "manual"
           });
         }
-        /** 右键块引用捕获：把被引用块存为 blockref 条目（目标块=引用目标） */
-        captureBlockRef(blockId, refText) {
-          var _a;
+        /** 右键块引用或块标捕获：把指定思源块存为 blockref 条目（目标块=引用目标，正文随原块实时变化） */
+        captureBlockRef(blockId, refText, docId) {
           if (!this.ensureConfigured()) return;
           if (!isBlockRefTarget(blockId)) {
             this.deps.notify("error", this.deps.t("invalidItem"));
             return;
           }
-          this.openForm(`((${blockId}))`, "blockref", null, {
-            title: (refText || blockId).slice(0, 120),
+          const cleanTitle = (refText || "").replace(/\s+/g, " ").trim().slice(0, 120) || blockId;
+          this.openForm(`((${blockId}))`, "blockref", blockId, {
+            title: cleanTitle,
             targetBlockId: blockId,
-            docId: (_a = this.deps.currentDocId()) != null ? _a : void 0,
+            docId: docId || this.deps.currentDocId() || void 0,
             sourceType: "block"
+          });
+        }
+        /** 块标菜单捕获：按给定的 1 个或多个真实块 ID 读取 Kramdown 并打开收录表单（多块自动合并为多段正文） */
+        async captureBlocksById(blockIds, docId) {
+          if (!this.ensureConfigured()) return;
+          const validIds = blockIds.filter((id) => isBlockRefTarget(id)).slice(0, 32);
+          if (validIds.length === 0) {
+            this.deps.notify("error", this.deps.t("captureBlockNone"));
+            return;
+          }
+          const resolvedDocId = docId || this.deps.currentDocId() || void 0;
+          await this.withCaptureLock("block", async () => {
+            var _a;
+            const parts = [];
+            for (const id of validIds) {
+              const kd = await this.deps.getBlockKramdown(id);
+              if (kd && kd.trim()) {
+                parts.push(kd.trim());
+              }
+            }
+            if (parts.length === 0) {
+              this.deps.notify("error", this.deps.t("captureBlockFailed"));
+              return;
+            }
+            const content = parts.join("\n\n");
+            if (!this.checkCaptureSize(content)) return;
+            const firstBlockId = (_a = validIds[0]) != null ? _a : null;
+            this.openForm(content, validIds.length > 1 ? "markdown" : inferTypeFromText(content), firstBlockId, {
+              docId: resolvedDocId,
+              sourceType: "block"
+            });
           });
         }
         /** 右键图片捕获：assets/ 图片存为图片条目（非 assets 图诚实拒绝） */
@@ -15270,7 +15396,7 @@ ${res.progressBar}`;
           });
         }
         openForm(defaultText, defaultType, sourceBlockId, overrides) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
           if (this.deps.isConfigured && !this.deps.isConfigured()) {
             (_b = (_a = this.deps).onNotConfigured) == null ? void 0 : _b.call(_a);
             return;
@@ -15495,14 +15621,16 @@ ${res.progressBar}`;
           });
           const tagRow = document.createElement("div");
           tagRow.className = "xlc-form-row";
-          const initialTags = (overrides == null ? void 0 : overrides.tags) ? overrides.tags.join("; ") : "";
+          const autoTags = defaultType !== "code" ? extractKramdownNativeTags(defaultText) : [];
+          const mergedInitialTags = Array.from(/* @__PURE__ */ new Set([...(_e = overrides == null ? void 0 : overrides.tags) != null ? _e : [], ...autoTags]));
+          const initialTags = mergedInitialTags.length > 0 ? mergedInitialTags.join("; ") : "";
           const tagsEl = field(t("tags"), initialTags, false, "xlc-form-tags", tagRow);
           tagsEl.dataset.xlcControl = "capture.tags";
           const tagsHint = document.createElement("span");
           tagsHint.className = "xlc-form-hint";
           tagsHint.textContent = t("tagsHint");
           tagsEl.parentElement.appendChild(tagsHint);
-          const existingTags = (_g = (_f = (_e = this.deps).getExistingTags) == null ? void 0 : _f.call(_e)) != null ? _g : [];
+          const existingTags = (_h = (_g = (_f = this.deps).getExistingTags) == null ? void 0 : _g.call(_f)) != null ? _h : [];
           if (existingTags.length > 0) {
             const tagPillsWrap = document.createElement("div");
             tagPillsWrap.className = "xlc-capture-quick-tags";
@@ -15550,10 +15678,10 @@ ${res.progressBar}`;
             }
             tagsEl.parentElement.appendChild(tagPillsWrap);
           }
-          const categoryEl = field(t("category"), (_h = overrides == null ? void 0 : overrides.category) != null ? _h : "", false, "xlc-form-category", tagRow);
+          const categoryEl = field(t("category"), (_i = overrides == null ? void 0 : overrides.category) != null ? _i : "", false, "xlc-form-category", tagRow);
           categoryEl.dataset.xlcControl = "capture.category";
           categoryEl.parentElement.classList.add("xlc-form-field--fixed");
-          const existingCats = (_k = (_j = (_i = this.deps).getExistingCategories) == null ? void 0 : _j.call(_i)) != null ? _k : [];
+          const existingCats = (_l = (_k = (_j = this.deps).getExistingCategories) == null ? void 0 : _k.call(_j)) != null ? _l : [];
           if (existingCats.length > 0) {
             categoryEl.setAttribute("list", "xlc-capture-category-list");
             const catDatalist = document.createElement("datalist");
@@ -15566,7 +15694,7 @@ ${res.progressBar}`;
             categoryEl.parentElement.appendChild(catDatalist);
           }
           form.appendChild(tagRow);
-          const shortcodeEl = field(t("shortcode") || "\u7B80\u7801 (:shortcode)", (_l = overrides == null ? void 0 : overrides.shortcode) != null ? _l : "", false, "xlc-form-shortcode");
+          const shortcodeEl = field(t("shortcode") || "\u7B80\u7801 (:shortcode)", (_m = overrides == null ? void 0 : overrides.shortcode) != null ? _m : "", false, "xlc-form-shortcode");
           shortcodeEl.dataset.xlcControl = "capture.shortcode";
           shortcodeEl.placeholder = t("shortcodePlaceholder") || "\u5982 :wk\u3001:bug\uFF08\u9009\u586B\uFF0C\u641C\u7D22\u6846\u8F93\u5165\u5373\u7F6E\u9876\u76F4\u8FBE\uFF09";
           contentElRef = contentEl;
@@ -16029,13 +16157,24 @@ ${res.progressBar}`;
               const rawShortcode = shortcodeEl.value.trim();
               const rawAlias = aliasEl.value.trim();
               const resolvedShortcode = rawShortcode ? cleanShortcode(rawShortcode) : rawAlias.startsWith(":") ? cleanShortcode(rawAlias) : "";
+              const parsedAnnotation = parseSnippetAnnotations(markdown);
+              let finalTitle = titleEl.value.trim();
+              let finalTags = tagsEl.value ? tagsEl.value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : [];
+              if (parsedAnnotation.tags.length > 0 || parsedAnnotation.title) {
+                if (!finalTitle && parsedAnnotation.title) {
+                  finalTitle = parsedAnnotation.title;
+                }
+                for (const t2 of parsedAnnotation.tags) {
+                  if (!finalTags.includes(t2)) finalTags.push(t2);
+                }
+              }
               void this.deps.createItem({
                 itemType: type,
                 markdown,
-                title: titleEl.value || void 0,
+                title: finalTitle || void 0,
                 alias: aliasEl.value || void 0,
                 ...resolvedShortcode ? { shortcode: resolvedShortcode } : {},
-                tags: tagsEl.value ? tagsEl.value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : void 0,
+                tags: finalTags.length > 0 ? finalTags : void 0,
                 category: categoryEl.value || void 0,
                 url: type === "url" ? markdown : void 0,
                 targetBlockId: overrides == null ? void 0 : overrides.targetBlockId,
@@ -16150,20 +16289,32 @@ ${res.progressBar}`;
     if (ctx.content.assetMissing) {
       base.pendingVerification.push("asset-missing");
     }
+    if (item.itemType !== "blockref" && (mode === "insert-ref" || mode === "insert-embed")) {
+      const target = BLOCK_ID_RE.test(item.blockId) ? item.blockId : BLOCK_ID_RE.test(item.source.sourceBlockId) ? item.source.sourceBlockId : BLOCK_ID_RE.test(item.targetBlockId) ? item.targetBlockId : "";
+      if (!target) {
+        return { ...base, downgraded: true, downgradeReason: "source-missing", warnings: ["target-block-invalid"] };
+      }
+      return {
+        ...base,
+        markdown: mode === "insert-ref" ? buildBlockRef(target, refAnchorText(item)) : buildEmbedBlock(target)
+      };
+    }
     switch (item.itemType) {
       case "text": {
-        const text = asInlineText(ctx.content.kramdown);
+        const text = extractCleanPayload(asInlineText(ctx.content.kramdown));
         if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: text, clipboardKind: "text" };
         return { ...base, markdown: text };
       }
       case "markdown":
       case "structure": {
-        const md = ctx.content.kramdown.slice(0, LIMITS.contentChars);
+        const raw = ctx.content.kramdown.slice(0, LIMITS.contentChars);
+        const md = item.itemType === "markdown" && !raw.includes("\n") ? extractCleanPayload(raw) : raw;
         if (mode === "copy" || mode === "copy-content") return { ...base, clipboardText: md, clipboardKind: "markdown" };
         return { ...base, markdown: md };
       }
       case "url": {
-        const url = item.url || extractFirstUrl(ctx.content.kramdown);
+        const rawUrl = item.url || extractFirstUrl(ctx.content.kramdown);
+        const url = extractCleanPayload(rawUrl);
         if (!url || !isSafeHttpUrl(url)) {
           return { ...base, downgraded: true, downgradeReason: "type-unsupported", warnings: ["url-empty"] };
         }
@@ -16259,6 +16410,9 @@ ${res.progressBar}`;
     if (item.source.sourceDocId) {
       if (resolved.sourceMissing) return { failure: "source-missing" };
       return { target: { kind: "doc", docId: item.source.sourceDocId } };
+    }
+    if (BLOCK_ID_RE.test(item.blockId)) {
+      return { target: { kind: "block", docId: item.libraryDocId, blockId: item.blockId } };
     }
     return { target: { kind: "doc", docId: item.libraryDocId } };
   }
@@ -16715,8 +16869,8 @@ ${finalHtml}
           const div = document.createElement("div");
           div.innerHTML = html;
           div.style.position = "fixed";
-          div.style.opacity = "0";
-          div.style.pointerEvents = "none";
+          div.style.left = "-9999px";
+          div.style.top = "-9999px";
           document.body.appendChild(div);
           const range = document.createRange();
           range.selectNodeContents(div);
@@ -16737,10 +16891,19 @@ ${finalHtml}
         const ta = document.createElement("textarea");
         ta.value = text;
         ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        ta.style.pointerEvents = "none";
+        ta.style.top = "0";
+        ta.style.left = "0";
+        ta.style.width = "2em";
+        ta.style.height = "2em";
+        ta.style.padding = "0";
+        ta.style.border = "none";
+        ta.style.outline = "none";
+        ta.style.boxShadow = "none";
+        ta.style.background = "transparent";
         document.body.appendChild(ta);
+        ta.focus();
         ta.select();
+        ta.setSelectionRange(0, text.length);
         const okFlag = document.execCommand("copy");
         ta.remove();
         return okFlag;
@@ -22962,7 +23125,26 @@ ${exception.mark.snippet}`;
     statusText.className = "xlc-setting-text";
     statusText.textContent = libStatus.textContent;
     libRow.appendChild(statusText);
-    libRow.appendChild(changeBtn);
+    const libBtnWrap = document.createElement("div");
+    libBtnWrap.style.display = "inline-flex";
+    libBtnWrap.style.alignItems = "center";
+    libBtnWrap.style.gap = "8px";
+    if (cfg && ctx.openLibraryDoc) {
+      const openLibBtn = document.createElement("button");
+      openLibBtn.type = "button";
+      openLibBtn.className = "b3-button";
+      openLibBtn.dataset.xlcControl = "settings.library.open-doc";
+      openLibBtn.textContent = "\u{1F4C4} \u6253\u5F00\u5E93\u6587\u6863";
+      openLibBtn.title = "\u5728\u601D\u6E90\u7B14\u8BB0\u7F16\u8F91\u5668\u4E2D\u76F4\u63A5\u6253\u5F00\u5F53\u524D\u5E38\u7528\u5E93\u6587\u6863";
+      openLibBtn.addEventListener("click", () => {
+        var _a2;
+        dialog.destroy();
+        (_a2 = ctx.openLibraryDoc) == null ? void 0 : _a2.call(ctx);
+      });
+      libBtnWrap.appendChild(openLibBtn);
+    }
+    libBtnWrap.appendChild(changeBtn);
+    libRow.appendChild(libBtnWrap);
     libSec.appendChild(libRow);
     const pickerHost = document.createElement("div");
     pickerHost.style.display = "none";
@@ -23605,6 +23787,70 @@ ${exception.mark.snippet}`;
     }
     root.appendChild(quickStart);
     if (!showQuickStart) quickStart.style.display = "none";
+    const oneClickCard = document.createElement("section");
+    oneClickCard.className = "xlc-setup-oneclick-card";
+    oneClickCard.setAttribute("role", "region");
+    oneClickCard.setAttribute("aria-label", "\u6700\u7B80\u6781\u901F\u65B9\u6848");
+    oneClickCard.style.cssText = "display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--b3-theme-primary); border-radius: var(--xlc-radius-sm); background: color-mix(in srgb, var(--b3-theme-primary) 8%, var(--b3-theme-surface)); margin-bottom: 12px;";
+    const oneClickHead = document.createElement("div");
+    oneClickHead.style.cssText = "display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;";
+    oneClickHead.innerHTML = `<strong>\u{1F680} \u6781\u901F\u4E00\u952E\u65B9\u6848\uFF08\u6700\u7701\u5FC3 \xB7 \u63A8\u8350\uFF09</strong><span class="xlc-form-hint" style="font-size:12px;">\u81EA\u52A8\u5EFA\u5E93\u4E0E\u521D\u59CB\u5316\uFF0C\u65E0\u8111\u70B9\u51FB\u5373\u5B8C\u6210</span>`;
+    oneClickCard.appendChild(oneClickHead);
+    const oneClickBtn = document.createElement("button");
+    oneClickBtn.type = "button";
+    oneClickBtn.className = "b3-button xlc-btn-primary";
+    oneClickBtn.dataset.xlcControl = "setup.oneclick.create";
+    oneClickBtn.style.cssText = "min-height: 36px; font-size: 14px; font-weight: 600; justify-content: center;";
+    oneClickBtn.textContent = "\u2728 \u4E00\u952E\u521B\u5EFA\u5E76\u5F00\u59CB\u4F7F\u7528\uFF08\u5168\u81EA\u52A8\uFF09";
+    let oneClickBusy = false;
+    oneClickBtn.addEventListener("click", async () => {
+      if (oneClickBusy) return;
+      oneClickBusy = true;
+      oneClickBtn.disabled = true;
+      oneClickBtn.textContent = t("saving");
+      try {
+        const nbRes = await ctx.library.listNotebooks();
+        const defaultDocTitle = t("setupNewDocName") || "\u5E38\u7528\u5185\u5BB9\u5E93";
+        if (nbRes.ok && nbRes.data.length > 0) {
+          const targetNbId = nbRes.data[0].id;
+          const docRes = await ctx.library.createLibraryDoc(targetNbId, defaultDocTitle);
+          if (!docRes.ok) throw new Error(docRes.message);
+          ctx.applyConfig({
+            configVersion: CONFIG_VERSION,
+            mode: "doc",
+            notebookIds: [],
+            containerDocIds: [docRes.data.docId],
+            createdDocIds: [docRes.data.docId],
+            configuredAt: Date.now()
+          });
+        } else {
+          const indepRes = await ctx.library.createIndependentLibrary(t("pluginName") || "\u5C0F\u9A74\u5E38\u7528", defaultDocTitle);
+          if (!indepRes.ok) throw new Error(indepRes.message);
+          ctx.applyConfig({
+            configVersion: CONFIG_VERSION,
+            mode: "notebook",
+            notebookIds: [indepRes.data.notebookId],
+            containerDocIds: [indepRes.data.docId],
+            createdDocIds: [indepRes.data.docId],
+            createdNotebookIds: [indepRes.data.notebookId],
+            configuredAt: Date.now()
+          });
+        }
+        ctx.notify("info", t("libDocCreated", defaultDocTitle));
+        onConfigured();
+      } catch (err) {
+        oneClickBusy = false;
+        oneClickBtn.disabled = false;
+        oneClickBtn.textContent = "\u2728 \u4E00\u952E\u521B\u5EFA\u5E76\u5F00\u59CB\u4F7F\u7528\uFF08\u5168\u81EA\u52A8\uFF09";
+        ctx.notify("error", t("kernelError", toErrorMessage(err)));
+      }
+    });
+    oneClickCard.appendChild(oneClickBtn);
+    const manualDivider = document.createElement("div");
+    manualDivider.style.cssText = "display: flex; align-items: center; gap: 8px; margin: 4px 0 10px 0; color: var(--b3-theme-on-surface); font-size: 12px;";
+    manualDivider.innerHTML = `<span style="flex:1; height:1px; background:var(--b3-border-color);"></span><span>\u6216\u8005\uFF1A\u624B\u52A8\u9009\u62E9\u5176\u4ED6\u65B9\u5F0F \u25BC</span><span style="flex:1; height:1px; background:var(--b3-border-color);"></span>`;
+    root.appendChild(oneClickCard);
+    root.appendChild(manualDivider);
     const step1 = document.createElement("div");
     const modeWrap = document.createElement("div");
     modeWrap.className = "xlc-form-field";
@@ -23977,7 +24223,7 @@ ${exception.mark.snippet}`;
     nameInput.value = t("setupNewDocName");
     nameRow.appendChild(nameInput);
     const createBtn = document.createElement("button");
-    createBtn.className = "b3-button";
+    createBtn.className = "b3-button xlc-btn-primary";
     createBtn.dataset.xlcControl = "setup.newdoc.create";
     createBtn.style.whiteSpace = "nowrap";
     createBtn.textContent = t("create");
@@ -24101,7 +24347,11 @@ ${exception.mark.snippet}`;
     step1.appendChild(nameWrap);
     function syncCreateState() {
       const mode = modeSelect.value;
-      createBtn.disabled = creatingLibrary || mode === "new-doc" && (!notebooksLoaded || !nbSelect.value) || mode !== "new-doc" && mode !== "new-notebook" || mode === "new-notebook" && !independentNotebookInput.value.trim() || !nameInput.value.trim();
+      const canCreate = !creatingLibrary && (mode === "new-doc" && notebooksLoaded && Boolean(nbSelect.value) && Boolean(nameInput.value.trim()) || mode === "new-notebook" && Boolean(independentNotebookInput.value.trim()) && Boolean(nameInput.value.trim()));
+      createBtn.disabled = !canCreate;
+      if (mode === "new-doc" || mode === "new-notebook") {
+        nextBtn.disabled = !canCreate;
+      }
     }
     nbSelect.addEventListener("change", () => {
       setupRevision++;
@@ -24115,9 +24365,21 @@ ${exception.mark.snippet}`;
       clearOrphanReceipt();
       syncCreateState();
     });
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.altKey && !createBtn.disabled) {
+        e.preventDefault();
+        createBtn.click();
+      }
+    });
     independentNotebookInput.addEventListener("input", () => {
       clearOrphanReceipt();
       syncCreateState();
+    });
+    independentNotebookInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.altKey && !createBtn.disabled) {
+        e.preventDefault();
+        createBtn.click();
+      }
     });
     const step1Actions = document.createElement("div");
     step1Actions.className = "xlc-form-actions";
@@ -24143,6 +24405,10 @@ ${exception.mark.snippet}`;
     nextBtn.disabled = true;
     nextBtn.addEventListener("click", () => {
       const mode = modeSelect.value;
+      if (mode === "new-doc" || mode === "new-notebook") {
+        createBtn.click();
+        return;
+      }
       if (mode === "notebook" && !nbSelect.value) {
         ctx.notify("error", nbSelect.disabled ? t("setupNotebookNotReady") : t("pickNotebookFirst"));
         return;
@@ -27899,10 +28165,23 @@ fi`;
         if (this.activeProvider >= 0) {
           const row = this.providerRows[this.activeProvider];
           if (row) void this.deps.copyProviderPayload(row.payload);
+          if (!this.pinWindow) this.destroy();
           return;
         }
         const entry = this.results[this.activeIndex];
-        if (entry) void this.deps.runAction(entry.id, "copy");
+        if (entry) {
+          if (entry.isOmni) {
+            const textToCopy = kramdownToPlainText(entry.content || entry.summary || "");
+            void this.deps.copyText(textToCopy).then((ok2) => {
+              var _a, _b, _c, _d;
+              if (ok2) (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", this.deps.t("copied", entry.title || "\u6761\u76EE"));
+              else (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "error", this.deps.t("copyFailed"));
+            });
+          } else {
+            void this.deps.runAction(entry.id, "copy");
+          }
+          if (!this.pinWindow) this.destroy();
+        }
       });
       const aiBtn = document.createElement("button");
       aiBtn.className = "b3-button xlc-btn-ai";
@@ -29414,6 +29693,17 @@ fi`;
       }
       void this.refreshPreservingPosition();
     }
+    /** 思源文档页签切换后的上下文联动：同步插入目标横幅，若处于「当前文档」范围则自动刷新当前文档块列表。 */
+    syncActiveContextAfterTabSwitch() {
+      this.syncPaneActions();
+      if (this.currentScope === "current-doc" && !this.isComposing) {
+        if (this.inputDebounce) {
+          clearTimeout(this.inputDebounce);
+          this.inputDebounce = null;
+        }
+        void this.refresh();
+      }
+    }
     /** 鉴权/权限错误由统一内核处理器调用；旧列表失效后保留查询条件并提供显式重试。 */
     showKernelAccessIssue(kind, message) {
       var _a, _b, _c, _d;
@@ -29734,14 +30024,16 @@ fi`;
         meta.appendChild(more);
       }
       const effectiveDocPath = entry.sourceDocPath || (entry.isOmni && entry.category && entry.category !== "\u5168\u5E93\u5185\u5BB9" && entry.category !== "\u526A\u8D34\u677F" ? entry.category.replace(/^\/+/, "").replace(/\.sy$/, "") : void 0);
-      if (effectiveDocPath) {
+      const hasExternalSourceDoc = !entry.isOmni && isBlockId(entry.sourceDocId) && entry.sourceDocId !== entry.libraryDocId;
+      if (effectiveDocPath || hasExternalSourceDoc) {
         const pathBtn = document.createElement("button");
         pathBtn.type = "button";
         pathBtn.className = "xlc-meta-chip xlc-meta-chip--path";
         pathBtn.dataset.xlcControl = "preview.open-path";
-        pathBtn.textContent = "\u{1F4C4} " + effectiveDocPath;
+        pathBtn.textContent = "\u{1F4C4} " + (effectiveDocPath || "\u6765\u6E90\u6587\u6863");
         pathBtn.title = "\u70B9\u51FB\u5728\u601D\u6E90\u4E2D\u6253\u5F00\u5E76\u5B9A\u4F4D\u6B64\u6587\u6863\u6216\u5757 (Alt+D)";
         pathBtn.addEventListener("click", () => {
+          if (!this.pinWindow) this.destroy();
           if (entry.isOmni && this.deps.openDocBlock) {
             void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
           } else {
@@ -29749,6 +30041,69 @@ fi`;
           }
         });
         meta.appendChild(pathBtn);
+        if (!effectiveDocPath && hasExternalSourceDoc && this.deps.getDocPath && entry.sourceDocId) {
+          void this.deps.getDocPath(entry.sourceDocId).then((resolvedPath) => {
+            if (!resolvedPath) return;
+            entry.sourceDocPath = resolvedPath;
+            if (pathBtn.isConnected) {
+              pathBtn.textContent = "\u{1F4C4} " + resolvedPath;
+            }
+          }).catch(() => {
+          });
+        }
+      }
+      if (!entry.isOmni && isBlockId(entry.blockId)) {
+        const libBlockBtn = document.createElement("button");
+        libBlockBtn.type = "button";
+        libBlockBtn.className = "xlc-meta-chip xlc-meta-chip--path";
+        libBlockBtn.dataset.xlcControl = "preview.open-lib-block";
+        libBlockBtn.textContent = "\u{1F4E6} \u5E93\u5185\u539F\u5757";
+        libBlockBtn.title = "\u70B9\u51FB\u5728\u601D\u6E90\u5E38\u7528\u5E93\u6587\u6863\u4E2D\u76F4\u63A5\u5B9A\u4F4D\u6B64\u6761\u76EE\u7684\u672C\u4F53\u5757";
+        libBlockBtn.addEventListener("click", () => {
+          if (!this.pinWindow) this.destroy();
+          if (this.deps.openDocBlock) {
+            void this.deps.openDocBlock(entry.blockId);
+          } else {
+            void this.deps.openSource(entry.id);
+          }
+        });
+        meta.appendChild(libBlockBtn);
+        if (this.deps.getDocPath && isBlockId(entry.libraryDocId)) {
+          void this.deps.getDocPath(entry.libraryDocId).then((libPath) => {
+            if (libPath && libBlockBtn.isConnected) {
+              libBlockBtn.title = `\u5728\u601D\u6E90\u5E38\u7528\u5E93\u6587\u6863 (${libPath}) \u4E2D\u5B9A\u4F4D\u6B64\u5757`;
+            }
+          }).catch(() => {
+          });
+        }
+      }
+      if (!entry.isOmni && isBlockId(entry.sourceBlockId) && entry.sourceBlockId !== entry.blockId) {
+        if (this.deps.pullFromSource) {
+          const pullBtn = document.createElement("button");
+          pullBtn.type = "button";
+          pullBtn.className = "xlc-meta-chip";
+          pullBtn.dataset.xlcControl = "preview.pull-source";
+          pullBtn.textContent = "\u21BB \u62C9\u53D6\u539F\u5757";
+          pullBtn.title = "\u4ECE\u601D\u6E90\u6765\u6E90\u5757\u62C9\u53D6\u6700\u65B0\u5185\u5BB9\u5E76\u66F4\u65B0\u672C\u6761\u76EE";
+          pullBtn.addEventListener("click", () => {
+            var _a2, _b2;
+            void ((_b2 = (_a2 = this.deps).pullFromSource) == null ? void 0 : _b2.call(_a2, entry.id));
+          });
+          meta.appendChild(pullBtn);
+        }
+        if (this.deps.pushToSource && entry.itemType !== "blockref") {
+          const pushBtn = document.createElement("button");
+          pushBtn.type = "button";
+          pushBtn.className = "xlc-meta-chip";
+          pushBtn.dataset.xlcControl = "preview.push-source";
+          pushBtn.textContent = "\u2934 \u56DE\u5199\u539F\u5757";
+          pushBtn.title = "\u5C06\u672C\u6761\u76EE\u5F53\u524D\u6B63\u6587\u56DE\u5199\u81F3\u601D\u6E90\u6765\u6E90\u5757";
+          pushBtn.addEventListener("click", () => {
+            var _a2, _b2;
+            void ((_b2 = (_a2 = this.deps).pushToSource) == null ? void 0 : _b2.call(_a2, entry.id));
+          });
+          meta.appendChild(pushBtn);
+        }
       }
       if (this.deps.getAdjacentBlocks && isBlockId(resolveEntryBlockId(entry)) && isBlockId(entry.sourceDocId || entry.libraryDocId)) {
         const probeBtn = document.createElement("button");
@@ -29847,11 +30202,13 @@ fi`;
         paneBody.classList.toggle("xlc-pane-body--muted", finalText === this.deps.t("previewUnavailable"));
         if (text) {
           try {
-            if ((entry == null ? void 0 : entry.itemType) !== "code" && hasDynamicMacros(text)) {
-              const expanded = expandMacroPreview(text);
+            const parsedAnnotation = (entry == null ? void 0 : entry.itemType) !== "code" ? parseSnippetAnnotations(text) : null;
+            const previewText = parsedAnnotation && parsedAnnotation.cleanText ? parsedAnnotation.cleanText : text;
+            if ((entry == null ? void 0 : entry.itemType) !== "code" && hasDynamicMacros(previewText)) {
+              const expanded = expandMacroPreview(previewText);
               renderDualMacroPreview(
                 paneBody,
-                text,
+                previewText,
                 expanded,
                 entry == null ? void 0 : entry.itemType,
                 {
@@ -29860,7 +30217,16 @@ fi`;
                 }
               );
             } else {
-              renderSafePreview(paneBody, text, entry == null ? void 0 : entry.itemType);
+              renderSafePreview(paneBody, previewText, entry == null ? void 0 : entry.itemType);
+            }
+            if (parsedAnnotation && parsedAnnotation.tags.length > 0) {
+              const annotHint = document.createElement("div");
+              annotHint.className = "xlc-form-hint";
+              annotHint.style.marginTop = "8px";
+              annotHint.style.fontSize = "11px";
+              annotHint.style.color = "var(--b3-theme-primary)";
+              annotHint.textContent = `\u{1F3F7}\uFE0F \u68C0\u7D22\u5173\u952E\u5B57\uFF1A${parsedAnnotation.tags.map((t) => `@${t}`).join(" ")}\uFF08\u63D2\u5165/\u590D\u5236\u65F6\u81EA\u52A8\u5265\u79BB\uFF0C\u4EC5\u8F93\u51FA\u6709\u6548\u6570\u636E\uFF09`;
+              paneBody.appendChild(annotHint);
             }
           } catch {
             paneBody.textContent = finalText;
@@ -29952,7 +30318,7 @@ fi`;
     /** F1：插入前询问变量（设置可关；无 ask 字段零打扰；code 条目不询问）。
      *  perform 收到 fills（undefined=未触发询问，走原路径）。 */
     async insertEntryWithVars(entry, perform, options) {
-      var _a, _b, _c, _d, _e;
+      var _a, _b, _c, _d;
       if (this.varFormOpen || this.primaryBusy) return;
       this.primaryBusy = true;
       this.syncPaneActions();
@@ -29989,7 +30355,8 @@ fi`;
         }
         try {
           const execution = perform();
-          (_c = options == null ? void 0 : options.beforePerform) == null ? void 0 : _c.call(options);
+          if (options == null ? void 0 : options.beforePerform) options.beforePerform();
+          else if (!this.pinWindow) this.destroy();
           await execution;
         } finally {
           releaseBusy();
@@ -30012,7 +30379,7 @@ fi`;
         defaults,
         templateText,
         itemId: entry.id,
-        presets: (_e = (_d = this.deps).getVariablePresets) == null ? void 0 : _e.call(_d, entry.id),
+        presets: (_d = (_c = this.deps).getVariablePresets) == null ? void 0 : _d.call(_c, entry.id),
         onSavePreset: (name, fills) => {
           var _a2, _b2;
           (_b2 = (_a2 = this.deps).saveVariablePreset) == null ? void 0 : _b2.call(_a2, entry.id, name, fills);
@@ -30170,6 +30537,10 @@ fi`;
         }
         const targetBlockId = resolveEntryBlockId(entry);
         if (isBlockId(targetBlockId)) {
+          if (entry.itemType !== "blockref") {
+            addAction("((\u2022))", (this.deps.t("insertBlockRef") || "\u63D2\u5165\u4E3A\u601D\u6E90\u5757\u5F15\u7528") + " (Alt+B)", () => this.insertEntryEmbedOrRef(entry, "ref"), "xlc-menu-item", false);
+            addAction("{{\u2022}}", (this.deps.t("insertEmbed") || "\u63D2\u5165\u4E3A\u601D\u6E90\u540C\u6B65\u5D4C\u5165\u5757") + " (Alt+E)", () => this.insertEntryEmbedOrRef(entry, "embed"), "xlc-menu-item", false);
+          }
           addAction("((\u2022))", "\u590D\u5236\u5757\u5F15\u7528\u8BED\u6CD5 (Alt+R)", async () => {
             var _a3, _b3;
             const anchor = (entry.title || entry.summary || "\u5F15\u7528").slice(0, 50).replace(/[\r\n]+/g, " ");
@@ -30266,6 +30637,17 @@ fi`;
           }
         } else {
           addSilent("\u2197", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
+          if (this.deps.openDocBlock && isBlockId(entry.blockId) && isBlockId(entry.sourceDocId) && entry.sourceDocId !== entry.libraryDocId) {
+            addSilent("\u{1F4E6}", "\u5728\u601D\u6E90\u5E93\u6587\u6863\u4E2D\u5B9A\u4F4D\u672C\u4F53\u5757", () => this.deps.openDocBlock(entry.blockId));
+          }
+          if (isBlockId(entry.sourceBlockId) && entry.sourceBlockId !== entry.blockId) {
+            if (this.deps.pullFromSource) {
+              addSilent("\u21BB", "\u4ECE\u601D\u6E90\u6765\u6E90\u5757\u62C9\u53D6\u6700\u65B0\u5185\u5BB9", () => this.deps.pullFromSource(entry.id));
+            }
+            if (this.deps.pushToSource && entry.itemType !== "blockref") {
+              addSilent("\u2934", "\u5C06\u672C\u6761\u5185\u5BB9\u56DE\u5199\u81F3\u601D\u6E90\u6765\u6E90\u5757", () => this.deps.pushToSource(entry.id));
+            }
+          }
           addSilent("\u270E", this.deps.t("edit"), () => this.deps.editItem(entry.id));
           addSilent("\u29C9", this.deps.t("duplicateItem"), () => this.deps.duplicateItem(entry.id));
           const rawContent = (entry.content || "").trim();
@@ -35366,6 +35748,7 @@ ${details.join("\n")}` : ""}`;
   init_actions();
   init_placeholders();
   init_variables();
+  init_item();
   init_clipboard();
 
   // src/ecosystem-bridge-kit.ts
@@ -35477,7 +35860,7 @@ ${details.join("\n")}` : ""}`;
         if (fills) {
           payload = expandAsks(payload, fills);
         }
-        payload = applyAskDefaults(stripCursorToken(payload));
+        payload = extractCleanPayload(applyAskDefaults(stripCursorToken(payload)));
       }
       return (_a = await this.applyOutput(payload, item)) != null ? _a : payload;
     }
@@ -35618,7 +36001,7 @@ ${details.join("\n")}` : ""}`;
       const insertRenderWithCursor = async (text) => {
         var _a2;
         if (text === void 0) return { text: void 0, cursorOffset: null };
-        if (item.itemType === "code") return { text, cursorOffset: null };
+        if (item.itemType === "code" || plan.mode === "insert-ref" || plan.mode === "insert-embed") return { text, cursorOffset: null };
         const withDefaults = applyAskDefaults(text);
         const withOutput = (_a2 = await this.applyOutput(withDefaults, item)) != null ? _a2 : withDefaults;
         const extracted = extractCursorPosition(withOutput);
@@ -36495,7 +36878,7 @@ ${details.join("\n")}` : ""}`;
       try {
         const data = parseKramdown(await this.kernel.request("getBlockKramdown", { id: target }));
         if (!data) return fail("not-found", `target block ${target} kramdown unavailable`);
-        return ok(normalizeKramdownIal(data.kramdown));
+        return ok(storedKramdownToBody(normalizeKramdownIal(data.kramdown)));
       } catch (err) {
         return toFailureReceipt(err);
       }
@@ -37027,6 +37410,187 @@ ${details.join("\n")}` : ""}`;
       this.notifyItemsChanged([itemId]);
       const refreshed = await this.getItem(itemId);
       return refreshed.ok ? ok({ item: refreshed.data }) : { ok: false, reason: refreshed.reason, message: refreshed.message };
+    }
+    /**
+     * 原地纳管思源库文档中用户直接手写/粘贴的未纳管块（不移动、不复制块，直接补齐 custom-xlc-* 属性）。
+     * - 未指定 targetBlockIds 时扫描全部库文档顶层无 custom-xlc-id 块，自动跳过库文档首行 # 标题占位块；
+     * - 指定 targetBlockIds 时仅纳管库文档中匹配该列表的块。
+     */
+    async adoptUnmanagedLibraryBlocks(targetBlockIds) {
+      return this.withWriteLock("adopt-library-blocks", async () => {
+        var _a, _b, _c, _d, _e;
+        if (!this.config) return fail("invalid-input", "no library configured");
+        const resolved = await this.resolveDocIds();
+        if (resolved.docIds.length === 0) return fail("not-found", "no library document available");
+        const targetSet = targetBlockIds && targetBlockIds.length > 0 ? new Set(targetBlockIds.filter((id) => isBlockId(id))) : null;
+        const adoptedItems = [];
+        for (const docId of resolved.docIds) {
+          let children;
+          try {
+            children = parseChildBlocks(await this.kernel.request("getChildBlocks", { id: docId }));
+          } catch (err) {
+            return toFailureReceipt(err);
+          }
+          if (children.length === 0) continue;
+          let attrsByBlock = {};
+          try {
+            attrsByBlock = parseBatchAttrs(await this.kernel.request("batchGetBlockAttrs", {
+              ids: children.map((c) => c.id)
+            }));
+          } catch (err) {
+            return toFailureReceipt(err);
+          }
+          const managedPartIds = /* @__PURE__ */ new Set();
+          for (const child of children) {
+            const rawParts = (_a = attrsByBlock[child.id]) == null ? void 0 : _a[ATTR.parts];
+            if (typeof rawParts === "string" && rawParts.trim()) {
+              for (const p of rawParts.split(",").map((s) => s.trim()).filter(isBlockId)) {
+                managedPartIds.add(p);
+              }
+            }
+          }
+          for (let idx = 0; idx < children.length; idx++) {
+            const child = children[idx];
+            const existingAttrs = (_b = attrsByBlock[child.id]) != null ? _b : {};
+            if (existingAttrs[ATTR.id] || managedPartIds.has(child.id)) continue;
+            if (targetSet && !targetSet.has(child.id)) continue;
+            if (!targetSet && idx === 0 && child.type === "h") continue;
+            let kramdown = "";
+            try {
+              const body = parseKramdown(await this.kernel.request("getBlockKramdown", { id: child.id }));
+              kramdown = storedKramdownToBody(normalizeKramdownIal((_c = body == null ? void 0 : body.kramdown) != null ? _c : "")).trim();
+            } catch {
+              continue;
+            }
+            if (!kramdown) continue;
+            const now = Date.now();
+            let logicalId = newLogicalId(now);
+            while (this.createdLogicalIds.has(logicalId) || ((_d = this.index) == null ? void 0 : _d.items.has(logicalId))) {
+              logicalId = newLogicalId(now + Math.floor(Math.random() * 1e3));
+            }
+            const itemType = inferItemType(child.type, (_e = child.subtype) != null ? _e : "", kramdown);
+            const parsedAnnotation = parseSnippetAnnotations(kramdown);
+            const title = (existingAttrs[ATTR.title] || parsedAnnotation.title || deriveTitle(kramdown, itemType, existingAttrs)).slice(0, LIMITS.title);
+            const nativeTags = itemType === "code" ? [] : extractKramdownNativeTags(kramdown);
+            const mergedTags = cleanTagList([...cleanTagList(existingAttrs[ATTR.tags]), ...nativeTags, ...parsedAnnotation.tags]);
+            const varCount = itemType === "code" ? 0 : countAskFields(kramdown);
+            const newAttrs = {
+              [ATTR.id]: logicalId,
+              [ATTR.type]: itemType,
+              [ATTR.title]: title,
+              [ATTR.created]: String(now),
+              [ATTR.updated]: String(now),
+              [ATTR.srcDoc]: docId,
+              [ATTR.srcBlock]: child.id,
+              [ATTR.srcType]: "manual"
+            };
+            if (mergedTags.length > 0) newAttrs[ATTR.tags] = mergedTags.join(",");
+            if (varCount > 0) newAttrs[ATTR.vars] = String(Math.min(varCount, LIMITS.maxAskFields));
+            try {
+              await this.kernel.request("setBlockAttrs", { id: child.id, attrs: newAttrs }, { maxRetries: 0 });
+            } catch (err) {
+              return toFailureReceipt(err);
+            }
+            this.createdLogicalIds.add(logicalId);
+            const item = normalizeCommonItem({
+              blockId: child.id,
+              libraryDocId: docId,
+              attrs: { ...existingAttrs, ...newAttrs },
+              blockType: child.type,
+              subtype: child.subtype,
+              kramdown
+            });
+            if (item) adoptedItems.push(item);
+          }
+        }
+        if (adoptedItems.length > 0) {
+          this.invalidateIndex();
+          await this.ensureIndex();
+          this.notifyItemsChanged(adoptedItems.map((i) => i.id));
+        }
+        return ok({ adopted: adoptedItems.length, items: adoptedItems });
+      });
+    }
+    /**
+     * 从条目关联的思源来源块（sourceBlockId / targetBlockId）拉取最新 Kramdown 正文并更新本条目。
+     */
+    async pullFromSourceBlock(itemId) {
+      const got = await this.getItem(itemId);
+      if (!got.ok) return { ok: false, reason: got.reason, message: got.message };
+      const item = got.data;
+      const sourceBlockId = item.source.sourceBlockId || item.targetBlockId;
+      if (!isBlockId(sourceBlockId)) {
+        return fail("invalid-input", "\u8BE5\u6761\u76EE\u672A\u5173\u8054\u6709\u6548\u7684\u601D\u6E90\u6765\u6E90\u5757 ID");
+      }
+      try {
+        const existMap = parseExistingMap(await this.kernel.request("checkBlocksExist", { ids: [sourceBlockId] }));
+        if (existMap[sourceBlockId] === false) {
+          return fail("not-found", "\u6765\u6E90\u5757\u5728\u601D\u6E90\u4E2D\u5DF2\u4E0D\u5B58\u5728");
+        }
+        const raw = parseKramdown(await this.kernel.request("getBlockKramdown", { id: sourceBlockId }));
+        if (!raw || typeof raw.kramdown !== "string") {
+          return fail("not-found", "\u65E0\u6CD5\u8BFB\u53D6\u601D\u6E90\u6765\u6E90\u5757\u5185\u5BB9");
+        }
+        const markdown = storedKramdownToBody(normalizeKramdownIal(raw.kramdown)).trim();
+        if (!markdown) {
+          return fail("invalid-input", "\u601D\u6E90\u6765\u6E90\u5757\u5185\u5BB9\u4E3A\u7A7A");
+        }
+        if (item.itemType === "blockref") {
+          this.invalidateIndex();
+          await this.ensureIndex();
+          this.notifyItemsChanged([itemId]);
+          return ok({ item, markdown });
+        }
+        const nativeTags = item.itemType === "code" ? [] : extractKramdownNativeTags(markdown);
+        const mergedTags = cleanTagList([...item.tags, ...nativeTags]);
+        const updated = await this.updateItem(itemId, {
+          markdown,
+          tags: mergedTags
+        });
+        if (!updated.ok) return { ok: false, reason: updated.reason, message: updated.message };
+        return ok({ item: updated.data.item, markdown });
+      } catch (err) {
+        return toFailureReceipt(err);
+      }
+    }
+    /**
+     * 将本条目当前正文回写至其关联的思源来源块（sourceBlockId / targetBlockId），并完整保留原块属性。
+     */
+    async pushToSourceBlock(itemId) {
+      return this.withWriteLock(`push-source:${itemId}`, async () => {
+        const got = await this.getItem(itemId);
+        if (!got.ok) return { ok: false, reason: got.reason, message: got.message };
+        const item = got.data;
+        const sourceBlockId = item.source.sourceBlockId || item.targetBlockId;
+        if (!isBlockId(sourceBlockId)) {
+          return fail("invalid-input", "\u8BE5\u6761\u76EE\u672A\u5173\u8054\u6709\u6548\u7684\u601D\u6E90\u6765\u6E90\u5757 ID");
+        }
+        const kd = await this.getStoredItemKramdown(item);
+        if (!kd.ok) return { ok: false, reason: kd.reason, message: kd.message };
+        try {
+          const existMap = parseExistingMap(await this.kernel.request("checkBlocksExist", { ids: [sourceBlockId] }));
+          if (existMap[sourceBlockId] === false) {
+            return fail("not-found", "\u6765\u6E90\u5757\u5728\u601D\u6E90\u4E2D\u5DF2\u4E0D\u5B58\u5728");
+          }
+          const oldSourceAttrs = parseAttrs(await this.kernel.request("getBlockAttrs", { id: sourceBlockId }));
+          await this.kernel.request("updateBlock", {
+            id: sourceBlockId,
+            dataType: "markdown",
+            data: toItemStorageMarkdown(kd.data)
+          }, { maxRetries: 0 });
+          const restorable = restorableAttrs(oldSourceAttrs);
+          if (Object.keys(restorable).length > 0) {
+            await this.kernel.request("setBlockAttrs", {
+              id: sourceBlockId,
+              attrs: restorable
+            }, { maxRetries: 0 });
+          }
+          this.notifyItemsChanged([itemId]);
+          return ok({ sourceBlockId });
+        } catch (err) {
+          return toFailureReceipt(err);
+        }
+      });
     }
   };
 
@@ -37721,7 +38285,10 @@ ${details.join("\n")}` : ""}`;
     filterCommon: "\u5E38\u7528",
     syncDiffBtn: "\u540C\u6B65\u51B2\u7A81\u6BD4\u5BF9",
     clipboardHistoryToggle: "\u8BB0\u5F55\u526A\u8D34\u677F\u5386\u53F2\uFF08\u9700\u4E3B\u52A8\u5F00\u542F\uFF09",
-    clipboardHistorySub: "\u5F00\u542F\u540E\u6682\u5B58\u6700\u8FD1 30 \u6761\u590D\u5236\u6587\u672C\uFF0C\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\u4FA7\u8F66\uFF1B\u5173\u95ED\u65F6\u4E0D\u8BFB\u53D6\u7CFB\u7EDF\u526A\u8D34\u677F\uFF0C\u5DF2\u6709\u8BB0\u5F55\u4FDD\u7559"
+    clipboardHistorySub: "\u5F00\u542F\u540E\u6682\u5B58\u6700\u8FD1 30 \u6761\u590D\u5236\u6587\u672C\uFF0C\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\u4FA7\u8F66\uFF1B\u5173\u95ED\u65F6\u4E0D\u8BFB\u53D6\u7CFB\u7EDF\u526A\u8D34\u677F\uFF0C\u5DF2\u6709\u8BB0\u5F55\u4FDD\u7559",
+    openLibraryDoc: "\u5728\u601D\u6E90\u4E2D\u6253\u5F00\u5E38\u7528\u5E93\u6587\u6863",
+    insertBlockRef: "\u63D2\u5165\u4E3A\u601D\u6E90\u5757\u5F15\u7528",
+    setupCreateAndEnter: "\u4E00\u952E\u521B\u5EFA\u5E76\u5B8C\u6210 (Enter)"
   };
 
   // scripts/harness/entry.ts
@@ -38496,6 +39063,7 @@ ${details.join("\n")}` : ""}`;
       lastSearchDialog = dialog;
       if (overrides == null ? void 0 : overrides.insertTarget) dialog.insertTarget = overrides.insertTarget;
       dialog.open();
+      if (overrides == null ? void 0 : overrides.pinWindow) dialog.togglePinWindow();
       const input = document.querySelector(".xlc-search-input");
       if (input) {
         input.value = (_a = overrides == null ? void 0 : overrides.query) != null ? _a : "?\u7ED9\u5BA2\u6237\u5EF6\u671F\u4E0A\u7EBF\u7684\u9053\u6B49\u56DE\u590D";

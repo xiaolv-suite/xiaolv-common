@@ -12,7 +12,7 @@ async function api(endpoint, payload = {}) {
     return r.json();
 }
 (async () => {
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({channel: "chrome", headless: true});
     const page = await browser.newPage({locale: "zh-CN"});
     const logs = [];
     page.on("pageerror", (e) => logs.push("PAGEERROR: " + String(e).slice(0, 200)));

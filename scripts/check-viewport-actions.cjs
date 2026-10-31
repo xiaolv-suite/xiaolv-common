@@ -35,7 +35,7 @@ const DIALOGS = [
     {
         name: "setup",
         open: () => window.XlcHarness.openSetup(),
-        selector: "[data-xlc-control='setup.newdoc.create']",
+        selector: "[data-xlc-control='setup.oneclick.create']",
     },
     {
         name: "discovery",
@@ -45,7 +45,7 @@ const DIALOGS = [
 ];
 
 async function runViewportCheck(injectFault = false) {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({channel: "chrome"});
     const page = await browser.newPage();
     await page.goto(HARNESS_URL);
 

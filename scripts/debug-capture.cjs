@@ -8,7 +8,7 @@ try {
     process.exit(1);
 }
 (async () => {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({channel: "chrome"});
     const page = await browser.newPage({viewport: {width: 1280, height: 720}});
     page.on("pageerror", (e) => console.log("[pageerror]", String(e).slice(0, 200)));
     const file = path.join(process.cwd(), "docs/design/harness.html").replace(/\\/g, "/");

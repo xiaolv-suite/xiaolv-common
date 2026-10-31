@@ -173,6 +173,108 @@ export function cleanShortcode(v: unknown): string {
     return cleanString(s.toLowerCase(), LIMITS.shortcode);
 }
 
+/**
+ * 智能解析常用语正文中的注释规则（对齐 Quicker、Raycast 与 uTools 最佳实践）：
+ * 支持在正文中附加检索关键字（如 @手机号、// 说明、#标签#、[标题] 内容 等）；
+ * 插入或复制时自动剥离注释仅输出有效数据，被剥离的注释自动提取为搜索标签与标题。
+ */
+export function parseSnippetAnnotations(text: string): { cleanText: string; tags: string[]; title: string } {
+    if (!text || typeof text !== "string") return { cleanText: text || "", tags: [], title: "" };
+    const trimmed = text.trim();
+    // 多行复杂结构（如代码围栏、表格、超级块）不自动剥离内部文本
+    if (trimmed.startsWith("```") || trimmed.startsWith("{{{") || trimmed.includes("\n\n")) {
+        return { cleanText: text, tags: [], title: "" };
+    }
+
+    let clean = trimmed;
+    const tags: string[] = [];
+    let title = "";
+
+    // 1. 前置 [说明] 内容，例如：[手机号] 13800000000 （排除 Markdown 链接语法 [text](url)）
+    const leadingBracket = clean.match(/^\[([^\]\n]{1,64})\]\s*([^\n]+)$/);
+    if (leadingBracket && !/^\(https?:\/\//.test(leadingBracket[2]!)) {
+        title = leadingBracket[1]!.trim();
+        tags.push(title);
+        clean = leadingBracket[2]!.trim();
+    }
+
+    // 2. 后置 内容 [说明]，例如：13800000000 [手机号]
+    const trailingBracket = clean.match(/^([^\n]+?)\s*\[([^\]\n]{1,64})\]$/);
+    if (trailingBracket) {
+        clean = trailingBracket[1]!.trim();
+        const tag = trailingBracket[2]!.trim();
+        if (!tags.includes(tag)) tags.push(tag);
+        if (!title) title = tag;
+    }
+
+    // 3. 后置 // 注释，例如：13800000000 // 手机号 或 13800000000//手机号（排除 http:// 与 https://）
+    const slashComment = clean.match(/^([^\n]+?)\s*\/\/\s*([^\n\r]+)$/);
+    if (slashComment && !slashComment[1]!.endsWith(":")) {
+        clean = slashComment[1]!.trim();
+        const comment = slashComment[2]!.trim();
+        if (!tags.includes(comment)) tags.push(comment);
+        if (!title) title = comment;
+    }
+
+    // 4. 邮箱后接 @注解：形如 user@domain.com @说明 或 user@domain.com@说明
+    const emailWithAnnotation = clean.match(/^([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)\s*@([^\s@\n]{1,64})$/);
+    if (emailWithAnnotation) {
+        clean = emailWithAnnotation[1]!.trim();
+        const tag = emailWithAnnotation[2]!.trim();
+        if (!tags.includes(tag)) tags.push(tag);
+        if (!title) title = tag;
+    }
+
+    // 5. 数字/编码后直接粘连 @中文注解：形如 18588888888@手机号、440301199001011234@身份证
+    const codeWithAnnotation = clean.match(/^([a-zA-Z0-9_.-]+)@([\u4e00-\u9fa5][^\s@\n]{0,63})$/);
+    if (codeWithAnnotation) {
+        clean = codeWithAnnotation[1]!.trim();
+        const tag = codeWithAnnotation[2]!.trim();
+        if (!tags.includes(tag)) tags.push(tag);
+        if (!title) title = tag;
+    }
+
+    // 6. 后置 @标签，例如：13800138000 @手机号 @常用电话（精确匹配空格后的 @，安全保留 user@domain.com）
+    const atPattern = /(?:^|\s)@([^\s@\n]{1,64})(?=\s|$)/g;
+    let match: RegExpExecArray | null;
+    const atMatches: string[] = [];
+    while ((match = atPattern.exec(clean)) !== null) {
+        if (match[1]) atMatches.push(match[1]);
+    }
+    if (atMatches.length > 0) {
+        for (const tag of atMatches) {
+            const cleanTag = tag.trim();
+            if (cleanTag && !tags.includes(cleanTag)) tags.push(cleanTag);
+            if (!title) title = cleanTag;
+        }
+        clean = clean.replace(/(?:^|\s)@([^\s@\n]{1,64})(?=\s|$)/g, "").trim();
+    }
+
+    // 7. 后置原生 #标签#，例如：13800000000 #手机号#
+    const hashPattern = /(?:^|\s)#([^\s#`\n]{1,32})#(?=\s|$)/g;
+    const hashMatches: string[] = [];
+    while ((match = hashPattern.exec(clean)) !== null) {
+        if (match[1]) hashMatches.push(match[1]);
+    }
+    if (hashMatches.length > 0) {
+        for (const tag of hashMatches) {
+            const cleanTag = tag.trim();
+            if (cleanTag && !tags.includes(cleanTag)) tags.push(cleanTag);
+            if (!title) title = cleanTag;
+        }
+        clean = clean.replace(/(?:^|\s)#([^\s#`\n]{1,32})#(?=\s|$)/g, "").trim();
+    }
+
+    return { cleanText: clean, tags: cleanTagList(tags), title };
+}
+
+/**
+ * 提取要插入或复制到外部的纯净正文（剥离尾部 @检索关键字 或 // 备注）
+ */
+export function extractCleanPayload(text: string): string {
+    return parseSnippetAnnotations(text).cleanText;
+}
+
 // SiYuan 块类型（getChildBlocks）：p 段落 / h 标题 / c 代码 / l 列表 / t 表格 /
 // b 引用 / s 超级块 / i iframe / html / m 公式 / query_embed 嵌入
 export function inferItemType(blockType: string, subtype: string, kramdown: string): ItemType {

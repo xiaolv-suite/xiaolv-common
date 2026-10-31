@@ -14,6 +14,7 @@ import {InsertMode} from "../model/actions";
 import {toErrorMessage} from "../model/errors";
 import {hasDynamicMacros, expandMacroPreview} from "../model/variables";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
+import {parseSnippetAnnotations} from "../model/item";
 
 function escapeDockHtml(raw: string): string {
     return String(raw ?? "")
@@ -829,11 +830,13 @@ export class DockView {
             if (this.isDestroyed) return;
             body.innerHTML = "";
             const rawText = text || entry.summary || "";
-            if (entry.itemType !== "code" && hasDynamicMacros(rawText)) {
+            const parsedAnnotation = (entry.itemType !== "code") ? parseSnippetAnnotations(rawText) : null;
+            const previewText = parsedAnnotation && parsedAnnotation.cleanText ? parsedAnnotation.cleanText : rawText;
+            if (entry.itemType !== "code" && hasDynamicMacros(previewText)) {
                 renderDualMacroPreview(
                     body,
-                    rawText,
-                    expandMacroPreview(rawText),
+                    previewText,
+                    expandMacroPreview(previewText),
                     entry.itemType,
                     {
                         templateSource: this.deps.t("previewTemplateSource") || "模板源码",
@@ -841,7 +844,7 @@ export class DockView {
                     },
                 );
             } else {
-                renderSafePreview(body, rawText, entry.itemType);
+                renderSafePreview(body, previewText, entry.itemType);
             }
         }).catch(() => {
             if (this.isDestroyed) return;

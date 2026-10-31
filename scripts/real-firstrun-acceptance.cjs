@@ -13,7 +13,7 @@ async function api(endpoint, payload = {}) {
 }
 
 (async () => {
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({channel: "chrome", headless: true});
     const page = await browser.newPage({viewport: {width: 1280, height: 780}, locale: "zh-CN"});
     const logs = [];
     page.on("pageerror", (e) => logs.push("PAGEERROR: " + String(e).slice(0, 160)));
