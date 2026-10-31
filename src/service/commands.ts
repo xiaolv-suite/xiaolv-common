@@ -107,7 +107,9 @@ export class HostBridge implements IHostBridge {
             const selection = window.getSelection();
             if (selection && selection.rangeCount > 0) {
                 const candidate = selection.getRangeAt(0);
-                if (protyleEl.contains(candidate.commonAncestorContainer)) {
+                const container = candidate.commonAncestorContainer;
+                const node = container instanceof Element ? container : container.parentElement;
+                if (node && node.closest('[data-node-id] [contenteditable="true"]') && protyleEl.contains(candidate.commonAncestorContainer)) {
                     range = candidate;
                 }
             }
@@ -115,7 +117,11 @@ export class HostBridge implements IHostBridge {
             if (!range) {
                 const toolbarRange = (editor.protyle as unknown as {toolbar?: {range?: Range}})?.toolbar?.range;
                 if (toolbarRange && protyleEl.contains(toolbarRange.commonAncestorContainer)) {
-                    range = toolbarRange;
+                    const container = toolbarRange.commonAncestorContainer;
+                    const node = container instanceof Element ? container : container.parentElement;
+                    if (node && node.closest('[data-node-id] [contenteditable="true"]')) {
+                        range = toolbarRange;
+                    }
                 }
             }
             // 若文档刚打开尚未点击段落产生光标，回退到文档末尾可编辑块末尾，确保「点击插入」真实落入当前打开的文档
@@ -134,8 +140,12 @@ export class HostBridge implements IHostBridge {
             }
             if (!range) return {editor, handle: null, docId};
             if (typeof editor.protyle.trackRange === "function") {
-                const handle = editor.protyle.trackRange(range, {owner: this.owner, affinity: "after"});
-                if (handle) return {editor, handle, docId};
+                try {
+                    const handle = editor.protyle.trackRange(range, {owner: this.owner, affinity: "after"});
+                    if (handle) return {editor, handle, docId};
+                } catch {
+                    // trackRange 在严格校验非直接源块选区时可能抛错，平滑回退到内部 Range 快照
+                }
             }
             return {editor, handle: {__xlcFallbackRange: range.cloneRange()} as unknown as ITrackedRangeHandle, docId};
         } catch {
@@ -197,9 +207,17 @@ export class HostBridge implements IHostBridge {
                 }
                 const selection = window.getSelection();
                 if (!selection) return false;
-                editor.focus();
-                selection.removeAllRanges();
-                selection.addRange(rangeToRestore);
+                if (typeof (editor as any).focus === "function") {
+                    (editor as any).focus();
+                } else if (typeof (editor as any).protyle?.getInstance === "function" && typeof (editor as any).protyle.getInstance()?.focus === "function") {
+                    (editor as any).protyle.getInstance().focus();
+                } else if (typeof (editor as any).protyle?.element?.focus === "function") {
+                    (editor as any).protyle.element.focus();
+                }
+                try {
+                    selection.removeAllRanges();
+                    selection.addRange(rangeToRestore);
+                } catch {}
                 const protyleToolbar = (editor.protyle as unknown as {toolbar?: {range?: Range}})?.toolbar;
                 if (protyleToolbar) protyleToolbar.range = rangeToRestore;
             }
@@ -218,11 +236,22 @@ export class HostBridge implements IHostBridge {
                     }
                 }
             } catch {
-                // 忽略异常，平滑降级走 editor.insert
+                // 忽略异常，平滑降级走 Protyle.insert
             }
 
-            editor.insert(markdown, true, false);
-            return true;
+            const protyleInstance = typeof (editor as any).insert === "function"
+                ? editor
+                : (typeof editor.protyle?.getInstance === "function" ? editor.protyle.getInstance() : editor.protyle);
+
+            if (typeof (protyleInstance as any)?.insert === "function") {
+                (protyleInstance as any).insert(markdown, true, false);
+                return true;
+            }
+            if (typeof (editor as any)?.insert === "function") {
+                (editor as any).insert(markdown, true, false);
+                return true;
+            }
+            return false;
         } catch {
             return false;
         }

@@ -11,7 +11,7 @@ import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {LIMITS, PLUGIN_VERSION, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
 import {createKernelClient, parseExistingMap, type IKernelClient, type SyncPost, type SyncPostContext} from "./kernel/client";
-import {CommonItem, cleanShortcode, isBlockId, isItemType, isSafeHttpUrl, resolveBlockRefTarget} from "./model/item";
+import {CommonItem, cleanShortcode, isBlockId, isItemType, isSafeHttpUrl, kramdownToPlainText, resolveBlockRefTarget} from "./model/item";
 import {toErrorMessage} from "./model/errors";
 import {getSingleDocTreeDiscoveryTarget} from "./model/discovery-target";
 import {InsertMode, buildBlockRef, buildEmbedBlock} from "./model/actions";
@@ -2068,6 +2068,21 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.persistSoon();
             },
             runAction: (itemId, mode) => withEditorTarget(mode, async () => {
+                if (itemId.startsWith("xlc-omni-") || itemId.startsWith("xlc-clip-")) {
+                    const active = this.searchDialog?.getActiveEntry();
+                    const content = active?.content || active?.summary || "";
+                    if (mode.startsWith("copy")) {
+                        const ok = await this.host.writeClipboard(kramdownToPlainText(content));
+                        const msg = ok ? this.i18nFn()("copied", shortTitle(active?.title || "条目")) : this.i18nFn()("copyFailed");
+                        this.notify(ok ? "info" : "error", msg);
+                        return {ok, message: msg};
+                    } else {
+                        const ok = this.host.insertMarkdown(content, editorTarget ?? undefined);
+                        const msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
+                        this.notify(ok ? "info" : "error", msg);
+                        return {ok, message: msg};
+                    }
+                }
                 const got = await this.library.getItem(itemId);
                 if (!got.ok) {
                     this.notify("error", got.message);
@@ -2081,6 +2096,21 @@ export default class XiaolvCommonPlugin extends Plugin {
                 return {ok: receipt.ok, message: msg};
             }),
             runActionWithFills: (itemId, mode, fills) => withEditorTarget(mode, async () => {
+                if (itemId.startsWith("xlc-omni-") || itemId.startsWith("xlc-clip-")) {
+                    const active = this.searchDialog?.getActiveEntry();
+                    const content = active?.content || active?.summary || "";
+                    if (mode.startsWith("copy")) {
+                        const ok = await this.host.writeClipboard(kramdownToPlainText(content));
+                        const msg = ok ? this.i18nFn()("copied", shortTitle(active?.title || "条目")) : this.i18nFn()("copyFailed");
+                        this.notify(ok ? "info" : "error", msg);
+                        return {ok, message: msg};
+                    } else {
+                        const ok = this.host.insertMarkdown(content, editorTarget ?? undefined);
+                        const msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
+                        this.notify(ok ? "info" : "error", msg);
+                        return {ok, message: msg};
+                    }
+                }
                 const got = await this.library.getItem(itemId);
                 if (!got.ok) {
                     this.notify("error", got.message);

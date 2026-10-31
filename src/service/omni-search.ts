@@ -583,7 +583,11 @@ export class OmniSearchService {
     async searchInCurrentDoc(keyword: string): Promise<SearchEntry[]> {
         const active = this.getActiveDoc();
         if (!active || !active.docId) return [];
-        return searchCurrentDocumentBlocks(this.kernel, active.docId, keyword, {docPath: active.hPath});
+        try {
+            return await searchCurrentDocumentBlocks(this.kernel, active.docId, keyword, {docPath: active.hPath});
+        } catch {
+            return [];
+        }
     }
 
     async searchInAllNotes(keyword: string): Promise<SearchEntry[]> {

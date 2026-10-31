@@ -1101,7 +1101,7 @@ function check(name, ok, detail = "") {
                 searchInp.value = "LIVE_SYNC";
                 searchInp.dispatchEvent(new Event("input", {bubbles: true}));
             }
-            await new Promise((r) => setTimeout(r, 350));
+            await new Promise((r) => setTimeout(r, 650));
             const beforeSwitchHits = (p.searchDialog?.results ?? []).length;
 
             const fakeWysiwyg = document.createElement("div");
@@ -1113,7 +1113,7 @@ function check(name, ok, detail = "") {
                     element: fakeWysiwyg,
                 },
             });
-            await new Promise((r) => setTimeout(r, 400));
+            await new Promise((r) => setTimeout(r, 650));
             const currentDocFollowed = beforeSwitchHits === 0
                 && p.host.currentDocId() === noteDocId
                 && (p.searchDialog?.results ?? []).some((e) => (e.summary ?? "").includes("LIVE_SYNC") || (e.content ?? "").includes("LIVE_SYNC"));

@@ -1118,7 +1118,17 @@ export class CommonSearchDialog {
                 return;
             }
             const entry = this.results[this.activeIndex];
-            if (entry) void this.deps.runAction(entry.id, "copy");
+            if (entry) {
+                if (entry.isOmni) {
+                    const textToCopy = kramdownToPlainText(entry.content || entry.summary || "");
+                    void this.deps.copyText(textToCopy).then((ok) => {
+                        if (ok) this.deps.notify?.("info", this.deps.t("copied", entry.title || "条目"));
+                        else this.deps.notify?.("error", this.deps.t("copyFailed"));
+                    });
+                    return;
+                }
+                void this.deps.runAction(entry.id, "copy");
+            }
         });
         // AI 变换：打开动作菜单（含 AI 变换分区；原型窗格底部第三按钮）
         const aiBtn = document.createElement("button");

@@ -240,8 +240,8 @@ export async function writeRichClipboard(
                 const div = document.createElement("div");
                 div.innerHTML = html;
                 div.style.position = "fixed";
-                div.style.opacity = "0";
-                div.style.pointerEvents = "none";
+                div.style.left = "-9999px";
+                div.style.top = "-9999px";
                 document.body.appendChild(div);
 
                 const range = document.createRange();
@@ -265,10 +265,19 @@ export async function writeRichClipboard(
             const ta = document.createElement("textarea");
             ta.value = text;
             ta.style.position = "fixed";
-            ta.style.opacity = "0";
-            ta.style.pointerEvents = "none";
+            ta.style.top = "0";
+            ta.style.left = "0";
+            ta.style.width = "2em";
+            ta.style.height = "2em";
+            ta.style.padding = "0";
+            ta.style.border = "none";
+            ta.style.outline = "none";
+            ta.style.boxShadow = "none";
+            ta.style.background = "transparent";
             document.body.appendChild(ta);
+            ta.focus();
             ta.select();
+            ta.setSelectionRange(0, text.length);
             const okFlag = document.execCommand("copy");
             ta.remove();
             return okFlag;
