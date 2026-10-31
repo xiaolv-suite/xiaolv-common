@@ -1604,7 +1604,7 @@ export default class XiaolvCommonPlugin extends Plugin {
 
     public recordClipboard(text: string): void {
         if (!this.state.clipboardHistoryEnabled) return;
-        this.state.clipboardHistory = pushClipboardHistory(this.state.clipboardHistory, text);
+        this.state.clipboardHistory = pushClipboardHistory(this.state.clipboardHistory, text, this.state.clipboardHistoryLimit ?? 30);
         this.persistSoon();
     }
 

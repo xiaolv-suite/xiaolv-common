@@ -637,15 +637,125 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const clipSwitchRow = buildSwitchRow(
         t("clipboardHistoryToggle"),
         t("clipboardHistorySub"),
-        Boolean(ctx.state.clipboardHistoryEnabled),
+        !(ctx.state.clipboardHistoryEnabled === false),
         (value) => {
             ctx.state.clipboardHistoryEnabled = value;
+            syncClipLimitUi();
             ctx.persistSoon();
         },
     );
     const clipSwitchInput = clipSwitchRow.querySelector<HTMLInputElement>("input[type='checkbox']");
     if (clipSwitchInput) clipSwitchInput.dataset.xlcControl = "settings.prefs.clipboardHistoryEnabled";
     sec.appendChild(clipSwitchRow);
+
+    // 剪贴板历史容量设置行（默认 30 条，支持 30/50/80/100 或自定义，最大 100 条）
+    const clipLimitRow = document.createElement("div");
+    clipLimitRow.className = "xlc-setting-row";
+    clipLimitRow.dataset.xlcControl = "settings.prefs.clipboardLimitRow";
+
+    const clipLimitCol = document.createElement("div");
+    clipLimitCol.className = "xlc-setting-text";
+    const clipLimitTitle = document.createElement("div");
+    clipLimitTitle.textContent = t("clipboardLimitLabel");
+    const clipLimitSub = document.createElement("div");
+    clipLimitSub.className = "xlc-setting-sub";
+    clipLimitSub.textContent = t("clipboardLimitSub");
+    clipLimitCol.append(clipLimitTitle, clipLimitSub);
+    clipLimitRow.appendChild(clipLimitCol);
+
+    const clipLimitControls = document.createElement("div");
+    clipLimitControls.style.cssText = "display:inline-flex; align-items:center; gap:8px;";
+
+    const clipLimitSelect = document.createElement("select");
+    clipLimitSelect.className = "b3-select";
+    clipLimitSelect.dataset.xlcControl = "settings.prefs.clipboardLimitSelect";
+    clipLimitSelect.setAttribute("aria-label", t("clipboardLimitLabel"));
+    const presets = [
+        {value: "30", label: "30 条（推荐）"},
+        {value: "50", label: "50 条"},
+        {value: "80", label: "80 条"},
+        {value: "100", label: "100 条（上限）"},
+        {value: "custom", label: "自定义..."},
+    ];
+    for (const p of presets) {
+        const opt = document.createElement("option");
+        opt.value = p.value;
+        opt.textContent = p.label;
+        clipLimitSelect.appendChild(opt);
+    }
+
+    const clipLimitInput = document.createElement("input");
+    clipLimitInput.type = "number";
+    clipLimitInput.className = "b3-text-field";
+    clipLimitInput.style.cssText = "width:72px; text-align:center; display:none;";
+    clipLimitInput.min = "10";
+    clipLimitInput.max = "100";
+    clipLimitInput.step = "1";
+    clipLimitInput.dataset.xlcControl = "settings.prefs.clipboardLimitInput";
+    clipLimitInput.setAttribute("aria-label", "自定义条数");
+
+    const currentLimit = ctx.state.clipboardHistoryLimit ?? 30;
+    const isPreset = ["30", "50", "80", "100"].includes(String(currentLimit));
+    clipLimitSelect.value = isPreset ? String(currentLimit) : "custom";
+    clipLimitInput.value = String(currentLimit);
+    if (!isPreset) clipLimitInput.style.display = "";
+
+    const applyNewLimit = (val: number): void => {
+        const clamped = Math.max(10, Math.min(100, Math.round(val) || 30));
+        ctx.state.clipboardHistoryLimit = clamped;
+        if (ctx.state.clipboardHistory && ctx.state.clipboardHistory.length > clamped) {
+            ctx.state.clipboardHistory = ctx.state.clipboardHistory.slice(0, clamped);
+        }
+        ctx.persistSoon();
+    };
+
+    clipLimitSelect.addEventListener("change", () => {
+        if (clipLimitSelect.value === "custom") {
+            clipLimitInput.style.display = "";
+            clipLimitInput.focus();
+            clipLimitInput.select();
+        } else {
+            clipLimitInput.style.display = "none";
+            const val = Number(clipLimitSelect.value);
+            clipLimitInput.value = String(val);
+            applyNewLimit(val);
+        }
+    });
+
+    clipLimitInput.addEventListener("change", () => {
+        const val = Number(clipLimitInput.value);
+        applyNewLimit(val);
+        clipLimitInput.value = String(ctx.state.clipboardHistoryLimit ?? 30);
+    });
+
+    const clearClipBtn = document.createElement("button");
+    clearClipBtn.type = "button";
+    clearClipBtn.className = "b3-button";
+    clearClipBtn.dataset.xlcControl = "settings.prefs.clearClipboardHistory";
+    clearClipBtn.textContent = t("clearClipboardBtn");
+    clearClipBtn.title = t("clearClipboardBtn");
+    clearClipBtn.addEventListener("click", () => {
+        const count = (ctx.state.clipboardHistory ?? []).length;
+        if (count === 0) {
+            ctx.notify("info", t("clearClipboardEmpty"));
+            return;
+        }
+        confirm("⚠️ " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
+            ctx.state.clipboardHistory = [];
+            ctx.persistSoon();
+            ctx.notify("info", t("clearClipboardDone"));
+        });
+    });
+
+    clipLimitControls.append(clipLimitSelect, clipLimitInput, clearClipBtn);
+    clipLimitRow.appendChild(clipLimitControls);
+    sec.appendChild(clipLimitRow);
+
+    const syncClipLimitUi = (): void => {
+        const on = !(ctx.state.clipboardHistoryEnabled === false);
+        clipLimitRow.style.display = on ? "" : "none";
+    };
+    syncClipLimitUi();
     const foot = document.createElement("div");
     foot.className = "xlc-setting-row";
     const hint = document.createElement("span");

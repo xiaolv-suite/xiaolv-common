@@ -240,9 +240,11 @@ export interface PluginState {
     insert: InsertPrefs;
     /** 变量填写值记忆（ADR 0074 / G22 / T-0133）：只存侧车，绝不出域 */
     variableMemory: VariableMemory;
-    /** 剪贴板历史开关（默认 false，需用户主动开启；关闭时不读取剪贴板，已有记录保留） */
+    /** 剪贴板历史开关（默认 true 开启，可在设置中随时关闭；关闭时不读取剪贴板，已有记录保留） */
     clipboardHistoryEnabled?: boolean;
-    /** 剪贴板历史暂存（流式暂存栈，上限 30 条，只存侧车不建块） */
+    /** 剪贴板历史暂存容量上限（默认 30 条，支持 30/50/80/100 或自由输入，严格上限 100 条） */
+    clipboardHistoryLimit?: number;
+    /** 剪贴板历史暂存（流式暂存栈，上限根据设置动态修剪 10~100 条，只存侧车不建块） */
     clipboardHistory: ClipboardHistoryEntry[];
     /** 变量填参预设方案（按条目或模板标题归档的多套方案：itemId -> 方案名 -> 字段键值对） */
     variablePresets?: Record<string, Record<string, Record<string, string>>>;
@@ -349,10 +351,19 @@ export function normalizeState(raw: unknown): PluginState {
             recordUsage: !(insertRaw.recordUsage === false),
         },
         variableMemory: normalizeVariableMemory(obj.variableMemory),
-        clipboardHistoryEnabled: obj.clipboardHistoryEnabled === true,
-        clipboardHistory: normalizeClipboardHistory(obj.clipboardHistory),
+        clipboardHistoryEnabled: !(obj.clipboardHistoryEnabled === false),
+        clipboardHistoryLimit: normalizeClipboardLimit(obj.clipboardHistoryLimit),
+        clipboardHistory: normalizeClipboardHistory(obj.clipboardHistory, normalizeClipboardLimit(obj.clipboardHistoryLimit)),
         variablePresets: normalizeVariablePresets(obj.variablePresets),
     };
+}
+
+export function normalizeClipboardLimit(raw: unknown): number {
+    const num = Number(raw);
+    if (!Number.isInteger(num)) return 30;
+    if (num < 10) return 10;
+    if (num > 100) return 100;
+    return num;
 }
 
 function normalizeVariablePresets(raw: unknown): Record<string, Record<string, Record<string, string>>> {
@@ -381,7 +392,8 @@ function normalizeVariablePresets(raw: unknown): Record<string, Record<string, R
     return variablePresets;
 }
 
-function normalizeClipboardHistory(raw: unknown): ClipboardHistoryEntry[] {
+function normalizeClipboardHistory(raw: unknown, limit = 30): ClipboardHistoryEntry[] {
+    const maxLimit = typeof limit === "number" && limit > 0 ? Math.min(100, limit) : 30;
     const clipRaw = Array.isArray(raw) ? raw : [];
     const clipboardHistory: ClipboardHistoryEntry[] = [];
     const clipSeen = new Set<string>();
@@ -393,17 +405,18 @@ function normalizeClipboardHistory(raw: unknown): ClipboardHistoryEntry[] {
         if (!Number.isFinite(copiedAt) || copiedAt <= 0) continue;
         clipSeen.add(text);
         clipboardHistory.push({text, copiedAt});
-        if (clipboardHistory.length >= 30) break;
+        if (clipboardHistory.length >= maxLimit) break;
     }
     return clipboardHistory;
 }
 
 export function pushClipboardHistory(list: ClipboardHistoryEntry[] | undefined, text: string, max = 30): ClipboardHistoryEntry[] {
+    const maxLimit = typeof max === "number" && max > 0 ? Math.min(100, max) : 30;
     const clean = (text ?? "").trim();
     if (!clean || clean.length < 2 || clean.length > 8000) return list ? [...list] : [];
     const current = (list ?? []).filter((e) => e.text !== clean);
     current.unshift({text: clean, copiedAt: Date.now()});
-    return current.slice(0, max);
+    return current.slice(0, maxLimit);
 }
 
 /**

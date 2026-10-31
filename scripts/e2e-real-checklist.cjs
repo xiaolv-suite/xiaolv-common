@@ -494,32 +494,56 @@ function check(name, ok, detail = "") {
         check("步骤 9：100%/125%/150% 三档视口下真实宿主弹窗主按钮全部在视口内可点中",
             vpChecks.every((s) => s.includes(":true(")), vpChecks.join(", "));
 
-        // ══════════ 第 10 步：剪贴板历史默认关闭与主动开启 ══════════
+        // ══════════ 第 10 步：剪贴板历史默认开启、容量限制（默认30/最高100）与主动关闭 ══════════
         const clipTest = await page.evaluate(async () => {
             const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
-            const defaultOff = p.state.clipboardHistoryEnabled === false;
-            const beforeLen = (p.state.clipboardHistory ?? []).length;
-            p.recordClipboard("默认关闭时绝不应被记录的文本");
-            const afterOffLen = (p.state.clipboardHistory ?? []).length;
-            return {defaultOff, blockedWhenOff: beforeLen === afterOffLen};
+            const defaultOn = p.state.clipboardHistoryEnabled === true;
+            const defaultLimit = p.state.clipboardHistoryLimit ?? 30;
+            p.recordClipboard("默认开启后自动采集的剪贴板文本");
+            const recorded = (p.state.clipboardHistory ?? []).some((x) => x.text === "默认开启后自动采集的剪贴板文本");
+            return {defaultOn, defaultLimit, recorded};
         });
         await page.locator(".xlc-footer-gear").click();
         await page.waitForSelector("[data-xlc-control='settings.prefs.clipboardHistoryEnabled']", {state: "attached", timeout: 10000});
+        // 验证容量设置与主动关闭
         await page.evaluate(() => {
             const el = document.querySelector("[data-xlc-control='settings.prefs.clipboardHistoryEnabled']");
             el?.scrollIntoView({block: "center"});
-            el?.click();
+            el?.click(); // 关闭
         });
-        const clipAfterOptIn = await page.evaluate(() => {
+        const clipAfterOff = await page.evaluate(() => {
             const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
-            const enabledNow = p.state.clipboardHistoryEnabled === true;
-            p.recordClipboard("主动开启后正常记录的文本");
-            const recorded = (p.state.clipboardHistory ?? []).some((x) => x.text === "主动开启后正常记录的文本");
-            return {enabledNow, recorded};
+            const disabledNow = p.state.clipboardHistoryEnabled === false;
+            const beforeLen = (p.state.clipboardHistory ?? []).length;
+            p.recordClipboard("关闭后绝不应被记录的文本");
+            const afterLen = (p.state.clipboardHistory ?? []).length;
+            return {disabledNow, blockedWhenOff: beforeLen === afterLen};
         });
-        check("步骤 10：剪贴板历史默认关闭不采集，设置中主动开启后正常记录",
-            clipTest.defaultOff && clipTest.blockedWhenOff && clipAfterOptIn.enabledNow && clipAfterOptIn.recorded,
-            JSON.stringify({...clipTest, ...clipAfterOptIn}));
+        // 重新开启并调整容量为 50 条与 100 条上限
+        await page.evaluate(() => {
+            const el = document.querySelector("[data-xlc-control='settings.prefs.clipboardHistoryEnabled']");
+            el?.click(); // 重新开
+            const sel = document.querySelector("[data-xlc-control='settings.prefs.clipboardLimitSelect']");
+            if (sel) {
+                sel.value = "50";
+                sel.dispatchEvent(new Event("change", {bubbles: true}));
+            }
+        });
+        const limitTest = await page.evaluate(() => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const limit50 = p.state.clipboardHistoryLimit === 50;
+            // 测试上限 100 钳制
+            const inp = document.querySelector("[data-xlc-control='settings.prefs.clipboardLimitInput']");
+            if (inp) {
+                inp.value = "150";
+                inp.dispatchEvent(new Event("change", {bubbles: true}));
+            }
+            const clamped100 = p.state.clipboardHistoryLimit === 100;
+            return {limit50, clamped100};
+        });
+        check("步骤 10：剪贴板历史默认开启正常采集，支持容量档位设置（上限100条）与主动关闭",
+            clipTest.defaultOn && clipTest.recorded && clipAfterOff.disabledNow && clipAfterOff.blockedWhenOff && limitTest.limit50 && limitTest.clamped100,
+            JSON.stringify({...clipTest, ...clipAfterOff, ...limitTest}));
 
         // ══════════ 第 11 步：收尾批验证（Alt+H 真实路径、Alt+Shift+M 多选、QuickLook 双态与上下键同步、420px 窄窗不溢出） ══════════
         await page.evaluate(() => {

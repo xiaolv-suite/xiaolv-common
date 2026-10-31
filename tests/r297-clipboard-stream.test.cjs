@@ -108,16 +108,27 @@ test("service: getClipboardHistory 读取状态中的剪贴板历史", async () 
     assert.equal(res.data[0].text, "剪贴板条目测试");
 });
 
-test("normalizeState: 剪贴板历史采集默认关闭（需主动开启），但保留已有历史记录", () => {
+test("normalizeState: 剪贴板历史采集默认开启，支持设置容量上限（默认30，最高100），显式false时关闭", () => {
     const def = normalizeState({
         clipboardHistory: [{text: "已有记录不丢失", copiedAt: 100}],
     });
-    assert.equal(def.clipboardHistoryEnabled, false, "未显式开启时默认必须为 false");
-    assert.equal(def.clipboardHistory.length, 1, "默认关闭不得删除用户已有历史数据");
+    assert.equal(def.clipboardHistoryEnabled, true, "未显式关闭时默认必须为 true");
+    assert.equal(def.clipboardHistoryLimit, 30, "未显式指定上限时默认必须为 30");
+    assert.equal(def.clipboardHistory.length, 1, "不得删除用户已有历史数据");
 
-    const optedIn = normalizeState({
-        clipboardHistoryEnabled: true,
+    const closed = normalizeState({
+        clipboardHistoryEnabled: false,
         clipboardHistory: [{text: "已有记录不丢失", copiedAt: 100}],
     });
-    assert.equal(optedIn.clipboardHistoryEnabled, true);
+    assert.equal(closed.clipboardHistoryEnabled, false);
+
+    // 容量上限边界（上限 100 钳制，下限 10）
+    const cap100 = normalizeState({ clipboardHistoryLimit: 150 });
+    assert.equal(cap100.clipboardHistoryLimit, 100, "超过 100 自动钳制到 100");
+
+    const cap50 = normalizeState({ clipboardHistoryLimit: 50 });
+    assert.equal(cap50.clipboardHistoryLimit, 50);
+
+    const capLow = normalizeState({ clipboardHistoryLimit: 5 });
+    assert.equal(capLow.clipboardHistoryLimit, 10, "小于 10 自动钳制到 10");
 });

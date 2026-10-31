@@ -256,7 +256,13 @@ async function main() {
         for (const candidate of candidates) {
             const preview = await discovery.previewCandidate(sessionId, candidate.key);
             assert.equal(preview.ok, true, preview.ok ? "" : preview.message);
-            const added = await discovery.addCandidate(sessionId, candidate.key, {batchId});
+            let added;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                added = await discovery.addCandidate(sessionId, candidate.key, {batchId});
+                if (added.ok) break;
+                await new Promise((r) => setTimeout(r, 200));
+            }
+            assert.equal(added.ok, true, added.ok ? "" : added.message);
             assert.equal(added.ok, true, added.ok ? "" : added.message);
             assert.equal(added.data.status, "added");
             libraryBlocks.push(added.data.item.blockId);

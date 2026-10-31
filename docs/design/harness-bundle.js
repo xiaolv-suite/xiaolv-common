@@ -23853,6 +23853,7 @@ ${exception.mark.snippet}`;
     return ctx.t("kernelError", toErrorMessage(err));
   }
   function buildInsertSection(ctx, root) {
+    var _a;
     const t = ctx.t;
     const sec = document.createElement("div");
     sec.id = "xlc-settings-prefs";
@@ -23882,15 +23883,114 @@ ${exception.mark.snippet}`;
     const clipSwitchRow = buildSwitchRow(
       t("clipboardHistoryToggle"),
       t("clipboardHistorySub"),
-      Boolean(ctx.state.clipboardHistoryEnabled),
+      !(ctx.state.clipboardHistoryEnabled === false),
       (value) => {
         ctx.state.clipboardHistoryEnabled = value;
+        syncClipLimitUi();
         ctx.persistSoon();
       }
     );
     const clipSwitchInput = clipSwitchRow.querySelector("input[type='checkbox']");
     if (clipSwitchInput) clipSwitchInput.dataset.xlcControl = "settings.prefs.clipboardHistoryEnabled";
     sec.appendChild(clipSwitchRow);
+    const clipLimitRow = document.createElement("div");
+    clipLimitRow.className = "xlc-setting-row";
+    clipLimitRow.dataset.xlcControl = "settings.prefs.clipboardLimitRow";
+    const clipLimitCol = document.createElement("div");
+    clipLimitCol.className = "xlc-setting-text";
+    const clipLimitTitle = document.createElement("div");
+    clipLimitTitle.textContent = t("clipboardLimitLabel");
+    const clipLimitSub = document.createElement("div");
+    clipLimitSub.className = "xlc-setting-sub";
+    clipLimitSub.textContent = t("clipboardLimitSub");
+    clipLimitCol.append(clipLimitTitle, clipLimitSub);
+    clipLimitRow.appendChild(clipLimitCol);
+    const clipLimitControls = document.createElement("div");
+    clipLimitControls.style.cssText = "display:inline-flex; align-items:center; gap:8px;";
+    const clipLimitSelect = document.createElement("select");
+    clipLimitSelect.className = "b3-select";
+    clipLimitSelect.dataset.xlcControl = "settings.prefs.clipboardLimitSelect";
+    clipLimitSelect.setAttribute("aria-label", t("clipboardLimitLabel"));
+    const presets = [
+      { value: "30", label: "30 \u6761\uFF08\u63A8\u8350\uFF09" },
+      { value: "50", label: "50 \u6761" },
+      { value: "80", label: "80 \u6761" },
+      { value: "100", label: "100 \u6761\uFF08\u4E0A\u9650\uFF09" },
+      { value: "custom", label: "\u81EA\u5B9A\u4E49..." }
+    ];
+    for (const p of presets) {
+      const opt = document.createElement("option");
+      opt.value = p.value;
+      opt.textContent = p.label;
+      clipLimitSelect.appendChild(opt);
+    }
+    const clipLimitInput = document.createElement("input");
+    clipLimitInput.type = "number";
+    clipLimitInput.className = "b3-text-field";
+    clipLimitInput.style.cssText = "width:72px; text-align:center; display:none;";
+    clipLimitInput.min = "10";
+    clipLimitInput.max = "100";
+    clipLimitInput.step = "1";
+    clipLimitInput.dataset.xlcControl = "settings.prefs.clipboardLimitInput";
+    clipLimitInput.setAttribute("aria-label", "\u81EA\u5B9A\u4E49\u6761\u6570");
+    const currentLimit = (_a = ctx.state.clipboardHistoryLimit) != null ? _a : 30;
+    const isPreset = ["30", "50", "80", "100"].includes(String(currentLimit));
+    clipLimitSelect.value = isPreset ? String(currentLimit) : "custom";
+    clipLimitInput.value = String(currentLimit);
+    if (!isPreset) clipLimitInput.style.display = "";
+    const applyNewLimit = (val) => {
+      const clamped = Math.max(10, Math.min(100, Math.round(val) || 30));
+      ctx.state.clipboardHistoryLimit = clamped;
+      if (ctx.state.clipboardHistory && ctx.state.clipboardHistory.length > clamped) {
+        ctx.state.clipboardHistory = ctx.state.clipboardHistory.slice(0, clamped);
+      }
+      ctx.persistSoon();
+    };
+    clipLimitSelect.addEventListener("change", () => {
+      if (clipLimitSelect.value === "custom") {
+        clipLimitInput.style.display = "";
+        clipLimitInput.focus();
+        clipLimitInput.select();
+      } else {
+        clipLimitInput.style.display = "none";
+        const val = Number(clipLimitSelect.value);
+        clipLimitInput.value = String(val);
+        applyNewLimit(val);
+      }
+    });
+    clipLimitInput.addEventListener("change", () => {
+      var _a2;
+      const val = Number(clipLimitInput.value);
+      applyNewLimit(val);
+      clipLimitInput.value = String((_a2 = ctx.state.clipboardHistoryLimit) != null ? _a2 : 30);
+    });
+    const clearClipBtn = document.createElement("button");
+    clearClipBtn.type = "button";
+    clearClipBtn.className = "b3-button";
+    clearClipBtn.dataset.xlcControl = "settings.prefs.clearClipboardHistory";
+    clearClipBtn.textContent = t("clearClipboardBtn");
+    clearClipBtn.title = t("clearClipboardBtn");
+    clearClipBtn.addEventListener("click", () => {
+      var _a2;
+      const count = ((_a2 = ctx.state.clipboardHistory) != null ? _a2 : []).length;
+      if (count === 0) {
+        ctx.notify("info", t("clearClipboardEmpty"));
+        return;
+      }
+      (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
+        ctx.state.clipboardHistory = [];
+        ctx.persistSoon();
+        ctx.notify("info", t("clearClipboardDone"));
+      });
+    });
+    clipLimitControls.append(clipLimitSelect, clipLimitInput, clearClipBtn);
+    clipLimitRow.appendChild(clipLimitControls);
+    sec.appendChild(clipLimitRow);
+    const syncClipLimitUi = () => {
+      const on = !(ctx.state.clipboardHistoryEnabled === false);
+      clipLimitRow.style.display = on ? "" : "none";
+    };
+    syncClipLimitUi();
     const foot = document.createElement("div");
     foot.className = "xlc-setting-row";
     const hint = document.createElement("span");
@@ -23909,10 +24009,10 @@ ${exception.mark.snippet}`;
     clearBtn.addEventListener("click", () => {
       if (!hasUsage()) return;
       (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
-        var _a;
+        var _a2;
         ctx.state.usage = {};
         ctx.persistSoon();
-        (_a = ctx.refreshSearch) == null ? void 0 : _a.call(ctx);
+        (_a2 = ctx.refreshSearch) == null ? void 0 : _a2.call(ctx);
         syncClearUsage();
         paintSummary();
         ctx.notify("info", t("clearUsageDone"));
@@ -38737,8 +38837,14 @@ ${details.join("\n")}` : ""}`;
     reindex: "\u5237\u65B0\u5185\u5BB9\u5E93",
     filterCommon: "\u5E38\u7528",
     syncDiffBtn: "\u540C\u6B65\u51B2\u7A81\u6BD4\u5BF9",
-    clipboardHistoryToggle: "\u8BB0\u5F55\u526A\u8D34\u677F\u5386\u53F2\uFF08\u9700\u4E3B\u52A8\u5F00\u542F\uFF09",
-    clipboardHistorySub: "\u5F00\u542F\u540E\u6682\u5B58\u6700\u8FD1 30 \u6761\u590D\u5236\u6587\u672C\uFF0C\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\u4FA7\u8F66\uFF1B\u5173\u95ED\u65F6\u4E0D\u8BFB\u53D6\u7CFB\u7EDF\u526A\u8D34\u677F\uFF0C\u5DF2\u6709\u8BB0\u5F55\u4FDD\u7559",
+    clipboardHistoryToggle: "\u8BB0\u5F55\u526A\u8D34\u677F\u5386\u53F2\uFF08\u9ED8\u8BA4\u5F00\u542F\uFF09",
+    clipboardHistorySub: "\u81EA\u52A8\u5728\u672C\u5730\u4FA7\u8F66\u6682\u5B58\u590D\u5236\u6587\u672C\uFF0C\u4EC5\u5B58\u672C\u5730\u7EDD\u4E0D\u4E0A\u4E91\uFF1B\u5173\u95ED\u65F6\u4E0D\u8BFB\u53D6\u7CFB\u7EDF\u526A\u8D34\u677F\uFF0C\u5DF2\u6709\u8BB0\u5F55\u4FDD\u7559",
+    clipboardLimitLabel: "\u526A\u8D34\u677F\u5386\u53F2\u6682\u5B58\u5BB9\u91CF",
+    clipboardLimitSub: "\u9ED8\u8BA4 30 \u6761\uFF0C\u652F\u6301\u8BBE\u7F6E 30/50/80/100 \u6761\u6216\u81EA\u5B9A\u4E49\uFF08\u4E25\u683C\u4E0A\u9650 100 \u6761\uFF09",
+    clearClipboardBtn: "\u6E05\u7A7A\u526A\u8D34\u677F",
+    clearClipboardConfirm: "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u6682\u5B58\u7684\u6240\u6709\u526A\u8D34\u677F\u5386\u53F2\u8BB0\u5F55\u5417\uFF1F",
+    clearClipboardDone: "\u5DF2\u6E05\u7A7A\u526A\u8D34\u677F\u5386\u53F2",
+    clearClipboardEmpty: "\u6682\u65E0\u526A\u8D34\u677F\u5386\u53F2",
     openLibraryDoc: "\u5728\u601D\u6E90\u4E2D\u6253\u5F00\u5E38\u7528\u5E93\u6587\u6863",
     insertBlockRef: "\u63D2\u5165\u4E3A\u601D\u6E90\u5757\u5F15\u7528",
     setupCreateAndEnter: "\u4E00\u952E\u521B\u5EFA\u5E76\u5B8C\u6210 (Enter)"
