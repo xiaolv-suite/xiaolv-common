@@ -6,7 +6,7 @@
 // AI：? 前缀语义找条目（默认仅元数据出域）；动作菜单 AI 变换（预览后选插入，原文永不被改写）。
 import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
-import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations} from "../model/item";
+import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations, extractCleanPayload} from "../model/item";
 import {ItemSortMode} from "../model/storage";
 import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
@@ -49,6 +49,8 @@ export interface DialogDeps {
     notify?: (kind: "info" | "error", message: string) => void;
     /** 打开搜索面板时主动注入的初始查询词（例如从编辑器划选文本时带入） */
     initialQuery?: string;
+    /** 打开搜索面板时主动指定的初始范围（如直接从斜杠菜单呼出 clipboard 剪贴板历史） */
+    initialScope?: SearchScope;
     search: (query: SearchQuery) => Promise<{entries: SearchEntry[]; truncated: boolean; total: number; loading?: boolean; error?: string}>;
     /** 文档搜索（插入到指定文档的选择器） */
     searchDocs: (k: string) => Promise<Array<{id: string; hPath: string; name: string}>>;
@@ -213,6 +215,9 @@ export class CommonSearchDialog {
     open(): void {
         const isMobile = this.deps.isMobile();
         void this.deps.syncSystemClipboard?.();
+        if (this.deps.initialScope) {
+            this.currentScope = this.deps.initialScope;
+        }
         this.prevActiveElement = (document.activeElement as HTMLElement | null);
         const dialog = new Dialog({
             title: this.deps.t("pluginName"),
@@ -251,7 +256,9 @@ export class CommonSearchDialog {
             const queryToFill = initial || this.deps.getLastQuery();
             if (queryToFill) {
                 input.value = queryToFill;
-                this.currentScope = "all";
+                if (!this.deps.initialScope) {
+                    this.currentScope = "all";
+                }
                 input.dispatchEvent(new Event("input", {bubbles: true}));
                 if (initial) {
                     // 若是由划选文本带入，全选以便用户可直接回车确认或敲键覆盖
@@ -1263,19 +1270,30 @@ export class CommonSearchDialog {
         saveOmni.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
             if (entry && this.deps.createFromOmni) {
+                const isClip = Boolean(entry && entry.id.startsWith("xlc-clip-"));
+                const label = isClip ? (this.deps.t("promoteToCommon") || "沉淀为常用语") : this.deps.t("saveToCommon");
                 saveOmni.disabled = true;
                 saveOmni.textContent = this.deps.t("loading");
                 void this.deps.createFromOmni(entry).then((ok) => {
                     if (ok) {
                         this.capturedOmniIds.add(entry.id);
-                        saveOmni.textContent = "✓ " + this.deps.t("saveToCommon");
+                        saveOmni.textContent = "✓ 已" + label;
+                        const activeRow = this.dialog?.element.querySelector<HTMLElement>(`[data-xlc-item-id="${entry.id}"]`);
+                        const rowSaveBtn = activeRow?.querySelector<HTMLButtonElement>('[data-xlc-control="item.save-to-common"]');
+                        if (rowSaveBtn) {
+                            rowSaveBtn.textContent = "✓";
+                            rowSaveBtn.disabled = true;
+                            rowSaveBtn.title = "已" + label;
+                        }
                     } else {
                         saveOmni.disabled = false;
-                        saveOmni.textContent = "✦ " + this.deps.t("saveToCommon") + " (Alt+S)";
+                        const icon = isClip ? "⭐ " : "✦ ";
+                        saveOmni.textContent = icon + label + " (Alt+S)";
                     }
                 }).catch((err) => {
                     saveOmni.disabled = false;
-                    saveOmni.textContent = "✦ " + this.deps.t("saveToCommon") + " (Alt+S)";
+                    const icon = isClip ? "⭐ " : "✦ ";
+                    saveOmni.textContent = icon + label + " (Alt+S)";
                     this.deps.notify?.("error", toErrorMessage(err));
                 });
             }
@@ -1615,17 +1633,21 @@ export class CommonSearchDialog {
                     filtered = history.filter((h) => h.text.toLowerCase().includes(cleanKeyword));
                 }
                 const entries: SearchEntry[] = filtered.map((h, i) => {
+                    const parsed = parseSnippetAnnotations(h.text);
                     const firstLine = h.text.trim().split(/[\r\n]+/)[0]?.slice(0, 35) || "剪贴板文本";
+                    const displayTitle = parsed.title ? `📋 ${parsed.title}` : `📋 ${firstLine}`;
+                    const tags = Array.from(new Set(["剪贴板", ...parsed.tags].filter(Boolean)));
+                    const cleanText = parsed.cleanText || h.text;
                     return {
                         id: `xlc-clip-${i}`,
                         blockId: "",
                         libraryDocId: "",
-                        title: `📋 ${firstLine}`,
+                        title: displayTitle,
                         content: h.text,
-                        summary: h.text.slice(0, 100).replace(/[\s\r\n]+/g, " "),
-                        itemType: inferTypeFromText(h.text),
+                        summary: cleanText.slice(0, 100).replace(/[\s\r\n]+/g, " "),
+                        itemType: inferTypeFromText(cleanText),
                         category: "剪贴板",
-                        tags: ["剪贴板"],
+                        tags,
                         alias: "",
                         createdAt: h.copiedAt,
                         updatedAt: h.copiedAt,
@@ -1900,6 +1922,7 @@ export class CommonSearchDialog {
         }
         row.dataset.xlcControl = "item.row";
         row.dataset.xlcIndex = String(index);
+        row.dataset.xlcItemId = entry.id;
         row.id = `xlc-result-${index}`;
         row.setAttribute("role", "listitem");
         row.setAttribute("aria-current", index === this.activeIndex ? "true" : "false");
@@ -2061,7 +2084,8 @@ export class CommonSearchDialog {
             const summarySpan = document.createElement("span");
             summarySpan.className = "xlc-row-summary";
             const tokens = this.lastQueryText ? splitSearchTokens(this.lastQueryText) : [];
-            const summaryText = deriveSmartSummary(sourceTextForSummary, tokens, 90);
+            const cleanSummarySource = (entry.itemType !== "code") ? extractCleanPayload(sourceTextForSummary) : sourceTextForSummary;
+            const summaryText = deriveSmartSummary(cleanSummarySource, tokens, 90);
             const prefix = (shownTags.length > 0 || (entry.isOmni && entry.category)) ? " · " : "";
             if (prefix) summarySpan.appendChild(document.createTextNode(prefix));
             if (this.lastQueryText && !this.lastQueryText.startsWith("?") && !this.aiResults) {
@@ -2086,19 +2110,48 @@ export class CommonSearchDialog {
 
         if (entry.isOmni) {
             if (entry.id.startsWith("xlc-clip-")) {
+                const actionsWrap = document.createElement("div");
+                actionsWrap.className = "xlc-row-action-wrap";
+                actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
+
+                const isCaptured = this.capturedOmniIds.has(entry.id);
                 const saveBtn = document.createElement("button");
                 saveBtn.className = "b3-button b3-button--small xlc-row-action";
                 saveBtn.dataset.xlcControl = "item.save-to-common";
-                saveBtn.textContent = "✦";
-                saveBtn.title = "沉淀为常用语 (Alt+S)";
-                saveBtn.setAttribute("aria-label", "沉淀为常用语");
-                saveBtn.addEventListener("click", (e) => {
+                saveBtn.textContent = isCaptured ? "✓" : "⭐";
+                saveBtn.title = isCaptured ? "已沉淀为常用语" : "一键沉淀为常用语 (Alt+S)";
+                saveBtn.setAttribute("aria-label", isCaptured ? "已沉淀为常用语" : "一键沉淀为常用语");
+                saveBtn.disabled = isCaptured;
+                saveBtn.addEventListener("click", async (e) => {
                     e.stopPropagation();
-                    if (this.deps.captureOmniWithForm) {
-                        this.deps.captureOmniWithForm(entry);
+                    if (this.deps.createFromOmni) {
+                        const ok = await this.deps.createFromOmni(entry);
+                        if (ok) {
+                            this.capturedOmniIds.add(entry.id);
+                            saveBtn.textContent = "✓";
+                            saveBtn.disabled = true;
+                            saveBtn.title = "已沉淀为常用语";
+                            this.syncPaneActions();
+                        }
                     }
                 });
-                row.appendChild(saveBtn);
+                actionsWrap.appendChild(saveBtn);
+
+                if (this.deps.captureOmniWithForm) {
+                    const editBtn = document.createElement("button");
+                    editBtn.className = "b3-button b3-button--small xlc-row-action";
+                    editBtn.dataset.xlcControl = "item.edit-capture";
+                    editBtn.textContent = "✎";
+                    editBtn.title = "编辑后沉淀为常用语";
+                    editBtn.setAttribute("aria-label", "编辑后沉淀为常用语");
+                    editBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        this.deps.captureOmniWithForm?.(entry);
+                    });
+                    actionsWrap.appendChild(editBtn);
+                }
+
+                row.appendChild(actionsWrap);
             } else {
                 const actionsWrap = document.createElement("div");
                 actionsWrap.className = "xlc-row-action-wrap";
@@ -2688,8 +2741,15 @@ export class CommonSearchDialog {
                 }
                 if (act === "save-omni") {
                     const isCaptured = entry ? this.capturedOmniIds.has(entry.id) : false;
-                    btn.textContent = isCaptured ? "✓ " + this.deps.t("saveToCommon") : "✦ " + this.deps.t("saveToCommon") + " (Alt+S)";
+                    const isClip = Boolean(entry && entry.id.startsWith("xlc-clip-"));
+                    const label = isClip ? (this.deps.t("promoteToCommon") || "沉淀为常用语") : this.deps.t("saveToCommon");
+                    const icon = isClip ? "⭐ " : "✦ ";
+                    btn.textContent = isCaptured ? "✓ 已" + label : icon + label + " (Alt+S)";
                     btn.disabled = isCaptured;
+                }
+                if (act === "edit-and-capture-omni") {
+                    const isClip = Boolean(entry && entry.id.startsWith("xlc-clip-"));
+                    btn.textContent = isClip ? "✎ " + (this.deps.t("editAndPromote") || "编辑后沉淀为常用语") : "✎ " + this.deps.t("editAndCapture");
                 }
                 if (act === "edit") {
                     btn.textContent = (isOmniScope && this.deps.quickEditBlock) ? "✎ " + this.deps.t("quickEditBlock") : this.deps.t("edit");
@@ -3766,6 +3826,27 @@ export class CommonSearchDialog {
                         addSilent("⊞", `转为 Markdown 表格并复制 (${table.rowCount}行×${table.colCount}列)`, async () => {
                             await this.deps.copyProviderPayload(table.result);
                             this.deps.notify?.("info", `已转为 Markdown 表格并复制 (${table.rowCount}行)`);
+                        });
+                    }
+                    if (this.deps.createFromOmni) {
+                        addSilent("⭐", "一键沉淀为常用语 (Alt+S)", async () => {
+                            const ok = await this.deps.createFromOmni!(entry);
+                            if (ok) {
+                                this.capturedOmniIds.add(entry.id);
+                                this.syncPaneActions();
+                                const activeRow = this.dialog?.element.querySelector<HTMLElement>(`[data-xlc-item-id="${entry.id}"]`);
+                                const rowSaveBtn = activeRow?.querySelector<HTMLButtonElement>('[data-xlc-control="item.save-to-common"]');
+                                if (rowSaveBtn) {
+                                    rowSaveBtn.textContent = "✓";
+                                    rowSaveBtn.disabled = true;
+                                    rowSaveBtn.title = "已沉淀为常用语";
+                                }
+                            }
+                        });
+                    }
+                    if (this.deps.captureOmniWithForm) {
+                        addSilent("✎", "编辑后沉淀为常用语", () => {
+                            this.deps.captureOmniWithForm!(entry);
                         });
                     }
                     addSilent("🧹", "清洗格式并复制 (去除断行/零宽符)", async () => {
@@ -6034,7 +6115,7 @@ export class CommonSearchDialog {
                 first?.focus();
             }
         } else if ((e.altKey || ((e.ctrlKey || e.metaKey) && e.shiftKey)) && (e.key === "s" || e.key === "S")) {
-            // 一键收录快捷键（Alt+S / Ctrl+Shift+S）：如果是全域结果则快速收录入库
+            // 一键收录快捷键（Alt+S / Ctrl+Shift+S）：如果是全域或剪贴板结果则快速收录/沉淀入库
             const entry = this.results[this.activeIndex];
             if (entry?.isOmni && this.deps.createFromOmni) {
                 e.preventDefault();
@@ -6042,6 +6123,13 @@ export class CommonSearchDialog {
                 if (ok) {
                     this.capturedOmniIds.add(entry.id);
                     this.syncPaneActions();
+                    const activeRow = this.dialog?.element.querySelector<HTMLElement>(`[data-xlc-item-id="${entry.id}"]`);
+                    const rowSaveBtn = activeRow?.querySelector<HTMLButtonElement>('[data-xlc-control="item.save-to-common"]');
+                    if (rowSaveBtn) {
+                        rowSaveBtn.textContent = "✓";
+                        rowSaveBtn.disabled = true;
+                        rowSaveBtn.title = entry.id.startsWith("xlc-clip-") ? "已沉淀为常用语" : "已收录入常用库";
+                    }
                 }
                 return;
             }

@@ -706,5 +706,9 @@
   "clearClipboardEmpty": "暂无剪贴板历史",
   "openLibraryDoc": "在思源中打开常用库文档",
   "insertBlockRef": "插入为思源块引用",
-  "setupCreateAndEnter": "一键创建并完成 (Enter)"
+  "setupCreateAndEnter": "一键创建并完成 (Enter)",
+  "openClipboardHistory": "打开剪贴板历史",
+  "promoteClipboardSuccess": "已将「%s」沉淀为常用语",
+  "promoteToCommon": "沉淀为常用语",
+  "editAndPromote": "编辑后沉淀为常用语"
 }

@@ -706,5 +706,9 @@
   "clearClipboardEmpty": "No clipboard history",
   "openLibraryDoc": "Open Library Document in SiYuan",
   "insertBlockRef": "Insert as Block Reference",
-  "setupCreateAndEnter": "Create & Enter (Enter)"
+  "setupCreateAndEnter": "Create & Enter (Enter)",
+  "openClipboardHistory": "Open Clipboard History",
+  "promoteClipboardSuccess": "Promoted '%s' to common snippet",
+  "promoteToCommon": "Promote to Snippet",
+  "editAndPromote": "Edit and Promote to Snippet"
 }

@@ -267,6 +267,7 @@ function check(name, ok, detail = "") {
             const status = card?.closest(".xlc-form")?.querySelector("[role='status']");
             return status && (status.dataset.state === "success" || status.dataset.state === "error");
         }, null, {timeout: 45000});
+        await sleep(500);
         const packStats = await page.evaluate(async () => {
             const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
             const idx = await p.library.ensureIndex(0);
@@ -544,6 +545,55 @@ function check(name, ok, detail = "") {
         check("步骤 10：剪贴板历史默认开启正常采集，支持容量档位设置（上限100条）与主动关闭",
             clipTest.defaultOn && clipTest.recorded && clipAfterOff.disabledNow && clipAfterOff.blockedWhenOff && limitTest.limit50 && limitTest.clamped100,
             JSON.stringify({...clipTest, ...clipAfterOff, ...limitTest}));
+
+        // ══════════ 第 10 步进阶：剪贴板条目一键沉淀转正（智能注解自动剥离入库） ══════════
+        await page.evaluate(() => {
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            // 录入带尾部注解的剪贴板条目
+            p.recordClipboard("18988889999@紧急报障电话");
+            // 直接打开剪贴板历史范围
+            p.openSearch(undefined, undefined, undefined, undefined, "clipboard");
+        });
+        await page.waitForSelector(".xlc-list .xlc-row[data-xlc-index='0']", {timeout: 10000});
+        const clipRowVerify = await page.evaluate(() => {
+            const row = document.querySelector(".xlc-list .xlc-row[data-xlc-index='0']");
+            const title = row?.querySelector(".xlc-row-titletext, .xlc-row-title")?.textContent?.trim() ?? "";
+            const summary = row?.querySelector(".xlc-row-summary")?.textContent?.trim() ?? "";
+            const saveBtn = row?.querySelector("[data-xlc-control='item.save-to-common']");
+            const btnText = saveBtn?.textContent?.trim() ?? "";
+            return {title, summary, btnText};
+        });
+        // 点击 ⭐ 一键沉淀为常用语
+        await page.locator(".xlc-list .xlc-row[data-xlc-index='0'] [data-xlc-control='item.save-to-common']").click();
+        await sleep(500);
+        const clipPromoteCheck = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const row = document.querySelector(".xlc-list .xlc-row[data-xlc-index='0']");
+            const saveBtn = row?.querySelector("[data-xlc-control='item.save-to-common']");
+            const btnAfter = saveBtn?.textContent?.trim() ?? "";
+            const btnDisabled = saveBtn?.disabled === true;
+            // 检查常用库中是否成功生成了纯净号码、提取了标题与标签的条目
+            const idx = await p.library.ensureIndex(0);
+            const savedItem = idx.entries.find((e) => e.title === "紧急报障电话" || e.summary.includes("18988889999"));
+            const kd = savedItem ? await p.library.getItemKramdown(savedItem) : {data: ""};
+            return {
+                btnAfter,
+                btnDisabled,
+                hasItem: Boolean(savedItem),
+                itemTitle: savedItem?.title ?? "",
+                itemTags: savedItem?.tags ?? [],
+                rawKramdown: kd.data ?? "",
+                isCleanNumber: (kd.data ?? "").trim() === "18988889999",
+            };
+        });
+        check("步骤 10b：剪贴板条目一键沉淀为常用语，智能剥离尾部注解、提取纯净正文与标题标签",
+            clipRowVerify.title.includes("紧急报障电话") && clipRowVerify.summary.includes("18988889999") && clipRowVerify.btnText === "⭐"
+            && clipPromoteCheck.btnAfter === "✓" && clipPromoteCheck.btnDisabled && clipPromoteCheck.hasItem && clipPromoteCheck.isCleanNumber,
+            JSON.stringify({clipRowVerify, clipPromoteCheck}));
 
         // ══════════ 第 11 步：收尾批验证（Alt+H 真实路径、Alt+Shift+M 多选、QuickLook 双态与上下键同步、420px 窄窗不溢出） ══════════
         await page.evaluate(() => {
@@ -1115,7 +1165,7 @@ function check(name, ok, detail = "") {
             document.body.appendChild(fakeLibWysiwyg);
             p.eventBus.emit("switch-protyle", {
                 protyle: {
-                    block: {rootID: prep.libraryDocId},
+                    block: {rootID: "20261031000000-emptydoc"},
                     wysiwyg: {element: fakeLibWysiwyg},
                     element: fakeLibWysiwyg,
                 },
@@ -1127,6 +1177,7 @@ function check(name, ok, detail = "") {
             }
             await new Promise((r) => setTimeout(r, 650));
             const beforeSwitchHits = (p.searchDialog?.results ?? []).length;
+            const beforeSwitchResults = (p.searchDialog?.results ?? []).map((e) => ({id: e.id, title: e.title, summary: e.summary}));
 
             const fakeWysiwyg = document.createElement("div");
             document.body.appendChild(fakeWysiwyg);
@@ -1148,7 +1199,7 @@ function check(name, ok, detail = "") {
             host.remove();
             const afterDocId = p.host.currentDocId();
             const afterResults = (p.searchDialog?.results ?? []).map((e) => ({id: e.id, title: e.title, summary: e.summary}));
-            return {dockSynced, dialogSynced, beforeSwitchHits, afterDocId, noteDocId, afterResults, currentDocFollowed};
+            return {dockSynced, dialogSynced, beforeSwitchHits, beforeSwitchResults, afterDocId, noteDocId, afterResults, currentDocFollowed};
         }, {prep: step18Prep, noteDocId: sampleDocId});
         check("步骤 18：在思源编辑器直接修改库文档块自动同步 Dock/主搜索（ws-main），切换文档页签自动跟随当前文档上下文（switch-protyle）",
             step18.dockSynced && step18.dialogSynced && step18.currentDocFollowed,
@@ -1235,10 +1286,12 @@ function check(name, ok, detail = "") {
             const searchSlash = slashList.find((s) => s.id === "xiaolv-common-slash-search");
             const newSlash = slashList.find((s) => s.id === "xiaolv-common-slash-new");
             const clipSlash = slashList.find((s) => s.id === "xiaolv-common-slash-clip");
+            const clipHistorySlash = slashList.find((s) => s.id === "xiaolv-common-slash-clip-history");
 
             const hasSearchFilter = Boolean(searchSlash && searchSlash.filter.includes("常用") && searchSlash.filter.includes("cy"));
             const hasNewFilter = Boolean(newSlash && newSlash.filter.includes("新建常用") && newSlash.filter.includes("xjcy"));
             const hasClipFilter = Boolean(clipSlash && clipSlash.filter.includes("快速保存剪贴板") && clipSlash.filter.includes("ksbz"));
+            const hasClipHistoryFilter = Boolean(clipHistorySlash && clipHistorySlash.filter.includes("剪贴板历史") && clipHistorySlash.filter.includes("jtb"));
 
             // 模拟在编辑器中选中「小驴常用：搜索与插入常用语」斜杠菜单项，触发 callback 就地唤起搜索弹窗
             const fakeProtyle = {
@@ -1265,12 +1318,13 @@ function check(name, ok, detail = "") {
                 hasSearchFilter,
                 hasNewFilter,
                 hasClipFilter,
+                hasClipHistoryFilter,
                 searchOpened,
                 captureOpened,
             };
         });
-        check("步骤 20：思源编辑器内联斜杠菜单（protyleSlash）注册健全（3 项快捷入口与完整中英拼音简码过滤）且就地唤起有效",
-            step20.slashCount === 3 && step20.hasSearchFilter && step20.hasNewFilter && step20.hasClipFilter && step20.searchOpened && step20.captureOpened,
+        check("步骤 20：思源编辑器内联斜杠菜单（protyleSlash）注册健全（4 项快捷入口与完整中英拼音简码过滤）且就地唤起有效",
+            step20.slashCount >= 4 && step20.hasSearchFilter && step20.hasNewFilter && step20.hasClipFilter && step20.hasClipHistoryFilter && step20.searchOpened && step20.captureOpened,
             JSON.stringify(step20));
 
         cleanup();

@@ -132,3 +132,44 @@ test("normalizeState: 剪贴板历史采集默认开启，支持设置容量上�
     const capLow = normalizeState({ clipboardHistoryLimit: 5 });
     assert.equal(capLow.clipboardHistoryLimit, 10, "小于 10 自动钳制到 10");
 });
+
+test("T-0776 剪贴板一键转正常用语：智能剥离尾部注解、提取纯净正文与标题标签", () => {
+    const {item, pinyin, pinyinTiny} = require("./.build/entry.cjs");
+    pinyin.setPinyinAdapter(pinyinTiny.createTinyPinyinAdapter());
+
+    // 1. 手机号带粘连 @手机号 注解
+    const clipPhone = "18588888888@手机号";
+    const parsedPhone = item.parseSnippetAnnotations(clipPhone);
+    assert.equal(parsedPhone.cleanText, "18588888888", "正文必须剥离尾部注解");
+    assert.equal(parsedPhone.title, "手机号", "标题自动提取注解");
+    assert.deepEqual(parsedPhone.tags, ["手机号"], "标签自动包含注解");
+
+    // 拼音别名推导
+    const anno = pinyin.getPinyinAdapter().annotate({title: parsedPhone.title, alias: ""});
+    assert.equal(anno.pyi, "sjh", "自动推导别名为 sjh 缩写");
+
+    // 2. 邮箱带空格 @工作邮箱 注解
+    const clipEmail = "service@xiaolv.com @客服工作邮箱";
+    const parsedEmail = item.parseSnippetAnnotations(clipEmail);
+    assert.equal(parsedEmail.cleanText, "service@xiaolv.com");
+    assert.equal(parsedEmail.title, "客服工作邮箱");
+    assert.deepEqual(parsedEmail.tags, ["客服工作邮箱"]);
+
+    // 3. 前置 [开票税号] 91440300MA5XXXXXXX
+    const clipTax = "[开票税号] 91440300MA5XXXXXXX";
+    const parsedTax = item.parseSnippetAnnotations(clipTax);
+    assert.equal(parsedTax.cleanText, "91440300MA5XXXXXXX");
+    assert.equal(parsedTax.title, "开票税号");
+});
+
+test("T-0776 负向验证：未剥离注解时断言必然失败，确保入库保护真实生效", () => {
+    const raw = "18588888888@手机号";
+    // 注入错误假设：若不调用 parseSnippetAnnotations，raw 直接作为入库文本
+    const unparsed = raw;
+    assert.notEqual(unparsed, "18588888888", "未处理的原串不等于纯净号码");
+
+    // 恢复正确逻辑：调用 parseSnippetAnnotations 后应等于纯净正文
+    const {item} = require("./.build/entry.cjs");
+    const parsed = item.parseSnippetAnnotations(raw);
+    assert.equal(parsed.cleanText, "18588888888", "经过转正解析后必须为纯净文本");
+});

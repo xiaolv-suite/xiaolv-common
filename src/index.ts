@@ -11,7 +11,7 @@ import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {LIMITS, PLUGIN_VERSION, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
 import {createKernelClient, parseExistingMap, type IKernelClient, type SyncPost, type SyncPostContext} from "./kernel/client";
-import {CommonItem, cleanShortcode, isBlockId, isItemType, isSafeHttpUrl, kramdownToPlainText, resolveBlockRefTarget} from "./model/item";
+import {CommonItem, cleanShortcode, isBlockId, isItemType, isSafeHttpUrl, kramdownToPlainText, parseSnippetAnnotations, resolveBlockRefTarget} from "./model/item";
 import {toErrorMessage} from "./model/errors";
 import {getSingleDocTreeDiscoveryTarget} from "./model/discovery-target";
 import {InsertMode, buildBlockRef, buildEmbedBlock} from "./model/actions";
@@ -25,7 +25,7 @@ import {SearchContext, collectCategories, collectTags, searchEntries, applyBasic
 import {findDuplicateByContent} from "./model/dedupe";
 import {LruCache, PREVIEW_CACHE_CAPACITY, PREVIEW_CACHE_TTL_MS} from "./model/lru";
 import {readWithTimeout} from "./model/startup";
-import {setPinyinAdapter, createNoopPinyinAdapter} from "./model/pinyin";
+import {setPinyinAdapter, createNoopPinyinAdapter, getPinyinAdapter} from "./model/pinyin";
 import {createTinyPinyinAdapter} from "./model/pinyin-tiny";
 import {buildProviderRows} from "./model/provider-section";
 import {CapabilityDescriptor, ProviderDescriptor} from "./model/protocol";
@@ -38,6 +38,7 @@ import {XiaolvCommonService} from "./service/service";
 import {DiscoveryService, type DiscoveryReceipt, type DiscoverySessionView} from "./service/discovery";
 import {OmniSearchService, deriveOmniItemMetadata} from "./service/omni-search";
 import {CommonSearchDialog} from "./ui/dialog";
+import type {SearchScope} from "./ui/empty-state";
 import {openDiscoveryDialog, type DiscoveryDialogController} from "./ui/discovery-dialog";
 import {CaptureDialog, confirmDelete, classifyLinkTarget} from "./ui/capture";
 import {openQuickEditDialog} from "./ui/quick-edit";
@@ -741,6 +742,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         // 后台预热索引：打开搜索时通常已就绪（零等待）；失败静默——打开时会重建并如实报错
         try {
             await this.library.ensureIndex();
+            await this.updateProtyleSlash();
         } catch {
             // 预热失败不打扰用户
         }
@@ -975,6 +977,11 @@ export default class XiaolvCommonPlugin extends Plugin {
             callback: () => this.openSearch(undefined, undefined, undefined, "openSource"),
         });
         this.addCommand({
+            langKey: "openClipboardHistory",
+            hotkey: "⌥⇧H",
+            callback: () => this.openSearch(undefined, undefined, undefined, undefined, "clipboard"),
+        });
+        this.addCommand({
             langKey: "discoverCurrentDocument",
             callback: () => this.openDiscoveryForCurrentDocument(),
         });
@@ -1064,6 +1071,15 @@ export default class XiaolvCommonPlugin extends Plugin {
                     },
                 },
                 {
+                    filter: ["剪贴板历史", "剪贴板", "jtb", "clip", "clipboard", "lsjtb"],
+                    html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("openClipboardHistory") || "小驴常用：查看剪贴板历史"}</span><span class="b3-list-item__meta">⌥⇧H</span></div>`,
+                    id: "xiaolv-common-slash-clip-history",
+                    callback: (protyle: any) => {
+                        this.host?.recordActiveEditor(protyle);
+                        this.openSearch(undefined, undefined, undefined, undefined, "clipboard");
+                    },
+                },
+                {
                     filter: ["新建常用", "新建常用语", "xjcy", "new-snippet"],
                     html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("newItem") || "小驴常用：新建常用语"}</span><span class="b3-list-item__meta">⌥⇧N</span></div>`,
                     id: "xiaolv-common-slash-new",
@@ -1082,6 +1098,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     },
                 },
             ];
+            void this.updateProtyleSlash();
         } catch {
             // 旧宿主降级保护
         }
@@ -1573,6 +1590,163 @@ export default class XiaolvCommonPlugin extends Plugin {
     private notifyExternalDataChange(): void {
         this.searchDialog?.refreshAfterExternalChange();
         void this.dockView?.refresh();
+        void this.updateProtyleSlash();
+    }
+
+    /** 动态更新思源编辑器斜杠菜单（protyleSlash）：自动将包含简码、别名、常用或高频的条目注册为行内斜杠项 */
+    public async updateProtyleSlash(): Promise<void> {
+        const baseSlash = [
+            {
+                filter: ["常用", "常用语", "xiaolv", "cy", "changyong", "xlc", "snippet", "snippets"],
+                html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("openSearch") || "小驴常用：搜索与插入常用语"}</span><span class="b3-list-item__meta">⌥⇧C</span></div>`,
+                id: "xiaolv-common-slash-search",
+                callback: (protyle: any) => {
+                    this.host?.recordActiveEditor(protyle);
+                    this.openSearch();
+                },
+            },
+            {
+                filter: ["剪贴板历史", "剪贴板", "jtb", "clip", "clipboard", "lsjtb"],
+                html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("openClipboardHistory") || "小驴常用：查看剪贴板历史"}</span><span class="b3-list-item__meta">⌥⇧H</span></div>`,
+                id: "xiaolv-common-slash-clip-history",
+                callback: (protyle: any) => {
+                    this.host?.recordActiveEditor(protyle);
+                    this.openSearch(undefined, undefined, undefined, undefined, "clipboard");
+                },
+            },
+            {
+                filter: ["新建常用", "新建常用语", "xjcy", "new-snippet"],
+                html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("newItem") || "小驴常用：新建常用语"}</span><span class="b3-list-item__meta">⌥⇧N</span></div>`,
+                id: "xiaolv-common-slash-new",
+                callback: (protyle: any) => {
+                    this.host?.recordActiveEditor(protyle);
+                    void this.capture?.newManual();
+                },
+            },
+            {
+                filter: ["快速保存剪贴板", "保存剪贴板", "ksbz", "jtb", "quick-clip"],
+                html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("quickCapture") || "小驴常用：从剪贴板快速保存"}</span><span class="b3-list-item__meta">⌥⇧V</span></div>`,
+                id: "xiaolv-common-slash-clip",
+                callback: (protyle: any) => {
+                    this.host?.recordActiveEditor(protyle);
+                    void this.capture?.quickCaptureFromClipboard();
+                },
+            },
+        ];
+
+        if (!this.library) {
+            this.protyleSlash = baseSlash;
+            return;
+        }
+
+        try {
+            const idx = this.library.getIndex() ?? await this.library.ensureIndex(60_000);
+            const dynamicSlash: typeof baseSlash = [];
+            const safeEscape = (s: string) => (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+            const candidateEntries = (idx.entries || []).filter((e) => {
+                const u = this.state.usage[e.id];
+                const count = typeof u === "number" ? u : (u?.count ?? 0);
+                return Boolean(e.shortcode || e.alias || count > 0 || this.state.favorites.includes(e.id));
+            }).slice(0, 60);
+
+            for (const entry of candidateEntries) {
+                const filters = new Set<string>();
+                if (entry.shortcode) {
+                    const cleanSc = entry.shortcode.replace(/^[:;；]/, "").trim().toLowerCase();
+                    if (cleanSc) filters.add(cleanSc);
+                }
+                if (entry.alias) {
+                    const cleanAl = entry.alias.trim().toLowerCase();
+                    if (cleanAl) filters.add(cleanAl);
+                }
+                if (entry.title) {
+                    const cleanTi = entry.title.trim().toLowerCase();
+                    if (cleanTi && cleanTi.length <= 16) filters.add(cleanTi);
+                }
+                if (filters.size === 0) continue;
+
+                const scDisplay = entry.shortcode ? ` [${entry.shortcode}]` : (entry.alias ? ` (${entry.alias})` : "");
+                const summaryText = (entry.summary || "").slice(0, 32).replace(/[\r\n\s]+/g, " ");
+                dynamicSlash.push({
+                    filter: Array.from(filters),
+                    html: `<div class="b3-list-item__first"><span class="b3-list-item__text">⚡ ${safeEscape(entry.title)}${safeEscape(scDisplay)}</span><span class="b3-list-item__meta">${safeEscape(summaryText)}</span></div>`,
+                    id: `xlc-slash-${entry.id}`,
+                    callback: async (protyle: any) => {
+                        this.host?.recordActiveEditor(protyle);
+                        await this.quickInsertById(entry.id);
+                    },
+                });
+            }
+
+            this.protyleSlash = [...baseSlash, ...dynamicSlash];
+        } catch {
+            this.protyleSlash = baseSlash;
+        }
+    }
+
+    /** 通过条目 ID 在当前光标处极速插入（支持变量表单唤起与直接插入） */
+    public async quickInsertById(itemId: string): Promise<boolean> {
+        if (!this.library || !this.executor) return false;
+        const got = await this.library.getItem(itemId);
+        if (!got.ok) {
+            this.notify("error", got.message);
+            return false;
+        }
+        const item = got.data;
+        const kd = await this.library.getItemKramdown(item);
+        if (!kd.ok) {
+            this.notify("error", kd.message);
+            return false;
+        }
+        const fields = listAskFields(kd.data);
+        if (fields.length > 0) {
+            openVariableFillCard({
+                t: this.i18nFn(),
+                itemType: item.itemType,
+                title: item.title,
+                itemId: item.id,
+                templateText: kd.data,
+                fields,
+                defaults: collectDefaults(this.state.variableMemory, fields.map((f) => f.name)),
+                onConfirm: async (fills: Record<string, string>) => {
+                    this.state.variableMemory = rememberValues(this.state.variableMemory, fills, Date.now());
+                    this.persistSoon();
+                    const receipt = await this.executor.run(item, "insert", {fills});
+                    if (receipt.ok) {
+                        this.recordUsage(item.id);
+                        this.service.touchRecent(item.id);
+                        this.notify("info", this.receiptText(receipt.message, item.title, receipt.pendingVerification));
+                        this.notifyExternalDataChange();
+                    } else {
+                        this.notify("error", receipt.message);
+                    }
+                },
+                onCopy: async (fills: Record<string, string>) => {
+                    const receipt = await this.executor.run(item, "copy", {fills});
+                    if (receipt.ok) {
+                        this.recordUsage(item.id);
+                        this.service.touchRecent(item.id);
+                        this.notify("info", this.receiptText(receipt.message, item.title, receipt.pendingVerification));
+                    } else {
+                        this.notify("error", receipt.message);
+                    }
+                },
+            });
+            return true;
+        }
+
+        const receipt = await this.executor.run(item, "insert");
+        if (receipt.ok) {
+            this.recordUsage(item.id);
+            this.service.touchRecent(item.id);
+            this.notify("info", this.receiptText(receipt.message, item.title, receipt.pendingVerification));
+            this.notifyExternalDataChange();
+            return true;
+        } else {
+            this.notify("error", receipt.message);
+            return false;
+        }
     }
 
     // ---- 搜索界面 ----
@@ -1659,8 +1833,8 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     }
 
-    /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式，defaultAction 预设主操作模式 */
-    openSearch(insertTarget?: {docId: string; hPath: string}, initialQuery?: string, surroundText?: string, defaultAction?: "insert" | "copy" | "openSource"): void {
+    /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式，defaultAction 预设主操作模式，initialScope 预设初始检索范围 */
+    openSearch(insertTarget?: {docId: string; hPath: string}, initialQuery?: string, surroundText?: string, defaultAction?: "insert" | "copy" | "openSource", initialScope?: SearchScope): void {
         if (!this.library || !this.capture || !this.service) {
             showMessage(this.i18nFn()("startupFailed", "services unavailable"), 7000, "error");
             return;
@@ -1703,6 +1877,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         const dialogInstance = new CommonSearchDialog({
             t: this.i18nFn(),
             initialQuery,
+            initialScope,
             surroundText,
             defaultActionMode: defaultAction,
             notify: (kind, msg) => this.notify(kind, msg),
@@ -1734,13 +1909,41 @@ export default class XiaolvCommonPlugin extends Plugin {
                 const isClip = entry.id.startsWith("xlc-clip-");
                 const cleanTitle = (entry.title || "").replace(/^[📋🔍☵★☆✦✓\s]+/, "").trim() || entry.title;
                 const meta = deriveOmniItemMetadata({...entry, title: cleanTitle});
+
+                let finalMarkdown = content;
+                let finalTitle = cleanTitle;
+                let finalTags = meta.tags;
+                let finalCategory = isClip ? (meta.category === "待整理" ? "常用" : meta.category) : meta.category;
+                let finalAlias = meta.recommendedAlias || undefined;
+
+                if (isClip) {
+                    const parsed = parseSnippetAnnotations(content);
+                    finalMarkdown = parsed.cleanText || content;
+                    finalTitle = parsed.title || cleanTitle || "剪贴板条目";
+                    finalTags = Array.from(new Set(["剪贴板", ...parsed.tags].filter(Boolean)));
+                    finalCategory = "常用";
+                    if (parsed.title) {
+                        try {
+                            const adapter = getPinyinAdapter();
+                            if (typeof adapter?.annotate === "function") {
+                                const anno = adapter.annotate({title: parsed.title, alias: ""});
+                                if (anno && anno.pyi) {
+                                    finalAlias = anno.pyi.toLowerCase().slice(0, 8);
+                                }
+                            }
+                        } catch {
+                            // ignore
+                        }
+                    }
+                }
+
                 const created = await this.library.createItem({
                     itemType: entry.itemType,
-                    markdown: content,
-                    title: cleanTitle,
-                    alias: meta.recommendedAlias || undefined,
-                    tags: meta.tags,
-                    category: isClip ? (meta.category === "待整理" ? "常用" : meta.category) : meta.category,
+                    markdown: finalMarkdown,
+                    title: finalTitle,
+                    alias: finalAlias,
+                    tags: finalTags,
+                    category: finalCategory,
                     source: {
                         sourceDocId: entry.sourceDocId,
                         sourceBlockId: entry.targetBlockId || entry.sourceBlockId,
@@ -1748,7 +1951,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                     },
                 });
                 if (created.ok) {
-                    this.notify("info", this.i18nFn()("saved", created.data.item.title));
+                    const notifyMsg = isClip
+                        ? (this.i18nFn()("promoteClipboardSuccess", created.data.item.title) || `已将「${created.data.item.title}」沉淀为常用语`)
+                        : this.i18nFn()("saved", created.data.item.title);
+                    this.notify("info", notifyMsg);
                     this.notifyExternalDataChange();
                     return true;
                 } else {

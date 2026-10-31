@@ -391,6 +391,20 @@ export class CaptureDialog {
     captureOmniWithForm(entry: SearchEntry): void {
         if (!this.ensureConfigured()) return;
         const text = (entry.content || entry.summary || "").trim();
+        const isClip = entry.id.startsWith("xlc-clip-");
+        if (isClip) {
+            const parsed = parseSnippetAnnotations(text);
+            const cleanText = parsed.cleanText || text;
+            const title = parsed.title || (entry.title || "").replace(/^[📋\s]+/, "").trim() || "剪贴板条目";
+            const tags = Array.from(new Set(["剪贴板", ...parsed.tags].filter(Boolean)));
+            this.openForm(cleanText, inferTypeFromText(cleanText), null, {
+                title,
+                tags,
+                category: "常用",
+                sourceType: "clipboard",
+            });
+            return;
+        }
         const title = entry.title || this.deps.t("unknownType");
         const meta = deriveOmniItemMetadata(entry);
         this.openForm(text, entry.itemType, null, {

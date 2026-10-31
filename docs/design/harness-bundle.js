@@ -15383,6 +15383,20 @@ ${res.progressBar}`;
         captureOmniWithForm(entry) {
           if (!this.ensureConfigured()) return;
           const text = (entry.content || entry.summary || "").trim();
+          const isClip = entry.id.startsWith("xlc-clip-");
+          if (isClip) {
+            const parsed = parseSnippetAnnotations(text);
+            const cleanText = parsed.cleanText || text;
+            const title2 = parsed.title || (entry.title || "").replace(/^[📋\s]+/, "").trim() || "\u526A\u8D34\u677F\u6761\u76EE";
+            const tags = Array.from(new Set(["\u526A\u8D34\u677F", ...parsed.tags].filter(Boolean)));
+            this.openForm(cleanText, inferTypeFromText(cleanText), null, {
+              title: title2,
+              tags,
+              category: "\u5E38\u7528",
+              sourceType: "clipboard"
+            });
+            return;
+          }
           const title = entry.title || this.deps.t("unknownType");
           const meta = deriveOmniItemMetadata(entry);
           this.openForm(text, entry.itemType, null, {
@@ -27831,6 +27845,9 @@ fi`;
       var _a, _b, _c;
       const isMobile = this.deps.isMobile();
       void ((_b = (_a = this.deps).syncSystemClipboard) == null ? void 0 : _b.call(_a));
+      if (this.deps.initialScope) {
+        this.currentScope = this.deps.initialScope;
+      }
       this.prevActiveElement = document.activeElement;
       const dialog = new import_siyuan5.Dialog({
         title: this.deps.t("pluginName"),
@@ -27869,7 +27886,9 @@ fi`;
         const queryToFill = initial || this.deps.getLastQuery();
         if (queryToFill) {
           input.value = queryToFill;
-          this.currentScope = "all";
+          if (!this.deps.initialScope) {
+            this.currentScope = "all";
+          }
           input.dispatchEvent(new Event("input", { bubbles: true }));
           if (initial) {
             input.select();
@@ -28811,20 +28830,32 @@ fi`;
       saveOmni.addEventListener("click", () => {
         const entry = this.results[this.activeIndex];
         if (entry && this.deps.createFromOmni) {
+          const isClip = Boolean(entry && entry.id.startsWith("xlc-clip-"));
+          const label = isClip ? this.deps.t("promoteToCommon") || "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : this.deps.t("saveToCommon");
           saveOmni.disabled = true;
           saveOmni.textContent = this.deps.t("loading");
           void this.deps.createFromOmni(entry).then((ok2) => {
+            var _a;
             if (ok2) {
               this.capturedOmniIds.add(entry.id);
-              saveOmni.textContent = "\u2713 " + this.deps.t("saveToCommon");
+              saveOmni.textContent = "\u2713 \u5DF2" + label;
+              const activeRow = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(`[data-xlc-item-id="${entry.id}"]`);
+              const rowSaveBtn = activeRow == null ? void 0 : activeRow.querySelector('[data-xlc-control="item.save-to-common"]');
+              if (rowSaveBtn) {
+                rowSaveBtn.textContent = "\u2713";
+                rowSaveBtn.disabled = true;
+                rowSaveBtn.title = "\u5DF2" + label;
+              }
             } else {
               saveOmni.disabled = false;
-              saveOmni.textContent = "\u2726 " + this.deps.t("saveToCommon") + " (Alt+S)";
+              const icon = isClip ? "\u2B50 " : "\u2726 ";
+              saveOmni.textContent = icon + label + " (Alt+S)";
             }
           }).catch((err) => {
             var _a, _b;
             saveOmni.disabled = false;
-            saveOmni.textContent = "\u2726 " + this.deps.t("saveToCommon") + " (Alt+S)";
+            const icon = isClip ? "\u2B50 " : "\u2726 ";
+            saveOmni.textContent = icon + label + " (Alt+S)";
             (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "error", toErrorMessage(err));
           });
         }
@@ -29153,17 +29184,21 @@ fi`;
           }
           const entries = filtered.map((h, i) => {
             var _a2;
+            const parsed = parseSnippetAnnotations(h.text);
             const firstLine = ((_a2 = h.text.trim().split(/[\r\n]+/)[0]) == null ? void 0 : _a2.slice(0, 35)) || "\u526A\u8D34\u677F\u6587\u672C";
+            const displayTitle = parsed.title ? `\u{1F4CB} ${parsed.title}` : `\u{1F4CB} ${firstLine}`;
+            const tags = Array.from(new Set(["\u526A\u8D34\u677F", ...parsed.tags].filter(Boolean)));
+            const cleanText = parsed.cleanText || h.text;
             return {
               id: `xlc-clip-${i}`,
               blockId: "",
               libraryDocId: "",
-              title: `\u{1F4CB} ${firstLine}`,
+              title: displayTitle,
               content: h.text,
-              summary: h.text.slice(0, 100).replace(/[\s\r\n]+/g, " "),
-              itemType: inferTypeFromText(h.text),
+              summary: cleanText.slice(0, 100).replace(/[\s\r\n]+/g, " "),
+              itemType: inferTypeFromText(cleanText),
               category: "\u526A\u8D34\u677F",
-              tags: ["\u526A\u8D34\u677F"],
+              tags,
               alias: "",
               createdAt: h.copiedAt,
               updatedAt: h.copiedAt,
@@ -29401,6 +29436,7 @@ fi`;
       }
       row.dataset.xlcControl = "item.row";
       row.dataset.xlcIndex = String(index);
+      row.dataset.xlcItemId = entry.id;
       row.id = `xlc-result-${index}`;
       row.setAttribute("role", "listitem");
       row.setAttribute("aria-current", index === this.activeIndex ? "true" : "false");
@@ -29577,19 +29613,46 @@ fi`;
       row.appendChild(main);
       if (entry.isOmni) {
         if (entry.id.startsWith("xlc-clip-")) {
+          const actionsWrap = document.createElement("div");
+          actionsWrap.className = "xlc-row-action-wrap";
+          actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
+          const isCaptured = this.capturedOmniIds.has(entry.id);
           const saveBtn = document.createElement("button");
           saveBtn.className = "b3-button b3-button--small xlc-row-action";
           saveBtn.dataset.xlcControl = "item.save-to-common";
-          saveBtn.textContent = "\u2726";
-          saveBtn.title = "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED (Alt+S)";
-          saveBtn.setAttribute("aria-label", "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED");
-          saveBtn.addEventListener("click", (e) => {
+          saveBtn.textContent = isCaptured ? "\u2713" : "\u2B50";
+          saveBtn.title = isCaptured ? "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : "\u4E00\u952E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED (Alt+S)";
+          saveBtn.setAttribute("aria-label", isCaptured ? "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : "\u4E00\u952E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED");
+          saveBtn.disabled = isCaptured;
+          saveBtn.addEventListener("click", async (e) => {
             e.stopPropagation();
-            if (this.deps.captureOmniWithForm) {
-              this.deps.captureOmniWithForm(entry);
+            if (this.deps.createFromOmni) {
+              const ok2 = await this.deps.createFromOmni(entry);
+              if (ok2) {
+                this.capturedOmniIds.add(entry.id);
+                saveBtn.textContent = "\u2713";
+                saveBtn.disabled = true;
+                saveBtn.title = "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED";
+                this.syncPaneActions();
+              }
             }
           });
-          row.appendChild(saveBtn);
+          actionsWrap.appendChild(saveBtn);
+          if (this.deps.captureOmniWithForm) {
+            const editBtn = document.createElement("button");
+            editBtn.className = "b3-button b3-button--small xlc-row-action";
+            editBtn.dataset.xlcControl = "item.edit-capture";
+            editBtn.textContent = "\u270E";
+            editBtn.title = "\u7F16\u8F91\u540E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED";
+            editBtn.setAttribute("aria-label", "\u7F16\u8F91\u540E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED");
+            editBtn.addEventListener("click", (e) => {
+              var _a2, _b2;
+              e.stopPropagation();
+              (_b2 = (_a2 = this.deps).captureOmniWithForm) == null ? void 0 : _b2.call(_a2, entry);
+            });
+            actionsWrap.appendChild(editBtn);
+          }
+          row.appendChild(actionsWrap);
         } else {
           const actionsWrap = document.createElement("div");
           actionsWrap.className = "xlc-row-action-wrap";
@@ -30134,8 +30197,15 @@ fi`;
         }
         if (act === "save-omni") {
           const isCaptured = entry ? this.capturedOmniIds.has(entry.id) : false;
-          btn.textContent = isCaptured ? "\u2713 " + this.deps.t("saveToCommon") : "\u2726 " + this.deps.t("saveToCommon") + " (Alt+S)";
+          const isClip = Boolean(entry && entry.id.startsWith("xlc-clip-"));
+          const label = isClip ? this.deps.t("promoteToCommon") || "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : this.deps.t("saveToCommon");
+          const icon = isClip ? "\u2B50 " : "\u2726 ";
+          btn.textContent = isCaptured ? "\u2713 \u5DF2" + label : icon + label + " (Alt+S)";
           btn.disabled = isCaptured;
+        }
+        if (act === "edit-and-capture-omni") {
+          const isClip = Boolean(entry && entry.id.startsWith("xlc-clip-"));
+          btn.textContent = isClip ? "\u270E " + (this.deps.t("editAndPromote") || "\u7F16\u8F91\u540E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED") : "\u270E " + this.deps.t("editAndCapture");
         }
         if (act === "edit") {
           btn.textContent = isOmniScope && this.deps.quickEditBlock ? "\u270E " + this.deps.t("quickEditBlock") : this.deps.t("edit");
@@ -31146,6 +31216,28 @@ fi`;
                 var _a3, _b3;
                 await this.deps.copyProviderPayload(table.result);
                 (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", `\u5DF2\u8F6C\u4E3A Markdown \u8868\u683C\u5E76\u590D\u5236 (${table.rowCount}\u884C)`);
+              });
+            }
+            if (this.deps.createFromOmni) {
+              addSilent("\u2B50", "\u4E00\u952E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED (Alt+S)", async () => {
+                var _a3;
+                const ok2 = await this.deps.createFromOmni(entry);
+                if (ok2) {
+                  this.capturedOmniIds.add(entry.id);
+                  this.syncPaneActions();
+                  const activeRow = (_a3 = this.dialog) == null ? void 0 : _a3.element.querySelector(`[data-xlc-item-id="${entry.id}"]`);
+                  const rowSaveBtn = activeRow == null ? void 0 : activeRow.querySelector('[data-xlc-control="item.save-to-common"]');
+                  if (rowSaveBtn) {
+                    rowSaveBtn.textContent = "\u2713";
+                    rowSaveBtn.disabled = true;
+                    rowSaveBtn.title = "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED";
+                  }
+                }
+              });
+            }
+            if (this.deps.captureOmniWithForm) {
+              addSilent("\u270E", "\u7F16\u8F91\u540E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED", () => {
+                this.deps.captureOmniWithForm(entry);
               });
             }
             addSilent("\u{1F9F9}", "\u6E05\u6D17\u683C\u5F0F\u5E76\u590D\u5236 (\u53BB\u9664\u65AD\u884C/\u96F6\u5BBD\u7B26)", async () => {
@@ -33199,7 +33291,7 @@ ${progress.progressBar}`);
       (_f = menu.querySelector(".xlc-menu-item")) == null ? void 0 : _f.focus();
     }
     async onKeydown(e) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O;
       if (e.isComposing || e.keyCode === 229) return;
       const list = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-list");
       const input = (_b = this.dialog) == null ? void 0 : _b.element.querySelector(".xlc-search-input");
@@ -33555,6 +33647,13 @@ ${progress.progressBar}`);
           if (ok2) {
             this.capturedOmniIds.add(entry.id);
             this.syncPaneActions();
+            const activeRow = (_M = this.dialog) == null ? void 0 : _M.element.querySelector(`[data-xlc-item-id="${entry.id}"]`);
+            const rowSaveBtn = activeRow == null ? void 0 : activeRow.querySelector('[data-xlc-control="item.save-to-common"]');
+            if (rowSaveBtn) {
+              rowSaveBtn.textContent = "\u2713";
+              rowSaveBtn.disabled = true;
+              rowSaveBtn.title = entry.id.startsWith("xlc-clip-") ? "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : "\u5DF2\u6536\u5F55\u5165\u5E38\u7528\u5E93";
+            }
           }
           return;
         }
@@ -33588,7 +33687,7 @@ ${progress.progressBar}`);
         const scopeOrder = ["all", "favorites", "recent", "clipboard", "current-doc", "all-notes"];
         const currentIdx = scopeOrder.indexOf(this.currentScope);
         const nextIdx = (currentIdx + 1) % scopeOrder.length;
-        this.currentScope = (_M = scopeOrder[nextIdx]) != null ? _M : "all";
+        this.currentScope = (_N = scopeOrder[nextIdx]) != null ? _N : "all";
         this.syncScopeChips();
         void this.refresh().then(() => this.restoreFocusToSearch());
         return;
@@ -33599,7 +33698,7 @@ ${progress.progressBar}`);
         this.syncScopeChips();
         void this.refresh().then(() => this.restoreFocusToSearch());
         return;
-      } else if (e.altKey && (e.key === "Delete" || e.key === "Backspace") || !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Delete" && !((_N = document.activeElement) == null ? void 0 : _N.matches("input, textarea"))) {
+      } else if (e.altKey && (e.key === "Delete" || e.key === "Backspace") || !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Delete" && !((_O = document.activeElement) == null ? void 0 : _O.matches("input, textarea"))) {
         if (e.repeat) return;
         if (this.activeProvider >= 0) return;
         const entry = this.results[this.activeIndex];
@@ -38847,7 +38946,11 @@ ${details.join("\n")}` : ""}`;
     clearClipboardEmpty: "\u6682\u65E0\u526A\u8D34\u677F\u5386\u53F2",
     openLibraryDoc: "\u5728\u601D\u6E90\u4E2D\u6253\u5F00\u5E38\u7528\u5E93\u6587\u6863",
     insertBlockRef: "\u63D2\u5165\u4E3A\u601D\u6E90\u5757\u5F15\u7528",
-    setupCreateAndEnter: "\u4E00\u952E\u521B\u5EFA\u5E76\u5B8C\u6210 (Enter)"
+    setupCreateAndEnter: "\u4E00\u952E\u521B\u5EFA\u5E76\u5B8C\u6210 (Enter)",
+    openClipboardHistory: "\u6253\u5F00\u526A\u8D34\u677F\u5386\u53F2",
+    promoteClipboardSuccess: "\u5DF2\u5C06\u300C%s\u300D\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED",
+    promoteToCommon: "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED",
+    editAndPromote: "\u7F16\u8F91\u540E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED"
   };
 
   // scripts/harness/entry.ts

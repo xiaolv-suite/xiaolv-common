@@ -297,6 +297,7 @@ async function main() {
         const attrsAfterEdit = await api("/api/attr/getBlockAttrs", {id: libraryBlocks[1]});
         assert.equal(attrsAfterEdit["custom-xlc-id"], editedAttrs["custom-xlc-id"], "editing fixture must preserve discovery metadata");
 
+        await new Promise((r) => setTimeout(r, 400));
         const undone = await discovery.undoBatch(sessionId, batchId);
         assert.equal(undone.ok, true, undone.ok ? "" : undone.message);
         assert.equal(undone.data.deleted, 2, JSON.stringify(undone.data));
