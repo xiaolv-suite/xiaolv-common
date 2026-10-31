@@ -10,11 +10,9 @@ const indexScss = fs.readFileSync(path.join(root, "src", "styles", "index.scss")
 const dialogTs = fs.readFileSync(path.join(root, "src", "ui", "dialog.ts"), "utf8");
 const settingsTs = fs.readFileSync(path.join(root, "src", "ui", "settings-dialog.ts"), "utf8");
 
-test("UI/UX Pro Max · 桌面顶部关键指标概览与侧边窗格 W3C 区域语义增强", () => {
-    // 1. 关键指标概览区 region 语义
-    assert.match(dialogTs, /strip\.className = "xlc-metrics-strip";/);
-    assert.match(dialogTs, /strip\.setAttribute\("role",\s*"region"\);/);
-    assert.match(dialogTs, /strip\.setAttribute\("aria-label",\s*"关键指标概览"\);/);
+test("UI/UX Pro Max · 桌面主面板移除统计指标横带并保留侧边窗格 W3C 区域语义增强", () => {
+    // 1. 统计指标横带已移除（T-0754 界面减法），不再挤占主搜索纵向空间
+    assert.doesNotMatch(dialogTs, /buildMetricsStrip/);
 
     // 2. 详情侧边窗格 complementary 角色与预览区 region
     assert.match(dialogTs, /pane\.className = "xlc-pane";/);

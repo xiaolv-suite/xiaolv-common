@@ -1,6 +1,6 @@
 // 全域块就地快编弹窗（Omni Block Quick Edit · G14）：
 // 在搜索全域结果时，支持快捷就地微调思源块内容；
-// 写入前严格遵循 B-006 单行正文或完整代码围栏边界约束，杜绝破坏排版层级。
+// 写入前遵循单块边界（单行正文或完整代码围栏），原地更新不拆块、不破坏排版层级。
 
 import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
@@ -166,12 +166,12 @@ export function openQuickEditDialog(
             return;
         }
 
-        // B-006 写前校验
+        // 单块写前校验：原地更新他人块不能拆出兄弟块
         const check = validateOmniBlockUpdate(val);
         if (!check.valid) {
-            errHint.textContent = check.error || "B-006 validation error";
+            errHint.textContent = check.error || "single-block validation error";
             errHint.style.display = "";
-            deps.notify("error", check.error || "B-006 validation error");
+            deps.notify("error", check.error || "single-block validation error");
             return;
         }
 

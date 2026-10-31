@@ -237,7 +237,8 @@ const T = (key: string, ...args: string[]): string => {
         resourceFallback: "资源", captureBlockFailed: "读取当前块内容失败，请重试", captureDocFailed: "读取文档内容失败，请重试",
         aiDraftOverwrite: "内容框已有内容，用 AI 草稿覆盖吗？", aiParseFailed: "AI 返回内容无法解析，请重试", aiContentTooLong: "内容超过 %s 字，请缩短后重试",
     };
-    let text = map[key] ?? key;
+    // 生产语言包优先：截图与审计看到的必须是用户看到的文案；手写表只兜底生产包缺失的测试专用键。
+    let text = (zhI18n as Record<string, string>)[key] ?? map[key] ?? key;
     for (const arg of args) text = text.replace("%s", arg);
     return text;
 };
@@ -616,6 +617,9 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
         openSetupDialog(ctx);
     },
     openCapture(aiOn = true, aiDelayMs = 0, options?: {tidyFailureCall?: number; tidyFailureKind?: "result" | "throw"; draftFailureCall?: number; draftFailureKind?: "result" | "throw"; deferTidy?: boolean}): void {
+        // 每次打开捕获表单都从空写入记录开始，避免上一项检查的创建调用串到下一项。
+        captureCreatedItems.length = 0;
+        delete document.body.dataset.xlcCaptureCreatedItems;
         let tidyCall = 0;
         let draftCall = 0;
         const capture = new CaptureDialog({

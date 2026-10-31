@@ -240,6 +240,8 @@ export interface PluginState {
     insert: InsertPrefs;
     /** 变量填写值记忆（ADR 0074 / G22 / T-0133）：只存侧车，绝不出域 */
     variableMemory: VariableMemory;
+    /** 剪贴板历史开关（默认 false，需用户主动开启；关闭时不读取剪贴板，已有记录保留） */
+    clipboardHistoryEnabled?: boolean;
     /** 剪贴板历史暂存（流式暂存栈，上限 30 条，只存侧车不建块） */
     clipboardHistory: ClipboardHistoryEntry[];
     /** 变量填参预设方案（按条目或模板标题归档的多套方案：itemId -> 方案名 -> 字段键值对） */
@@ -347,6 +349,7 @@ export function normalizeState(raw: unknown): PluginState {
             recordUsage: !(insertRaw.recordUsage === false),
         },
         variableMemory: normalizeVariableMemory(obj.variableMemory),
+        clipboardHistoryEnabled: obj.clipboardHistoryEnabled === true,
         clipboardHistory: normalizeClipboardHistory(obj.clipboardHistory),
         variablePresets: normalizeVariablePresets(obj.variablePresets),
     };

@@ -603,6 +603,18 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
             ctx.persistSoon();
         },
     ));
+    const clipSwitchRow = buildSwitchRow(
+        t("clipboardHistoryToggle"),
+        t("clipboardHistorySub"),
+        Boolean(ctx.state.clipboardHistoryEnabled),
+        (value) => {
+            ctx.state.clipboardHistoryEnabled = value;
+            ctx.persistSoon();
+        },
+    );
+    const clipSwitchInput = clipSwitchRow.querySelector<HTMLInputElement>("input[type='checkbox']");
+    if (clipSwitchInput) clipSwitchInput.dataset.xlcControl = "settings.prefs.clipboardHistoryEnabled";
+    sec.appendChild(clipSwitchRow);
     const foot = document.createElement("div");
     foot.className = "xlc-setting-row";
     const hint = document.createElement("span");
@@ -890,7 +902,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     root.appendChild(stepsEl);
     const hint = document.createElement("p");
     hint.className = "xlc-form-hint";
-    hint.style.marginBottom = "12px";
+    hint.style.marginBottom = "2px";
     hint.textContent = t("setupHint");
     root.appendChild(hint);
     // 首次设置就给出可执行的最短路径，避免用户配置完库后不知道如何开始。

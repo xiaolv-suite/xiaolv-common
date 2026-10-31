@@ -14,7 +14,7 @@ import {createKernelClient, parseExistingMap, type IKernelClient, type SyncPost,
 import {CommonItem, cleanShortcode, isBlockId, isItemType, isSafeHttpUrl, resolveBlockRefTarget} from "./model/item";
 import {toErrorMessage} from "./model/errors";
 import {getSingleDocTreeDiscoveryTarget} from "./model/discovery-target";
-import {buildBlockRef, buildEmbedBlock} from "./model/actions";
+import {InsertMode, buildBlockRef, buildEmbedBlock} from "./model/actions";
 import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown} from "./model/clipboard";
 import {collectDefaults, rememberValues} from "./model/variable-memory";
 import {ExportedItem, buildBundle, validateImport, ConflictPolicy, ImportReceipt} from "./model/transfer";
@@ -43,7 +43,8 @@ import {CaptureDialog, confirmDelete, classifyLinkTarget} from "./ui/capture";
 import {openQuickEditDialog} from "./ui/quick-edit";
 import {ICONS} from "./ui/icons";
 import type {SettingsUiContext} from "./ui/settings-dialog";
-import {buildVariableBar} from "./ui/variable-form";
+import {buildVariableBar, openVariableFillCard} from "./ui/variable-form";
+import {listAskFields} from "./model/variables";
 import type {TransformKind} from "./service/ai";
 import {mountXlcBridge} from "./service/external-bridge";
 import {queryEcosystemItems} from "./service/ecosystem";
@@ -1173,6 +1174,66 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     }
 
+    /** 侧栏与主搜索共用同一执行与变量填充路径（executor.run + openVariableFillCard + 变量记忆）。 */
+    private async runDockItemAction(
+        itemId: string,
+        mode: InsertMode,
+        fills?: Record<string, string>,
+    ): Promise<{ok: boolean; message: string}> {
+        const got = await this.library.getItem(itemId);
+        if (!got.ok) return {ok: false, message: got.message};
+        const item = got.data;
+        if (!fills && this.state.insert.promptVariables && item.itemType !== "code") {
+            const kd = await this.library.getItemKramdown(item);
+            if (kd.ok) {
+                const expanded = await this.library.expandSnippetRefs(kd.data);
+                const fields = listAskFields(expanded);
+                if (fields.length > 0) {
+                    const labels = fields.map((f) => f.name);
+                    return new Promise((resolve) => {
+                        let settled = false;
+                        const finish = (res: {ok: boolean; message: string}) => {
+                            if (settled) return;
+                            settled = true;
+                            resolve(res);
+                        };
+                        openVariableFillCard({
+                            t: this.i18nFn(),
+                            itemType: item.itemType,
+                            title: item.title,
+                            fields,
+                            defaults: collectDefaults(this.state.variableMemory, labels),
+                            templateText: expanded,
+                            itemId: item.id,
+                            onConfirm: (filled) => {
+                                try {
+                                    this.state.variableMemory = rememberValues(this.state.variableMemory, filled, Date.now());
+                                    this.persistSoon();
+                                } catch {}
+                                void this.runDockItemAction(itemId, mode, filled).then(finish);
+                            },
+                            onCopy: async (filled) => {
+                                try {
+                                    this.state.variableMemory = rememberValues(this.state.variableMemory, filled, Date.now());
+                                    this.persistSoon();
+                                } catch {}
+                                const copied = await this.runDockItemAction(itemId, "copy", filled);
+                                finish(copied);
+                                return copied.ok;
+                            },
+                            onCancel: () => finish({ok: false, message: ""}),
+                        });
+                    });
+                }
+            }
+        }
+        const receipt = await this.executor.run(item, mode, fills ? {fills} : undefined);
+        const msg = receipt.ok
+            ? this.receiptText(receipt.message, item.title, receipt.pendingVerification)
+            : this.receiptText(receipt.message, item.title, receipt.pendingVerification) || this.i18nFn()("kernelError", receipt.message);
+        return {ok: receipt.ok, message: msg};
+    }
+
     private buildDockDeps(): DockViewDeps {
         return {
             t: this.i18nFn(),
@@ -1197,14 +1258,8 @@ export default class XiaolvCommonPlugin extends Plugin {
                 const kd = await this.library.getItemKramdown(got.data);
                 return kd.ok ? await this.library.expandSnippetRefs(kd.data) : "";
             },
-            runAction: async (itemId, mode) => {
-                const res = await this.service.insert(itemId, {mode});
-                return {ok: res.ok, message: res.message ?? ""};
-            },
-            runActionWithFills: async (itemId, mode, fills) => {
-                const res = await this.service.insert(itemId, {mode, fills});
-                return {ok: res.ok, message: res.message ?? ""};
-            },
+            runAction: async (itemId, mode) => this.runDockItemAction(itemId, mode),
+            runActionWithFills: async (itemId, mode, fills) => this.runDockItemAction(itemId, mode, fills),
             toggleFavorite: (itemId) => {
                 const fav = this.service.toggleFavorite(itemId);
                 this.notifyExternalDataChange();
@@ -1277,12 +1332,14 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     public recordClipboard(text: string): void {
+        if (!this.state.clipboardHistoryEnabled) return;
         this.state.clipboardHistory = pushClipboardHistory(this.state.clipboardHistory, text);
         this.persistSoon();
     }
 
     private setupClipboardTracking(): void {
         const onCopyCut = (e: ClipboardEvent) => {
+            if (!this.state.clipboardHistoryEnabled) return;
             try {
                 const text = e.clipboardData?.getData("text/plain") || window.getSelection()?.toString();
                 if (text) this.recordClipboard(text);
@@ -1291,6 +1348,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         };
         const onWindowFocus = async () => {
+            if (!this.state.clipboardHistoryEnabled) return;
             try {
                 if (navigator.clipboard?.readText && window.isSecureContext) {
                     const txt = await navigator.clipboard.readText();

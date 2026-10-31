@@ -44,7 +44,7 @@ test("UI/UX Pro Max · 创作侧宏变量快捷工具栏 toolbar 语义与左右
 
     // 2. 水平键盘轮巡与 Home/End 直达
     assert.match(varFormTs, /if \(e\.key === "ArrowRight" \|\| e\.key === "ArrowLeft"\)/);
-    assert.match(varFormTs, /const btns = Array\.from\(bar\.querySelectorAll<HTMLButtonElement>\("button"\)\);/);
+    assert.match(varFormTs, /const btns = Array\.from\(bar\.querySelectorAll<HTMLButtonElement>\("button"\)\)/);
     assert.match(varFormTs, /const nextIdx = e\.key === "ArrowRight"\s*\?\s*\(idx \+ 1\) % btns\.length/);
     assert.match(varFormTs, /if \(e\.key === "Home" \|\| e\.key === "End"\)/);
 

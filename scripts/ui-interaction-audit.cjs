@@ -60,7 +60,7 @@ const check = (name, ok, detail = "") => {
 };
 
 (async () => {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({channel: "chrome"});
     const page = await browser.newPage({viewport: {width: 1280, height: 900}});
     const pageErrors = [];
     page.on("pageerror", (err) => pageErrors.push(String(err)));
@@ -1250,6 +1250,70 @@ const check = (name, ok, detail = "") => {
     check("K19 搜索框内敲空格不误触预览浮层", spaceInInput.overlay === false, JSON.stringify(spaceInInput));
     await page.keyboard.press("Escape");
     await sleep(200);
+
+    // ── S1–S2：界面减法与可搜索「文本工具」抽屉交互（T-0754）──
+    await open();
+    await sleep(200);
+    const searchSurfaceCut = await page.evaluate(async () => {
+        const noMetricsStrip = !document.querySelector(".xlc-metrics-strip");
+        const kbdCount = document.querySelectorAll(".xlc-kbdrow .xlc-kbd-key").length;
+        const row = document.querySelector("[data-xlc-control='item.row']");
+        row?.dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true, clientX: 200, clientY: 200}));
+        await new Promise((r) => setTimeout(r, 100));
+        const toggle = document.querySelector("[data-xlc-control='dialog.menu.text-tools-toggle']");
+        const panel = document.querySelector("[data-xlc-control='dialog.menu.text-tools-panel']");
+        const defaultHidden = Boolean(panel && panel.hidden === true && getComputedStyle(panel).display === "none");
+        toggle?.click();
+        const expanded = Boolean(panel && panel.hidden === false && toggle?.getAttribute("aria-expanded") === "true");
+        const search = document.querySelector("[data-xlc-control='dialog.menu.text-tools-search']");
+        if (search) {
+            search.value = "盘古";
+            search.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+        const visibleTools = Array.from(panel?.querySelectorAll(".xlc-menu-item") ?? []).filter((el) => !el.hidden);
+        return {
+            noMetricsStrip,
+            kbdCount,
+            defaultHidden,
+            expanded,
+            filteredMatch: visibleTools.length >= 1 && visibleTools.every((el) => (el.textContent ?? "").includes("盘古")),
+        };
+    });
+    check("S1 主搜索去掉指标条、快捷键提示收敛为5项、动作菜单文本工具收进可搜索入口",
+        searchSurfaceCut.noMetricsStrip && searchSurfaceCut.kbdCount === 5
+            && searchSurfaceCut.defaultHidden && searchSurfaceCut.expanded && searchSurfaceCut.filteredMatch,
+        JSON.stringify(searchSurfaceCut));
+
+    await page.evaluate(() => {
+        document.querySelectorAll(".b3-dialog").forEach((el) => el.remove());
+        window.XlcHarness.openCapture(false);
+    });
+    await sleep(100);
+    const captureSurfaceCut = await page.evaluate(() => {
+        const bar = document.querySelector(".xlc-varbar");
+        const panel = document.querySelector("[data-xlc-control='capture.varbar.tools-panel']");
+        const toggle = document.querySelector("[data-xlc-control='capture.varbar.tools-toggle']");
+        const directVisibleBtns = Array.from(bar?.querySelectorAll("button") ?? []).filter((b) => !b.hidden && !b.closest("[hidden]"));
+        const defaultHidden = Boolean(panel && panel.hidden === true && getComputedStyle(panel).display === "none");
+        toggle?.click();
+        const expanded = Boolean(panel && panel.hidden === false && toggle?.getAttribute("aria-expanded") === "true");
+        const search = document.querySelector("[data-xlc-control='capture.varbar.tools-search']");
+        if (search) {
+            search.value = "盘古";
+            search.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+        const matchedBtns = Array.from(panel?.querySelectorAll("button") ?? []).filter((b) => !b.hidden);
+        return {
+            directCount: directVisibleBtns.length,
+            defaultHidden,
+            expanded,
+            filteredMatch: matchedBtns.length >= 1 && matchedBtns.every((b) => `${b.textContent ?? ""}${b.title ?? ""}`.includes("盘古")),
+        };
+    });
+    check("S2 捕获/编辑工具栏默认只展示10个核心变量+1个文本工具入口，展开后支持实时搜索过滤",
+        captureSurfaceCut.directCount === 11 && captureSurfaceCut.defaultHidden
+            && captureSurfaceCut.expanded && captureSurfaceCut.filteredMatch,
+        JSON.stringify(captureSurfaceCut));
 
     // ── 全局：页面异常为零 ──
     check("Z1 全程 0 页面异常/控制台错误", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));

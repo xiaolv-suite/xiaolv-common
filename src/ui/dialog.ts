@@ -5,7 +5,7 @@
 // 触控：44px 命中区、长按 550ms（移动 <10px 判定）弹动作菜单；不依赖 hover、不做坐标猜测。
 // AI：? 前缀语义找条目（默认仅元数据出域）；动作菜单 AI 变换（预览后选插入，原文永不被改写）。
 import {Dialog} from "siyuan";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {getDialogBody, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText} from "../model/item";
 import {ItemSortMode} from "../model/storage";
 import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
@@ -502,24 +502,11 @@ export class CommonSearchDialog {
             kbdLabel.className = "xlc-kbdrow-label";
             kbdLabel.textContent = this.deps.t("shortcutLabel");
             kbdRow.appendChild(kbdLabel);
+            // 界面减法（T-0754）：操作提示收敛为 5 个高频核心键，一行排下不再折成三行。
             const kbdDefinitions = [
-                {id: "insert", key: "Enter", action: "插入文本快照"},
-                {id: "embed", key: formatPlatformShortcut("Shift+Enter", isApple), action: "嵌入同步块"},
-                {id: "blockref", key: formatPlatformShortcut("Alt+Enter", isApple), action: "插入块引用"},
-                {id: "adjacent", key: `${isApple ? "⌥" : "Alt"} + J`, action: "前后文探针"},
-                {id: "copy", key: `${isApple ? "⌘" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy")},
+                {id: "insert", key: "Enter", action: this.deps.t("insert")},
+                {id: "copy", key: formatPlatformShortcut("Ctrl+Enter", isApple).replace(/\+/g, " + "), action: this.deps.t("kbdCopy")},
                 {id: "quickInsert", key: `${isApple ? "⌥" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert")},
-                {id: "quickCopy", key: `${isApple ? "⌥ + ⇧" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy")},
-                {id: "captureOmni", key: `${isApple ? "⌥" : "Alt"} + S`, action: "收录全库块"},
-                {id: "copyRef", key: `${isApple ? "⌥" : "Alt"} + R`, action: "复制块引用"},
-                {id: "openSource", key: `${isApple ? "⌥" : "Alt"} + D`, action: "打开来源定位"},
-                {id: "copyMd", key: `${isApple ? "⌥" : "Alt"} + M`, action: "复制 Markdown"},
-                {id: "hierarchy", key: `${isApple ? "⌥" : "Alt"} + H`, action: "层级大纲"},
-                {id: "pin", key: `${isApple ? "⌥" : "Alt"} + P`, action: "固定窗口"},
-                {id: "copyClose", key: `${isApple ? "⌥" : "Alt"} + C`, action: "复制并关闭"},
-                {id: "cycleScope", key: `${isApple ? "⌥" : "Alt"} + T`, action: "轮转范围"},
-                {id: "omniPrefix", key: "@ /", action: "全库穿透"},
-                {id: "favorite", key: `${isApple ? "⌥" : "Alt"} + F`, action: this.deps.t("kbdFavorite")},
                 {id: "tab", key: "Tab", action: this.deps.t("kbdTabActions")},
                 {id: "close", key: "Esc", action: this.deps.t("kbdClose")},
             ];
@@ -710,11 +697,6 @@ export class CommonSearchDialog {
             filters.insertBefore(targetBanner, filters.firstChild);
         }
         root.appendChild(filters);
-
-        // 桌面顶部关键指标横带（参考图统计优先原则：3-4个关键数字指标，竖线分隔无厚重边框）
-        if (!isMobile) {
-            root.appendChild(this.buildMetricsStrip());
-        }
 
         // 热门标签快速筛选胶囊行（桌面与平板快捷直达）
         const quickPills = document.createElement("div");
@@ -1058,76 +1040,6 @@ export class CommonSearchDialog {
         });
         head.appendChild(collapseBtn);
         return head;
-    }
-
-    private buildMetricsStrip(): HTMLElement {
-        const strip = document.createElement("div");
-        strip.className = "xlc-metrics-strip";
-        strip.dataset.xlcControl = "metrics.strip";
-        strip.setAttribute("role", "region");
-        strip.setAttribute("aria-label", "关键指标概览");
-
-        const makeItem = (key: string, label: string, initialValue: string = "0") => {
-            const item = document.createElement("div");
-            item.className = "xlc-metric-item";
-            const num = document.createElement("div");
-            num.className = "xlc-metric-number";
-            num.dataset.xlcMetric = key;
-            num.textContent = initialValue;
-            const lbl = document.createElement("div");
-            lbl.className = "xlc-metric-label";
-            lbl.textContent = label;
-            item.appendChild(num);
-            item.appendChild(lbl);
-            return item;
-        };
-
-        const divider = () => {
-            const div = document.createElement("div");
-            div.className = "xlc-metric-divider";
-            return div;
-        };
-
-        const labelTotal = this.deps.t("metricTotal") || "资产总计";
-        const labelUsage = this.deps.t("metricUsage") || "复用频次";
-        const labelFav = this.deps.t("metricFav") || "星标收藏";
-        const labelProviders = this.deps.t("metricProviders") || "外部生态";
-
-        strip.appendChild(makeItem("total", labelTotal, String(this.results.length)));
-        strip.appendChild(divider());
-        strip.appendChild(makeItem("usage", labelUsage, "0"));
-        strip.appendChild(divider());
-        strip.appendChild(makeItem("fav", labelFav, "0"));
-        strip.appendChild(divider());
-        strip.appendChild(makeItem("providers", labelProviders, String(this.providerRows.length)));
-
-        return strip;
-    }
-
-    private updateMetricsStrip(): void {
-        const strip = this.dialog?.element.querySelector<HTMLElement>(".xlc-metrics-strip");
-        if (!strip) return;
-        const totalEl = strip.querySelector<HTMLElement>("[data-xlc-metric='total']");
-        const usageEl = strip.querySelector<HTMLElement>("[data-xlc-metric='usage']");
-        const favEl = strip.querySelector<HTMLElement>("[data-xlc-metric='fav']");
-        const provEl = strip.querySelector<HTMLElement>("[data-xlc-metric='providers']");
-
-        if (totalEl) totalEl.textContent = String(this.results.length);
-        if (usageEl) {
-            const usage = this.deps.getUsage ? this.deps.getUsage() : {};
-            let sum = 0;
-            for (const item of this.results) {
-                sum += usage[item.id]?.count ?? 0;
-            }
-            usageEl.textContent = String(sum);
-        }
-        if (favEl) {
-            const favCount = this.results.filter((r) => this.deps.isFavorite ? this.deps.isFavorite(r.id) : false).length;
-            favEl.textContent = String(favCount);
-        }
-        if (provEl) {
-            provEl.textContent = String(this.providerRows.length);
-        }
     }
 
     private buildPaneFoot(): HTMLElement {
@@ -2198,7 +2110,6 @@ export class CommonSearchDialog {
     }
 
     private renderList(list: HTMLElement): void {
-        this.updateMetricsStrip();
         this.virtualListCleanup?.();
         this.virtualListCleanup = null;
         this.virtualEnsureIndex = null;
@@ -3677,6 +3588,7 @@ export class CommonSearchDialog {
                 sec2.setAttribute("role", "group");
                 sec2.setAttribute("aria-label", "扩展操作");
             }
+            let silentTarget: HTMLElement = sec2;
             const addSilent = (icon: string, label: string, run: () => Promise<unknown> | void, cls = "xlc-menu-item", title?: string): HTMLButtonElement => {
                 const btn = this.menuButton(icon, label, cls, async () => {
                     // 统一走 menuDismiss：document 监听必须摘除、账目不被错清（此前 menu.remove() 泄漏监听，
@@ -3686,7 +3598,7 @@ export class CommonSearchDialog {
                     await run();
                 });
                 if (title) btn.title = title;
-                sec2.appendChild(btn);
+                silentTarget.appendChild(btn);
                 return btn;
             };
             if (entry.isOmni) {
@@ -3764,6 +3676,53 @@ export class CommonSearchDialog {
                     await this.deps.copyProviderPayload(code);
                     this.deps.notify?.("info", this.deps.t("copyCompactBundleSuccess"));
                 });
+
+                // 界面减法（T-0754）：~180 个文本清洗/转换动作收进一个可搜索的「文本工具…」入口，默认不撑长菜单。
+                const textToolsPanel = document.createElement("div");
+                textToolsPanel.className = "xlc-menu-text-tools-panel";
+                textToolsPanel.dataset.xlcControl = "dialog.menu.text-tools-panel";
+                textToolsPanel.hidden = true;
+
+                const textToolsSearch = document.createElement("input");
+                textToolsSearch.type = "search";
+                textToolsSearch.className = "b3-text-field xlc-menu-text-tools-search";
+                textToolsSearch.dataset.xlcControl = "dialog.menu.text-tools-search";
+                textToolsSearch.placeholder = "搜索文本工具…";
+                textToolsSearch.setAttribute("aria-label", "搜索文本工具");
+                textToolsSearch.addEventListener("keydown", (ev) => {
+                    ev.stopPropagation();
+                });
+
+                const textToolsList = document.createElement("div");
+                textToolsList.className = "xlc-menu-text-tools-list";
+                textToolsPanel.append(textToolsSearch, textToolsList);
+
+                const textToolsToggleBtn = this.menuButton("🛠", "文本工具…", "xlc-menu-item", () => {
+                    const nextOpen = textToolsPanel.hidden;
+                    textToolsPanel.hidden = !nextOpen;
+                    textToolsToggleBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+                    if (nextOpen) {
+                        textToolsSearch.value = "";
+                        textToolsList.querySelectorAll<HTMLElement>(".xlc-menu-item").forEach((el) => {
+                            el.hidden = false;
+                        });
+                        textToolsSearch.focus();
+                    }
+                });
+                textToolsToggleBtn.dataset.xlcControl = "dialog.menu.text-tools-toggle";
+                textToolsToggleBtn.setAttribute("aria-expanded", "false");
+                sec2.appendChild(textToolsToggleBtn);
+                sec2.appendChild(textToolsPanel);
+
+                textToolsSearch.addEventListener("input", () => {
+                    const kw = textToolsSearch.value.trim().toLowerCase();
+                    textToolsList.querySelectorAll<HTMLElement>(".xlc-menu-item").forEach((el) => {
+                        const hay = `${el.textContent ?? ""} ${el.title ?? ""}`.toLowerCase();
+                        el.hidden = Boolean(kw) && !hay.includes(kw);
+                    });
+                });
+
+                silentTarget = textToolsList;
                 addSilent("✦", "盘古排版 (中英文加空格并复制)", async () => {
                     const raw = entry.content || await this.deps.preview(entry.id) || "";
                     const pangu = formatPanguSpacing(raw);
@@ -5217,6 +5176,7 @@ export class CommonSearchDialog {
                         this.deps.notify?.("info", "已复制剥离变量标记后的纯正文");
                     });
                 }
+                silentTarget = sec2;
                 const useCount = this.usageCounts.get(entry.id) ?? 0;
                 if (useCount > 0 && this.deps.resetItemUsage) {
                     addSilent("↺", this.deps.t("resetItemUsage", String(useCount)), async () => {
@@ -6234,11 +6194,16 @@ export class CommonSearchDialog {
         addTagBtn.textContent = "＋ 加标签";
         addTagBtn.addEventListener("click", () => {
             if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
-            const input = typeof window !== "undefined" && typeof window.prompt === "function"
-                ? window.prompt("请输入要批量追加的标签（支持中英文逗号分号分隔）：")
-                : "";
-            if (!input || !input.trim()) return;
-            void this.applyBatchUpdate({addTags: [input.trim()]});
+            openTextPromptDialog({
+                title: "＋ 批量加标签",
+                label: "请输入要批量追加的标签（支持中英文逗号分号分隔）：",
+                controlId: "search.batch.add-tags.input",
+                onConfirm: (input) => {
+                    const tags = input.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean);
+                    if (tags.length === 0) return;
+                    void this.applyBatchUpdate({addTags: tags});
+                },
+            });
         });
 
         const removeTagBtn = document.createElement("button");
@@ -6248,11 +6213,16 @@ export class CommonSearchDialog {
         removeTagBtn.textContent = "－ 删标签";
         removeTagBtn.addEventListener("click", () => {
             if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
-            const input = typeof window !== "undefined" && typeof window.prompt === "function"
-                ? window.prompt("请输入要批量移除的标签（大小写不敏感）：")
-                : "";
-            if (!input || !input.trim()) return;
-            void this.applyBatchUpdate({removeTags: [input.trim()]});
+            openTextPromptDialog({
+                title: "－ 批量删标签",
+                label: "请输入要批量移除的标签（大小写不敏感）：",
+                controlId: "search.batch.remove-tags.input",
+                onConfirm: (input) => {
+                    const tags = input.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean);
+                    if (tags.length === 0) return;
+                    void this.applyBatchUpdate({removeTags: tags});
+                },
+            });
         });
 
         const setCatBtn = document.createElement("button");
@@ -6262,11 +6232,15 @@ export class CommonSearchDialog {
         setCatBtn.textContent = "🏷️ 设分类";
         setCatBtn.addEventListener("click", () => {
             if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
-            const input = typeof window !== "undefined" && typeof window.prompt === "function"
-                ? window.prompt("请输入目标分类名称（留空表示清空分类）：")
-                : null;
-            if (input === null) return;
-            void this.applyBatchUpdate({setCategory: input.trim()});
+            openTextPromptDialog({
+                title: "🏷️ 批量设置分类",
+                label: "请输入目标分类名称（留空表示清空分类）：",
+                allowEmpty: true,
+                controlId: "search.batch.set-category.input",
+                onConfirm: (input) => {
+                    void this.applyBatchUpdate({setCategory: input.trim()});
+                },
+            });
         });
 
         // 全域条目批量一键收录按钮

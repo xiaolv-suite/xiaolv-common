@@ -3,7 +3,7 @@
 
 import {listSnippetRefs} from "./variables";
 import {isSafeHttpUrl} from "./item";
-import {bodyWriteRestriction} from "./kramdown";
+import {itemBodyRestriction} from "./kramdown";
 import {PLACEHOLDER_PATTERN, resolvePlaceholder, PlaceholderKind} from "./placeholders";
 
 export type IssueSeverity = "error" | "warning";
@@ -244,16 +244,16 @@ export function diagnoseLibraryHealth(
             }
         }
 
-        // 2.4 B-006 多块写前防御限制预警
+        // 2.4 条目容器写前边界预警（ADR 0165）
         if (content && item.itemType !== "code") {
-            const restriction = bodyWriteRestriction(content);
+            const restriction = itemBodyRestriction(content);
             if (restriction) {
                 issues.push({
                     itemId: item.id,
                     itemTitle: item.title,
                     severity: "warning",
                     type: "write-restriction",
-                    message: `正文触发 B-006 多块写前受限防御（${restriction}）`,
+                    message: `正文无法按条目容器写回（${restriction}）`,
                     details: restriction,
                 });
             }

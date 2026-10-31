@@ -102,7 +102,12 @@ function killTree(pid) {
         nb = (await api(ORIGIN, token, "/api/notebook/lsNotebooks")).data?.notebooks?.find((n) => !n.closed);
     }
     const docTitle = `XLC集成测试库 ${Date.now()}`;
-    const docId = String((await api(ORIGIN, token, "/api/filetree/createDocWithMd", {notebook: nb.id, path: `/${docTitle}`, markdown: ""})).data ?? "");
+    // 新建笔记本后内核需数秒加载元数据（"document metadata is not ready"），有界重试。
+    let docId = "";
+    for (let attempt = 0; attempt < 30 && !/^\d{14}-[0-9a-z]{7}$/.test(docId); attempt++) {
+        if (attempt) await new Promise((r) => setTimeout(r, 1000));
+        docId = String((await api(ORIGIN, token, "/api/filetree/createDocWithMd", {notebook: nb.id, path: `/${docTitle}`, markdown: ""})).data ?? "");
+    }
     if (!/^\d{14}-[0-9a-z]{7}$/.test(docId)) {
         console.error("[it] 建库文档失败");
         if (child?.pid) killTree(child.pid);

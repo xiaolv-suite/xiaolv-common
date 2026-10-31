@@ -3,7 +3,7 @@
 // 填充值仅作用于本次插入（草稿不回写库）；同名重复变量只询问一次（listAskFields 已去重）。
 // 安全：字段名/选项一律 textContent 注入，绝不 innerHTML。
 import {Dialog} from "siyuan";
-import {getDialogBody} from "./dialog-dom";
+import {getDialogBody, openInfoDialog, openTextPromptDialog} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
 import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, maskTextRange, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
@@ -450,16 +450,22 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     savePresetBtn.setAttribute("aria-label", "存为预设方案");
     savePresetBtn.dataset.xlcControl = "variable.save-preset";
     savePresetBtn.addEventListener("click", () => {
-        const name = (typeof window !== "undefined" && typeof window.prompt === "function")
-            ? window.prompt("请输入此套参数预设的名称（如：客户A专票）：", `方案 ${Object.keys(presetSchemes).length + 1}`)
-            : null;
-        if (!name || !name.trim()) return;
-        const cleanName = name.trim().slice(0, 32);
-        const currentFills = collect();
-        presetSchemes[cleanName] = currentFills;
-        syncPresetOptions();
-        presetSelect.value = cleanName;
-        options.onSavePreset?.(cleanName, currentFills);
+        openTextPromptDialog({
+            title: "存为预设方案",
+            label: "请输入此套参数预设的名称（如：客户A专票）：",
+            defaultValue: `方案 ${Object.keys(presetSchemes).length + 1}`,
+            maxLength: 32,
+            controlId: "variable.save-preset.input",
+            onConfirm: (name) => {
+                const cleanName = name.trim().slice(0, 32);
+                if (!cleanName) return;
+                const currentFills = collect();
+                presetSchemes[cleanName] = currentFills;
+                syncPresetOptions();
+                presetSelect.value = cleanName;
+                options.onSavePreset?.(cleanName, currentFills);
+            },
+        });
     });
     presetWrap.appendChild(savePresetBtn);
 
@@ -663,7 +669,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
     bar.addEventListener("keydown", (e) => {
         if (e.isComposing || e.keyCode === 229) return;
         if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-            const btns = Array.from(bar.querySelectorAll<HTMLButtonElement>("button"));
+            const btns = Array.from(bar.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.hidden && !b.closest("[hidden]"));
             if (!btns.length) return;
             const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
             if (idx === -1) return;
@@ -674,7 +680,7 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
             return;
         }
         if (e.key === "Home" || e.key === "End") {
-            const btns = Array.from(bar.querySelectorAll<HTMLButtonElement>("button"));
+            const btns = Array.from(bar.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.hidden && !b.closest("[hidden]"));
             if (!btns.length) return;
             e.preventDefault();
             e.stopPropagation();
@@ -4280,9 +4286,12 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         const hasSel = start !== end;
         const targetText = hasSel ? el.value.slice(start, end) : el.value;
         const m = measureVisualWidth(targetText);
-        if (typeof window !== "undefined" && typeof window.alert === "function") {
-            window.alert(`视觉宽度：${m.visualWidth}\n字符总数：${m.charCount}\n中文汉字：${m.cjkCount}\nASCII字符：${m.asciiCount}`);
-        }
+        openInfoDialog("视觉宽度与字符统计", [
+            `视觉宽度：${m.visualWidth}`,
+            `字符总数：${m.charCount}`,
+            `中文汉字：${m.cjkCount}`,
+            `ASCII字符：${m.asciiCount}`,
+        ]);
     });
     bar.appendChild(measureWidthBtn);
 
@@ -4649,6 +4658,75 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
             btn.setAttribute("aria-label", label);
         }
     });
+
+    // 界面减法（T-0754）：工具栏默认只展示 10 个核心变量模板，其余宏与格式化按钮收进可搜索的「文本工具」抽屉，
+    // 既保留全部 DOM 节点与 data-xlc-control，又把捕获/编辑表单从 2800px 压缩回单屏高度。
+    const coreControls = new Set([
+        "capture.variable.ask",
+        "capture.variable.ask.options",
+        "capture.variable.ask.textarea",
+        "capture.variable.snippet",
+        "capture.variable.cursor",
+        "capture.variable.date",
+        "capture.variable.date.offset",
+        "capture.variable.random",
+        "capture.variable.doc",
+        "capture.variable.clipboard",
+    ]);
+    const extraButtons = Array.from(bar.querySelectorAll<HTMLButtonElement>("button"))
+        .filter((btn) => !coreControls.has(btn.dataset.xlcControl ?? ""));
+
+    const toolsToggleBtn = document.createElement("button");
+    toolsToggleBtn.type = "button";
+    toolsToggleBtn.className = "xlc-varbtn xlc-btn-ghost xlc-varbar-tools-toggle";
+    toolsToggleBtn.dataset.xlcControl = "capture.varbar.tools-toggle";
+    toolsToggleBtn.textContent = "🛠 文本工具…";
+    toolsToggleBtn.title = "展开可搜索的扩展宏与文本格式化工具";
+    toolsToggleBtn.setAttribute("aria-label", "展开可搜索的扩展宏与文本格式化工具");
+    toolsToggleBtn.setAttribute("aria-expanded", "false");
+
+    const toolsPanel = document.createElement("div");
+    toolsPanel.className = "xlc-varbar-tools-panel";
+    toolsPanel.dataset.xlcControl = "capture.varbar.tools-panel";
+    toolsPanel.hidden = true;
+
+    const toolsSearch = document.createElement("input");
+    toolsSearch.type = "search";
+    toolsSearch.className = "b3-text-field xlc-varbar-tools-search";
+    toolsSearch.dataset.xlcControl = "capture.varbar.tools-search";
+    toolsSearch.placeholder = "搜索宏或文本工具…";
+    toolsSearch.setAttribute("aria-label", "搜索宏或文本工具");
+
+    const toolsList = document.createElement("div");
+    toolsList.className = "xlc-varbar-tools-list";
+    for (const btn of extraButtons) {
+        toolsList.appendChild(btn);
+    }
+
+    toolsSearch.addEventListener("input", () => {
+        const kw = toolsSearch.value.trim().toLowerCase();
+        for (const btn of extraButtons) {
+            const hay = `${btn.textContent ?? ""} ${btn.title ?? ""} ${btn.dataset.xlcControl ?? ""}`.toLowerCase();
+            btn.hidden = Boolean(kw) && !hay.includes(kw);
+        }
+    });
+    toolsSearch.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+    });
+
+    toolsToggleBtn.addEventListener("click", () => {
+        const nextOpen = toolsPanel.hidden;
+        toolsPanel.hidden = !nextOpen;
+        toolsToggleBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        if (nextOpen) {
+            toolsSearch.value = "";
+            for (const btn of extraButtons) btn.hidden = false;
+            toolsSearch.focus();
+        }
+    });
+
+    toolsPanel.append(toolsSearch, toolsList);
+    bar.append(toolsToggleBtn, toolsPanel);
 
     return bar;
 }

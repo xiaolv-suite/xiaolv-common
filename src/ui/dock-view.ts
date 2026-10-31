@@ -701,7 +701,7 @@ export class DockView {
         try {
             const res = await this.deps.runAction(entry.id, "copy");
             if (res.ok) {
-                this.deps.notify?.("info", this.deps.t("copied") || "已复制到剪贴板");
+                this.deps.notify?.("info", this.deps.t("copied", entry.title || entry.id) || "已复制到剪贴板");
             } else {
                 this.deps.notify?.("error", res.message || this.deps.t("copyFailed") || "复制失败");
             }

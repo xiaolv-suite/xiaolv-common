@@ -355,7 +355,7 @@ export class XiaolvCommonService {
         const author = (input.author || "").trim();
         const sourceTitle = (input.sourceTitle || "").trim();
 
-        // 组装格式符合 B-006 单行规则的金句正文
+        // 组装单行金句正文
         let markdown = `💡 「${quote}」`;
         if (author) {
             markdown += ` —— ${author}`;

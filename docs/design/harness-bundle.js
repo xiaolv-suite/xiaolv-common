@@ -118,7 +118,7 @@
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
-      PLUGIN_VERSION = "0.10.79";
+      PLUGIN_VERSION = "0.10.80";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
       PROTOCOL_VERSION = 1;
@@ -202,7 +202,12 @@
     const iconSpan = document.createElement("span");
     iconSpan.className = "lv-dialog-title-icon";
     iconSpan.setAttribute("aria-hidden", "true");
-    iconSpan.innerHTML = `<svg><use xlink:href="#${iconName || "iconXlcCommon"}"></use></svg>`;
+    const safeIcon = (iconName || "iconXlcCommon").replace(/[^A-Za-z0-9_-]/g, "") || "iconXlcCommon";
+    const svg = typeof document.createElementNS === "function" ? document.createElementNS("http://www.w3.org/2000/svg", "svg") : document.createElement("svg");
+    const use = typeof document.createElementNS === "function" ? document.createElementNS("http://www.w3.org/2000/svg", "use") : document.createElement("use");
+    use.setAttribute("xlink:href", `#${safeIcon}`);
+    svg.appendChild(use);
+    iconSpan.appendChild(svg);
     const titleSpan = document.createElement("span");
     titleSpan.className = "lv-dialog-title-text";
     titleSpan.textContent = titleText || "";
@@ -219,9 +224,107 @@
     titleEl.appendChild(wrap);
     return wrap;
   }
+  function openTextPromptDialog(options) {
+    var _a, _b;
+    const dialog = new import_siyuan.Dialog({
+      title: options.title,
+      content: "",
+      width: "min(440px, 92vw)"
+    });
+    (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-form-host");
+    mountPlatformDialogTitleWrap(dialog.element, options.title);
+    const body = getDialogBody(dialog.element);
+    if (!body) {
+      dialog.destroy();
+      return dialog;
+    }
+    const form = document.createElement("form");
+    form.className = "xlc-form xlc-prompt-form";
+    form.noValidate = true;
+    const field = document.createElement("label");
+    field.className = "xlc-form-field";
+    const caption = document.createElement("span");
+    caption.className = "xlc-form-label";
+    caption.textContent = options.label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "b3-text-field";
+    if (options.controlId) input.dataset.xlcControl = options.controlId;
+    if (options.maxLength) input.maxLength = options.maxLength;
+    if (options.placeholder) input.placeholder = options.placeholder;
+    input.value = (_b = options.defaultValue) != null ? _b : "";
+    field.append(caption, input);
+    const actions = document.createElement("div");
+    actions.className = "xlc-form-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "b3-button b3-button--cancel";
+    cancelBtn.textContent = options.cancelText || "\u53D6\u6D88";
+    cancelBtn.addEventListener("click", () => dialog.destroy());
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "b3-button xlc-btn-primary";
+    submitBtn.textContent = options.confirmText || "\u786E\u5B9A";
+    actions.append(cancelBtn, submitBtn);
+    form.append(field, actions);
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const val = input.value;
+      if (!options.allowEmpty && !val.trim()) {
+        input.focus();
+        return;
+      }
+      dialog.destroy();
+      options.onConfirm(val);
+    });
+    body.appendChild(form);
+    setTimeout(() => {
+      input.focus();
+      if (typeof input.select === "function") input.select();
+    }, 0);
+    return dialog;
+  }
+  function openInfoDialog(title, lines, closeText = "\u5173\u95ED") {
+    var _a;
+    const dialog = new import_siyuan.Dialog({
+      title,
+      content: "",
+      width: "min(400px, 92vw)"
+    });
+    (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-form-host");
+    mountPlatformDialogTitleWrap(dialog.element, title);
+    const body = getDialogBody(dialog.element);
+    if (!body) {
+      dialog.destroy();
+      return dialog;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "xlc-form";
+    const list = document.createElement("div");
+    list.className = "xlc-form-hint";
+    for (const line of lines) {
+      const row = document.createElement("div");
+      row.textContent = line;
+      list.appendChild(row);
+    }
+    const actions = document.createElement("div");
+    actions.className = "xlc-form-actions";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "b3-button xlc-btn-primary";
+    closeBtn.textContent = closeText;
+    closeBtn.addEventListener("click", () => dialog.destroy());
+    actions.appendChild(closeBtn);
+    wrap.append(list, actions);
+    body.appendChild(wrap);
+    setTimeout(() => closeBtn.focus(), 0);
+    return dialog;
+  }
+  var import_siyuan;
   var init_dialog_dom = __esm({
     "src/ui/dialog-dom.ts"() {
       "use strict";
+      import_siyuan = __toESM(require_stub_dom());
       init_constants();
     }
   });
@@ -9666,7 +9769,7 @@ ${codeText}`;
       const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
       container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
     };
-    const dialog = new import_siyuan.Dialog({
+    const dialog = new import_siyuan2.Dialog({
       title: t("varFormTitle"),
       content: "",
       width: "min(440px, 92vw)",
@@ -10016,15 +10119,23 @@ ${codeText}`;
     savePresetBtn.setAttribute("aria-label", "\u5B58\u4E3A\u9884\u8BBE\u65B9\u6848");
     savePresetBtn.dataset.xlcControl = "variable.save-preset";
     savePresetBtn.addEventListener("click", () => {
-      var _a2;
-      const name = typeof window !== "undefined" && typeof window.prompt === "function" ? window.prompt("\u8BF7\u8F93\u5165\u6B64\u5957\u53C2\u6570\u9884\u8BBE\u7684\u540D\u79F0\uFF08\u5982\uFF1A\u5BA2\u6237A\u4E13\u7968\uFF09\uFF1A", `\u65B9\u6848 ${Object.keys(presetSchemes).length + 1}`) : null;
-      if (!name || !name.trim()) return;
-      const cleanName = name.trim().slice(0, 32);
-      const currentFills = collect();
-      presetSchemes[cleanName] = currentFills;
-      syncPresetOptions();
-      presetSelect.value = cleanName;
-      (_a2 = options.onSavePreset) == null ? void 0 : _a2.call(options, cleanName, currentFills);
+      openTextPromptDialog({
+        title: "\u5B58\u4E3A\u9884\u8BBE\u65B9\u6848",
+        label: "\u8BF7\u8F93\u5165\u6B64\u5957\u53C2\u6570\u9884\u8BBE\u7684\u540D\u79F0\uFF08\u5982\uFF1A\u5BA2\u6237A\u4E13\u7968\uFF09\uFF1A",
+        defaultValue: `\u65B9\u6848 ${Object.keys(presetSchemes).length + 1}`,
+        maxLength: 32,
+        controlId: "variable.save-preset.input",
+        onConfirm: (name) => {
+          var _a2;
+          const cleanName = name.trim().slice(0, 32);
+          if (!cleanName) return;
+          const currentFills = collect();
+          presetSchemes[cleanName] = currentFills;
+          syncPresetOptions();
+          presetSelect.value = cleanName;
+          (_a2 = options.onSavePreset) == null ? void 0 : _a2.call(options, cleanName, currentFills);
+        }
+      });
     });
     presetWrap.appendChild(savePresetBtn);
     const deletePresetBtn = document.createElement("button");
@@ -10214,7 +10325,7 @@ ${codeText}`;
       var _a, _b, _c;
       if (e.isComposing || e.keyCode === 229) return;
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-        const btns = Array.from(bar.querySelectorAll("button"));
+        const btns = Array.from(bar.querySelectorAll("button")).filter((b) => !b.hidden && !b.closest("[hidden]"));
         if (!btns.length) return;
         const idx = btns.indexOf(document.activeElement);
         if (idx === -1) return;
@@ -10225,7 +10336,7 @@ ${codeText}`;
         return;
       }
       if (e.key === "Home" || e.key === "End") {
-        const btns = Array.from(bar.querySelectorAll("button"));
+        const btns = Array.from(bar.querySelectorAll("button")).filter((b) => !b.hidden && !b.closest("[hidden]"));
         if (!btns.length) return;
         e.preventDefault();
         e.stopPropagation();
@@ -13828,12 +13939,12 @@ ${res.progressBar}`;
       const hasSel = start !== end;
       const targetText = hasSel ? el.value.slice(start, end) : el.value;
       const m = measureVisualWidth(targetText);
-      if (typeof window !== "undefined" && typeof window.alert === "function") {
-        window.alert(`\u89C6\u89C9\u5BBD\u5EA6\uFF1A${m.visualWidth}
-\u5B57\u7B26\u603B\u6570\uFF1A${m.charCount}
-\u4E2D\u6587\u6C49\u5B57\uFF1A${m.cjkCount}
-ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
-      }
+      openInfoDialog("\u89C6\u89C9\u5BBD\u5EA6\u4E0E\u5B57\u7B26\u7EDF\u8BA1", [
+        `\u89C6\u89C9\u5BBD\u5EA6\uFF1A${m.visualWidth}`,
+        `\u5B57\u7B26\u603B\u6570\uFF1A${m.charCount}`,
+        `\u4E2D\u6587\u6C49\u5B57\uFF1A${m.cjkCount}`,
+        `ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`
+      ]);
     });
     bar.appendChild(measureWidthBtn);
     const flattenListBtn = document.createElement("button");
@@ -14199,13 +14310,75 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
         btn.setAttribute("aria-label", label);
       }
     });
+    const coreControls = /* @__PURE__ */ new Set([
+      "capture.variable.ask",
+      "capture.variable.ask.options",
+      "capture.variable.ask.textarea",
+      "capture.variable.snippet",
+      "capture.variable.cursor",
+      "capture.variable.date",
+      "capture.variable.date.offset",
+      "capture.variable.random",
+      "capture.variable.doc",
+      "capture.variable.clipboard"
+    ]);
+    const extraButtons = Array.from(bar.querySelectorAll("button")).filter((btn) => {
+      var _a;
+      return !coreControls.has((_a = btn.dataset.xlcControl) != null ? _a : "");
+    });
+    const toolsToggleBtn = document.createElement("button");
+    toolsToggleBtn.type = "button";
+    toolsToggleBtn.className = "xlc-varbtn xlc-btn-ghost xlc-varbar-tools-toggle";
+    toolsToggleBtn.dataset.xlcControl = "capture.varbar.tools-toggle";
+    toolsToggleBtn.textContent = "\u{1F6E0} \u6587\u672C\u5DE5\u5177\u2026";
+    toolsToggleBtn.title = "\u5C55\u5F00\u53EF\u641C\u7D22\u7684\u6269\u5C55\u5B8F\u4E0E\u6587\u672C\u683C\u5F0F\u5316\u5DE5\u5177";
+    toolsToggleBtn.setAttribute("aria-label", "\u5C55\u5F00\u53EF\u641C\u7D22\u7684\u6269\u5C55\u5B8F\u4E0E\u6587\u672C\u683C\u5F0F\u5316\u5DE5\u5177");
+    toolsToggleBtn.setAttribute("aria-expanded", "false");
+    const toolsPanel = document.createElement("div");
+    toolsPanel.className = "xlc-varbar-tools-panel";
+    toolsPanel.dataset.xlcControl = "capture.varbar.tools-panel";
+    toolsPanel.hidden = true;
+    const toolsSearch = document.createElement("input");
+    toolsSearch.type = "search";
+    toolsSearch.className = "b3-text-field xlc-varbar-tools-search";
+    toolsSearch.dataset.xlcControl = "capture.varbar.tools-search";
+    toolsSearch.placeholder = "\u641C\u7D22\u5B8F\u6216\u6587\u672C\u5DE5\u5177\u2026";
+    toolsSearch.setAttribute("aria-label", "\u641C\u7D22\u5B8F\u6216\u6587\u672C\u5DE5\u5177");
+    const toolsList = document.createElement("div");
+    toolsList.className = "xlc-varbar-tools-list";
+    for (const btn of extraButtons) {
+      toolsList.appendChild(btn);
+    }
+    toolsSearch.addEventListener("input", () => {
+      var _a, _b, _c;
+      const kw = toolsSearch.value.trim().toLowerCase();
+      for (const btn of extraButtons) {
+        const hay = `${(_a = btn.textContent) != null ? _a : ""} ${(_b = btn.title) != null ? _b : ""} ${(_c = btn.dataset.xlcControl) != null ? _c : ""}`.toLowerCase();
+        btn.hidden = Boolean(kw) && !hay.includes(kw);
+      }
+    });
+    toolsSearch.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+    });
+    toolsToggleBtn.addEventListener("click", () => {
+      const nextOpen = toolsPanel.hidden;
+      toolsPanel.hidden = !nextOpen;
+      toolsToggleBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+      if (nextOpen) {
+        toolsSearch.value = "";
+        for (const btn of extraButtons) btn.hidden = false;
+        toolsSearch.focus();
+      }
+    });
+    toolsPanel.append(toolsSearch, toolsList);
+    bar.append(toolsToggleBtn, toolsPanel);
     return bar;
   }
-  var import_siyuan, TYPE_BADGES;
+  var import_siyuan2, TYPE_BADGES;
   var init_variable_form = __esm({
     "src/ui/variable-form.ts"() {
       "use strict";
-      import_siyuan = __toESM(require_stub_dom());
+      import_siyuan2 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_variables();
       init_clipboard_cleaner();
@@ -14225,23 +14398,82 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
   });
 
   // src/model/kramdown.ts
-  function bodyWriteRestriction(markdown) {
-    var _a;
-    if (!markdown.trim()) return "body is empty";
-    if (markdown.length > LIMITS.contentChars) return "body exceeds the supported size; nothing was written";
-    if (/[\u2028\u2029]/.test(markdown)) return "multi-line body writing is unavailable pending B-006 host verification";
+  function trimmedLines(markdown) {
     const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
     while (lines.length > 1 && lines[0].trim() === "") lines.shift();
     while (lines.length > 1 && lines[lines.length - 1].trim() === "") lines.pop();
+    return lines;
+  }
+  function isSingleBlockBody(markdown) {
+    var _a;
+    const lines = trimmedLines(markdown);
     const opening = (_a = lines[0]) == null ? void 0 : _a.match(/^(`{3,}|~{3,})([a-zA-Z0-9_+.-]*)[ \t]*$/);
     if (opening && lines.length >= 2) {
       const fence = opening[1];
       const close = new RegExp(`^ {0,3}${fence[0]}{${fence.length},}[ \\t]*$`);
       const closingIndex = lines.findIndex((line, index) => index > 0 && close.test(line));
-      if (closingIndex === lines.length - 1) return void 0;
+      if (closingIndex === lines.length - 1) return true;
     }
-    if (lines.length === 1 && !STRUCTURED_PATTERN.test(lines[0])) return void 0;
-    return "multi-line or structured body writing is unavailable pending B-006 host verification; use a single line or a complete code fence";
+    return lines.length === 1 && !STRUCTURED_PATTERN.test(lines[0]);
+  }
+  function itemBodyRestriction(markdown) {
+    if (!markdown.trim()) return "body is empty";
+    if (markdown.length > ITEM_BODY_MAX_CHARS) return "body exceeds the supported size; nothing was written";
+    const lines = markdown.replace(/\r\n?|[\u2028\u2029]/g, "\n").split("\n");
+    const codeLines = findCodeLines(lines);
+    if (lines.some((line, index) => !codeLines[index] && SUPERBLOCK_MARKER_LINE.test(line))) {
+      return "superblock markers ({{{ / }}}) at line start are reserved for the item container; remove them or put them in a code fence";
+    }
+    return void 0;
+  }
+  function toItemStorageMarkdown(markdown, forceContainer = false) {
+    const body = guardEmbedLines(normalizeKramdownIal(markdown.replace(/[\u2028\u2029]/g, "\n")).slice(0, ITEM_BODY_MAX_CHARS));
+    if (!forceContainer && isSingleBlockBody(body)) return body;
+    return `${CONTAINER_OPEN}${body}${CONTAINER_CLOSE}`;
+  }
+  function guardEmbedLines(markdown) {
+    const lines = markdown.split("\n");
+    const codeLines = findCodeLines(lines);
+    return lines.map((line, index) => codeLines[index] ? line : line.replace(EMBED_LINE_START, `$1${ZWSP}$2`)).join("\n");
+  }
+  function storedKramdownToBody(kramdown) {
+    var _a, _b, _c;
+    const lines = kramdown.replace(/\r\n?/g, "\n").split("\n");
+    const codeLines = findCodeLines(lines);
+    const out = [];
+    for (let index = 0; index < lines.length; index++) {
+      const line = (_a = lines[index]) != null ? _a : "";
+      if (codeLines[index]) {
+        out.push({ line, code: true });
+        continue;
+      }
+      const visible = line.replace(READ_ZWSP_PATTERN, "$1");
+      const stripped = visible.replace(HOST_IAL_PATTERN, "");
+      if (stripped === visible) {
+        out.push({ line: visible, code: false });
+        continue;
+      }
+      if (/^[\s>]*$/.test(stripped)) continue;
+      out.push({ line: stripped.replace(/[ \t]+$/, ""), code: false });
+    }
+    for (let index = out.length - 1; index >= 0; index--) {
+      const entry = out[index];
+      if (!entry.code && /^\s*>\s*$/.test(entry.line) && !/^\s*>/.test((_c = (_b = out[index + 1]) == null ? void 0 : _b.line) != null ? _c : "")) out.splice(index, 1);
+    }
+    let first = 0;
+    let last = out.length - 1;
+    while (first <= last && !out[first].line.trim()) first++;
+    while (last >= first && !out[last].line.trim()) last--;
+    if (last > first && !out[first].code && /^\{\{\{(?:row|col)\s*$/.test(out[first].line) && out[last].line.trim() === "}}}") {
+      first++;
+      last--;
+    }
+    const body = [];
+    for (const { line, code } of out.slice(first, last + 1)) {
+      if (!code && !line.trim() && body.length && !body[body.length - 1].trim()) continue;
+      body.push(line);
+    }
+    return body.join("\n").trim();
   }
   function normalizeIalToken(ial) {
     const attributes = ial.slice(2, -1);
@@ -14367,12 +14599,20 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
     }
     return output.join("\n").trim();
   }
-  var STRUCTURED_PATTERN, ATTRIBUTE_PATTERN, IAL_TOKEN_PATTERN;
+  var STRUCTURED_PATTERN, CONTAINER_OPEN, CONTAINER_CLOSE, ITEM_BODY_MAX_CHARS, SUPERBLOCK_MARKER_LINE, ZWSP, EMBED_LINE_START, READ_ZWSP_PATTERN, HOST_IAL_PATTERN, ATTRIBUTE_PATTERN, IAL_TOKEN_PATTERN;
   var init_kramdown = __esm({
     "src/model/kramdown.ts"() {
       "use strict";
       init_constants();
       STRUCTURED_PATTERN = /\{:|[{]{3}|[}]{3}|^ {0,3}(?:`{3,}|~{3,}|>|(?:[-*+]|\d{1,9}[.)])[ \t]|\||(?:[-*_][ \t]*){3,}$)/;
+      CONTAINER_OPEN = "{{{row\n";
+      CONTAINER_CLOSE = "\n}}}";
+      ITEM_BODY_MAX_CHARS = LIMITS.contentChars - CONTAINER_OPEN.length - CONTAINER_CLOSE.length;
+      SUPERBLOCK_MARKER_LINE = /^\s*(?:\{\{\{|\}\}\})/;
+      ZWSP = "\u200B";
+      EMBED_LINE_START = /^(\s*(?:>\s*)*(?:(?:[-*+]|\d{1,9}[.)])\s+(?:\[[ xX]\]\s+)?)?)(\{\{(?!\{))/;
+      READ_ZWSP_PATTERN = /\u200b(?=\{\{)|\u200b(?=`)|(`)\u200b/g;
+      HOST_IAL_PATTERN = /\{:[^{}]*\bid="\d{14}-[0-9a-z]{7}"[^{}]*\}/g;
       ATTRIBUTE_PATTERN = /(^|\s)([\w:-]+)=(?:"[^"]*"|'[^']*'|[^\s}]+)(?=\s|$)/g;
       IAL_TOKEN_PATTERN = /(`+)|(\{:[^{}]*\})/g;
     }
@@ -14721,11 +14961,11 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
     if (/^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|\*\*/.test(trimmed) || trimmed.includes("\n")) return "markdown";
     return "text";
   }
-  var import_siyuan2, TOAST_TITLE_MAX, shortTitle, newWriteKey, _CaptureDialog, CaptureDialog;
+  var import_siyuan3, TOAST_TITLE_MAX, shortTitle, newWriteKey, _CaptureDialog, CaptureDialog;
   var init_capture = __esm({
     "src/ui/capture.ts"() {
       "use strict";
-      import_siyuan2 = __toESM(require_stub_dom());
+      import_siyuan3 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_item();
       init_errors();
@@ -14851,7 +15091,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           }
           const content = text;
           if (!this.checkCaptureSize(content)) return;
-          if (bodyWriteRestriction(content)) {
+          if (itemBodyRestriction(content)) {
             this.deps.notify("error", this.deps.t("multiBlockPendingHint"));
             return;
           }
@@ -15046,7 +15286,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           const formWriteKey = newWriteKey("form");
           let tidySeq = 0;
           let draftSeq = 0;
-          const dialog = new import_siyuan2.Dialog({
+          const dialog = new import_siyuan3.Dialog({
             title: t("newItem"),
             content: "",
             width: "min(620px, 92vw)",
@@ -15164,12 +15404,6 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
           contentError.setAttribute("role", "alert");
           contentError.hidden = true;
           contentWrap.appendChild(contentError);
-          const multiBlockHint = document.createElement("span");
-          multiBlockHint.className = "xlc-form-hint";
-          multiBlockHint.dataset.xlcControl = "capture.body-restriction";
-          multiBlockHint.setAttribute("role", "note");
-          multiBlockHint.textContent = t("multiBlockPendingHint");
-          contentWrap.appendChild(multiBlockHint);
           const counterEl = document.createElement("span");
           counterEl.className = "xlc-form-counter";
           if (typeof counterEl.setAttribute === "function") {
@@ -15642,7 +15876,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
                 }
                 const contentBox = contentEl;
                 if (contentBox.value.trim()) {
-                  (0, import_siyuan2.confirm)(t("aiDraft"), t("aiDraftOverwrite"), () => {
+                  (0, import_siyuan3.confirm)(t("aiDraft"), t("aiDraftOverwrite"), () => {
                     contentBox.value = result.text;
                     contentBox.dispatchEvent(new Event("input", { bubbles: true }));
                   });
@@ -15766,7 +16000,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
                 return;
               }
             }
-            if (bodyWriteRestriction(markdown)) {
+            if (itemBodyRestriction(markdown)) {
               const message = markdown.length > LIMITS.contentChars ? t("aiContentTooLong", String(LIMITS.contentChars)) : t("multiBlockPendingHint");
               flagContentError(message);
               this.deps.notify("error", message);
@@ -15836,7 +16070,7 @@ ASCII\u5B57\u7B26\uFF1A${m.asciiCount}`);
               saveBtn.disabled = false;
               saveBtn.textContent = t("save");
               cancelBtn.disabled = false;
-              (0, import_siyuan2.confirm)("\u26A0\uFE0F " + t("duplicateTitle"), t("duplicateConfirm", dup.title), () => {
+              (0, import_siyuan3.confirm)("\u26A0\uFE0F " + t("duplicateTitle"), t("duplicateConfirm", dup.title), () => {
                 if (!closed) doSave();
               });
             }).catch((err) => {
@@ -16973,7 +17207,7 @@ ${finalHtml}
         "-->",
         "# \u5E38\u7528\u5185\u5BB9\u793A\u4F8B",
         "",
-        "> \u5C0F\u9A74\u5E38\u7528\uFF08\u5185\u6D4B\u7248\uFF09\u5E38\u7528\u5185\u5BB9\u793A\u4F8B\uFF1A\u4F7F\u7528\u8BF4\u660E / \u5730\u5740 / \u90AE\u7BB1 / \u8054\u7CFB\u65B9\u5F0F / \u5BA2\u670D\u56DE\u590D / AI \u63D0\u793A\u8BCD / \u7814\u53D1\u5199\u4F5C / \u5546\u52A1\u8D44\u6599 / \u8EAB\u4EFD\u5360\u4F4D / \u7F51\u5740 / JSON\u3002\u5BFC\u5165\u540E\u5373\u4E3A\u771F\u5B9E\u601D\u6E90\u5757\uFF0C\u53EF\u81EA\u7531\u4FEE\u6539\u3002\u591A\u884C\u6B63\u6587\u4E0E\u6DF7\u5408\u7ED3\u6784\u4ECD\u53D7 B-006 \u5199\u5165\u8FB9\u754C\u9650\u5236\u3002",
+        "> \u5C0F\u9A74\u5E38\u7528\uFF08\u5185\u6D4B\u7248\uFF09\u5E38\u7528\u5185\u5BB9\u793A\u4F8B\uFF1A\u4F7F\u7528\u8BF4\u660E / \u5730\u5740 / \u90AE\u7BB1 / \u8054\u7CFB\u65B9\u5F0F / \u5BA2\u670D\u56DE\u590D / AI \u63D0\u793A\u8BCD / \u7814\u53D1\u5199\u4F5C / \u5546\u52A1\u8D44\u6599 / \u8EAB\u4EFD\u5360\u4F4D / \u7F51\u5740 / JSON\u3002\u5BFC\u5165\u540E\u5373\u4E3A\u771F\u5B9E\u601D\u6E90\u5757\uFF08\u591A\u6BB5\u6B63\u6587\u88C5\u8FDB\u4E00\u4E2A\u8D85\u7EA7\u5757\uFF09\uFF0C\u53EF\u81EA\u7531\u4FEE\u6539\u3002",
         "",
         // ---- 入门与个人信息 ----
         "## \u4F7F\u7528\u8BF4\u660E\uFF1A\u4E09\u6B65\u5F00\u59CB",
@@ -17183,7 +17417,7 @@ ${finalHtml}
         "## \u7ED3\u8BBA",
         "- {{xlc:cursor}}",
         "## \u5F85\u529E",
-        "- [ ] __\u4E8B\u9879__\uFF08\u8D1F\u8D23\u4EBA\uFF1A__ / \u622A\u6B62\uFF1A__\uFF09",
+        "- [ ] {{xlc:ask:\u5F85\u529E\u4E8B\u9879}}\uFF08\u8D1F\u8D23\u4EBA\uFF1A{{xlc:ask:\u8D1F\u8D23\u4EBA}} / \u622A\u6B62\uFF1A{{xlc:ask:\u622A\u6B62\u65E5\u671F|date}}\uFF09",
         "## \u98CE\u9669",
         "- ",
         "## \u65E5\u8BA1\u5212\u6A21\u677F",
@@ -17292,7 +17526,7 @@ ${finalHtml}
         "",
         "> \u{1F4A1} \u63D0\u793A\uFF1A\u672C\u7B54\u590D\u9002\u7528\u4E8E\u5E38\u89C1\u6807\u51C6\u6D41\u7A0B\uFF1B\u590D\u6742\u7279\u6B8A\u60C5\u51B5\u8BF7\u8F6C\u4EBA\u5DE5\u4E13\u9879\u5DE5\u5355\u8DDF\u8FDB\u3002{{xlc:cursor}}",
         "",
-        // ---- 场景⑤ 单行资料与代码格式示例（符合当前 B-006 写入边界） ----
+        // ---- 场景⑤ 单行资料与代码格式示例 ----
         "## \u90AE\u7BB1\u5730\u5740\uFF08\u5355\u884C\u793A\u4F8B\uFF09",
         "",
         "<!-- xlc-item",
@@ -17364,7 +17598,7 @@ ${finalHtml}
         "-->",
         "# \u6E10\u8FDB\u53CD\u601D\u6279\u5224\u6A21\u677F\u5305",
         "",
-        "> \u4E13\u4E3A SuperMemo \u6E10\u8FDB\u5B66\u4E60\u4E0E\u6DF1\u5EA6\u9605\u8BFB\u6253\u9020\u7684\u9AD8\u9636\u8BA4\u77E5\u52A0\u5DE5\u6A21\u677F\u96C6\u3002\u544A\u522B\u88AB\u52A8\u5212\u7EBF\u6458\u6284\uFF0C\u901A\u8FC7\u6838\u5FC3\u8BBA\u70B9\u3001\u53CD\u601D\u8D28\u7591\u3001\u7F51\u72B6\u8054\u7ED3\u4E0E\u5B9E\u8DF5\u884C\u52A8\u56DB\u6B65\u8DC3\u8FC1\uFF0C\u5C06\u5916\u90E8\u4FE1\u606F\u5185\u5316\u4E3A\u4E2A\u4EBA\u6C38\u4E45\u601D\u7EF4\u8D44\u4EA7\u3002\u5168\u90E8\u6761\u76EE\u5747\u7B26\u5408 B-006 \u5199\u524D\u5B89\u5168\u9650\u5236\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
+        "> \u4E13\u4E3A SuperMemo \u6E10\u8FDB\u5B66\u4E60\u4E0E\u6DF1\u5EA6\u9605\u8BFB\u6253\u9020\u7684\u9AD8\u9636\u8BA4\u77E5\u52A0\u5DE5\u6A21\u677F\u96C6\u3002\u544A\u522B\u88AB\u52A8\u5212\u7EBF\u6458\u6284\uFF0C\u901A\u8FC7\u6838\u5FC3\u8BBA\u70B9\u3001\u53CD\u601D\u8D28\u7591\u3001\u7F51\u72B6\u8054\u7ED3\u4E0E\u5B9E\u8DF5\u884C\u52A8\u56DB\u6B65\u8DC3\u8FC1\uFF0C\u5C06\u5916\u90E8\u4FE1\u606F\u5185\u5316\u4E3A\u4E2A\u4EBA\u6C38\u4E45\u601D\u7EF4\u8D44\u4EA7\u3002\u5F00\u7BB1\u5373\u7528\u3002",
         "",
         "## \u6838\u5FC3\u8BBA\u70B9\u63D0\u70BC (Thesis)",
         "",
@@ -17447,7 +17681,7 @@ ${finalHtml}
         "-->",
         "# Task Horizon SOP \u4EFB\u52A1\u6E05\u5355\u5305",
         "",
-        "> \u4E13\u4E3A\u914D\u5408 Task Horizon (\u4EFB\u52A1\u89C6\u754C) \u6253\u9020\u7684\u6807\u51C6 SOP \u591A\u5C42\u7EA7\u591A\u5C5E\u6027\u4EFB\u52A1\u6E05\u5355\u3002\u63D2\u5165\u601D\u6E90\u6587\u6863\u540E\uFF0CTask Horizon \u81EA\u52A8\u8BC6\u522B\u5E76\u6784\u5EFA\u5C42\u7EA7\u4EFB\u52A1\u6811\u4E0E\u770B\u677F\u5361\u7247\u3002\u5168\u90E8\u6761\u76EE\u4EE5\u5B8C\u6574 Markdown \u56F4\u680F\u627F\u8F7D\uFF0C100% \u4E25\u683C\u7B26\u5408 B-006 \u5199\u524D\u5B89\u5168\u9650\u5236\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
+        "> \u4E13\u4E3A\u914D\u5408 Task Horizon (\u4EFB\u52A1\u89C6\u754C) \u6253\u9020\u7684\u6807\u51C6 SOP \u591A\u5C42\u7EA7\u591A\u5C5E\u6027\u4EFB\u52A1\u6E05\u5355\u3002\u63D2\u5165\u601D\u6E90\u6587\u6863\u540E\uFF0CTask Horizon \u81EA\u52A8\u8BC6\u522B\u5E76\u6784\u5EFA\u5C42\u7EA7\u4EFB\u52A1\u6811\u4E0E\u770B\u677F\u5361\u7247\u3002\u5168\u90E8\u6761\u76EE\u4EE5\u5B8C\u6574 Markdown \u56F4\u680F\u627F\u8F7D\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
         "",
         "## \u{1F680} \u9879\u76EE\u53D1\u7248 SOP Checklist",
         "",
@@ -17508,7 +17742,7 @@ ${finalHtml}
         "-->",
         "# \u601D\u6E90\u6807\u51C6 Callout \u63D0\u793A\u6846\u7EC4\u4EF6\u5305",
         "",
-        "> \u57FA\u4E8E\u601D\u6E90\u5B98\u65B9\u6807\u51C6 Callout (\u5F15\u7528\u5757\u8F6C\u9AD8\u4EAE\u6298\u53E0\u63D0\u793A\u5361\u7247) \u89C4\u8303\u6253\u9020\u7684\u9AD8\u8D28\u611F\u7EC4\u4EF6\u5E93\u3002\u652F\u6301\u5E26\u53C2\u52A8\u6001\u53D8\u91CF\uFF0C\u4E00\u952E\u63D2\u5165\u9AD8\u4EAE\u9192\u76EE\u7684 Note/Tip/Warning/Important/Caution \u5361\u7247\u3002\u5168\u90E8\u6761\u76EE\u4EE5\u5B8C\u6574 Markdown \u56F4\u680F\u627F\u8F7D\uFF0C100% \u4E25\u683C\u7B26\u5408 B-006 \u5199\u524D\u5B89\u5168\u9650\u5236\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
+        "> \u57FA\u4E8E\u601D\u6E90\u5B98\u65B9\u6807\u51C6 Callout (\u5F15\u7528\u5757\u8F6C\u9AD8\u4EAE\u6298\u53E0\u63D0\u793A\u5361\u7247) \u89C4\u8303\u6253\u9020\u7684\u9AD8\u8D28\u611F\u7EC4\u4EF6\u5E93\u3002\u652F\u6301\u5E26\u53C2\u52A8\u6001\u53D8\u91CF\uFF0C\u4E00\u952E\u63D2\u5165\u9AD8\u4EAE\u9192\u76EE\u7684 Note/Tip/Warning/Important/Caution \u5361\u7247\u3002\u5168\u90E8\u6761\u76EE\u4EE5\u5B8C\u6574 Markdown \u56F4\u680F\u627F\u8F7D\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
         "",
         "## \u{1F4CC} [!NOTE] \u6838\u5FC3\u7B14\u8BB0\u5361\u7247",
         "",
@@ -17590,7 +17824,7 @@ ${finalHtml}
         "-->",
         "# \u5B66\u672F\u79D1\u7814\u89C4\u8303\u5F15\u6587\u6A21\u677F\u5305",
         "",
-        "> \u4E13\u4E3A\u5B66\u672F\u79D1\u7814\u3001\u6BD5\u4E1A\u8BBA\u6587\u4E0E\u5B66\u672F\u62A5\u544A\u6253\u9020\u7684\u6807\u51C6 CSL \u53C2\u8003\u6587\u732E\u5F15\u7528\u6A21\u677F\u3002\u6DB5\u76D6 GB/T 7714-2015 \u987A\u5E8F\u7F16\u7801\u5236\u6807\u51C6\u671F\u520A/\u4E13\u8457/\u5B66\u4F4D\u8BBA\u6587\u4EE5\u53CA\u56FD\u9645\u901A\u7528 APA 7th \u683C\u5F0F\u3002\u652F\u6301\u53D8\u91CF\u586B\u5145\u4E0E\u4E00\u952E\u751F\u6210\u6807\u51C6\u5B66\u672F\u5F15\u6587\uFF0C100% \u7B26\u5408 B-006 \u5199\u524D\u5B89\u5168\u9650\u5236\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
+        "> \u4E13\u4E3A\u5B66\u672F\u79D1\u7814\u3001\u6BD5\u4E1A\u8BBA\u6587\u4E0E\u5B66\u672F\u62A5\u544A\u6253\u9020\u7684\u6807\u51C6 CSL \u53C2\u8003\u6587\u732E\u5F15\u7528\u6A21\u677F\u3002\u6DB5\u76D6 GB/T 7714-2015 \u987A\u5E8F\u7F16\u7801\u5236\u6807\u51C6\u671F\u520A/\u4E13\u8457/\u5B66\u4F4D\u8BBA\u6587\u4EE5\u53CA\u56FD\u9645\u901A\u7528 APA 7th \u683C\u5F0F\u3002\u652F\u6301\u53D8\u91CF\u586B\u5145\u4E0E\u4E00\u952E\u751F\u6210\u6807\u51C6\u5B66\u672F\u5F15\u6587\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
         "",
         "## \u{1F4DA} GB/T 7714-2015 \u671F\u520A\u6587\u7AE0 (J)",
         "",
@@ -17971,8 +18205,8 @@ ${finalHtml}
       } else {
         itemType = inferTypeFromText(content);
       }
-      if (bodyWriteRestriction(content)) {
-        issues.push(`\u7B2C ${rowNum} \u884C\u300C${title}\u300D\uFF1A\u6B63\u6587\u5305\u542B\u591A\u884C\u6216\u590D\u6742\u7ED3\u6784\uFF0C\u5728\u5F53\u524D\u53D7\u9650\u6A21\u5F0F\u4E0B\u4FDD\u5B58\u5C06\u53D7\u5230\u5B89\u5168\u4FDD\u62A4`);
+      if (itemBodyRestriction(content)) {
+        issues.push(`\u7B2C ${rowNum} \u884C\u300C${title}\u300D\uFF1A\u6B63\u6587\u884C\u9996\u542B\u8D85\u7EA7\u5757\u6807\u8BB0 {{{ / }}}\uFF0C\u5BFC\u5165\u65F6\u4F1A\u88AB\u62D2\u7EDD\u5199\u5165`);
       }
       const id = csvTsvLogicalId(title, category, alias, content.slice(0, 60));
       items.push({
@@ -18032,7 +18266,7 @@ ${finalHtml}
       observer == null ? void 0 : observer.disconnect();
       onClose == null ? void 0 : onClose();
     };
-    const dialog = new import_siyuan4.Dialog({
+    const dialog = new import_siyuan5.Dialog({
       title: t("csvImportTitle"),
       content: "",
       width: "min(800px, 96vw)",
@@ -18332,11 +18566,11 @@ ${finalHtml}
     });
     ta.focus();
   }
-  var import_siyuan4;
+  var import_siyuan5;
   var init_csv_tsv_wizard = __esm({
     "src/ui/csv-tsv-wizard.ts"() {
       "use strict";
-      import_siyuan4 = __toESM(require_stub_dom());
+      import_siyuan5 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_csv_tsv_import();
       init_errors();
@@ -18502,14 +18736,14 @@ ${finalHtml}
         }
       }
       if (content && item.itemType !== "code") {
-        const restriction = bodyWriteRestriction(content);
+        const restriction = itemBodyRestriction(content);
         if (restriction) {
           issues.push({
             itemId: item.id,
             itemTitle: item.title,
             severity: "warning",
             type: "write-restriction",
-            message: `\u6B63\u6587\u89E6\u53D1 B-006 \u591A\u5757\u5199\u524D\u53D7\u9650\u9632\u5FA1\uFF08${restriction}\uFF09`,
+            message: `\u6B63\u6587\u65E0\u6CD5\u6309\u6761\u76EE\u5BB9\u5668\u5199\u56DE\uFF08${restriction}\uFF09`,
             details: restriction
           });
         }
@@ -18826,10 +19060,10 @@ ${finalHtml}
     };
   }
   function openSanitizerOptionsDialog(initialOptions, onConfirm) {
-    if (typeof import_siyuan5.Dialog === "undefined") return null;
+    if (typeof import_siyuan6.Dialog === "undefined") return null;
     let dialog;
     try {
-      dialog = new import_siyuan5.Dialog({
+      dialog = new import_siyuan6.Dialog({
         title: "\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879",
         content: "",
         width: "min(560px, 92vw)",
@@ -18859,13 +19093,13 @@ ${finalHtml}
     if (innerHeader) innerHeader.style.display = "none";
     return dialog;
   }
-  var import_siyuan5, MockElement;
+  var import_siyuan6, MockElement;
   var init_export_sanitizer_modal = __esm({
     "src/ui/export-sanitizer-modal.ts"() {
       "use strict";
       init_clipboard();
       init_dialog_dom();
-      import_siyuan5 = __toESM(require_stub_dom());
+      import_siyuan6 = __toESM(require_stub_dom());
       MockElement = class {
         constructor(tagName = "div") {
           this._classes = /* @__PURE__ */ new Set();
@@ -19631,7 +19865,7 @@ ${finalHtml}
     if (isBrowser) {
       let dialog = null;
       try {
-        dialog = new import_siyuan6.Dialog({
+        dialog = new import_siyuan7.Dialog({
           title: titleText,
           content: "",
           width: "min(960px, 94vw)",
@@ -19854,12 +20088,12 @@ ${finalHtml}
       }
     };
   }
-  var import_siyuan6, MockElement2, STRATEGY_DESCRIPTIONS;
+  var import_siyuan7, MockElement2, STRATEGY_DESCRIPTIONS;
   var init_sync_diff_modal = __esm({
     "src/ui/sync-diff-modal.ts"() {
       "use strict";
       init_sync_diff();
-      import_siyuan6 = __toESM(require_stub_dom());
+      import_siyuan7 = __toESM(require_stub_dom());
       init_clipboard();
       init_dialog_dom();
       MockElement2 = class {
@@ -22588,7 +22822,7 @@ ${exception.mark.snippet}`;
     }
     activeSetupDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan7.Dialog({
+    const dialog = new import_siyuan8.Dialog({
       title: t("setupTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -22618,7 +22852,7 @@ ${exception.mark.snippet}`;
     }
     activeSettingsDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan7.Dialog({
+    const dialog = new import_siyuan8.Dialog({
       title: t("openSettings"),
       content: "",
       width: "min(720px, 92vw)",
@@ -22781,7 +23015,7 @@ ${exception.mark.snippet}`;
     }
     const all = Array.from(idx.items.values());
     const categories = Array.from(new Set(all.map((i) => i.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-    const dialog = new import_siyuan7.Dialog({
+    const dialog = new import_siyuan8.Dialog({
       title: t("packExportTitle"),
       content: "",
       width: "min(580px, 92vw)",
@@ -23047,6 +23281,18 @@ ${exception.mark.snippet}`;
         ctx.persistSoon();
       }
     ));
+    const clipSwitchRow = buildSwitchRow(
+      t("clipboardHistoryToggle"),
+      t("clipboardHistorySub"),
+      Boolean(ctx.state.clipboardHistoryEnabled),
+      (value) => {
+        ctx.state.clipboardHistoryEnabled = value;
+        ctx.persistSoon();
+      }
+    );
+    const clipSwitchInput = clipSwitchRow.querySelector("input[type='checkbox']");
+    if (clipSwitchInput) clipSwitchInput.dataset.xlcControl = "settings.prefs.clipboardHistoryEnabled";
+    sec.appendChild(clipSwitchRow);
     const foot = document.createElement("div");
     foot.className = "xlc-setting-row";
     const hint = document.createElement("span");
@@ -23064,7 +23310,7 @@ ${exception.mark.snippet}`;
     syncClearUsage();
     clearBtn.addEventListener("click", () => {
       if (!hasUsage()) return;
-      (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
+      (0, import_siyuan8.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
         var _a;
         ctx.state.usage = {};
         ctx.persistSoon();
@@ -23098,7 +23344,7 @@ ${exception.mark.snippet}`;
       if (countRememberedFields(ctx.state.variableMemory) === 0) return;
       const confirmTitle = "\u26A0\uFE0F " + (t("clearVariableMemoryBtn") || "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6");
       const confirmBody = t("clearVariableMemoryConfirm") || "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u8BB0\u4F4F\u7684\u6240\u6709\u53D8\u91CF\u5386\u53F2\u586B\u5199\u503C\u5417\uFF1F\u6761\u76EE\u6A21\u677F\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002";
-      (0, import_siyuan7.confirm)(confirmTitle, confirmBody, () => {
+      (0, import_siyuan8.confirm)(confirmTitle, confirmBody, () => {
         ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
         ctx.persistSoon();
         syncClearMem();
@@ -23300,7 +23546,7 @@ ${exception.mark.snippet}`;
     root.appendChild(stepsEl);
     const hint = document.createElement("p");
     hint.className = "xlc-form-hint";
-    hint.style.marginBottom = "12px";
+    hint.style.marginBottom = "2px";
     hint.textContent = t("setupHint");
     root.appendChild(hint);
     const usageGuide = document.createElement("p");
@@ -23740,7 +23986,7 @@ ${exception.mark.snippet}`;
       }
       const revision = setupRevision;
       const confirmText = mode === "new-notebook" ? t("setupIndependentConfirmCreate", notebookName, title) : t("setupConfirmCreate", title);
-      (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
+      (0, import_siyuan8.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
         if (creatingLibrary || setupRevision !== revision || modeSelect.value !== mode || mode === "new-doc" && nbSelect.value !== notebookId || mode === "new-notebook" && independentNotebookInput.value.trim() !== notebookName || nameInput.value.trim() !== title) return;
         creatingLibrary = true;
         clearOrphanReceipt();
@@ -24142,7 +24388,7 @@ ${exception.mark.snippet}`;
         delBtn.setAttribute("aria-label", `${t("delete")}\uFF1A${ct.name}`);
         delBtn.title = `${t("delete")}\uFF1A${ct.name}`;
         delBtn.addEventListener("click", () => {
-          (0, import_siyuan7.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
+          (0, import_siyuan8.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
             ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
             persistCt();
             repaintCt();
@@ -24311,7 +24557,7 @@ ${exception.mark.snippet}`;
         remove.textContent = t("savedViewsDelete");
         remove.setAttribute("aria-label", `${t("savedViewsDelete")}\uFF1A${view.name}`);
         remove.addEventListener("click", () => {
-          (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
+          (0, import_siyuan8.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
             var _a;
             if (ctx.deleteSavedDiscoveryView) {
               ctx.deleteSavedDiscoveryView(view.id);
@@ -24751,7 +24997,7 @@ fi`;
     const clearRecentsBtn = mkBtn(ctx.state.recents.length ? t("clearRecents") : t("clearRecentsEmpty"), void 0, "settings.data.clearRecents");
     clearRecentsBtn.addEventListener("click", () => {
       if (ctx.state.recents.length === 0 || clearRecentsBtn.disabled) return;
-      (0, import_siyuan7.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
+      (0, import_siyuan8.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
         var _a;
         ctx.state.recents = [];
         ctx.persistSoon();
@@ -25258,7 +25504,7 @@ fi`;
   }
   function openEspansoImportDialog(ctx, onClose) {
     const t = ctx.t;
-    const dialog = new import_siyuan7.Dialog({
+    const dialog = new import_siyuan8.Dialog({
       title: t("espansoTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -25423,7 +25669,7 @@ fi`;
     } catch (err) {
       throw new Error(ctx.aiErrorText(err));
     }
-    const dialog = new import_siyuan7.Dialog({
+    const dialog = new import_siyuan8.Dialog({
       title: t("tagAuditTitle"),
       content: "",
       width: "min(620px, 92vw)",
@@ -25474,7 +25720,7 @@ fi`;
   function openImportPolicyDialog(ctx, parsed, issues, source) {
     var _a, _b, _c;
     const t = ctx.t;
-    const dialog = new import_siyuan7.Dialog({
+    const dialog = new import_siyuan8.Dialog({
       title: t("importPolicyTitle"),
       content: "",
       width: "min(540px, 92vw)",
@@ -25678,11 +25924,11 @@ fi`;
     });
     body.appendChild(wrap);
   }
-  var import_siyuan7, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
+  var import_siyuan8, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
   var init_settings_dialog = __esm({
     "src/ui/settings-dialog.ts"() {
       "use strict";
-      import_siyuan7 = __toESM(require_stub_dom());
+      import_siyuan8 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_storage();
       init_constants();
@@ -25710,7 +25956,7 @@ fi`;
   });
 
   // src/ui/dialog.ts
-  var import_siyuan3 = __toESM(require_stub_dom());
+  var import_siyuan4 = __toESM(require_stub_dom());
   init_dialog_dom();
   init_item();
   init_clipboard_cleaner();
@@ -26795,7 +27041,7 @@ fi`;
       const isMobile = this.deps.isMobile();
       void ((_b = (_a = this.deps).syncSystemClipboard) == null ? void 0 : _b.call(_a));
       this.prevActiveElement = document.activeElement;
-      const dialog = new import_siyuan3.Dialog({
+      const dialog = new import_siyuan4.Dialog({
         title: this.deps.t("pluginName"),
         content: "",
         // 桌面采用宽松密度，减少截断并让双栏预览一次展示更多内容；移动端仍由 sheet 占满视口。
@@ -27081,23 +27327,9 @@ fi`;
         kbdLabel.textContent = this.deps.t("shortcutLabel");
         kbdRow.appendChild(kbdLabel);
         const kbdDefinitions = [
-          { id: "insert", key: "Enter", action: "\u63D2\u5165\u6587\u672C\u5FEB\u7167" },
-          { id: "embed", key: formatPlatformShortcut("Shift+Enter", isApple), action: "\u5D4C\u5165\u540C\u6B65\u5757" },
-          { id: "blockref", key: formatPlatformShortcut("Alt+Enter", isApple), action: "\u63D2\u5165\u5757\u5F15\u7528" },
-          { id: "adjacent", key: `${isApple ? "\u2325" : "Alt"} + J`, action: "\u524D\u540E\u6587\u63A2\u9488" },
-          { id: "copy", key: `${isApple ? "\u2318" : "Ctrl"} + Enter`, action: this.deps.t("kbdCopy") },
+          { id: "insert", key: "Enter", action: this.deps.t("insert") },
+          { id: "copy", key: formatPlatformShortcut("Ctrl+Enter", isApple).replace(/\+/g, " + "), action: this.deps.t("kbdCopy") },
           { id: "quickInsert", key: `${isApple ? "\u2325" : "Alt"} + 1-9`, action: this.deps.t("kbdQuickInsert") },
-          { id: "quickCopy", key: `${isApple ? "\u2325 + \u21E7" : "Alt + Shift"} + 1-9`, action: this.deps.t("kbdQuickCopy") },
-          { id: "captureOmni", key: `${isApple ? "\u2325" : "Alt"} + S`, action: "\u6536\u5F55\u5168\u5E93\u5757" },
-          { id: "copyRef", key: `${isApple ? "\u2325" : "Alt"} + R`, action: "\u590D\u5236\u5757\u5F15\u7528" },
-          { id: "openSource", key: `${isApple ? "\u2325" : "Alt"} + D`, action: "\u6253\u5F00\u6765\u6E90\u5B9A\u4F4D" },
-          { id: "copyMd", key: `${isApple ? "\u2325" : "Alt"} + M`, action: "\u590D\u5236 Markdown" },
-          { id: "hierarchy", key: `${isApple ? "\u2325" : "Alt"} + H`, action: "\u5C42\u7EA7\u5927\u7EB2" },
-          { id: "pin", key: `${isApple ? "\u2325" : "Alt"} + P`, action: "\u56FA\u5B9A\u7A97\u53E3" },
-          { id: "copyClose", key: `${isApple ? "\u2325" : "Alt"} + C`, action: "\u590D\u5236\u5E76\u5173\u95ED" },
-          { id: "cycleScope", key: `${isApple ? "\u2325" : "Alt"} + T`, action: "\u8F6E\u8F6C\u8303\u56F4" },
-          { id: "omniPrefix", key: "@ /", action: "\u5168\u5E93\u7A7F\u900F" },
-          { id: "favorite", key: `${isApple ? "\u2325" : "Alt"} + F`, action: this.deps.t("kbdFavorite") },
           { id: "tab", key: "Tab", action: this.deps.t("kbdTabActions") },
           { id: "close", key: "Esc", action: this.deps.t("kbdClose") }
         ];
@@ -27273,9 +27505,6 @@ fi`;
         filters.insertBefore(targetBanner, filters.firstChild);
       }
       root.appendChild(filters);
-      if (!isMobile) {
-        root.appendChild(this.buildMetricsStrip());
-      }
       const quickPills = document.createElement("div");
       quickPills.className = "xlc-quick-filter-pills";
       quickPills.style.display = "none";
@@ -27483,7 +27712,7 @@ fi`;
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
     openUsageGuide() {
       var _a;
-      const guideDialog = new import_siyuan3.Dialog({
+      const guideDialog = new import_siyuan4.Dialog({
         title: this.deps.t("usageGuideTitle"),
         content: "",
         width: "min(600px, 92vw)",
@@ -27594,69 +27823,6 @@ fi`;
       });
       head.appendChild(collapseBtn);
       return head;
-    }
-    buildMetricsStrip() {
-      const strip = document.createElement("div");
-      strip.className = "xlc-metrics-strip";
-      strip.dataset.xlcControl = "metrics.strip";
-      strip.setAttribute("role", "region");
-      strip.setAttribute("aria-label", "\u5173\u952E\u6307\u6807\u6982\u89C8");
-      const makeItem = (key, label, initialValue = "0") => {
-        const item = document.createElement("div");
-        item.className = "xlc-metric-item";
-        const num = document.createElement("div");
-        num.className = "xlc-metric-number";
-        num.dataset.xlcMetric = key;
-        num.textContent = initialValue;
-        const lbl = document.createElement("div");
-        lbl.className = "xlc-metric-label";
-        lbl.textContent = label;
-        item.appendChild(num);
-        item.appendChild(lbl);
-        return item;
-      };
-      const divider = () => {
-        const div = document.createElement("div");
-        div.className = "xlc-metric-divider";
-        return div;
-      };
-      const labelTotal = this.deps.t("metricTotal") || "\u8D44\u4EA7\u603B\u8BA1";
-      const labelUsage = this.deps.t("metricUsage") || "\u590D\u7528\u9891\u6B21";
-      const labelFav = this.deps.t("metricFav") || "\u661F\u6807\u6536\u85CF";
-      const labelProviders = this.deps.t("metricProviders") || "\u5916\u90E8\u751F\u6001";
-      strip.appendChild(makeItem("total", labelTotal, String(this.results.length)));
-      strip.appendChild(divider());
-      strip.appendChild(makeItem("usage", labelUsage, "0"));
-      strip.appendChild(divider());
-      strip.appendChild(makeItem("fav", labelFav, "0"));
-      strip.appendChild(divider());
-      strip.appendChild(makeItem("providers", labelProviders, String(this.providerRows.length)));
-      return strip;
-    }
-    updateMetricsStrip() {
-      var _a, _b, _c;
-      const strip = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-metrics-strip");
-      if (!strip) return;
-      const totalEl = strip.querySelector("[data-xlc-metric='total']");
-      const usageEl = strip.querySelector("[data-xlc-metric='usage']");
-      const favEl = strip.querySelector("[data-xlc-metric='fav']");
-      const provEl = strip.querySelector("[data-xlc-metric='providers']");
-      if (totalEl) totalEl.textContent = String(this.results.length);
-      if (usageEl) {
-        const usage = this.deps.getUsage ? this.deps.getUsage() : {};
-        let sum = 0;
-        for (const item of this.results) {
-          sum += (_c = (_b = usage[item.id]) == null ? void 0 : _b.count) != null ? _c : 0;
-        }
-        usageEl.textContent = String(sum);
-      }
-      if (favEl) {
-        const favCount = this.results.filter((r) => this.deps.isFavorite ? this.deps.isFavorite(r.id) : false).length;
-        favEl.textContent = String(favCount);
-      }
-      if (provEl) {
-        provEl.textContent = String(this.providerRows.length);
-      }
     }
     buildPaneFoot() {
       const foot = document.createElement("div");
@@ -28665,7 +28831,6 @@ fi`;
     }
     renderList(list) {
       var _a, _b, _c, _d;
-      this.updateMetricsStrip();
       (_a = this.virtualListCleanup) == null ? void 0 : _a.call(this);
       this.virtualListCleanup = null;
       this.virtualEnsureIndex = null;
@@ -30033,6 +30198,7 @@ fi`;
           sec2.setAttribute("role", "group");
           sec2.setAttribute("aria-label", "\u6269\u5C55\u64CD\u4F5C");
         }
+        let silentTarget = sec2;
         const addSilent = (icon, label, run, cls = "xlc-menu-item", title) => {
           const btn = this.menuButton(icon, label, cls, async () => {
             var _a3;
@@ -30041,7 +30207,7 @@ fi`;
             await run();
           });
           if (title) btn.title = title;
-          sec2.appendChild(btn);
+          silentTarget.appendChild(btn);
           return btn;
         };
         if (entry.isOmni) {
@@ -30124,6 +30290,47 @@ fi`;
             await this.deps.copyProviderPayload(code);
             (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", this.deps.t("copyCompactBundleSuccess"));
           });
+          const textToolsPanel = document.createElement("div");
+          textToolsPanel.className = "xlc-menu-text-tools-panel";
+          textToolsPanel.dataset.xlcControl = "dialog.menu.text-tools-panel";
+          textToolsPanel.hidden = true;
+          const textToolsSearch = document.createElement("input");
+          textToolsSearch.type = "search";
+          textToolsSearch.className = "b3-text-field xlc-menu-text-tools-search";
+          textToolsSearch.dataset.xlcControl = "dialog.menu.text-tools-search";
+          textToolsSearch.placeholder = "\u641C\u7D22\u6587\u672C\u5DE5\u5177\u2026";
+          textToolsSearch.setAttribute("aria-label", "\u641C\u7D22\u6587\u672C\u5DE5\u5177");
+          textToolsSearch.addEventListener("keydown", (ev) => {
+            ev.stopPropagation();
+          });
+          const textToolsList = document.createElement("div");
+          textToolsList.className = "xlc-menu-text-tools-list";
+          textToolsPanel.append(textToolsSearch, textToolsList);
+          const textToolsToggleBtn = this.menuButton("\u{1F6E0}", "\u6587\u672C\u5DE5\u5177\u2026", "xlc-menu-item", () => {
+            const nextOpen = textToolsPanel.hidden;
+            textToolsPanel.hidden = !nextOpen;
+            textToolsToggleBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+            if (nextOpen) {
+              textToolsSearch.value = "";
+              textToolsList.querySelectorAll(".xlc-menu-item").forEach((el) => {
+                el.hidden = false;
+              });
+              textToolsSearch.focus();
+            }
+          });
+          textToolsToggleBtn.dataset.xlcControl = "dialog.menu.text-tools-toggle";
+          textToolsToggleBtn.setAttribute("aria-expanded", "false");
+          sec2.appendChild(textToolsToggleBtn);
+          sec2.appendChild(textToolsPanel);
+          textToolsSearch.addEventListener("input", () => {
+            const kw = textToolsSearch.value.trim().toLowerCase();
+            textToolsList.querySelectorAll(".xlc-menu-item").forEach((el) => {
+              var _a3, _b3;
+              const hay = `${(_a3 = el.textContent) != null ? _a3 : ""} ${(_b3 = el.title) != null ? _b3 : ""}`.toLowerCase();
+              el.hidden = Boolean(kw) && !hay.includes(kw);
+            });
+          });
+          silentTarget = textToolsList;
           addSilent("\u2726", "\u76D8\u53E4\u6392\u7248 (\u4E2D\u82F1\u6587\u52A0\u7A7A\u683C\u5E76\u590D\u5236)", async () => {
             var _a3, _b3;
             const raw = entry.content || await this.deps.preview(entry.id) || "";
@@ -31764,6 +31971,7 @@ ${progress.progressBar}`);
               (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", "\u5DF2\u590D\u5236\u5265\u79BB\u53D8\u91CF\u6807\u8BB0\u540E\u7684\u7EAF\u6B63\u6587");
             });
           }
+          silentTarget = sec2;
           const useCount = (_c2 = this.usageCounts.get(entry.id)) != null ? _c2 : 0;
           if (useCount > 0 && this.deps.resetItemUsage) {
             addSilent("\u21BA", this.deps.t("resetItemUsage", String(useCount)), async () => {
@@ -32698,9 +32906,16 @@ ${progress.progressBar}`);
       addTagBtn.textContent = "\uFF0B \u52A0\u6807\u7B7E";
       addTagBtn.addEventListener("click", () => {
         if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
-        const input = typeof window !== "undefined" && typeof window.prompt === "function" ? window.prompt("\u8BF7\u8F93\u5165\u8981\u6279\u91CF\u8FFD\u52A0\u7684\u6807\u7B7E\uFF08\u652F\u6301\u4E2D\u82F1\u6587\u9017\u53F7\u5206\u53F7\u5206\u9694\uFF09\uFF1A") : "";
-        if (!input || !input.trim()) return;
-        void this.applyBatchUpdate({ addTags: [input.trim()] });
+        openTextPromptDialog({
+          title: "\uFF0B \u6279\u91CF\u52A0\u6807\u7B7E",
+          label: "\u8BF7\u8F93\u5165\u8981\u6279\u91CF\u8FFD\u52A0\u7684\u6807\u7B7E\uFF08\u652F\u6301\u4E2D\u82F1\u6587\u9017\u53F7\u5206\u53F7\u5206\u9694\uFF09\uFF1A",
+          controlId: "search.batch.add-tags.input",
+          onConfirm: (input) => {
+            const tags = input.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean);
+            if (tags.length === 0) return;
+            void this.applyBatchUpdate({ addTags: tags });
+          }
+        });
       });
       const removeTagBtn = document.createElement("button");
       removeTagBtn.type = "button";
@@ -32709,9 +32924,16 @@ ${progress.progressBar}`);
       removeTagBtn.textContent = "\uFF0D \u5220\u6807\u7B7E";
       removeTagBtn.addEventListener("click", () => {
         if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
-        const input = typeof window !== "undefined" && typeof window.prompt === "function" ? window.prompt("\u8BF7\u8F93\u5165\u8981\u6279\u91CF\u79FB\u9664\u7684\u6807\u7B7E\uFF08\u5927\u5C0F\u5199\u4E0D\u654F\u611F\uFF09\uFF1A") : "";
-        if (!input || !input.trim()) return;
-        void this.applyBatchUpdate({ removeTags: [input.trim()] });
+        openTextPromptDialog({
+          title: "\uFF0D \u6279\u91CF\u5220\u6807\u7B7E",
+          label: "\u8BF7\u8F93\u5165\u8981\u6279\u91CF\u79FB\u9664\u7684\u6807\u7B7E\uFF08\u5927\u5C0F\u5199\u4E0D\u654F\u611F\uFF09\uFF1A",
+          controlId: "search.batch.remove-tags.input",
+          onConfirm: (input) => {
+            const tags = input.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean);
+            if (tags.length === 0) return;
+            void this.applyBatchUpdate({ removeTags: tags });
+          }
+        });
       });
       const setCatBtn = document.createElement("button");
       setCatBtn.type = "button";
@@ -32720,9 +32942,15 @@ ${progress.progressBar}`);
       setCatBtn.textContent = "\u{1F3F7}\uFE0F \u8BBE\u5206\u7C7B";
       setCatBtn.addEventListener("click", () => {
         if (this.selectedIds.size === 0 || !this.deps.batchUpdateMetadata) return;
-        const input = typeof window !== "undefined" && typeof window.prompt === "function" ? window.prompt("\u8BF7\u8F93\u5165\u76EE\u6807\u5206\u7C7B\u540D\u79F0\uFF08\u7559\u7A7A\u8868\u793A\u6E05\u7A7A\u5206\u7C7B\uFF09\uFF1A") : null;
-        if (input === null) return;
-        void this.applyBatchUpdate({ setCategory: input.trim() });
+        openTextPromptDialog({
+          title: "\u{1F3F7}\uFE0F \u6279\u91CF\u8BBE\u7F6E\u5206\u7C7B",
+          label: "\u8BF7\u8F93\u5165\u76EE\u6807\u5206\u7C7B\u540D\u79F0\uFF08\u7559\u7A7A\u8868\u793A\u6E05\u7A7A\u5206\u7C7B\uFF09\uFF1A",
+          allowEmpty: true,
+          controlId: "search.batch.set-category.input",
+          onConfirm: (input) => {
+            void this.applyBatchUpdate({ setCategory: input.trim() });
+          }
+        });
       });
       const batchCaptureBtn = document.createElement("button");
       batchCaptureBtn.type = "button";
@@ -33057,7 +33285,7 @@ ${progress.progressBar}`);
   init_capture();
 
   // src/ui/discovery-dialog.ts
-  var import_siyuan8 = __toESM(require_stub_dom());
+  var import_siyuan9 = __toESM(require_stub_dom());
   init_constants();
   init_dialog_dom();
   init_item();
@@ -33333,7 +33561,7 @@ ${progress.progressBar}`);
       var _a, _b, _c;
       if (this.dialog) return;
       this.closed = false;
-      const dialog = new import_siyuan8.Dialog({
+      const dialog = new import_siyuan9.Dialog({
         title: (_a = this.options.title) != null ? _a : this.tx(this.titleKey()),
         content: "",
         width: "min(1040px, 94vw)",
@@ -33421,7 +33649,7 @@ ${progress.progressBar}`);
     openCloseConfirmation(onClosed) {
       var _a;
       if (this.closeConfirmationDialog || this.closed) return;
-      const dialog = new import_siyuan8.Dialog({
+      const dialog = new import_siyuan9.Dialog({
         title: this.tx("discoveryCloseTitle"),
         content: "",
         width: "min(440px, 92vw)",
@@ -34562,7 +34790,7 @@ ${progress.progressBar}`);
         pathLabel: ((_f = this.options.sourcePath) != null ? _f : "").slice(0, LIMITS.savedViewPathChars),
         defaultCategory: ((_h = (_g = this.defaultCategoryInput) == null ? void 0 : _g.value) != null ? _h : "").trim().slice(0, LIMITS.category)
       };
-      const dialog = new import_siyuan8.Dialog({
+      const dialog = new import_siyuan9.Dialog({
         title: this.tx("discoverySaveView"),
         content: "",
         width: "min(440px, 92vw)",
@@ -35061,7 +35289,7 @@ ${details.join("\n")}` : ""}`;
 
   // src/service/commands.ts
   var siyuan = __toESM(require_stub_dom());
-  var import_siyuan9 = __toESM(require_stub_dom());
+  var import_siyuan10 = __toESM(require_stub_dom());
   init_constants();
   init_actions();
   init_placeholders();
@@ -35471,6 +35699,13 @@ ${details.join("\n")}` : ""}`;
       var _a2;
       return id === ((_a2 = expected.partBlockIds) != null ? _a2 : [expected.blockId])[index];
     }) && actual.droppedFields.length === expected.droppedFields.length && actual.droppedFields.every((field, index) => field === expected.droppedFields[index]);
+  }
+  function restorableAttrs(attrs) {
+    const out = {};
+    for (const [name, value] of Object.entries(attrs)) {
+      if (name !== "id" && name !== "updated") out[name] = value;
+    }
+    return out;
   }
   function normalizeConditionalMarkdown(markdown) {
     return normalizeKramdownIal(markdown);
@@ -35967,7 +36202,7 @@ ${details.join("\n")}` : ""}`;
           let kramdown = "";
           try {
             const body = parseKramdown(await this.kernel.request("getBlockKramdown", { id: child.id }));
-            kramdown = (_c = body == null ? void 0 : body.kramdown) != null ? _c : "";
+            kramdown = storedKramdownToBody((_c = body == null ? void 0 : body.kramdown) != null ? _c : "");
           } catch (err) {
             errors.push(`block ${child.id}: ${toErrorMessage(err)}`);
           }
@@ -36169,7 +36404,7 @@ ${details.join("\n")}` : ""}`;
           if (!data || data.id !== id || typeof data.kramdown !== "string") {
             return fail("not-found", `block ${id} kramdown unavailable`);
           }
-          bodies.push(data.kramdown);
+          bodies.push(storedKramdownToBody(data.kramdown));
         }
         return ok(ids.length === 1 ? (_d = bodies[0]) != null ? _d : "" : bodies.join("\n\n"));
       } catch (err) {
@@ -36253,7 +36488,7 @@ ${details.join("\n")}` : ""}`;
     }
     async createItemUnlocked(input, libraryDocId, options = {}) {
       var _a, _b, _c, _d, _e, _f;
-      const restriction = bodyWriteRestriction(input.markdown);
+      const restriction = itemBodyRestriction(input.markdown);
       if (restriction) return fail("conflict", restriction);
       const targetDoc = libraryDocId != null ? libraryDocId : await this.resolveWriteDoc();
       if (!targetDoc || !isBlockId(targetDoc)) return fail("invalid-input", "no library doc");
@@ -36287,7 +36522,8 @@ ${details.join("\n")}` : ""}`;
       let insertResp;
       try {
         insertResp = await this.kernel.request("appendBlock", {
-          data: input.markdown.slice(0, LIMITS.contentChars),
+          // 多段正文装进一个超级块（ADR 0165），内核只回一个顶层插入 ID。
+          data: toItemStorageMarkdown(input.markdown),
           dataType: "markdown",
           parentID: targetDoc
         }, { idempotencyKey: options.idempotencyKey, maxRetries: 0 });
@@ -36306,7 +36542,7 @@ ${details.join("\n")}` : ""}`;
         return fail("kernel-error", "appendBlock returned no block id");
       }
       if (createdBlockIds.length !== 1) {
-        return fail("conflict", `appendBlock returned multiple insert operations for restricted input; inspect library document ${targetDoc} before retrying; no automatic deletion was attempted`);
+        return fail("conflict", `appendBlock returned multiple insert operations for one item container; inspect library document ${targetDoc} before retrying; no automatic deletion was attempted`);
       }
       try {
         await this.kernel.request("setBlockAttrs", { id: newBlockId, attrs });
@@ -36443,9 +36679,9 @@ ${details.join("\n")}` : ""}`;
       return receipt;
     }
     async updateItemUnlocked(itemId, patch, options = {}) {
-      var _a, _b, _c;
+      var _a, _b;
       if (typeof patch.markdown === "string" && patch.markdown.trim()) {
-        const restriction = bodyWriteRestriction(patch.markdown);
+        const restriction = itemBodyRestriction(patch.markdown);
         if (restriction) return fail("conflict", restriction);
       }
       const got = await this.getItem(itemId);
@@ -36453,7 +36689,7 @@ ${details.join("\n")}` : ""}`;
       const item = got.data;
       if (item.partsCorrupt) return fail("conflict", `item ${itemId} has invalid physical part metadata`);
       if (typeof patch.markdown === "string" && patch.markdown && ((_b = (_a = item.partBlockIds) == null ? void 0 : _a.length) != null ? _b : 1) > 1) {
-        return fail("conflict", "multi-block item body editing is not available until real host update semantics are verified");
+        return fail("conflict", "legacy multi-part item bodies are read-only; recreate the item to edit its body");
       }
       const attrs = {
         [ATTR.updated]: String(Date.now())
@@ -36477,36 +36713,42 @@ ${details.join("\n")}` : ""}`;
       }
       let oldAttrs = null;
       let oldMarkdown;
+      let bodyWritten = false;
+      let keepContainer = false;
       try {
         const children = parseChildBlocks(await this.kernel.request("getChildBlocks", { id: item.libraryDocId }));
-        if (!children.some((child) => child.id === item.blockId)) return fail("conflict", "item has moved out of its indexed library document");
+        const self = children.find((child) => child.id === item.blockId);
+        if (!self) return fail("conflict", "item has moved out of its indexed library document");
+        keepContainer = self.type === "s";
         oldAttrs = parseAttrs(await this.kernel.request("getBlockAttrs", { id: item.blockId }));
         if (typeof patch.markdown === "string" && patch.markdown) {
-          oldMarkdown = (_c = parseKramdown(await this.kernel.request("getBlockKramdown", { id: item.blockId }))) == null ? void 0 : _c.kramdown;
-          if (oldMarkdown === void 0 || bodyWriteRestriction(oldMarkdown)) {
-            return fail("conflict", "existing body cannot be safely restored under the current write restriction; inspect the library document before editing");
-          }
+          const old = await this.readManagedPartKramdown(item);
+          if (!old.ok) return fail("conflict", `existing body cannot be read for rollback: ${old.message}`);
+          oldMarkdown = old.data;
         }
         await this.kernel.request("setBlockAttrs", { id: item.blockId, attrs }, { idempotencyKey: options.idempotencyKey, maxRetries: 0 });
         if (typeof patch.markdown === "string" && patch.markdown) {
+          bodyWritten = true;
           await this.kernel.request("updateBlock", {
-            data: patch.markdown.slice(0, LIMITS.contentChars),
+            // 已是超级块的条目保持容器，避免把单段更新拆成游离段落。
+            data: toItemStorageMarkdown(patch.markdown, keepContainer),
             dataType: "markdown",
             id: item.blockId
           }, { idempotencyKey: options.idempotencyKey ? `${options.idempotencyKey}:body` : void 0, maxRetries: 0 });
+          await this.kernel.request("setBlockAttrs", { id: item.blockId, attrs: { ...restorableAttrs(oldAttrs), ...attrs } }, { maxRetries: 0 });
         }
       } catch (err) {
         let rollbackFailed = false;
-        if (oldAttrs) {
+        if (oldMarkdown !== void 0 && bodyWritten) {
           try {
-            await this.kernel.request("setBlockAttrs", { id: item.blockId, attrs: oldAttrs }, { maxRetries: 0 });
+            await this.kernel.request("updateBlock", { data: toItemStorageMarkdown(oldMarkdown, keepContainer), dataType: "markdown", id: item.blockId }, { maxRetries: 0 });
           } catch {
             rollbackFailed = true;
           }
         }
-        if (oldMarkdown !== void 0) {
+        if (oldAttrs) {
           try {
-            await this.kernel.request("updateBlock", { data: oldMarkdown, dataType: "markdown", id: item.blockId }, { maxRetries: 0 });
+            await this.kernel.request("setBlockAttrs", { id: item.blockId, attrs: restorableAttrs(oldAttrs) }, { maxRetries: 0 });
           } catch {
             rollbackFailed = true;
           }
@@ -36894,16 +37136,16 @@ ${details.join("\n")}` : ""}`;
     exportItemReadFailed: "\u5BFC\u51FA\u5DF2\u53D6\u6D88\uFF1A\u65E0\u6CD5\u8BFB\u53D6\u6761\u76EE\u300C%s\u300D\uFF1A%s",
     exportBodyMissing: "\u5BFC\u51FA\u5DF2\u53D6\u6D88\uFF1A\u7F3A\u5C11\u6761\u76EE\u300C%s\u300D\u7684\u6B63\u6587\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     exportTooLarge: "\u5BFC\u51FA\u5DF2\u53D6\u6D88\uFF1A\u6A21\u677F\u5305\u8D85\u8FC7 %s \u5B57\u7B26\uFF0C\u8BF7\u6309\u5206\u7C7B\u5206\u6279\u5BFC\u51FA\u3002",
-    usageGuideOrganize: "\u6574\u7406\uFF1A\u7ED9\u6761\u76EE\u8865\u4E0A\u6E05\u695A\u7684\u6807\u9898\u3001\u6807\u7B7E\u548C\u5206\u7C7B\uFF1B\u8BBE\u7F6E \u2192 \u6570\u636E\u4E0E\u6A21\u677F\u53EF\u5BFC\u5165 25 \u6761\u793A\u4F8B\uFF0C\u5176\u4E2D\u90AE\u7BB1\u3001\u5730\u5740\u3001\u65E0\u6548\u8EAB\u4EFD\u5360\u4F4D\u3001\u7F51\u5740\u548C\u4EE3\u7801\u5165\u95E8\u662F\u53EF\u76F4\u63A5\u5BFC\u5165\u7684\u5B89\u5168\u793A\u4F8B\u3002\u7167\u7247\u3001PPT\u3001PDF/DOCX \u548C\u7B80\u5386\u6587\u4EF6\u9700\u5148\u5728\u601D\u6E90\u6DFB\u52A0\u771F\u5B9E\u8D44\u6E90\uFF0C\u518D\u4FDD\u5B58\u8D44\u6E90\u94FE\u63A5\u3002",
+    usageGuideOrganize: "\u6574\u7406\uFF1A\u7ED9\u6761\u76EE\u8865\u4E0A\u6E05\u695A\u7684\u6807\u9898\u3001\u6807\u7B7E\u548C\u5206\u7C7B\uFF1B\u8BBE\u7F6E \u2192 \u6570\u636E\u4E0E\u6A21\u677F\u53EF\u5BFC\u5165 25 \u6761\u793A\u4F8B\uFF08\u591A\u6BB5\u6A21\u677F\u4F1A\u4F5C\u4E3A\u8D85\u7EA7\u5757\u5199\u5165\uFF09\u3002\u7167\u7247\u3001PPT\u3001PDF/DOCX \u548C\u7B80\u5386\u6587\u4EF6\u9700\u5148\u5728\u601D\u6E90\u6DFB\u52A0\u771F\u5B9E\u8D44\u6E90\uFF0C\u518D\u4FDD\u5B58\u8D44\u6E90\u94FE\u63A5\u3002",
     usageGuideVariables: "\u6A21\u677F\u4E0E\u6CE8\u91CA\u89C4\u5219\uFF1A{{xlc:ask:\u5B57\u6BB5}} \u63D2\u5165\u524D\u8BE2\u95EE\uFF0C\u652F\u6301 {{xlc:ask:\u5B57\u6BB5|\u9009\u9879A,\u9009\u9879B}} \u4E0B\u62C9\u9009\u62E9\uFF1B{{xlc:date}}\u3001{{xlc:clipboard}} \u7B49\u5360\u4F4D\u7B26\u4EC5\u4F7F\u7528\u65F6\u5C55\u5F00\u3002\u4EE3\u7801\u7C7B\u578B\u59CB\u7EC8\u539F\u6837\u4FDD\u7559\uFF0C\u4E0D\u5C55\u5F00\u53D8\u91CF\u3002\u6761\u76EE\u522B\u540D\u53EF\u4F5C\u573A\u666F\u6CE8\u91CA\uFF0C\u6B63\u6587\u5185\u53EF\u7528\u5F15\u7528\u5757\u300C> \u{1F4A1} \u63D0\u793A\uFF1A...\u300D\u8BB0\u5F55\u586B\u5199\u63D0\u9192\u3002AI \u9ED8\u8BA4\u5173\u95ED\u3002",
     mediaContentHint: "\u56FE\u7247\u548C\u9644\u4EF6\u663E\u793A Markdown \u539F\u6587\uFF1B\u590D\u5236\u5F97\u5230\u94FE\u63A5\u6587\u672C\u3002\u67E5\u770B\u539F\u6587\u4EF6\u8BF7\u7528\u300C\u6253\u5F00\u6765\u6E90\u300D\u3002\u4E0D\u652F\u6301\u590D\u5236\u56FE\u7247\u4F4D\u56FE\u6216\u6587\u4EF6\u672C\u4F53\u3002",
     usageGuideMedia: "\u56FE\u7247\u4E0E\u9644\u4EF6\uFF1A\u5148\u5C06\u56FE\u7247\u3001PPT\u3001PDF \u6216\u7B80\u5386\u6587\u4EF6\u6DFB\u52A0\u5230\u601D\u6E90\uFF0C\u518D\u4ECE\u56FE\u7247\u6216\u8D44\u6E90\u94FE\u63A5\u7684\u53F3\u952E\u83DC\u5355\u4FDD\u5B58\u3002\u9762\u677F\u663E\u793A Markdown \u539F\u6587\uFF0C\u590D\u5236\u5F97\u5230\u94FE\u63A5\u6587\u672C\uFF1B\u67E5\u770B\u539F\u6587\u4EF6\u8BF7\u7528\u300C\u6253\u5F00\u6765\u6E90\u300D\u3002\u4E0D\u652F\u6301\u590D\u5236\u56FE\u7247\u4F4D\u56FE\u6216\u6587\u4EF6\u672C\u4F53\uFF0C\u672A\u5185\u7F6E PPT \u9605\u8BFB\u5668\uFF1B\u5185\u7F6E\u793A\u4F8B\u5305\u4E0D\u5B89\u88C5\u5047\u8D44\u6E90\uFF0C\u9700\u7528\u6237\u63D0\u4F9B\u771F\u5B9E\u9644\u4EF6\u3002",
     usageGuideMediaExamplesTitle: "\u771F\u5B9E\u8D44\u6E90\u793A\u4F8B\uFF08\u9700\u5148\u5728\u601D\u6E90\u6DFB\u52A0\uFF09",
     usageGuideMediaImageExample: "\u56FE\u7247 / \u8EAB\u4EFD\u8BC1\u7167\u7247\uFF1A\u53EA\u7528\u65E0\u654F\u611F\u4FE1\u606F\u7684\u793A\u610F\u56FE\uFF1B\u4FDD\u5B58\u540E\u53EF\u9884\u89C8 Markdown \u94FE\u63A5\u3001\u590D\u5236\u94FE\u63A5\u6216\u6253\u5F00\u6765\u6E90\uFF0C\u4F4D\u56FE\u590D\u5236\u4ECD\u5F85 Android \u9A8C\u8BC1\u3002",
     usageGuideMediaAttachmentExample: "\u516C\u53F8\u4ECB\u7ECD PPT\u3001PDF\u3001DOCX\uFF1A\u5148\u62D6\u5165\u601D\u6E90\u751F\u6210\u9644\u4EF6\uFF1B\u5F53\u524D\u53EF\u4FDD\u5B58\u3001\u590D\u5236\u548C\u6253\u5F00\u8D44\u6E90\u94FE\u63A5\uFF0C\u6CA1\u6709\u5185\u7F6E Office \u9605\u8BFB\u5668\u6216\u8DE8\u5E94\u7528\u6587\u4EF6\u53D1\u9001\u3002",
-    usageGuideMediaResumeExample: "\u7B80\u5386\uFF1A\u6B63\u6587\u9002\u5408\u4FDD\u5B58\u4E3A\u53EF\u7F16\u8F91 Markdown\uFF0C\u6587\u4EF6\u7248\u9700\u5148\u6DFB\u52A0\u771F\u5B9E PDF/DOCX\uFF1B\u5B8C\u6574\u591A\u6BB5\u6B63\u6587\u6682\u53D7 B-006 \u9650\u5236\uFF0C\u793A\u4F8B\u5305\u4E0D\u4F1A\u5B89\u88C5\u5047\u9644\u4EF6\u3002",
-    usageGuideMultiblock: "\u591A\u5757\u6B63\u6587\u5F85\u9A8C\u8BC1\uFF08B-006\uFF09\uFF1A\u65B0\u5EFA\u3001\u6B63\u6587\u66F4\u65B0\u548C\u5BFC\u5165\u6682\u4EC5\u63A5\u53D7\u5355\u884C\u5185\u5BB9\u6216\u4E00\u4E2A\u5B8C\u6574\u4EE3\u7801\u56F4\u680F\uFF0C\u591A\u884C\u6587\u672C\u3001Markdown \u548C\u6DF7\u5408\u7ED3\u6784\u4F1A\u5728\u5199\u5165\u524D\u62D2\u7EDD\u3002\u5F53\u524D 25 \u6761\u793A\u4F8B\u4E2D 8 \u6761\uFF08\u542B\u90AE\u7BB1\u3001\u5730\u5740\u3001\u65E0\u6548\u8EAB\u4EFD\u5360\u4F4D\u3001\u7F51\u5740\u548C\u4EE3\u7801\u5165\u95E8\uFF09\u7B26\u5408\u8BE5\u8FB9\u754C\uFF1B\u5B8C\u6574\u7B80\u5386\u3001\u516C\u53F8\u4ECB\u7ECD\u548C\u7ED3\u6784\u6E05\u5355\u8BF7\u5148\u4FDD\u7559\u5728\u601D\u6E90\u6765\u6E90\u6587\u6863\u4E2D\uFF0C\u7167\u7247/PPT/PDF/DOCX \u4E5F\u9700\u5148\u6DFB\u52A0\u771F\u5B9E\u8D44\u6E90\u3002\u5DF2\u6709\u6761\u76EE\u8BF7\u6253\u5F00\u6765\u6E90\u6838\u5BF9\u5168\u6587\u3002\u5E26 parts \u6E05\u5355\u7684\u65E7\u6761\u76EE\u9700\u901A\u8FC7\u540C\u6587\u6863\u5F52\u5C5E\u68C0\u67E5\u540E\u624D\u80FD\u8BFB\u53D6\uFF0C\u6B63\u6587\u66F4\u65B0\u53CA\u81EA\u52A8\u5220\u9664\u6682\u4E0D\u53EF\u7528\u3002",
-    multiBlockPendingHint: "\u6682\u4EC5\u652F\u6301\u5355\u884C\u5185\u5BB9\u6216\u4E00\u4E2A\u5B8C\u6574\u4EE3\u7801\u56F4\u680F\uFF1B\u591A\u884C\u6B63\u6587\u3001Markdown \u548C\u6DF7\u5408\u7ED3\u6784\u4F1A\u5728\u5199\u5165\u524D\u62D2\u7EDD\uFF08B-006\uFF09\u3002\u5DF2\u6709\u591A\u5757\u6761\u76EE\u8BF7\u6253\u5F00\u6765\u6E90\u6838\u5BF9\uFF0C\u6B63\u6587\u66F4\u65B0\u53CA\u81EA\u52A8\u5220\u9664\u6682\u4E0D\u53EF\u7528\u3002",
+    usageGuideMediaResumeExample: "\u7B80\u5386\uFF1A\u6B63\u6587\u53EF\u4FDD\u5B58\u4E3A\u53EF\u7F16\u8F91 Markdown\uFF08\u591A\u6BB5\u6B63\u6587\u4F1A\u88C5\u8FDB\u4E00\u4E2A\u8D85\u7EA7\u5757\uFF09\uFF0C\u6587\u4EF6\u7248\u9700\u5148\u6DFB\u52A0\u771F\u5B9E PDF/DOCX\uFF1B\u793A\u4F8B\u5305\u4E0D\u4F1A\u5B89\u88C5\u5047\u9644\u4EF6\u3002",
+    usageGuideMultiblock: "\u591A\u6BB5\u6B63\u6587\uFF1A\u65B0\u5EFA\u3001\u7F16\u8F91\u548C\u5BFC\u5165\u90FD\u652F\u6301\u591A\u884C\u6587\u672C\u3001\u5217\u8868\u3001\u5F15\u7528\u3001\u8868\u683C\u548C\u4EE3\u7801\uFF0C\u6761\u76EE\u4F1A\u4F5C\u4E3A\u4E00\u4E2A\u8D85\u7EA7\u5757\u4FDD\u5B58\u5728\u5E93\u6587\u6863\u4E2D\u3002\u6B63\u6587\u884C\u9996\u4E0D\u80FD\u51FA\u73B0 {{{ \u6216 }}}\uFF08\u8D85\u7EA7\u5757\u8FB9\u754C\u6807\u8BB0\uFF09\uFF0C\u9700\u8981\u65F6\u8BF7\u653E\u8FDB\u4EE3\u7801\u56F4\u680F\u3002\u65E9\u671F\u7248\u672C\u7559\u4E0B\u7684 parts \u591A\u5757\u6761\u76EE\u4ECD\u53EF\u8BFB\u53D6\uFF0C\u6B63\u6587\u6539\u4E3A\u53EA\u8BFB\u3002",
+    multiBlockPendingHint: "\u6B63\u6587\u884C\u9996\u4E0D\u80FD\u51FA\u73B0 {{{ \u6216 }}}\uFF08\u8D85\u7EA7\u5757\u8FB9\u754C\u6807\u8BB0\uFF09\uFF0C\u8BF7\u5220\u9664\u6216\u653E\u8FDB\u4EE3\u7801\u56F4\u680F\u540E\u518D\u4FDD\u5B58\u3002",
     more: "\u66F4\u591A",
     dropToAdd: "\u677E\u5F00\u9F20\u6807\u4EE5\u6DFB\u52A0\u5E38\u7528\u6761\u76EE",
     timeout: "\u64CD\u4F5C\u8D85\u65F6\uFF0C\u8BF7\u91CD\u8BD5",
@@ -37118,9 +37360,9 @@ ${details.join("\n")}` : ""}`;
     quickCapture: "\u5FEB\u901F\u4FDD\u5B58\u526A\u8D34\u677F\u5185\u5BB9\u4E3A\u6761\u76EE",
     quickCaptureDuplicate: "\u5DF2\u5B58\u5728\u540C\u6587\u6761\u76EE\u300C%s\u300D\uFF0C\u672A\u91CD\u590D\u4FDD\u5B58",
     promptPackBtn: "\u5BFC\u5165\u5E38\u7528\u5185\u5BB9\u793A\u4F8B",
-    promptPackHint: "\u793A\u4F8B\u5305\u5305\u542B 25 \u6761\u5206\u7C7B\u6A21\u677F\uFF0C\u5176\u4E2D 8 \u6761\uFF08\u90AE\u7BB1\u3001\u5730\u5740\u3001\u65E0\u6548\u8EAB\u4EFD\u5360\u4F4D\u3001\u7F51\u5740\u548C\u4EE3\u7801\u5165\u95E8\u7B49\uFF09\u7B26\u5408\u5F53\u524D\u5355\u884C\u5185\u5BB9\u6216\u5B8C\u6574\u4EE3\u7801\u56F4\u680F\u9650\u5236\uFF1B\u5176\u4F59 17 \u6761\u591A\u884C\u6A21\u677F\u4F1A\u88AB\u62D2\u7EDD\u5E76\u5217\u51FA\u539F\u56E0\uFF08B-006\uFF09\u3002\u5EFA\u8BAE\u8DF3\u8FC7\u91CD\u590D\uFF1B\u5B8C\u6574\u7B80\u5386\u3001\u516C\u53F8\u4ECB\u7ECD\u548C\u7ED3\u6784\u6A21\u677F\u6682\u4E0D\u53EF\u7528\uFF0C\u7167\u7247/PPT/PDF/DOCX \u9700\u5148\u6DFB\u52A0\u771F\u5B9E\u8D44\u6E90\uFF0C\u793A\u4F8B\u5305\u4E0D\u4F1A\u5B89\u88C5\u9644\u4EF6\u3002",
+    promptPackHint: "\u793A\u4F8B\u5305\u5305\u542B 25 \u6761\u5206\u7C7B\u6A21\u677F\uFF08\u90AE\u7BB1\u3001\u5730\u5740\u3001\u5BA2\u670D\u56DE\u590D\u3001\u63D0\u793A\u8BCD\u3001\u5199\u4F5C\u4E0E\u4EE3\u7801\u7B49\uFF09\uFF0C\u591A\u6BB5\u6A21\u677F\u4F1A\u4F5C\u4E3A\u8D85\u7EA7\u5757\u5199\u5165\u3002\u5EFA\u8BAE\u8DF3\u8FC7\u91CD\u590D\uFF1B\u7167\u7247/PPT/PDF/DOCX \u9700\u5148\u6DFB\u52A0\u771F\u5B9E\u8D44\u6E90\uFF0C\u793A\u4F8B\u5305\u4E0D\u4F1A\u5B89\u88C5\u9644\u4EF6\u3002",
     reformulationPackBtn: "\u5BFC\u5165\u6E10\u8FDB\u53CD\u601D\u6279\u5224\u6A21\u677F\u5305 (SuperMemo)",
-    reformulationPackHint: "\u57FA\u4E8E SuperMemo \u6E10\u8FDB\u601D\u8003\u4E0E\u6DF1\u5EA6\u52A0\u5DE5\u7406\u5FF5\u9884\u7F6E 6 \u9879\u9AD8\u9636\u6A21\u677F\uFF08\u8BBA\u70B9\u63D0\u70BC\u3001\u53CD\u601D\u8D28\u7591\u3001\u7F51\u72B6\u8054\u7ED3\u3001\u884C\u52A8\u6307\u5F15\u3001\u91D1\u53E5\u6458\u5F55\u4E0E\u56DB\u7EF4\u91CD\u8FF0\u5361\uFF09\uFF0C100% \u7B26\u5408 B-006 \u5199\u524D\u5B89\u5168\u9650\u5236\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
+    reformulationPackHint: "\u57FA\u4E8E SuperMemo \u6E10\u8FDB\u601D\u8003\u4E0E\u6DF1\u5EA6\u52A0\u5DE5\u7406\u5FF5\u9884\u7F6E 6 \u9879\u9AD8\u9636\u6A21\u677F\uFF08\u8BBA\u70B9\u63D0\u70BC\u3001\u53CD\u601D\u8D28\u7591\u3001\u7F51\u72B6\u8054\u7ED3\u3001\u884C\u52A8\u6307\u5F15\u3001\u91D1\u53E5\u6458\u5F55\u4E0E\u56DB\u7EF4\u91CD\u8FF0\u5361\uFF09\uFF0C\u5F00\u7BB1\u5373\u7528\u3002",
     taskHorizonPackBtn: "\u5BFC\u5165 Task Horizon SOP \u4EFB\u52A1\u6E05\u5355\u5305",
     taskHorizonPackHint: "\u9884\u7F6E\u53D1\u7248\u3001\u6545\u969C\u6392\u67E5\u4E0E\u5DEE\u65C5\u7B49\u6807\u51C6 SOP \u591A\u5C42\u7EA7\u4EFB\u52A1\u6E05\u5355\uFF0C\u643A\u5E26 Task Horizon \u4F18\u5148\u7EA7\u4E0E\u72B6\u6001\u5C5E\u6027\uFF0C\u601D\u6E90\u63D2\u5165\u540E\u81EA\u52A8\u6784\u5EFA\u591A\u5C42\u7EA7\u4EFB\u52A1\u6811\u3002",
     calloutPackBtn: "\u5BFC\u5165\u601D\u6E90\u6807\u51C6 Callout \u63D0\u793A\u6846\u7EC4\u4EF6\u5305",
@@ -37402,7 +37644,12 @@ ${details.join("\n")}` : ""}`;
     metricFav: "\u661F\u6807\u6536\u85CF",
     metricProviders: "\u5916\u90E8\u751F\u6001",
     paneExpand: "\u5C55\u5F00\u8BE6\u60C5\u9762\u677F",
-    paneCollapse: "\u6536\u8D77\u8BE6\u60C5\u9762\u677F"
+    paneCollapse: "\u6536\u8D77\u8BE6\u60C5\u9762\u677F",
+    reindex: "\u5237\u65B0\u5185\u5BB9\u5E93",
+    filterCommon: "\u5E38\u7528",
+    syncDiffBtn: "\u540C\u6B65\u51B2\u7A81\u6BD4\u5BF9",
+    clipboardHistoryToggle: "\u8BB0\u5F55\u526A\u8D34\u677F\u5386\u53F2\uFF08\u9700\u4E3B\u52A8\u5F00\u542F\uFF09",
+    clipboardHistorySub: "\u5F00\u542F\u540E\u6682\u5B58\u6700\u8FD1 30 \u6761\u590D\u5236\u6587\u672C\uFF0C\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\u4FA7\u8F66\uFF1B\u5173\u95ED\u65F6\u4E0D\u8BFB\u53D6\u7CFB\u7EDF\u526A\u8D34\u677F\uFF0C\u5DF2\u6709\u8BB0\u5F55\u4FDD\u7559"
   };
 
   // scripts/harness/entry.ts
@@ -37442,7 +37689,7 @@ ${details.join("\n")}` : ""}`;
   var lastSearchDialog = null;
   var savedDiscoveryViews = [];
   var T = (key, ...args) => {
-    var _a;
+    var _a, _b;
     const map = {
       pluginName: "\u5C0F\u9A74\u5E38\u7528\uFF08\u5185\u6D4B\u7248\uFF09",
       setupCreateIndependentNotebook: "\u65B0\u5EFA\u72EC\u7ACB\u7B14\u8BB0\u672C\u4E0E\u5E93\u6587\u6863",
@@ -37916,7 +38163,7 @@ ${details.join("\n")}` : ""}`;
       aiParseFailed: "AI \u8FD4\u56DE\u5185\u5BB9\u65E0\u6CD5\u89E3\u6790\uFF0C\u8BF7\u91CD\u8BD5",
       aiContentTooLong: "\u5185\u5BB9\u8D85\u8FC7 %s \u5B57\uFF0C\u8BF7\u7F29\u77ED\u540E\u91CD\u8BD5"
     };
-    let text = (_a = map[key]) != null ? _a : key;
+    let text = (_b = (_a = zh_CN_default[key]) != null ? _a : map[key]) != null ? _b : key;
     for (const arg of args) text = text.replace("%s", arg);
     return text;
   };
@@ -38349,6 +38596,8 @@ ${details.join("\n")}` : ""}`;
       openSetupDialog(ctx);
     },
     openCapture(aiOn = true, aiDelayMs = 0, options) {
+      captureCreatedItems.length = 0;
+      delete document.body.dataset.xlcCaptureCreatedItems;
       let tidyCall = 0;
       let draftCall = 0;
       const capture = new CaptureDialog({

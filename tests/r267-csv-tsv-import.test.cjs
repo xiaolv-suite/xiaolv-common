@@ -118,7 +118,7 @@ test("csvTsvLogicalId：生成确定性稳定外部逻辑 ID", () => {
     assert.match(id1, /^xlc-t[0-9a-z]{14}$/, "ID 必须满足平台 xlc- 前缀与字符集要求");
 });
 
-test("parseCsvTsvItems：完整端到端解析（类型推断、标签清洗、B-006 写前保护）", () => {
+test("parseCsvTsvItems：完整端到端解析（类型推断、标签清洗、容器写前边界）", () => {
     const csvData = `标题,内容,分类,标签,别名
 日常打卡,今日已按期完成工作交付。,工作,#打卡#;日常,alt+d
 代码片段,"\`\`\`typescript
@@ -154,10 +154,10 @@ const greeting = ""hello"";
     assert.strictEqual(item2.itemType, "url");
     assert.strictEqual(item2.url, "https://docs.siyuan-note.org");
 
-    // 条目 3：多行受限文本，触发 B-006 安全警告 Issue
+    // 条目 3：多行正文装进超级块容器可写（ADR 0165），不再产生写入警示
     const item3 = res.items[3];
     assert.strictEqual(item3.title, "多行受限条目");
-    assert.ok(res.issues.some((iss) => iss.includes("正文包含多行或复杂结构")), "应有 B-006 写前安全警示");
+    assert.equal(res.issues.some((iss) => iss.includes("多行受限条目")), false, "多行正文不应再被警示");
 });
 
 test("parseCsvTsvItems：从剪贴板 TSV 复制数据的无表头推断与标题自动衍生", () => {

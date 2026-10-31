@@ -107,3 +107,17 @@ test("service: getClipboardHistory 读取状态中的剪贴板历史", async () 
     assert.equal(res.data.length, 1);
     assert.equal(res.data[0].text, "剪贴板条目测试");
 });
+
+test("normalizeState: 剪贴板历史采集默认关闭（需主动开启），但保留已有历史记录", () => {
+    const def = normalizeState({
+        clipboardHistory: [{text: "已有记录不丢失", copiedAt: 100}],
+    });
+    assert.equal(def.clipboardHistoryEnabled, false, "未显式开启时默认必须为 false");
+    assert.equal(def.clipboardHistory.length, 1, "默认关闭不得删除用户已有历史数据");
+
+    const optedIn = normalizeState({
+        clipboardHistoryEnabled: true,
+        clipboardHistory: [{text: "已有记录不丢失", copiedAt: 100}],
+    });
+    assert.equal(optedIn.clipboardHistoryEnabled, true);
+});

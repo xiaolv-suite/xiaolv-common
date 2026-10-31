@@ -12,29 +12,30 @@ const enI18n = require(path.join(ROOT, "src", "i18n", "en.json"));
 const zhI18n = require(path.join(ROOT, "src", "i18n", "zh-CN.json"));
 
 async function checkCaptureBoundary(page) {
+    // ADR 0165：多段正文装进超级块，表单不再常驻限制提示；只有会破坏容器的行首 {{{ / }}} 被拒绝。
     await page.evaluate(() => window.XlcHarness.openCapture(false));
-    const hint = page.locator("[data-xlc-control='capture.body-restriction']");
-    for (const type of ["text", "markdown", "url", "code", "image", "asset", "blockref", "structure"]) {
-        await page.locator("[data-xlc-control='capture.type']").selectOption(type);
-        assert.equal(await hint.isVisible(), true, `body restriction must remain visible for ${type}`);
-        assert.equal(await hint.textContent(), zhI18n.multiBlockPendingHint, "harness must use the production locale");
-    }
+    assert.equal(await page.locator("[data-xlc-control='capture.body-restriction']").count(), 0, "the old single-line restriction hint must be gone");
     await page.locator("[data-xlc-control='capture.type']").selectOption("markdown");
-    await page.locator("[data-xlc-control='capture.content']").fill("首段\n\n尾段");
+    await page.locator("[data-xlc-control='capture.content']").fill("首段\n}}}\n尾段");
     await page.locator("[data-xlc-control='capture.save']").click();
     const rejected = await page.evaluate((message) => {
         const content = document.querySelector("[data-xlc-control='capture.content']");
         const error = document.getElementById("xlc-capture-content-error");
         return content?.getAttribute("aria-invalid") === "true"
-            && content.value === "首段\n\n尾段"
+            && content.value === "首段\n}}}\n尾段"
             && document.activeElement === content
             && error?.hidden === false && error.textContent === message
             && JSON.parse(document.body.dataset.xlcCaptureCreatedItems ?? "[]").length === 0;
     }, zhI18n.multiBlockPendingHint);
-    assert.equal(rejected, true, "unsupported body must remain in the form with a localized error and no create call");
-    await page.locator("[data-xlc-control='capture.cancel']").click();
-    console.log("  smoke ✓ capture boundary: production locale, all 8 types, inline rejection and zero create calls");
+    assert.equal(rejected, true, "container-breaking body must remain in the form with a localized error and no create call");
+    await page.locator("[data-xlc-control='capture.content']").fill("首段\n\n- 列表\n\n尾段");
+    await page.locator("[data-xlc-control='capture.save']").click();
+    await page.waitForFunction(() => JSON.parse(document.body.dataset.xlcCaptureCreatedItems ?? "[]").length === 1, null, {timeout: 5000});
+    const created = await page.evaluate(() => JSON.parse(document.body.dataset.xlcCaptureCreatedItems)[0]);
+    assert.equal(created.markdown, "首段\n\n- 列表\n\n尾段", "multi-paragraph body must be submitted intact");
+    console.log("  smoke ✓ capture boundary: no restriction hint, container-breaking body rejected inline, multi-paragraph body created intact");
 }
+
 
 let chromium;
 try {
@@ -100,7 +101,7 @@ const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 fs.writeFileSync(path.join(OUT, "harness.html"), html);
 
 (async () => {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({channel: "chrome"});
     const page = await browser.newPage({viewport: {width: 1280, height: 720}, deviceScaleFactor: 2});
     await page.goto("file:///" + path.join(OUT, "harness.html").replace(/\\/g, "/"));
     await page.waitForFunction(() => Boolean(window.XlcHarness));
@@ -526,7 +527,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     const setupCompletion = await page.evaluate(() => {
         const back = document.querySelector("[data-xlc-control='setup.back']");
         back?.click();
-        const returnedToChoice = document.body.textContent.includes("第 1 步 · 选择库方式")
+        const returnedToChoice = document.body.textContent.includes("第 1 步 · 选择内容库形式")
             && document.querySelector("[data-xlc-control='setup.mode']")?.value === "doc";
         const resultWasSelected = document.querySelector("[data-xlc-control='setup.doc.result']")?.classList.contains("xlc-doclist-item--on") === true;
         document.querySelector("[data-xlc-control='setup.next']")?.click();
@@ -987,10 +988,10 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
         const guide = document.querySelector(".xlc-footer-guide");
         guide?.click();
     });
-    const mobileGuide = await page.evaluate(() => {
+    const mobileGuide = await page.evaluate(({mobile, desktop}) => {
         const text = document.body.textContent ?? "";
-        return text.includes("点按只选择条目") && text.includes("复制到剪贴板") && !text.includes("Alt+1~9 直达前九条");
-    });
+        return text.includes(mobile) && !text.includes(desktop) && !/Alt\/⌥ \+ 1-9/.test(text);
+    }, {mobile: zhI18n.usageGuideInsertMobile, desktop: zhI18n.usageGuideInsert});
     if (!mobileGuide) throw new Error("mobile usage guide contains desktop-only shortcuts");
     console.log("  smoke ✓ mobile usage guide: 2 assertions");
     // 捕获表单（生产 CaptureDialog DOM）
@@ -1117,7 +1118,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     await page.locator("[data-xlc-control='capture.cancel']").click();
     const canceledWithoutWrite = await page.evaluate(() => {
         const created = JSON.parse(document.body.dataset.xlcCaptureCreatedItems ?? "[]");
-        return created.length === 1 && !document.querySelector(".xlc-capture");
+        return created.length === 0 && !document.querySelector(".xlc-capture");
     });
     if (!canceledWithoutWrite) throw new Error("capture cancel did not close without another write");
     console.log("  smoke ✓ capture core: empty/URL validation, correction, payload, save and cancel");
@@ -2241,7 +2242,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     }));
     if (initialTreeTarget.scope !== "tree"
         || initialTreeTarget.selected !== "20240101120001-hijklmn"
-        || initialTreeTarget.title !== "从此文档发现常用语"
+        || initialTreeTarget.title !== "从指定文档树发现常用语"
         || !initialTreeTarget.path?.includes("/项目笔记")) {
         throw new Error("document-tree discovery entry must preserve and display the clicked root: " + JSON.stringify(initialTreeTarget));
     }
@@ -2384,7 +2385,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     };
     assert.equal(deferredBatchClose, false, "batch close must wait for an explicit decision");
     assert.equal(await page.evaluate(closeFormIsVisible), true, "batch close form must remain visible and defer closing the session");
-    const closeFormClippingFixture = await page.addStyleTag({content: ".xlc-discovery-close-form { transform: translateY(120vh) !important; }"});
+    const closeFormClippingFixture = await page.addStyleTag({content: ".xlc-discovery-close-form { transform: translateY(120vh) !important; transition: none !important; }"});
     try {
         const clippedCloseFormPasses = await page.evaluate(closeFormIsVisible);
         assert.throws(() => assert.equal(clippedCloseFormPasses, true), {code: "ERR_ASSERTION"});

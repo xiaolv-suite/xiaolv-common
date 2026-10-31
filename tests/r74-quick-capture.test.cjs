@@ -63,13 +63,20 @@ test("快速捕获：新内容 → 类型推断入库（URL 识别）+ 保存回
     assert.ok(!calls.notified.some((n) => n.message.includes("已保存")), "表单侧不得重复报已保存"); // R138 回执上收到包装层
 });
 
-test("快速捕获：受限多行正文明确拒绝，不提交部分内容", async () => {
+test("快速捕获：多段正文完整提交（超级块容器，ADR 0165）", async () => {
     const {dialog, calls} = makeCapture({readClipboardText: async () => "\n  第一行标题  \n正文"});
+    await dialog.quickCaptureFromClipboard();
+    assert.ok(calls.created, "多段正文应进入 createItem");
+    assert.match(calls.created.markdown, /第一行标题[\s\S]*正文/);
+    assert.equal(calls.notified.some((notice) => notice.kind === "error"), false);
+});
+
+test("快速捕获：行首超级块标记会破坏容器，明确拒绝", async () => {
+    const {dialog, calls} = makeCapture({readClipboardText: async () => "标题\n}}}\n正文"});
     await dialog.quickCaptureFromClipboard();
     assert.equal(calls.created, null);
     assert.ok(calls.notified.some((notice) => notice.kind === "error" && notice.message === "multiBlockPendingHint"));
 });
-
 test("捕获入口：超长内容不截断、不打开草稿、不调用创建", async () => {
     const giant = "A".repeat(100001);
     const {dialog, calls} = makeCapture({
@@ -293,7 +300,7 @@ test("常用内容示例：新增邮箱、地址、无效身份占位、网址�
     assert.match(byId.get("xlc-pack00000025")?.kramdown ?? "", /^```json[\s\S]*\n```$/);
 });
 
-test("常用内容示例：导入回执按写入限制统计，重复导入按 skip 且不重写", async () => {
+test("常用内容示例：25 条全部进入写入，重复导入按 skip 且不重写", async () => {
     const parsed = parseMarkdownPack(PROMPT_PACK_MD);
     const stored = new Map();
     let createCalls = 0;
@@ -309,17 +316,17 @@ test("常用内容示例：导入回执按写入限制统计，重复导入按 s
     const first = await importMarkdown.importMarkdownBundle(library, parsed.items, "skip");
     assert.deepEqual(
         {total: first.total, created: first.created, skipped: first.skipped, overwritten: first.overwritten, renamed: first.renamed, failed: first.failed},
-        {total: 25, created: 8, skipped: 0, overwritten: 0, renamed: 0, failed: 17},
+        {total: 25, created: 25, skipped: 0, overwritten: 0, renamed: 0, failed: 0},
     );
-    assert.equal(createCalls, 8, "仅 8 条安全正文应进入 createItem");
+    assert.equal(createCalls, 25, "多段模板装进超级块容器，全部 25 条进入 createItem");
     const second = await importMarkdown.importMarkdownBundle(library, parsed.items, "skip");
     assert.deepEqual(
         {total: second.total, created: second.created, skipped: second.skipped, overwritten: second.overwritten, renamed: second.renamed, failed: second.failed},
-        {total: 25, created: 0, skipped: 8, overwritten: 0, renamed: 0, failed: 17},
+        {total: 25, created: 0, skipped: 25, overwritten: 0, renamed: 0, failed: 0},
     );
-    assert.equal(createCalls, 8, "skip 重复项不应再次写入");
-    assert.equal(second.lines.filter((line) => line.action === "skip" && line.ok).length, 8);
-    assert.equal(second.lines.filter((line) => line.action === "new" && !line.ok).length, 17);
+    assert.equal(createCalls, 25, "skip 重复项不应再次写入");
+    assert.equal(second.lines.filter((line) => line.action === "skip" && line.ok).length, 25);
+    assert.equal(second.lines.filter((line) => !line.ok).length, 0);
 });
 
 test("常用内容示例：预览正文与复制/插入载荷保持类型语义", () => {

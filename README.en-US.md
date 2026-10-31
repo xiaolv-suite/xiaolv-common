@@ -142,8 +142,8 @@ Upon first launch, an onboarding dialog will appear:
 
 - **Q1: Where is my data stored? Will uninstalling the plugin lose my snippets?**
   All items are stored as real SiYuan blocks inside your chosen library document/notebook with `custom-xlc-*` block attributes. Even if you uninstall the plugin, your notes and blocks remain intact.
-- **Q2: Why are multi-paragraph Markdown bodies restricted when creating/updating (B-006)?**
-  To prevent multi-block append operations from leaving trailing blocks unanchored, direct writes accept a single line or a complete code fence. For multi-block structures, wrap them in a code fence or save them as block references (`blockref`).
+- **Q2: Can I save multi-paragraph bodies, lists, and tables?**
+  Yes. Since v0.10.80 a multi-paragraph body is stored inside **one superblock** in the library document, so creating, editing, importing, and the example packs are no longer limited to a single line; all 25 built-in examples install. The only rule: a body line may not start with `{{{` / `}}}` (superblock boundary markers); put them in a code fence if needed. Legacy multi-part items from early versions stay readable with read-only bodies.
 - **Q3: How do `:shortcode` triggers work?**
   Assign a shortcode like `:wk` or `:bug` when creating/editing an item (or import from Espanso). Typing `:wk` in search boosts it to the top (+500) and lets you press `Tab` or `Enter` to insert immediately.
 
@@ -151,7 +151,7 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🔒 Security Baseline & Known Boundaries
 
-- **B-006 Kramdown Pre-write Safeguards**: To prevent parser runaway, single-line text or a complete code fence is accepted for writes. Multi-line snippets should use code blocks or block references.
+- **Item container (superblock)**: Each item is one top-level block in the library document; multi-paragraph bodies live inside one superblock and item metadata stays on that block's `custom-xlc-*` attributes. Write, read-back, update, delete, and per-item read-back of all 5 example packs were verified against an isolated SiYuan 3.8.9 kernel; the full desktop (Electron) regression is listed in the [release checklist](docs/release-checklist.md) and has not been run yet.
 - **Zero-SQL Redline**: Strictly zero calls to `/api/query/sql`; all operations rely on official structured APIs.
 - **Mobile Environment**: Touch and image clipboard operations on Android operate under graceful fallbacks.
 
@@ -159,24 +159,23 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.79] — 2026-10-31 (Latest Release)
+### [v0.10.80] — 2026-10-31 (Latest Release)
 
-v0.10.79 Local Official Release: Single source-of-truth material convergence, `:shortcode` end-to-end closure, Sync Diff & adjacent block probe fixes, and dynamic macro evaluation consistency:
-- **Sync Diff, Adjacent Context Probe & Edit Dialog Fixes (TD-001 ~ TD-003)**:
-  - Fixed Settings Sync Diff (`syncDiffBtn`) reading `it.kramdown` from standard exported JSON bundles and routed `update` (`overwrite`), `create`/`fork` (`rename` with valid `xlc-...` IDs), and `delete` actions accurately;
-  - Eliminated unescaped `innerHTML` concatenation in the adjacent block context probe (`Alt+J`) and Dock category group headers;
-  - Fixed Chinese punctuation tag splitting in `openEditDialog`, synchronized Dock sidebar refresh on edit save, fixed Dock `isSourceMissing` ID lookup, and added physical `entry.blockId` fallback for Dock drag/context block references.
-- **`:shortcode` & Dynamic Macro End-to-End Closure (TD-004 ~ TD-006)**:
-  - Added `:shortcode` input fields to Capture and Edit dialogs, preserved `shortcode` across JSON/Markdown pack roundtrips, Espanso imports, and bundle checksum verification, and wired `:shortcode` recall and Dock badges;
-  - Aligned `expandMacroPreview` with `applyPlaceholders` / `listPlaceholders` (`{{doc.title}}`, `{{doc.path}}`, `{{date+Nd}}`) and exposed `cursorOffset` on `ExecutionReceipt` and `service.resolve`;
-  - Added Variable Memory clearing in Settings, wired `jsonToProperties` into action menu & variable bar, and integrated hierarchy prefix rename/reparent into `BatchTagCategoryPatch`.
-- **Quality Gates**: **1162/1162 unit tests passing** with negative mutation verification, 25 UI render snapshots, and 77/77 interaction audits green.
+v0.10.80 Local Release: Multi-paragraph superblock storage container (all 25/25 built-in examples installable), UI surface reduction with searchable "Text Tools" drawers, and multi-zoom viewport gates:
+- **Multi-Paragraph Superblock Container (ADR 0165 / T-0752)**:
+  - Multi-paragraph bodies, lists, blockquotes, tables, and mixed structures are stored inside **one superblock** (`{{{row ... }}}`) in the library document, with automatic attribute restoration after `updateBlock`, zero-width space protection against `query_embed` on line-start `{{`, and clean host IAL stripping on read-back;
+  - All **25/25** templates in the built-in Example Pack (and all 43/43 across the 5 built-in packs) write and read back cleanly against the isolated SiYuan 3.8.9 kernel.
+- **UI Surface Reduction & Interaction Fixes (T-0753 ~ T-0755)**:
+  - Capture/edit `.xlc-varbar` keeps only the 10 core variable buttons visible and folds ~207 extended macros/formatters into a searchable "🛠 文本工具…" drawer; the action menu folds ~180 text tools into a searchable "🛠 文本工具…" entry; removed the top metrics strip and reduced keyboard hints from 19 to 5;
+  - Replaced `window.prompt` / `window.alert` with SiYuan `Dialog` modals, added missing `reindex`/`filterCommon`/`syncDiffBtn` locale keys, fixed `copied` `%s` formatting in Dock, unified Dock action execution with the main search variable-fill path, and made clipboard history opt-in (`clipboardHistoryEnabled: false` by default, preserving existing history).
+- **Generic Engineering Gates**: Added `pnpm run check:ui` and `pnpm run check:viewport` (12/12 primary buttons visible & clickable across 100%/125%/150% viewports), with 33/33 real-kernel integration checks, **1172/1172** unit tests, and **79/79** interaction audits passing.
 
 <details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.78, collapsed)</b></summary>
+<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.79, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |
+| **v0.10.79** | Single source-of-truth material convergence, `:shortcode` end-to-end closure, Sync Diff & adjacent block probe fixes, and dynamic macro evaluation consistency | [ADR 0164](./docs/adr/0164-full-chain-closure-and-material-convergence.md) |
 | **v0.10.78** | Full-spectrum usability closure, 6 modern visual design systems, and user manual overhaul | [ADR 0163](./docs/adr/0163-github-benchmark-fusion-shortcode-macro-frecency.md) |
 | **v0.10.77** | Export sanitizer options dialog hierarchy cleanup and design token convergence | [ADR 0159](./docs/adr/0159-export-sanitizer-modal-closure.md) |
 | **v0.10.76** | Sync diff visualization modal host mount closure, and settings data management integration | [ADR 0158](./docs/adr/0158-sync-diff-ui-closure.md) |

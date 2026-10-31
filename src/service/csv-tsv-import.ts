@@ -3,13 +3,13 @@
 // 智能嗅探逗号 (,)、制表符 (\t) 与分号 (;) 分隔符；
 // 智能识别中英文多场景表头（标题/正文/分类/标签/别名/网址/类型）；
 // 支持无表头位置降级推断、类型推断（URL/Code/Markdown/Text）与稳定确定性逻辑 ID 生成；
-// 深度融合 B-006 写前安全限制，产生可追溯导入 Issue 与告警，对接现有导入策略管道。
+// 深度融合条目容器写前边界，产生可追溯导入 Issue 与告警，对接现有导入策略管道。
 
 import {LIMITS} from "../constants";
 import {ExportedItem} from "../model/transfer";
 import {ItemType, isItemType, cleanTagList, isSafeHttpUrl} from "../model/item";
 import {inferTypeFromText} from "../ui/capture";
-import {bodyWriteRestriction} from "../model/kramdown";
+import {itemBodyRestriction} from "../model/kramdown";
 
 export interface CsvTsvImportResult {
     items: ExportedItem[];
@@ -422,9 +422,9 @@ export function parseCsvTsvItems(
             itemType = inferTypeFromText(content);
         }
 
-        // 检查 B-006 写前安全限制（多行或嵌套结构警示）
-        if (bodyWriteRestriction(content)) {
-            issues.push(`第 ${rowNum} 行「${title}」：正文包含多行或复杂结构，在当前受限模式下保存将受到安全保护`);
+        // 条目容器写前边界（ADR 0165）：只拦会破坏超级块容器的行首 {{{ / }}}
+        if (itemBodyRestriction(content)) {
+            issues.push(`第 ${rowNum} 行「${title}」：正文行首含超级块标记 {{{ / }}}，导入时会被拒绝写入`);
         }
 
         const id = csvTsvLogicalId(title, category, alias, content.slice(0, 60));

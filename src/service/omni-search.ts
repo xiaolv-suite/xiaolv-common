@@ -536,7 +536,7 @@ export async function searchAllNotesUnified(
     return [...blockEntries, ...supplementalDocs];
 }
 
-/** 校验全域块内容更新（遵循 B-006 写前安全约束，防止多行结构损坏思源块层级） */
+/** 校验全域块内容更新（遵循单块写前边界，防止多行结构损坏思源块层级） */
 export function validateOmniBlockUpdate(content: string): {valid: boolean; error?: string} {
     const err = bodyWriteRestriction(content);
     if (err) {

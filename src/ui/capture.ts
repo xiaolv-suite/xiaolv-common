@@ -6,7 +6,7 @@ import {ItemType, cleanShortcode, isSafeHttpUrl} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {NewItemInput} from "../service/library";
 import {buildVariableBar} from "./variable-form";
-import {bodyWriteRestriction} from "../model/kramdown";
+import {itemBodyRestriction} from "../model/kramdown";
 import {LIMITS} from "../constants";
 import type {SearchEntry} from "../model/search";
 import {deriveOmniItemMetadata} from "../service/omni-search";
@@ -195,7 +195,7 @@ export class CaptureDialog {
         }
         const content = text;
         if (!this.checkCaptureSize(content)) return;
-        if (bodyWriteRestriction(content)) {
+        if (itemBodyRestriction(content)) {
             this.deps.notify("error", this.deps.t("multiBlockPendingHint"));
             return;
         }
@@ -520,12 +520,6 @@ export class CaptureDialog {
         contentError.setAttribute("role", "alert");
         contentError.hidden = true;
         contentWrap.appendChild(contentError);
-        const multiBlockHint = document.createElement("span");
-        multiBlockHint.className = "xlc-form-hint";
-        multiBlockHint.dataset.xlcControl = "capture.body-restriction";
-        multiBlockHint.setAttribute("role", "note");
-        multiBlockHint.textContent = t("multiBlockPendingHint");
-        contentWrap.appendChild(multiBlockHint);
         const counterEl = document.createElement("span");
         counterEl.className = "xlc-form-counter";
         if (typeof counterEl.setAttribute === "function") {
@@ -1159,7 +1153,7 @@ export class CaptureDialog {
                     return;
                 }
             }
-            if (bodyWriteRestriction(markdown)) {
+            if (itemBodyRestriction(markdown)) {
                 const message = markdown.length > LIMITS.contentChars
                     ? t("aiContentTooLong", String(LIMITS.contentChars)) : t("multiBlockPendingHint");
                 flagContentError(message);

@@ -36,7 +36,7 @@ import {
 } from "../model/batch-ops";
 import {LibraryConfig} from "../model/storage";
 import {SearchEntry} from "../model/search";
-import {bodyWriteRestriction, normalizeKramdownIal} from "../model/kramdown";
+import {itemBodyRestriction, normalizeKramdownIal, storedKramdownToBody, toItemStorageMarkdown} from "../model/kramdown";
 import {getPinyinAdapter} from "../model/pinyin";
 import {countAskFields, SNIPPET_PATTERN} from "../model/variables";
 import {getErrorProperty, toErrorMessage} from "../model/errors";
@@ -144,6 +144,15 @@ function sameManagedItem(actual: CommonItem, expected: CommonItem): boolean {
         && (actual.partBlockIds ?? [actual.blockId]).every((id, index) => id === (expected.partBlockIds ?? [expected.blockId])[index])
         && actual.droppedFields.length === expected.droppedFields.length
         && actual.droppedFields.every((field, index) => field === expected.droppedFields[index]);
+}
+
+/** 正文写入后需补回的块属性：除宿主维护的 id/updated 外全部保留（含用户自定义属性）。 */
+function restorableAttrs(attrs: Record<string, string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [name, value] of Object.entries(attrs)) {
+        if (name !== "id" && name !== "updated") out[name] = value;
+    }
+    return out;
 }
 
 function normalizeConditionalMarkdown(markdown: string): string {
@@ -717,7 +726,7 @@ export class LibraryService {
                 let kramdown = "";
                 try {
                     const body = parseKramdown(await this.kernel.request("getBlockKramdown", {id: child.id}));
-                    kramdown = body?.kramdown ?? "";
+                    kramdown = storedKramdownToBody(body?.kramdown ?? "");
                 } catch (err) {
                     // 属性仍可用于展示；正文失败要进入诊断，而不是伪造完整摘要。
                     errors.push(`block ${child.id}: ${toErrorMessage(err)}`);
@@ -927,7 +936,7 @@ export class LibraryService {
                 if (!data || data.id !== id || typeof data.kramdown !== "string") {
                     return fail("not-found", `block ${id} kramdown unavailable`);
                 }
-                bodies.push(data.kramdown);
+                bodies.push(storedKramdownToBody(data.kramdown));
             }
             return ok(ids.length === 1 ? (bodies[0] ?? "") : bodies.join("\n\n"));
         } catch (err) {
@@ -1027,7 +1036,7 @@ export class LibraryService {
     }
 
     private async createItemUnlocked(input: NewItemInput, libraryDocId?: string, options: WriteOptions = {}): Promise<Receipt<{item: CommonItem}>> {
-        const restriction = bodyWriteRestriction(input.markdown);
+        const restriction = itemBodyRestriction(input.markdown);
         if (restriction) return fail("conflict", restriction);
         const targetDoc = libraryDocId ?? await this.resolveWriteDoc();
         if (!targetDoc || !isBlockId(targetDoc)) return fail("invalid-input", "no library doc");
@@ -1066,7 +1075,8 @@ export class LibraryService {
         let insertResp;
         try {
             insertResp = await this.kernel.request<Array<unknown> | null>("appendBlock", {
-                data: input.markdown.slice(0, LIMITS.contentChars),
+                // 多段正文装进一个超级块（ADR 0165），内核只回一个顶层插入 ID。
+                data: toItemStorageMarkdown(input.markdown),
                 dataType: "markdown",
                 parentID: targetDoc,
             }, {idempotencyKey: options.idempotencyKey, maxRetries: 0});
@@ -1075,8 +1085,8 @@ export class LibraryService {
         }
         const ops = Array.isArray(insertResp) ? insertResp as Array<{doOperations?: Array<{id?: unknown; action?: unknown; parentID?: unknown}>}> : [];
         const rawOperations = ops.flatMap((group) => Array.isArray(group?.doOperations) ? group.doOperations : []);
-        // setAttrs and other transaction operations are not created blocks. Upstream may
-        // return only the first inserted block, so this response is never a complete parts manifest.
+        // setAttrs and other transaction operations are not created blocks. The container write
+        // must yield exactly one top-level block; anything else is reported, never auto-deleted.
         const inserts = rawOperations.filter((operation) => operation?.action === "insert");
         if (!inserts.length || inserts.some((operation) => !isBlockId(operation.id) || operation.parentID !== targetDoc)
             || rawOperations.some((operation) => operation?.action !== "insert" && operation?.action !== "setAttrs")) {
@@ -1090,7 +1100,7 @@ export class LibraryService {
             return fail("kernel-error", "appendBlock returned no block id");
         }
         if (createdBlockIds.length !== 1) {
-            return fail("conflict", `appendBlock returned multiple insert operations for restricted input; inspect library document ${targetDoc} before retrying; no automatic deletion was attempted`);
+            return fail("conflict", `appendBlock returned multiple insert operations for one item container; inspect library document ${targetDoc} before retrying; no automatic deletion was attempted`);
         }
         try {
             await this.kernel.request("setBlockAttrs", {id: newBlockId, attrs});
@@ -1238,7 +1248,7 @@ export class LibraryService {
 
     private async updateItemUnlocked(itemId: string, patch: Partial<Pick<NewItemInput, "title" | "alias" | "shortcode" | "tags" | "category" | "markdown" | "url" | "targetBlockId">>, options: WriteOptions = {}): Promise<Receipt<{item: CommonItem}>> {
         if (typeof patch.markdown === "string" && patch.markdown.trim()) {
-            const restriction = bodyWriteRestriction(patch.markdown);
+            const restriction = itemBodyRestriction(patch.markdown);
             if (restriction) return fail("conflict", restriction);
         }
         // 注：不含 itemType——类型变化需删旧建新（见 applyOverwriteImport），原地改类型会语义错位
@@ -1247,7 +1257,7 @@ export class LibraryService {
         const item = got.data;
         if (item.partsCorrupt) return fail("conflict", `item ${itemId} has invalid physical part metadata`);
         if (typeof patch.markdown === "string" && patch.markdown && (item.partBlockIds?.length ?? 1) > 1) {
-            return fail("conflict", "multi-block item body editing is not available until real host update semantics are verified");
+            return fail("conflict", "legacy multi-part item bodies are read-only; recreate the item to edit its body");
         }
         const attrs: Record<string, string> = {
             [ATTR.updated]: String(Date.now()),
@@ -1272,34 +1282,41 @@ export class LibraryService {
         }
         let oldAttrs: Record<string, string> | null = null;
         let oldMarkdown: string | undefined;
+        let bodyWritten = false;
+        let keepContainer = false;
         try {
             const children = parseChildBlocks(await this.kernel.request("getChildBlocks", {id: item.libraryDocId}));
-            if (!children.some((child) => child.id === item.blockId)) return fail("conflict", "item has moved out of its indexed library document");
+            const self = children.find((child) => child.id === item.blockId);
+            if (!self) return fail("conflict", "item has moved out of its indexed library document");
+            keepContainer = self.type === "s";
             oldAttrs = parseAttrs(await this.kernel.request("getBlockAttrs", {id: item.blockId}));
             if (typeof patch.markdown === "string" && patch.markdown) {
-                oldMarkdown = parseKramdown(await this.kernel.request("getBlockKramdown", {id: item.blockId}))?.kramdown;
-                if (oldMarkdown === undefined || bodyWriteRestriction(oldMarkdown)) {
-                    return fail("conflict", "existing body cannot be safely restored under the current write restriction; inspect the library document before editing");
-                }
+                const old = await this.readManagedPartKramdown(item);
+                if (!old.ok) return fail("conflict", `existing body cannot be read for rollback: ${old.message}`);
+                oldMarkdown = old.data;
             }
             await this.kernel.request("setBlockAttrs", {id: item.blockId, attrs}, {idempotencyKey: options.idempotencyKey, maxRetries: 0});
             if (typeof patch.markdown === "string" && patch.markdown) {
+                bodyWritten = true;
                 await this.kernel.request("updateBlock", {
-                    data: patch.markdown.slice(0, LIMITS.contentChars),
+                    // 已是超级块的条目保持容器，避免把单段更新拆成游离段落。
+                    data: toItemStorageMarkdown(patch.markdown, keepContainer),
                     dataType: "markdown",
                     id: item.blockId,
                 }, {idempotencyKey: options.idempotencyKey ? `${options.idempotencyKey}:body` : undefined, maxRetries: 0});
+                // updateBlock 重建块会丢掉块属性（真内核实测），正文写入后原样补回全部属性。
+                await this.kernel.request("setBlockAttrs", {id: item.blockId, attrs: {...restorableAttrs(oldAttrs), ...attrs}}, {maxRetries: 0});
             }
         } catch (err) {
-            // updateBlock 失败时恢复属性和正文，避免出现“新元数据 + 旧正文”的半更新状态。
+            // updateBlock 失败时恢复正文和属性，避免出现“新元数据 + 旧正文”的半更新状态。
             let rollbackFailed = false;
-            if (oldAttrs) {
-                try { await this.kernel.request("setBlockAttrs", {id: item.blockId, attrs: oldAttrs}, {maxRetries: 0}); } catch { rollbackFailed = true; }
-            }
-            if (oldMarkdown !== undefined) {
+            if (oldMarkdown !== undefined && bodyWritten) {
                 try {
-                    await this.kernel.request("updateBlock", {data: oldMarkdown, dataType: "markdown", id: item.blockId}, {maxRetries: 0});
+                    await this.kernel.request("updateBlock", {data: toItemStorageMarkdown(oldMarkdown, keepContainer), dataType: "markdown", id: item.blockId}, {maxRetries: 0});
                 } catch { rollbackFailed = true; }
+            }
+            if (oldAttrs) {
+                try { await this.kernel.request("setBlockAttrs", {id: item.blockId, attrs: restorableAttrs(oldAttrs)}, {maxRetries: 0}); } catch { rollbackFailed = true; }
             }
             if (rollbackFailed) {
                 return fail("kernel-error", `${toErrorMessage(err)}; rollback failed and item state may be partially updated`);

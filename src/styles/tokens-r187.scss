@@ -461,7 +461,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   &.xlc-form { padding-bottom: var(--xlc-space-5); }
 
   .xlc-setup-recommendation {
-    padding: var(--xlc-space-4) var(--xlc-space-4);
+    padding: var(--xlc-space-2) var(--xlc-space-3);
     border: 0;
     border-radius: var(--xlc-radius);
     background: var(--xlc-lavender);
@@ -469,8 +469,8 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   }
 
   .xlc-setup-quickstart {
-    gap: var(--xlc-space-4);
-    padding: var(--xlc-space-5);
+    gap: var(--xlc-space-2) var(--xlc-space-3);
+    padding: var(--xlc-space-3) var(--xlc-space-4);
     border-radius: var(--xlc-radius-lg);
     background: var(--xlc-surface);
     box-shadow: none;
@@ -563,9 +563,9 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   .xlc-target-banner { height: auto; min-height: 30px; border: 0; border-radius: var(--xlc-radius-sm); background: var(--xlc-soft); color: var(--xlc-muted); font-size: var(--xlc-font-sm); }
   .xlc-ai-banner { border-color: transparent; background: var(--xlc-lavender); color: var(--xlc-lavender-ink); }
 
-  .xlc-body { gap: var(--xlc-space-4); border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-  .xlc-list { flex: 0 0 46%; width: 46%; border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-lg); background: var(--xlc-surface); box-shadow: var(--xlc-shadow-float); }
-  .xlc-pane { border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-lg); background: var(--xlc-surface); box-shadow: var(--xlc-shadow-float); overflow: hidden; }
+  .xlc-body { gap: var(--xlc-space-4); min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .xlc-list { flex: 0 0 46%; width: 46%; min-height: 0; border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-lg); background: var(--xlc-surface); box-shadow: var(--xlc-shadow-float); }
+  .xlc-pane { min-height: 0; border: 1px solid var(--xlc-line); border-radius: var(--xlc-radius-lg); background: var(--xlc-surface); box-shadow: var(--xlc-shadow-float); overflow: hidden; }
   .xlc-group-head { padding: var(--xlc-space-3) var(--xlc-space-4); background: var(--xlc-soft); color: var(--xlc-muted); font-size: var(--xlc-font-xs); font-weight: var(--xlc-weight-semibold); letter-spacing: 0; }
   .xlc-row { gap: var(--xlc-space-3); min-height: 64px; padding: var(--xlc-space-3) var(--xlc-space-4); border-bottom-color: var(--xlc-line); box-shadow: none; }
   .xlc-row:hover { background: var(--xlc-soft); }
@@ -581,17 +581,17 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   .xlc-row--provider:hover { background: var(--xlc-lavender); }
   .xlc-provider-header { padding: var(--xlc-space-3) var(--xlc-space-4); background: var(--xlc-lavender); color: var(--xlc-lavender-ink); font-size: var(--xlc-font-sm); letter-spacing: 0; }
 
-  .xlc-pane-head { padding: var(--xlc-space-5) var(--xlc-space-5) var(--xlc-space-3); align-items: flex-start; flex-wrap: wrap; flex-shrink: 0; }
+  .xlc-pane-head { padding: var(--xlc-space-3) var(--xlc-space-4) var(--xlc-space-2); align-items: flex-start; flex-wrap: wrap; flex-shrink: 0; }
   .xlc-pane-title { color: var(--xlc-ink); font-size: var(--xlc-font-xl); line-height: var(--xlc-line-heading); font-weight: var(--xlc-weight-strong); }
-  .xlc-pane-meta { gap: var(--xlc-space-2); margin: var(--xlc-space-0-5) var(--xlc-space-5) var(--xlc-space-3); }
+  .xlc-pane-meta { gap: var(--xlc-space-2); margin: var(--xlc-space-0-5) var(--xlc-space-4) var(--xlc-space-2); flex-shrink: 0; }
   .xlc-meta-chip { min-height: 26px; padding: var(--xlc-space-1) var(--xlc-space-2); border: 0; border-radius: var(--xlc-radius-sm); background: var(--xlc-soft); color: var(--xlc-muted); font-size: var(--xlc-font-xs); }
   .xlc-meta-chip--on { background: var(--xlc-lavender); color: var(--xlc-lavender-ink); }
-  .xlc-pane-vars { margin: var(--xlc-space-0) var(--xlc-space-5) var(--xlc-space-3); padding: var(--xlc-space-3) var(--xlc-space-3); font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); }
-  .xlc-pane-warn { margin: var(--xlc-space-0) var(--xlc-space-5) var(--xlc-space-3); padding: var(--xlc-space-3) var(--xlc-space-3); }
-  .xlc-pane-body { min-height: 0; padding: var(--xlc-space-2) var(--xlc-space-5) var(--xlc-space-5); font-size: var(--xlc-font-lg); line-height: var(--xlc-leading-loose); color: var(--xlc-ink); }
+  .xlc-pane-vars { margin: var(--xlc-space-0) var(--xlc-space-4) var(--xlc-space-2); padding: var(--xlc-space-1) var(--xlc-space-3); max-height: 44px; overflow-y: auto; flex-shrink: 0; font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); }
+  .xlc-pane-warn { margin: var(--xlc-space-0) var(--xlc-space-4) var(--xlc-space-2); padding: var(--xlc-space-2) var(--xlc-space-3); flex-shrink: 0; }
+  .xlc-pane-body { min-height: 0; padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-3); font-size: var(--xlc-font-lg); line-height: var(--xlc-leading-loose); color: var(--xlc-ink); }
   .xlc-pane-body--muted { color: var(--xlc-muted); }
   .xlc-pane-body--code { font-size: var(--xlc-font-md); line-height: var(--xlc-leading-loose); }
-  // 预览窗格动作栏：多按钮自适应流动布局，防截断并保持紧凑质感
+  // 预览窗格动作栏：固定在预览窗格底部，单行横向自适应，绝不被上方内容挤出视口
   .xlc-pane-foot {
     display: flex;
     align-items: center;
@@ -600,9 +600,9 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     border-top: 1px solid var(--xlc-line);
     background: var(--xlc-surface);
     flex: 0 0 auto;
-    min-height: 48px;
+    min-height: 44px;
     box-sizing: border-box;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
   }
@@ -1238,6 +1238,157 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   .xlc-surround-banner {
     border-width: 2px;
     font-weight: 700;
+  }
+}
+
+// ══════════ 可搜索「文本工具」抽屉与多视口主按钮可见性（T-0753 / T-0754）══════════
+:is(#{$roots}) {
+  :is(.xlc-varbar-tools-panel, .xlc-menu-text-tools-panel, .xlc-varbtn, .xlc-menu-item)[hidden] {
+    display: none !important;
+  }
+
+  .xlc-varbar-tools-panel {
+    flex: 1 0 100%;
+    width: 100%;
+    margin-top: var(--xlc-space-2);
+    padding: var(--xlc-space-2);
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius-sm);
+    background: var(--xlc-soft);
+    box-sizing: border-box;
+  }
+
+  .xlc-varbar-tools-search,
+  .xlc-menu-text-tools-search {
+    width: 100%;
+    min-height: 32px;
+    box-sizing: border-box;
+  }
+
+  .xlc-varbar-tools-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xlc-space-1);
+    max-height: 156px;
+    overflow-y: auto;
+    margin-top: var(--xlc-space-2);
+  }
+
+  .xlc-menu-text-tools-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xlc-space-1);
+    padding: var(--xlc-space-2);
+    margin: var(--xlc-space-1) 0;
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius-sm);
+    background: var(--xlc-soft);
+  }
+
+  .xlc-menu-text-tools-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+}
+
+:is(#{$roots}).b3-dialog__container.xlc-form-host:has(.xlc-capture) {
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+
+  > :is(.b3-dialog__body, .b3-dialog__content) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .xlc-capture > .xlc-form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    background: var(--xlc-canvas);
+    padding-top: var(--xlc-space-3);
+    padding-bottom: var(--xlc-space-1);
+  }
+}
+
+// 125%（1024×576）与 150%（853×480）高缩放视口：压缩装饰性纵向间距，确保四个弹窗主操作按钮始终在视口内可点中
+@media (max-height: 620px) {
+  .b3-dialog__container {
+    margin: 6px auto !important;
+    max-height: calc(100vh - 12px) !important;
+  }
+
+  :is(#{$roots}).b3-dialog__container.xlc-form-host {
+    max-height: calc(100vh - 12px);
+    display: flex;
+    flex-direction: column;
+
+    > :is(.b3-dialog__body, .b3-dialog__content) {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .xlc-capture > .xlc-form-actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 4;
+      background: var(--xlc-canvas);
+      padding-top: var(--xlc-space-2);
+      padding-bottom: var(--xlc-space-1);
+    }
+  }
+
+  :is(#{$roots}).b3-dialog__container {
+    .b3-dialog__header {
+      padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-1);
+    }
+
+    > :is(.b3-dialog__body, .b3-dialog__content) {
+      padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-3);
+    }
+  }
+
+  :is(#{$roots}).xlc-dialog {
+    gap: var(--xlc-space-1-5, 6px);
+    max-height: calc(100vh - 68px);
+
+    .xlc-kbdrow,
+    .xlc-search-hint,
+    .xlc-quick-filter-pills,
+    .xlc-pane-vars,
+    .xlc-pane-meta {
+      display: none !important;
+    }
+
+    .xlc-search { height: 36px; }
+    .xlc-top-new { min-height: 36px; padding: var(--xlc-space-1) var(--xlc-space-3); }
+    .xlc-filters .b3-select, .xlc-chip { min-height: 30px; height: 30px; padding: 2px var(--xlc-space-2); }
+    .xlc-target-banner { min-height: 24px; padding: 2px var(--xlc-space-2); }
+    .xlc-pane-head { padding: var(--xlc-space-2) var(--xlc-space-3) var(--xlc-space-1); }
+    .xlc-pane-body { padding: var(--xlc-space-1) var(--xlc-space-3); }
+    .xlc-pane-foot { min-height: 38px; padding: var(--xlc-space-1) var(--xlc-space-3); }
+    .xlc-footer { padding-top: var(--xlc-space-1); }
+  }
+
+  :is(#{$roots}).xlc-form {
+    gap: var(--xlc-space-1-5, 6px);
+    padding-bottom: var(--xlc-space-2);
+
+    .xlc-setup-recommendation,
+    .xlc-setup-quickstart-item-desc,
+    .xlc-setup-quickstart-title {
+      display: none;
+    }
+    .xlc-setup-quickstart {
+      padding: var(--xlc-space-1) var(--xlc-space-2);
+      gap: var(--xlc-space-2);
+    }
+    .xlc-form-content { min-height: 64px; max-height: 96px; }
   }
 }
 

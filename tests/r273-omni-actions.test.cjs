@@ -19,7 +19,7 @@ test("bodyWriteRestriction：超长文本拒绝", () => {
 test("bodyWriteRestriction：多行非代码块拒绝", () => {
     const multiLine = "第一行\n第二行";
     const res = kramdown.bodyWriteRestriction(multiLine);
-    assert.ok(res && res.includes("multi-line or structured body writing is unavailable"));
+    assert.ok(res && res.includes("multi-line or structured content cannot be written into an existing single block"));
 });
 
 test("bodyWriteRestriction：完整代码块允许通过", () => {
@@ -30,13 +30,13 @@ test("bodyWriteRestriction：完整代码块允许通过", () => {
 test("bodyWriteRestriction：不完整代码块拒绝", () => {
     const incompleteFence = "```typescript\nconsole.log('hello');";
     const res = kramdown.bodyWriteRestriction(incompleteFence);
-    assert.ok(res && res.includes("multi-line or structured body writing is unavailable"));
+    assert.ok(res && res.includes("multi-line or structured content cannot be written into an existing single block"));
 });
 
 test("bodyWriteRestriction：单行结构化内容拒绝", () => {
     const structured = "- 列表项";
     const res = kramdown.bodyWriteRestriction(structured);
-    assert.ok(res && res.includes("multi-line or structured body writing is unavailable"));
+    assert.ok(res && res.includes("multi-line or structured content cannot be written into an existing single block"));
 });
 
 test("负向验证：注入含换行符的违规内容应被拒绝", () => {
