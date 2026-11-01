@@ -268,8 +268,8 @@ function check(name, ok, detail = "") {
             return status && (status.dataset.state === "success" || status.dataset.state === "error");
         }, null, {timeout: 45000});
         let packStats = {count: 0, errors: 0};
-        for (let i = 0; i < 14; i++) {
-            await sleep(650);
+        for (let i = 0; i < 18; i++) {
+            await sleep(700);
             packStats = await page.evaluate(async () => {
                 const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
                 p.library.invalidateIndex();

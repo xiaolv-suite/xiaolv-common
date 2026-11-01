@@ -2305,6 +2305,9 @@ export class CommonSearchDialog {
             });
             const icon = document.createElement("div");
             icon.className = "xlc-empty-icon";
+            if (typeof icon.setAttribute === "function") {
+                icon.setAttribute("aria-hidden", "true");
+            }
             icon.textContent = "✦";
             empty.appendChild(icon);
             const text = document.createElement("div");
@@ -3706,6 +3709,9 @@ export class CommonSearchDialog {
         }
         const ic = document.createElement("span");
         ic.className = "xlc-menu-ic";
+        if (typeof ic.setAttribute === "function") {
+            ic.setAttribute("aria-hidden", "true");
+        }
         ic.textContent = icon;
         btn.appendChild(ic);
         btn.appendChild(document.createTextNode(label));

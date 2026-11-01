@@ -2329,7 +2329,18 @@
   &:hover {
     border-color: var(--b3-theme-primary);
     background: var(--b3-list-hover);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--xlc-shadow-sm);
+  }
+
+  [data-theme-mode="dark"] &,
+  [data-theme="dark"] & {
+    border-color: var(--xlc-line-strong);
+    background: var(--xlc-surface);
+
+    &:hover {
+      border-color: var(--b3-theme-primary);
+      background: var(--xlc-soft);
+    }
   }
 
   &:focus-within {
@@ -4941,6 +4952,7 @@
   color: var(--xlc-ink);
   font-family: var(--xlc-font-family);
   overflow: hidden;
+  container-type: inline-size;
 
   .xlc-dock-head {
     display: flex;
@@ -5327,6 +5339,47 @@
         padding: 2px 8px;
         white-space: nowrap;
       }
+    }
+  }
+
+  @container (max-width: 240px) {
+    .xlc-dock-head {
+      padding: var(--xlc-space-1) var(--xlc-space-2);
+    }
+    .xlc-dock-title {
+      font-size: var(--xlc-font-sm);
+    }
+    .xlc-dock-btn-icon {
+      width: 22px;
+      height: 22px;
+      font-size: 13px;
+    }
+    .xlc-dock-search {
+      padding: 4px var(--xlc-space-2);
+    }
+    .xlc-dock-chips {
+      padding: 0 var(--xlc-space-2) 4px;
+      gap: 3px;
+    }
+    .xlc-dock-chip {
+      padding: 1px 6px;
+      font-size: 10px;
+    }
+    .xlc-dock-row {
+      padding: 4px 6px;
+      gap: 4px;
+      margin-bottom: 2px;
+    }
+    .xlc-dock-act-btn {
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+      min-height: 20px;
+      font-size: 10px;
+    }
+    .xlc-dock-group-head {
+      padding: 4px 6px;
+      font-size: 10px;
     }
   }
 }

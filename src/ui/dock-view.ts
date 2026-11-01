@@ -104,7 +104,7 @@ export class DockView {
 
         const titleBox = document.createElement("div");
         titleBox.className = "xlc-dock-title";
-        titleBox.innerHTML = `<span class="xlc-dock-icon">🐴</span><strong>${escapeDockHtml(this.deps.t("pluginName") || "小驴常用")}</strong>`;
+        titleBox.innerHTML = `<span class="xlc-dock-icon" aria-hidden="true">🐴</span><strong>${escapeDockHtml(this.deps.t("pluginName") || "小驴常用")}</strong>`;
         head.appendChild(titleBox);
 
         const actions = document.createElement("div");
@@ -184,6 +184,9 @@ export class DockView {
 
         const searchIcon = document.createElement("span");
         searchIcon.className = "xlc-dock-search-icon";
+        if (typeof searchIcon.setAttribute === "function") {
+            searchIcon.setAttribute("aria-hidden", "true");
+        }
         searchIcon.textContent = "🔍";
         searchBox.appendChild(searchIcon);
 
@@ -433,7 +436,7 @@ export class DockView {
                 }
                 const safeCatName = escapeDockHtml(catName);
                 groupHead.innerHTML = `
-                    <span class="xlc-dock-group-arrow">${isCollapsed ? "▸" : "▾"}</span>
+                    <span class="xlc-dock-group-arrow" aria-hidden="true">${isCollapsed ? "▸" : "▾"}</span>
                     <span class="xlc-dock-group-name">${safeCatName}</span>
                     <span class="xlc-dock-group-count">${catEntries.length}</span>
                 `;
@@ -651,7 +654,7 @@ export class DockView {
             if (typeof it.setAttribute === "function") {
                 it.setAttribute("role", "menuitem");
             }
-            it.innerHTML = `<span class="xlc-dock-menu-ic">${escapeDockHtml(icon)}</span><span>${escapeDockHtml(label)}</span>`;
+            it.innerHTML = `<span class="xlc-dock-menu-ic" aria-hidden="true">${escapeDockHtml(icon)}</span><span>${escapeDockHtml(label)}</span>`;
             it.addEventListener("click", () => {
                 this.closeContextMenu();
                 action();
