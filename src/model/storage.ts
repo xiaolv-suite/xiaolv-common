@@ -113,6 +113,11 @@ function normalizeCustomTransforms(raw: unknown): CustomTransform[] {
     return out;
 }
 
+export interface MiniPosition {
+    x: number;
+    y: number;
+}
+
 export interface SearchPrefs {
     /** 拼音搜索（全拼/首字母注解；默认开，可在设置关闭） */
     pinyin: boolean;
@@ -128,6 +133,10 @@ export interface SearchPrefs {
     density?: "comfortable" | "compact";
     /** 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017）：单列紧凑浮条无遮挡 */
     miniMode?: boolean;
+    /** 迷你悬浮条拖拽停留位置坐标（CAND-022 / TODO-FEAT-020） */
+    miniPosition?: MiniPosition;
+    /** 迷你条折叠贴边微型胶囊状态（CAND-023 / TODO-FEAT-021） */
+    miniCollapsed?: boolean;
 }
 
 export type SavedDiscoveryScope = "document" | "notebook" | "tree" | "selected-notebook" | "all-notebooks";
@@ -365,6 +374,8 @@ export function normalizeState(raw: unknown): PluginState {
                 ? "compact"
                 : "comfortable",
             miniMode: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).miniMode === true),
+            miniPosition: normalizeMiniPosition((obj.search as SearchPrefs)?.miniPosition),
+            miniCollapsed: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).miniCollapsed === true),
         },
         // 插入偏好默认开（F1/F3）；显式 false 才关
         insert: {
@@ -628,5 +639,19 @@ export function matchProfilePreset(fieldName: string, presets?: Readonly<Record<
 
     return undefined;
 }
+
+export function normalizeMiniPosition(raw: unknown): MiniPosition | undefined {
+    if (!raw || typeof raw !== "object") return undefined;
+    const obj = raw as Record<string, unknown>;
+    const x = Number(obj.x);
+    const y = Number(obj.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+    if (x < 0 || x > 10000 || y < 0 || y > 10000) return undefined;
+    return {
+        x: Math.round(x),
+        y: Math.round(y),
+    };
+}
+
 
 

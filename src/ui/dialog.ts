@@ -35,7 +35,7 @@ import {evaluateMathExpression} from "../model/calculator";
 import {AdjacentBlocksContext} from "../service/omni-search";
 import {openStepByStepGuideDialog} from "./guide-dialog";
 import {openShareCardDialog} from "./share-card";
-import {getClipboardTimeGroup} from "../model/storage";
+import {getClipboardTimeGroup, MiniPosition} from "../model/storage";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -130,6 +130,12 @@ export interface DialogDeps {
     /** 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017） */
     miniMode?: boolean;
     onMiniModeChange?: (mini: boolean) => void;
+    /** 迷你悬浮条拖拽停留位置坐标（CAND-022 / TODO-FEAT-020） */
+    miniPosition?: MiniPosition;
+    onMiniPositionChange?: (pos: MiniPosition) => void;
+    /** 迷你条折叠贴边微型胶囊状态（CAND-023 / TODO-FEAT-021） */
+    miniCollapsed?: boolean;
+    onMiniCollapsedChange?: (collapsed: boolean) => void;
     openSetup: () => void;
     /** 全局常驻名片池 / 身份档案（CAND-016 / TODO-FEAT-015） */
     getProfilePresets?: () => Record<string, string>;
@@ -228,6 +234,10 @@ export class CommonSearchDialog {
     /** 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017） */
     private miniMode = false;
     private miniModeBtn: HTMLButtonElement | null = null;
+    /** 迷你悬浮条停留坐标与折叠状态（CAND-022 / CAND-023） */
+    private miniPosition?: MiniPosition;
+    private miniCollapsed = false;
+    private collapsedPillEl: HTMLElement | null = null;
     /** 常用语购物车暂存托盘（CAND-019 / TODO-FEAT-018） */
     private pasteTrayItems: Array<{id: string; title: string; content?: string}> = [];
     private pasteTrayEl: HTMLElement | null = null;
@@ -235,6 +245,8 @@ export class CommonSearchDialog {
     constructor(private readonly deps: DialogDeps) {
         if (deps.density) this.density = deps.density;
         if (deps.miniMode !== undefined) this.miniMode = deps.miniMode;
+        if (deps.miniPosition) this.miniPosition = deps.miniPosition;
+        if (deps.miniCollapsed !== undefined) this.miniCollapsed = deps.miniCollapsed;
     }
 
     /** 定向插入目标（文档树入口；设置后 Enter/点按插入到该文档而非活动编辑器） */
@@ -310,6 +322,65 @@ export class CommonSearchDialog {
         // 顶部：搜索框。把普通搜索与 ? 语义搜索拆成可读提示，避免用户只看到一个神秘符号。
         const top = document.createElement("div");
         top.className = "xlc-top";
+
+        // 极窄迷你悬浮条拖拽把手与折叠按钮（CAND-020 / CAND-022 / CAND-023）
+        const miniDragBar = document.createElement("div");
+        miniDragBar.className = "xlc-mini-drag-bar";
+        miniDragBar.dataset.xlcControl = "search.mini.drag-bar";
+
+        const handleText = document.createElement("span");
+        handleText.className = "xlc-mini-drag-handle";
+        handleText.textContent = "⠿ 常用语";
+        handleText.title = "按住拖拽移动悬浮条位置，双击折叠/展开";
+        handleText.addEventListener("dblclick", () => {
+            this.toggleMiniCollapse();
+        });
+
+        handleText.addEventListener("mousedown", (ev: MouseEvent) => {
+            if (ev.button !== 0) return;
+            const container = this.dialog?.element;
+            if (!container) return;
+            ev.preventDefault();
+
+            const rect = container.getBoundingClientRect();
+            const shiftX = ev.clientX - rect.left;
+            const shiftY = ev.clientY - rect.top;
+
+            const onMouseMove = (moveEv: MouseEvent) => {
+                const newX = Math.max(0, Math.min(window.innerWidth - 80, moveEv.clientX - shiftX));
+                const newY = Math.max(0, Math.min(window.innerHeight - 40, moveEv.clientY - shiftY));
+                container.style.position = "fixed";
+                container.style.left = `${newX}px`;
+                container.style.top = `${newY}px`;
+                container.style.margin = "0";
+                container.style.transform = "none";
+                this.miniPosition = {x: Math.round(newX), y: Math.round(newY)};
+            };
+
+            const onMouseUp = () => {
+                document.removeEventListener("mousemove", onMouseMove);
+                document.removeEventListener("mouseup", onMouseUp);
+                if (this.miniPosition) {
+                    this.deps.onMiniPositionChange?.(this.miniPosition);
+                }
+            };
+
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+        });
+
+        const collapseBtn = document.createElement("button");
+        collapseBtn.type = "button";
+        collapseBtn.className = "xlc-mini-bar-btn";
+        collapseBtn.dataset.xlcControl = "search.mini.collapse";
+        collapseBtn.textContent = "─";
+        collapseBtn.title = "折叠为贴边微型灵动胶囊";
+        collapseBtn.setAttribute("aria-label", "折叠为贴边微型灵动胶囊");
+        collapseBtn.addEventListener("click", () => this.toggleMiniCollapse());
+
+        miniDragBar.append(handleText, collapseBtn);
+        top.appendChild(miniDragBar);
+
         if (this.deps.surroundText) {
             const surroundBanner = document.createElement("div");
             surroundBanner.className = "xlc-surround-banner";
@@ -1105,6 +1176,25 @@ export class CommonSearchDialog {
         });
         footer.appendChild(gear);
         root.appendChild(footer);
+
+        // 迷你模式贴边折叠灵动药丸胶囊（CAND-023 / TODO-FEAT-021）
+        const pill = document.createElement("div");
+        pill.className = "xlc-mini-collapsed-pill";
+        pill.dataset.xlcControl = "search.mini.collapsed-pill";
+        const pillIcon = document.createElement("span");
+        pillIcon.textContent = "🐴 常用语";
+        const pillKbd = document.createElement("span");
+        pillKbd.className = "xlc-pill-shortcut";
+        pillKbd.setAttribute("aria-hidden", "true");
+        pillKbd.textContent = "Alt+M";
+        pill.append(pillIcon, pillKbd);
+        pill.title = "点击展开常用语悬浮条 (Alt+M)";
+        pill.addEventListener("click", () => {
+            this.setMiniCollapsed(false);
+        });
+        this.collapsedPillEl = pill;
+        root.appendChild(pill);
+
         return root;
     }
 
@@ -6690,14 +6780,70 @@ export class CommonSearchDialog {
 
     private applyMiniMode(): void {
         const dialogWrap = this.dialog?.element;
+        const maskEl = dialogWrap?.parentElement;
         if (dialogWrap) {
             dialogWrap.classList.toggle("xlc-dialog--mini", this.miniMode);
+            if (this.miniMode && this.miniPosition) {
+                dialogWrap.style.position = "fixed";
+                dialogWrap.style.left = `${this.miniPosition.x}px`;
+                dialogWrap.style.top = `${this.miniPosition.y}px`;
+                dialogWrap.style.margin = "0";
+                dialogWrap.style.transform = "none";
+            } else if (!this.miniMode) {
+                dialogWrap.style.position = "";
+                dialogWrap.style.left = "";
+                dialogWrap.style.top = "";
+                dialogWrap.style.margin = "";
+                dialogWrap.style.transform = "";
+            }
         }
+
+        // 非模态穿透协同（CAND-021 / TODO-FEAT-019）：
+        // 迷你模式下开启背景遮罩穿透，用户可自由在编辑器中打字
+        if (maskEl) {
+            maskEl.classList.toggle("xlc-dialog-mask--passthrough", this.miniMode);
+        }
+
         if (this.miniModeBtn) {
             this.miniModeBtn.classList.toggle("xlc-search-mini-btn--active", this.miniMode);
             this.miniModeBtn.title = this.miniMode ? "已开启极窄迷你模式（Alt+M 恢复双栏）" : "迷你悬浮浮条模式（极窄单列无遮挡，Alt+M 切换）";
             this.miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
         }
+
+        this.applyMiniCollapse();
+    }
+
+    public toggleMiniCollapse(): boolean {
+        return this.setMiniCollapsed(!this.miniCollapsed);
+    }
+
+    public setMiniCollapsed(collapsed: boolean): boolean {
+        this.miniCollapsed = collapsed;
+        this.applyMiniCollapse();
+        this.deps.onMiniCollapsedChange?.(this.miniCollapsed);
+        if (!collapsed) {
+            this.focusInput();
+        }
+        return this.miniCollapsed;
+    }
+
+    public getMiniCollapsed(): boolean {
+        return this.miniCollapsed;
+    }
+
+    public getMiniPosition(): MiniPosition | undefined {
+        return this.miniPosition;
+    }
+
+    public getCollapsedPillElement(): HTMLElement | null {
+        return this.collapsedPillEl;
+    }
+
+    private applyMiniCollapse(): void {
+        const dialogWrap = this.dialog?.element;
+        if (!dialogWrap) return;
+        const isCollapsed = this.miniMode && this.miniCollapsed;
+        dialogWrap.classList.toggle("xlc-dialog--collapsed", isCollapsed);
     }
 
     public togglePasteTrayItem(entry: SearchEntry): void {

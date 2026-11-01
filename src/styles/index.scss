@@ -3662,6 +3662,123 @@
   }
 }
 
+// 迷你模式背景无模态穿透协同（CAND-021 / TODO-FEAT-019）
+.xlc-dialog-mask--passthrough {
+  pointer-events: none !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+
+  .b3-dialog__container {
+    pointer-events: auto !important;
+    box-shadow: var(--xlc-shadow-float) !important;
+  }
+}
+
+// 迷你拖拽把手栏（CAND-022 / TODO-FEAT-020）
+.xlc-mini-drag-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 4px;
+  cursor: grab;
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  .xlc-mini-drag-handle {
+    font-size: 11px;
+    font-weight: var(--xlc-weight-semibold);
+    color: var(--b3-theme-on-surface-light);
+    letter-spacing: 0.5px;
+  }
+
+  .xlc-mini-bar-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: var(--xlc-radius-sm);
+    color: var(--b3-theme-on-surface-light);
+
+    &:hover {
+      background: var(--b3-theme-surface-lighter);
+      color: var(--b3-theme-primary);
+    }
+  }
+}
+
+.xlc-dialog--mini {
+  .xlc-mini-drag-bar {
+    display: flex;
+  }
+}
+
+// 贴边微型灵动胶囊折叠状态（CAND-023 / TODO-FEAT-021）
+.xlc-mini-collapsed-pill {
+  display: none;
+}
+
+.b3-dialog__container.xlc-dialog-host.xlc-dialog--collapsed,
+.xlc-dialog--collapsed {
+  width: auto !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+
+  .b3-dialog__content,
+  .b3-dialog__body,
+  .b3-dialog__header {
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+  }
+
+  .xlc-top,
+  .xlc-body,
+  .xlc-footer,
+  .xlc-paste-tray,
+  .xlc-batch-bar,
+  .xlc-status {
+    display: none !important;
+  }
+
+  .xlc-mini-collapsed-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--b3-theme-surface);
+    border: 1px solid var(--b3-theme-primary);
+    border-radius: var(--xlc-radius-pill, 9999px);
+    box-shadow: var(--xlc-shadow-float);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: var(--xlc-weight-semibold);
+    color: var(--b3-theme-primary);
+    transition: transform var(--xlc-dur-fast) var(--xlc-ease);
+
+    &:hover {
+      transform: scale(1.06);
+    }
+
+    .xlc-pill-shortcut {
+      font-size: 10px;
+      padding: 0 4px;
+      border-radius: var(--b3-border-radius);
+      background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent);
+      color: var(--b3-theme-primary);
+    }
+  }
+}
+
 // 常用语购物车暂存托盘栏（CAND-019 / TODO-FEAT-018）
 .xlc-paste-tray {
   display: flex;

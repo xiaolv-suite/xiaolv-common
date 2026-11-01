@@ -2046,6 +2046,16 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.state.search.miniMode = mini;
                 this.persistSoon();
             },
+            miniPosition: this.state.search.miniPosition,
+            onMiniPositionChange: (pos) => {
+                this.state.search.miniPosition = pos;
+                this.persistSoon();
+            },
+            miniCollapsed: this.state.search.miniCollapsed ?? false,
+            onMiniCollapsedChange: (collapsed) => {
+                this.state.search.miniCollapsed = collapsed;
+                this.persistSoon();
+            },
             getProfilePresets: () => this.state.profilePresets ?? {},
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {

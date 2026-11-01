@@ -28194,6 +28194,8 @@ fi`;
       /** 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017） */
       this.miniMode = false;
       this.miniModeBtn = null;
+      this.miniCollapsed = false;
+      this.collapsedPillEl = null;
       /** 常用语购物车暂存托盘（CAND-019 / TODO-FEAT-018） */
       this.pasteTrayItems = [];
       this.pasteTrayEl = null;
@@ -28212,6 +28214,8 @@ fi`;
       this.dropCleanup = null;
       if (deps.density) this.density = deps.density;
       if (deps.miniMode !== void 0) this.miniMode = deps.miniMode;
+      if (deps.miniPosition) this.miniPosition = deps.miniPosition;
+      if (deps.miniCollapsed !== void 0) this.miniCollapsed = deps.miniCollapsed;
     }
     open() {
       var _a, _b, _c;
@@ -28282,6 +28286,56 @@ fi`;
       root.className = "xlc-search xlc-dialog" + (isMobile ? " xlc-dialog--mobile" : "");
       const top = document.createElement("div");
       top.className = "xlc-top";
+      const miniDragBar = document.createElement("div");
+      miniDragBar.className = "xlc-mini-drag-bar";
+      miniDragBar.dataset.xlcControl = "search.mini.drag-bar";
+      const handleText = document.createElement("span");
+      handleText.className = "xlc-mini-drag-handle";
+      handleText.textContent = "\u283F \u5E38\u7528\u8BED";
+      handleText.title = "\u6309\u4F4F\u62D6\u62FD\u79FB\u52A8\u60AC\u6D6E\u6761\u4F4D\u7F6E\uFF0C\u53CC\u51FB\u6298\u53E0/\u5C55\u5F00";
+      handleText.addEventListener("dblclick", () => {
+        this.toggleMiniCollapse();
+      });
+      handleText.addEventListener("mousedown", (ev) => {
+        var _a2;
+        if (ev.button !== 0) return;
+        const container = (_a2 = this.dialog) == null ? void 0 : _a2.element;
+        if (!container) return;
+        ev.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const shiftX = ev.clientX - rect.left;
+        const shiftY = ev.clientY - rect.top;
+        const onMouseMove = (moveEv) => {
+          const newX = Math.max(0, Math.min(window.innerWidth - 80, moveEv.clientX - shiftX));
+          const newY = Math.max(0, Math.min(window.innerHeight - 40, moveEv.clientY - shiftY));
+          container.style.position = "fixed";
+          container.style.left = `${newX}px`;
+          container.style.top = `${newY}px`;
+          container.style.margin = "0";
+          container.style.transform = "none";
+          this.miniPosition = { x: Math.round(newX), y: Math.round(newY) };
+        };
+        const onMouseUp = () => {
+          var _a3, _b2;
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("mouseup", onMouseUp);
+          if (this.miniPosition) {
+            (_b2 = (_a3 = this.deps).onMiniPositionChange) == null ? void 0 : _b2.call(_a3, this.miniPosition);
+          }
+        };
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+      });
+      const collapseBtn = document.createElement("button");
+      collapseBtn.type = "button";
+      collapseBtn.className = "xlc-mini-bar-btn";
+      collapseBtn.dataset.xlcControl = "search.mini.collapse";
+      collapseBtn.textContent = "\u2500";
+      collapseBtn.title = "\u6298\u53E0\u4E3A\u8D34\u8FB9\u5FAE\u578B\u7075\u52A8\u80F6\u56CA";
+      collapseBtn.setAttribute("aria-label", "\u6298\u53E0\u4E3A\u8D34\u8FB9\u5FAE\u578B\u7075\u52A8\u80F6\u56CA");
+      collapseBtn.addEventListener("click", () => this.toggleMiniCollapse());
+      miniDragBar.append(handleText, collapseBtn);
+      top.appendChild(miniDragBar);
       if (this.deps.surroundText) {
         const surroundBanner = document.createElement("div");
         surroundBanner.className = "xlc-surround-banner";
@@ -28500,11 +28554,11 @@ fi`;
         lbl.textContent = "\u{1F550} \u5386\u53F2:";
         historyBar.appendChild(lbl);
         for (const word of history) {
-          const pill = document.createElement("div");
-          pill.className = "xlc-history-pill";
-          pill.dataset.xlcControl = "search.history.pill";
-          pill.title = `\u5386\u53F2\u8BCD\u300C${word}\u300D`;
-          pill.setAttribute("aria-label", pill.title);
+          const pill2 = document.createElement("div");
+          pill2.className = "xlc-history-pill";
+          pill2.dataset.xlcControl = "search.history.pill";
+          pill2.title = `\u5386\u53F2\u8BCD\u300C${word}\u300D`;
+          pill2.setAttribute("aria-label", pill2.title);
           const wordBtn = document.createElement("button");
           wordBtn.type = "button";
           wordBtn.className = "xlc-history-text-btn";
@@ -28522,7 +28576,7 @@ fi`;
             }
             void this.refresh();
           });
-          pill.appendChild(wordBtn);
+          pill2.appendChild(wordBtn);
           if (this.deps.removeRecentQuery) {
             const delBtn = document.createElement("button");
             delBtn.type = "button";
@@ -28537,9 +28591,9 @@ fi`;
               (_b3 = (_a3 = this.deps).removeRecentQuery) == null ? void 0 : _b3.call(_a3, word);
               updateHistoryBar();
             });
-            pill.appendChild(delBtn);
+            pill2.appendChild(delBtn);
           }
-          historyBar.appendChild(pill);
+          historyBar.appendChild(pill2);
         }
         if (this.deps.clearRecentQueries) {
           const clearBtn2 = document.createElement("button");
@@ -28705,20 +28759,20 @@ fi`;
         { id: "code", label: "\u4EE3\u7801\u7247\u6BB5" }
       ];
       for (const fmt of clipFormats) {
-        const pill = document.createElement("button");
-        pill.type = "button";
-        pill.className = "xlc-chip xlc-clip-format-chip" + (this.clipboardFormatFilter === fmt.id ? " xlc-chip--on" : "");
-        pill.dataset.format = fmt.id;
-        pill.dataset.xlcControl = `filter.clip.${fmt.id}`;
-        pill.textContent = fmt.label;
-        pill.addEventListener("click", () => {
+        const pill2 = document.createElement("button");
+        pill2.type = "button";
+        pill2.className = "xlc-chip xlc-clip-format-chip" + (this.clipboardFormatFilter === fmt.id ? " xlc-chip--on" : "");
+        pill2.dataset.format = fmt.id;
+        pill2.dataset.xlcControl = `filter.clip.${fmt.id}`;
+        pill2.textContent = fmt.label;
+        pill2.addEventListener("click", () => {
           this.clipboardFormatFilter = fmt.id;
           for (const p of clipFormatTrack.querySelectorAll(".xlc-clip-format-chip")) {
             p.classList.toggle("xlc-chip--on", p.dataset.format === fmt.id);
           }
           void this.refresh();
         });
-        clipFormatTrack.appendChild(pill);
+        clipFormatTrack.appendChild(pill2);
       }
       filters.appendChild(clipFormatTrack);
       const queueChip = document.createElement("button");
@@ -29009,6 +29063,22 @@ fi`;
       });
       footer.appendChild(gear);
       root.appendChild(footer);
+      const pill = document.createElement("div");
+      pill.className = "xlc-mini-collapsed-pill";
+      pill.dataset.xlcControl = "search.mini.collapsed-pill";
+      const pillIcon = document.createElement("span");
+      pillIcon.textContent = "\u{1F434} \u5E38\u7528\u8BED";
+      const pillKbd = document.createElement("span");
+      pillKbd.className = "xlc-pill-shortcut";
+      pillKbd.setAttribute("aria-hidden", "true");
+      pillKbd.textContent = "Alt+M";
+      pill.append(pillIcon, pillKbd);
+      pill.title = "\u70B9\u51FB\u5C55\u5F00\u5E38\u7528\u8BED\u60AC\u6D6E\u6761 (Alt+M)";
+      pill.addEventListener("click", () => {
+        this.setMiniCollapsed(false);
+      });
+      this.collapsedPillEl = pill;
+      root.appendChild(pill);
       return root;
     }
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
@@ -34520,14 +34590,61 @@ ${progress.progressBar}`);
     applyMiniMode() {
       var _a;
       const dialogWrap = (_a = this.dialog) == null ? void 0 : _a.element;
+      const maskEl = dialogWrap == null ? void 0 : dialogWrap.parentElement;
       if (dialogWrap) {
         dialogWrap.classList.toggle("xlc-dialog--mini", this.miniMode);
+        if (this.miniMode && this.miniPosition) {
+          dialogWrap.style.position = "fixed";
+          dialogWrap.style.left = `${this.miniPosition.x}px`;
+          dialogWrap.style.top = `${this.miniPosition.y}px`;
+          dialogWrap.style.margin = "0";
+          dialogWrap.style.transform = "none";
+        } else if (!this.miniMode) {
+          dialogWrap.style.position = "";
+          dialogWrap.style.left = "";
+          dialogWrap.style.top = "";
+          dialogWrap.style.margin = "";
+          dialogWrap.style.transform = "";
+        }
+      }
+      if (maskEl) {
+        maskEl.classList.toggle("xlc-dialog-mask--passthrough", this.miniMode);
       }
       if (this.miniModeBtn) {
         this.miniModeBtn.classList.toggle("xlc-search-mini-btn--active", this.miniMode);
         this.miniModeBtn.title = this.miniMode ? "\u5DF2\u5F00\u542F\u6781\u7A84\u8FF7\u4F60\u6A21\u5F0F\uFF08Alt+M \u6062\u590D\u53CC\u680F\uFF09" : "\u8FF7\u4F60\u60AC\u6D6E\u6D6E\u6761\u6A21\u5F0F\uFF08\u6781\u7A84\u5355\u5217\u65E0\u906E\u6321\uFF0CAlt+M \u5207\u6362\uFF09";
         this.miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
       }
+      this.applyMiniCollapse();
+    }
+    toggleMiniCollapse() {
+      return this.setMiniCollapsed(!this.miniCollapsed);
+    }
+    setMiniCollapsed(collapsed) {
+      var _a, _b;
+      this.miniCollapsed = collapsed;
+      this.applyMiniCollapse();
+      (_b = (_a = this.deps).onMiniCollapsedChange) == null ? void 0 : _b.call(_a, this.miniCollapsed);
+      if (!collapsed) {
+        this.focusInput();
+      }
+      return this.miniCollapsed;
+    }
+    getMiniCollapsed() {
+      return this.miniCollapsed;
+    }
+    getMiniPosition() {
+      return this.miniPosition;
+    }
+    getCollapsedPillElement() {
+      return this.collapsedPillEl;
+    }
+    applyMiniCollapse() {
+      var _a;
+      const dialogWrap = (_a = this.dialog) == null ? void 0 : _a.element;
+      if (!dialogWrap) return;
+      const isCollapsed = this.miniMode && this.miniCollapsed;
+      dialogWrap.classList.toggle("xlc-dialog--collapsed", isCollapsed);
     }
     togglePasteTrayItem(entry) {
       var _a, _b, _c, _d;
