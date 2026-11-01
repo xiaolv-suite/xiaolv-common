@@ -2327,8 +2327,13 @@
   transition: all var(--xlc-dur-fast) var(--xlc-ease);
 
   &:hover {
-    border-color: var(--b3-theme-primary-light);
+    border-color: var(--b3-theme-primary);
     background: var(--b3-list-hover);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  &:focus-within {
+    border-color: var(--b3-theme-primary);
   }
 
   .xlc-setting-text {
@@ -2673,6 +2678,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     gap: var(--xlc-space-3);
@@ -5047,6 +5053,8 @@
     gap: var(--xlc-space-1);
     padding: 0 var(--xlc-space-3) var(--xlc-space-2);
     overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
     flex-shrink: 0;
 
     .xlc-dock-chip {
@@ -5064,9 +5072,9 @@
       }
 
       &--active {
-        border-color: transparent;
-        background: var(--xlc-lavender);
-        color: var(--xlc-lavender-ink);
+        border-color: var(--b3-theme-primary);
+        background: color-mix(in srgb, var(--b3-theme-primary) 14%, var(--b3-theme-surface));
+        color: var(--b3-theme-primary);
         font-weight: var(--xlc-weight-semibold);
       }
     }

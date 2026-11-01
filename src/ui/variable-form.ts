@@ -596,6 +596,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         if (ev.isComposing || (ev as KeyboardEvent).keyCode === 229) return;
         if (ev.key === "Escape") {
             ev.preventDefault();
+            ev.stopPropagation();
             if (liveDebounceTimer) {
                 clearTimeout(liveDebounceTimer);
                 liveDebounceTimer = null;
