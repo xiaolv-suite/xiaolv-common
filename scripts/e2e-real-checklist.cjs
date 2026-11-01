@@ -85,6 +85,12 @@ function readToken(ws) {
     return "";
 }
 
+function extractFirstBlockId(resp) {
+    const data = resp?.data ?? resp;
+    const ops = Array.isArray(data) ? data.flatMap((entry) => entry?.doOperations ?? []) : [];
+    return ops.find((op) => /^\d{14}-[0-9a-z]{7}$/.test(op?.id ?? ""))?.id ?? "";
+}
+
 function killPid(pid) {
     if (!pid) return;
     try {
@@ -1238,19 +1244,20 @@ function check(name, ok, detail = "") {
             dataType: "markdown",
             data: "用户在思源库文档直接手写的售后模板 #手写直写标签# #高频#",
         });
-        const handwrittenBlockId = rawHandwrittenAppend?.data?.[0]?.doOperations?.[0]?.id ?? "";
+        const handwrittenBlockId = extractFirstBlockId(rawHandwrittenAppend);
         // 在 /测试笔记文档 新建一个供双向同步测试的源块
         const bidiSrcAppend = await api(token, "/api/block/appendBlock", {
             parentID: sampleDocId,
             dataType: "markdown",
             data: "双向同步源块初始内容",
         });
-        const bidiSrcBlockId = bidiSrcAppend?.data?.[0]?.doOperations?.[0]?.id ?? "";
+        const bidiSrcBlockId = extractFirstBlockId(bidiSrcAppend);
+        await sleep(300);
 
         const step19 = await page.evaluate(async ({handBlockId, srcBlockId, noteDocId}) => {
             const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
             // 1. 调用库文档手写块原地纳管协议命令，验证不复制块、保持原 blockId 并自动提取 #手写直写标签# 与 #高频#
-            const adoptRes = await p.protocolCommands["xiaolv.common.adoptLibraryBlocks"]();
+            const adoptRes = await p.protocolCommands["xiaolv.common.adoptLibraryBlocks"](handBlockId ? {blockIds: [handBlockId]} : undefined);
             const idx = await p.library.ensureIndex(0);
             const adoptedItem = Array.from(idx.items.values()).find((it) => it.blockId === handBlockId);
             const adoptedOk = Boolean(
@@ -1268,7 +1275,7 @@ function check(name, ok, detail = "") {
                 source: {sourceDocId: noteDocId, sourceBlockId: srcBlockId, sourceType: "block"},
             });
             const bidiItemId = created.ok ? created.data.item.id : "";
-            return {adoptedOk, bidiItemId};
+            return {adoptedOk, bidiItemId, handBlockId, adoptRes, hasAdoptedItem: Boolean(adoptedItem), tags: adoptedItem?.tags};
         }, {handBlockId: handwrittenBlockId, srcBlockId: bidiSrcBlockId, noteDocId: sampleDocId});
 
         // 在思源笔记文档中修改源块，然后触发 pullFromSource 拉取到常用库条目
@@ -1355,10 +1362,279 @@ function check(name, ok, detail = "") {
             step20.slashCount >= 4 && step20.hasSearchFilter && step20.hasNewFilter && step20.hasClipFilter && step20.hasClipHistoryFilter && step20.searchOpened && step20.captureOpened,
             JSON.stringify(step20));
 
+        // ══════════ 第 21 步：开箱即用套件市场（Starter Packs Hub）自主挑选启用、抽屉预览与新建专属文档 ══════════
+        await page.evaluate(() => {
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            void p.protocolCommands["xiaolv.common.open"]();
+        });
+        await page.waitForSelector(".xlc-dialog .xlc-footer-starter-packs", {timeout: 10000});
+        // 1. 点击底栏「📦 开箱套件」入口打开套件市场
+        await page.locator("[data-xlc-control='footer.starter-packs']").click();
+        await page.waitForSelector("[data-xlc-control='starter-hub.container']", {timeout: 10000});
+
+        // 2. 验证行业套件卡片挂载，点击商务与财务套件「👁 查看内容」展开抽屉预览
+        const bizCardExists = await page.evaluate(() => {
+            return Boolean(document.querySelector("[data-xlc-control='starter-hub.card.starter-biz']"));
+        });
+        await page.locator("[data-xlc-control='starter-hub.preview.starter-biz']").click();
+        await sleep(250);
+        const drawerExpanded = await page.evaluate(() => {
+            const card = document.querySelector("[data-xlc-control='starter-hub.card.starter-biz']");
+            const drawer = card?.querySelector(".xlc-starter-hub-drawer");
+            const rows = drawer?.querySelectorAll(".xlc-starter-hub-preview-row") ?? [];
+            return Boolean(drawer && drawer.style.display !== "none" && rows.length >= 4);
+        });
+        await page.locator("[data-xlc-control='starter-hub.preview.starter-biz']").click(); // 收起抽屉
+
+        // 3. 点击商务财务套件「＋ 一键启用」，验证装入当前库并反馈「✓ 已启用」
+        await page.locator("[data-xlc-control='starter-hub.install.starter-biz']").click();
+        await page.waitForFunction(() => {
+            const btn = document.querySelector("[data-xlc-control='starter-hub.install.starter-biz']");
+            return btn && (btn.textContent ?? "").includes("已启用");
+        }, null, {timeout: 15000});
+
+        // 4. 点击研发运维套件「📁 新建专属文档」，验证在当前笔记本中创建专属结构化大纲文档
+        await page.locator("[data-xlc-control='starter-hub.doc.starter-dev']").click();
+        await page.waitForFunction(() => {
+            const btn = document.querySelector("[data-xlc-control='starter-hub.doc.starter-dev']");
+            return btn && (btn.textContent ?? "").includes("文档已建");
+        }, null, {timeout: 20000});
+
+        // 5. 关闭套件市场弹窗，在主搜索输入 :tax 简码置顶验证套件条目
+        await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll(".xlc-starter-hub-foot button, .b3-dialog__action button"));
+            const closeBtn = btns.find((b) => (b.textContent ?? "").includes("关闭") || (b.textContent ?? "").includes("Close"));
+            closeBtn?.click();
+        });
+        await sleep(350);
+        await page.waitForSelector(".xlc-dialog .xlc-search-input", {timeout: 10000});
+        await page.locator(".xlc-search-input").fill(":tax");
+        await sleep(350);
+        const taxMatched = await page.evaluate(() => {
+            const first = document.querySelector(".xlc-list .xlc-row[data-xlc-index='0']");
+            return (first?.textContent ?? "").includes("企业开票税号") || (first?.textContent ?? "").includes("tax");
+        });
+        check("步骤 21：开箱即用套件市场（Starter Packs Hub）自主挑选启用、抽屉预览与新建专属文档全部通过",
+            bizCardExists && drawerExpanded && taxMatched,
+            JSON.stringify({bizCardExists, drawerExpanded, taxMatched}));
+
+        // ══════════ 第 22 步：外部服务桥（window.xiaolvCommon）雷切复制 content 契约对齐与全生态动态宏矩阵展开 ══════════
+        const step22 = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const bridge = window.xiaolvCommon;
+            if (!bridge) return {bridgeExists: false};
+
+            // 1. 验证外部桥契约（search / recent / get 返回满足 CommonSnippet 契约包含 content 字段）
+            const sRes = await bridge.search("开票");
+            const hasContentInSearch = sRes.ok && sRes.data.length > 0 && sRes.data.every((it) => typeof it.content === "string" && it.content.length > 0);
+
+            const rRes = await bridge.recent();
+            const hasContentInRecent = rRes.ok && Array.isArray(rRes.data) && rRes.data.every((it) => typeof it.content === "string" && it.content.length > 0);
+
+            const firstItemId = sRes.ok && sRes.data[0] ? sRes.data[0].id : "";
+            const gRes = firstItemId ? await bridge.get(firstItemId) : {ok: false};
+            const hasContentInGet = gRes.ok && typeof gRes.data?.content === "string" && gRes.data.content.length > 0;
+
+            // 2. 挂载 5 大生态兄弟插件 Mock 接口
+            window.LvHome = {
+                getReminders: () => [
+                    {id: "rem-1", title: "管家备忘：完成周报整理", dueDate: "2026-11-01", daysLeft: 0},
+                ],
+            };
+            window.TaskHorizon = {
+                getTodayTasks: async () => [
+                    {id: "th-1", title: "任务视界：交付核心API文档", priority: "high", done: false},
+                ],
+            };
+            window.siyuanGlean = {
+                listClips: async () => [
+                    {id: "gl-1", title: "拾遗精选：认知与知识流转", url: "https://example.com/p/1", summary: "系统性知识复利"},
+                ],
+            };
+            window.LvContacts = {
+                searchPeople: async () => [
+                    {id: "ct-1", name: "张三技术总监", organization: "小驴科技有限公司", role: "首席架构师", phone: "13912345678"},
+                ],
+            };
+            window.siyuanCheckin = {
+                getItems: () => [
+                    {id: "chk-1", name: "早起深度阅读45分钟", archived: false},
+                ],
+            };
+
+            // 3. 动态宏安全展开
+            const renderedHome = await p.executor.renderForInsert("备忘清单：\n{{xlc:home:today}}");
+            const renderedTask = await p.executor.renderForInsert("今日任务：\n{{xlc:task:today}}");
+            const renderedGlean = await p.executor.renderForInsert("精选剪藏：\n{{xlc:glean:recent}}");
+            const renderedContacts = await p.executor.renderForInsert("对接人：\n{{xlc:contacts:recent}}");
+            const renderedCheckin = await p.executor.renderForInsert("打卡项：\n{{xlc:checkin:today}}");
+
+            const macroOk = renderedHome.includes("完成周报整理")
+                && renderedTask.includes("交付核心API文档")
+                && renderedGlean.includes("认知与知识流转")
+                && renderedContacts.includes("张三技术总监")
+                && renderedCheckin.includes("早起深度阅读45分钟");
+
+            // 4. 清理并验证降级
+            delete window.LvHome;
+            delete window.TaskHorizon;
+            delete window.siyuanGlean;
+            delete window.LvContacts;
+            delete window.siyuanCheckin;
+
+            const downgradedHome = await p.executor.renderForInsert("备忘：{{xlc:home:today}}");
+            const downgradedOk = downgradedHome.includes("（未检测到小驴管家）");
+
+            return {
+                bridgeExists: true,
+                hasContentInSearch,
+                hasContentInRecent,
+                hasContentInGet,
+                macroOk,
+                downgradedOk,
+            };
+        });
+        check("步骤 22：外部服务桥（window.xiaolvCommon）雷切复制 content 契约对齐与全生态动态宏矩阵展开全部通过",
+            step22.bridgeExists && step22.hasContentInSearch && step22.hasContentInRecent && step22.hasContentInGet && step22.macroOk && step22.downgradedOk,
+            JSON.stringify(step22));
+
+        // ══════════ 第 23 步：全域生态联邦搜索、剪贴板一键推送管家备忘与 Epoch 6 事件标准信封 ══════════
+        const step23Prep = await page.evaluate(() => {
+            // 挂载管家与拾遗 Mock
+            window.LvHome = {
+                getReminders: () => [
+                    {id: "rem-e2e", title: "紧急需求对接会", dueDate: "2026-11-01", daysLeft: 0},
+                ],
+                addMemo: async (title, dueDate) => {
+                    window.__lastHomeMemo = {title, dueDate, at: Date.now()};
+                    return {id: "memo-created"};
+                },
+            };
+            window.siyuanGlean = {
+                listClips: async () => [
+                    {id: "glean-e2e", title: "联邦架构模式指南", url: "https://example.com/arch", summary: "去中心化架构演进"},
+                ],
+            };
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            p.state.clipboardHistoryEnabled = true;
+            p.recordClipboard("用户报障反馈：无法登录系统 @紧急");
+            return true;
+        });
+
+        // 1. 验证剪贴板历史卡片中「📋 推送到小驴管家备忘」
+        await page.evaluate(() => {
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            p.openSearch(undefined, "", undefined, undefined, "clipboard");
+        });
+        await page.waitForSelector(".xlc-dialog .xlc-search-input", {timeout: 10000});
+        await page.locator(".xlc-search-input").fill("");
+        await sleep(350);
+        await page.waitForSelector(".xlc-list .xlc-row[data-xlc-index='0'] [data-xlc-control='item.promote-to-home']", {timeout: 10000});
+        await page.locator(".xlc-list .xlc-row[data-xlc-index='0'] [data-xlc-control='item.promote-to-home']").click();
+        await page.waitForFunction(() => {
+            const btn = document.querySelector(".xlc-list .xlc-row[data-xlc-index='0'] [data-xlc-control='item.promote-to-home']");
+            return btn && (btn.textContent ?? "").includes("✓");
+        }, null, {timeout: 5000});
+
+        const memoPushed = await page.evaluate(() => {
+            return Boolean(window.__lastHomeMemo && window.__lastHomeMemo.title.includes("用户报障反馈"));
+        });
+
+        // 2. 验证 Epoch 6 事件标准信封派发
+        const eventEnvelopeChecked = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            let capturedDetail = null;
+            const listener = (e) => { capturedDetail = e.detail; };
+            window.addEventListener("xiaolv:common:item-created", listener, {once: true});
+
+            await p.service.save({
+                itemType: "text",
+                title: "Epoch6信封事件条目",
+                markdown: "测试信封格式正文",
+            });
+            await new Promise((r) => setTimeout(r, 400));
+            window.removeEventListener("xiaolv:common:item-created", listener);
+
+            if (!capturedDetail) return {captured: false};
+            const isEpoch6 = capturedDetail.v === 1
+                && capturedDetail.source === "xiaolv-common"
+                && typeof capturedDetail.eventId === "string" && capturedDetail.eventId.startsWith("evt-xlc-")
+                && typeof capturedDetail.at === "string"
+                && typeof capturedDetail.idempotencyKey === "string"
+                && capturedDetail.protocolVersion === 1
+                && typeof capturedDetail.itemId === "string";
+
+            delete window.LvHome;
+            delete window.siyuanGlean;
+            delete window.__lastHomeMemo;
+            return {captured: true, isEpoch6};
+        });
+        check("步骤 23：全域生态联邦搜索就绪、剪贴板一键推送管家备忘与 Epoch 6 事件标准信封全部通过",
+            step23Prep && memoPushed && eventEnvelopeChecked.captured && eventEnvelopeChecked.isEpoch6,
+            JSON.stringify({memoPushed, eventEnvelopeChecked}));
+
+        // ══════════ 第 24 步：极窄悬浮迷你模式（Mini Mode）单列无遮挡、1-9数字直达、拖拽条与折叠胶囊 ══════════
+        await page.evaluate(() => {
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
+                try { d.destroy(); } catch {}
+            });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            void p.protocolCommands["xiaolv.common.open"]();
+        });
+        await page.waitForSelector(".xlc-search-mini-btn", {timeout: 10000});
+
+        // 1. 开启极窄迷你模式
+        await page.locator("[data-xlc-control='search.mini.toggle']").click();
+        await sleep(250);
+        const miniModeActive = await page.evaluate(() => {
+            const dlg = document.querySelector(".b3-dialog__container.xlc-dialog--mini, .xlc-dialog--mini");
+            const btn = document.querySelector(".xlc-search-mini-btn--active");
+            const num = document.querySelector(".xlc-mini-row-num");
+            const dragBar = document.querySelector("[data-xlc-control='search.mini.drag-bar']");
+            return Boolean(dlg && btn && num && dragBar);
+        });
+
+        // 2. 折叠为胶囊浮条
+        await page.locator("[data-xlc-control='search.mini.collapse']").click();
+        await sleep(200);
+        const pillActive = await page.evaluate(() => {
+            const pill = document.querySelector("[data-xlc-control='search.mini.collapsed-pill']");
+            return Boolean(pill && getComputedStyle(pill).display !== "none");
+        });
+
+        // 3. 点击胶囊恢复展开
+        await page.locator("[data-xlc-control='search.mini.collapsed-pill']").click();
+        await sleep(200);
+        const expandedAgain = await page.evaluate(() => {
+            const dragBar = document.querySelector("[data-xlc-control='search.mini.drag-bar']");
+            return Boolean(dragBar && getComputedStyle(dragBar).display !== "none");
+        });
+
+        // 4. 再次点击 mini toggle 恢复为标准双栏模式
+        await page.locator("[data-xlc-control='search.mini.toggle']").click();
+        await sleep(200);
+        const restoredStandard = await page.evaluate(() => {
+            const isMini = Boolean(document.querySelector(".xlc-dialog--mini"));
+            return !isMini;
+        });
+
+        check("步骤 24：极窄悬浮迷你模式（Mini Mode）单列无遮挡、1-9数字直达、拖拽条与折叠胶囊全部通过",
+            miniModeActive && pillActive && expandedAgain && restoredStandard,
+            JSON.stringify({miniModeActive, pillActive, expandedAgain, restoredStandard}));
+
         cleanup();
         const pass = results.filter((r) => r.ok).length;
         const fail = results.length - pass;
-        console.log(`\n真实思源宿主 20 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
+        console.log(`\n真实思源宿主 24 步回归汇总：${pass}/${results.length} 通过${fail ? `，${fail} 项失败` : " —— 全部通过"}`);
         process.exit(fail ? 1 : 0);
     } catch (err) {
         console.error(`[real-e2e] 异常：${err.stack || err.message}`);
