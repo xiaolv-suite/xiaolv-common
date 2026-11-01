@@ -10060,9 +10060,117 @@ ${finalHtml}
     }
     return false;
   }
+  function formatItemContent(markdown, format, meta) {
+    var _a, _b;
+    const raw = (markdown != null ? markdown : "").trim();
+    if (format === "markdown") {
+      return { text: raw };
+    }
+    if (format === "blockref") {
+      const id = (_a = meta == null ? void 0 : meta.id) != null ? _a : "";
+      const title = (_b = meta == null ? void 0 : meta.title) != null ? _b : "ref";
+      return { text: id ? `((${id} '${title.replace(/'/g, "\\'")}'))` : raw };
+    }
+    if (format === "wechat-html") {
+      const html = renderWechatArticleHtml(raw);
+      const cleanText2 = stripMarkdownFormatting(raw);
+      return { text: cleanText2 || raw, html };
+    }
+    const cleanText = stripMarkdownFormatting(raw);
+    return { text: cleanText || raw };
+  }
+  function mergeTrayContents(items) {
+    if (!items || items.length === 0) return "";
+    return items.map((it) => {
+      var _a;
+      return ((_a = it == null ? void 0 : it.content) != null ? _a : "").trim();
+    }).filter(Boolean).join("\n\n");
+  }
   var init_clipboard = __esm({
     "src/model/clipboard.ts"() {
       "use strict";
+      init_clipboard_cleaner();
+    }
+  });
+
+  // src/model/variable-memory.ts
+  function clearAllMemory(memory) {
+    return { enabled: memory ? memory.enabled : true, values: {} };
+  }
+  function countRememberedFields(memory) {
+    if (!memory || !memory.values) return 0;
+    return Object.keys(memory.values).length;
+  }
+  var init_variable_memory = __esm({
+    "src/model/variable-memory.ts"() {
+      "use strict";
+    }
+  });
+
+  // src/model/storage.ts
+  function summarizeUsage(usage) {
+    let totalCount = 0;
+    let trackedItems = 0;
+    let latestAt = null;
+    for (const entry of Object.values(usage)) {
+      if (!Number.isInteger(entry.count) || entry.count <= 0 || !Number.isFinite(entry.lastAt) || entry.lastAt <= 0) continue;
+      totalCount += entry.count;
+      trackedItems++;
+      latestAt = latestAt === null ? entry.lastAt : Math.max(latestAt, entry.lastAt);
+    }
+    return { totalCount, trackedItems, latestAt };
+  }
+  function getClipboardTimeGroup(timestamp, now = Date.now()) {
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return "earlier";
+    const nowDate = new Date(now);
+    const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
+    if (timestamp >= todayStart) {
+      return "today";
+    }
+    const yesterdayStart = todayStart - 24 * 60 * 60 * 1e3;
+    if (timestamp >= yesterdayStart) {
+      return "yesterday";
+    }
+    return "earlier";
+  }
+  function matchProfilePreset(fieldName, presets) {
+    if (!presets || Object.keys(presets).length === 0) return void 0;
+    const clean = fieldName.trim().toLowerCase();
+    if (!clean) return void 0;
+    for (const [k, v] of Object.entries(presets)) {
+      if (k.trim().toLowerCase() === clean && v) return v;
+    }
+    for (const [standardKey, aliases] of Object.entries(PROFILE_FIELD_ALIASES)) {
+      const isMatched = clean === standardKey.toLowerCase() || aliases.some((a) => clean === a.toLowerCase() || clean.includes(a.toLowerCase()));
+      if (isMatched) {
+        for (const alias of aliases) {
+          for (const [k, v] of Object.entries(presets)) {
+            if (k.trim().toLowerCase() === alias.toLowerCase() && v) {
+              return v;
+            }
+          }
+        }
+      }
+    }
+    return void 0;
+  }
+  var CONFIG_VERSION, PROFILE_FIELD_ALIASES;
+  var init_storage = __esm({
+    "src/model/storage.ts"() {
+      "use strict";
+      init_constants();
+      init_item();
+      init_variable_memory();
+      CONFIG_VERSION = 1;
+      PROFILE_FIELD_ALIASES = {
+        "\u59D3\u540D": ["\u59D3\u540D", "\u540D\u5B57", "\u8054\u7CFB\u4EBA", "\u6536\u4EF6\u4EBA", "name"],
+        "\u624B\u673A\u53F7": ["\u624B\u673A\u53F7", "\u624B\u673A", "\u7535\u8BDD", "\u8054\u7CFB\u7535\u8BDD", "\u8054\u7CFB\u65B9\u5F0F", "phone", "mobile", "tel"],
+        "\u90AE\u7BB1": ["\u90AE\u7BB1", "\u7535\u5B50\u90AE\u7BB1", "\u4F01\u4E1A\u90AE\u7BB1", "email", "mail"],
+        "\u516C\u53F8": ["\u516C\u53F8", "\u516C\u53F8\u540D\u79F0", "\u4F01\u4E1A", "\u4F01\u4E1A\u540D\u79F0", "\u5355\u4F4D", "company"],
+        "\u7A0E\u53F7": ["\u7A0E\u53F7", "\u7EDF\u4E00\u793E\u4F1A\u4FE1\u7528\u4EE3\u7801", "\u7EB3\u7A0E\u4EBA\u8BC6\u522B\u53F7", "taxid", "tax_no"],
+        "\u5730\u5740": ["\u5730\u5740", "\u6536\u4EF6\u5730\u5740", "\u8BE6\u7EC6\u5730\u5740", "\u90AE\u5BC4\u5730\u5740", "address"],
+        "\u804C\u52A1": ["\u804C\u52A1", "\u804C\u4F4D", "\u5934\u8854", "title", "position"]
+      };
     }
   });
 
@@ -10180,10 +10288,22 @@ ${finalHtml}
       }
       input.dataset.xlcVarField = field.name;
       const memoryValue = options.defaults ? options.defaults[field.name] : void 0;
+      const profileValue = matchProfilePreset(field.name, options.profilePresets);
       if (memoryValue !== void 0 && memoryValue.length > 0) {
         input.value = memoryValue;
+      } else if (profileValue !== void 0 && profileValue.length > 0) {
+        input.value = profileValue;
       } else if (field.defaultValue) {
         input.value = field.defaultValue;
+      }
+      if ((!memoryValue || !memoryValue.trim()) && profileValue && profileValue.trim() && field.kind !== "toggle" && field.kind !== "multi") {
+        const profileBadge = document.createElement("span");
+        profileBadge.className = "xlc-varform-profile-badge";
+        profileBadge.dataset.xlcControl = `varform.profile.${fieldIndex}`;
+        profileBadge.title = `\u5DF2\u4ECE\u5168\u5C40\u5E38\u7528\u6863\u6848\u9884\u586B\u300C${profileValue}\u300D`;
+        profileBadge.setAttribute("aria-label", `\u5DF2\u4ECE\u5168\u5C40\u5E38\u7528\u6863\u6848\u9884\u586B\u300C${profileValue}\u300D`);
+        profileBadge.innerHTML = `<span class="xlc-profile-prefix" aria-hidden="true">\u{1F464} \u6863\u6848</span>`;
+        label.appendChild(profileBadge);
       }
       if (memoryValue && memoryValue.trim() && field.kind !== "toggle" && field.kind !== "multi") {
         const recentChip = document.createElement("button");
@@ -14732,6 +14852,7 @@ ${res.progressBar}`;
       init_template_wizard();
       init_placeholders();
       init_clipboard();
+      init_storage();
       TYPE_BADGES = {
         text: "TXT",
         markdown: "MD",
@@ -15211,6 +15332,43 @@ ${res.progressBar}`;
       }
     }
     return matched;
+  }
+  function parseSearchPrefix(raw) {
+    let clean = (raw != null ? raw : "").trim();
+    let tagFilter;
+    let categoryFilter;
+    let typeFilter;
+    let scopeFilter;
+    const typeMatch = clean.match(/(?:^|\s)type:(text|code|markdown|url|asset|blockref|structure)(?:\s|$)/i);
+    if (typeMatch && typeMatch[1]) {
+      typeFilter = typeMatch[1].toLowerCase();
+      clean = clean.replace(typeMatch[0], " ").trim();
+    }
+    const scopeMatch = clean.match(/(?:^|\s)scope:(all|favorites|fav|recent|clipboard|clip|current-doc|all-notes)(?:\s|$)/i);
+    if (scopeMatch && scopeMatch[1]) {
+      const sc = scopeMatch[1].toLowerCase();
+      if (sc === "fav") scopeFilter = "favorites";
+      else if (sc === "clip") scopeFilter = "clipboard";
+      else scopeFilter = sc;
+      clean = clean.replace(scopeMatch[0], " ").trim();
+    }
+    const tagMatch = clean.match(/(?:^|\s)#([\w\u4e00-\u9fa5\-_\/]+)#?(?:\s|$)/);
+    if (tagMatch && tagMatch[1]) {
+      tagFilter = tagMatch[1];
+      clean = clean.replace(tagMatch[0], " ").trim();
+    }
+    const catMatch = clean.match(/(?:^|\s)@([\w\u4e00-\u9fa5\-_\/]+)(?:\s|$)/);
+    if (catMatch && catMatch[1]) {
+      categoryFilter = catMatch[1];
+      clean = clean.replace(catMatch[0], " ").trim();
+    }
+    return {
+      cleanQuery: clean.replace(/\s+/g, " ").trim(),
+      tagFilter,
+      categoryFilter,
+      typeFilter,
+      scopeFilter
+    };
   }
   var DEFAULT_RECENCY_HALF_LIFE_MS, SEARCH_TOKEN_DELIMITER;
   var init_search = __esm({
@@ -17235,57 +17393,6 @@ ${res.progressBar}`;
       import_siyuan4 = __toESM(require_stub_dom());
       init_dialog_dom();
       activeGuideDialog = null;
-    }
-  });
-
-  // src/model/variable-memory.ts
-  function clearAllMemory(memory) {
-    return { enabled: memory ? memory.enabled : true, values: {} };
-  }
-  function countRememberedFields(memory) {
-    if (!memory || !memory.values) return 0;
-    return Object.keys(memory.values).length;
-  }
-  var init_variable_memory = __esm({
-    "src/model/variable-memory.ts"() {
-      "use strict";
-    }
-  });
-
-  // src/model/storage.ts
-  function summarizeUsage(usage) {
-    let totalCount = 0;
-    let trackedItems = 0;
-    let latestAt = null;
-    for (const entry of Object.values(usage)) {
-      if (!Number.isInteger(entry.count) || entry.count <= 0 || !Number.isFinite(entry.lastAt) || entry.lastAt <= 0) continue;
-      totalCount += entry.count;
-      trackedItems++;
-      latestAt = latestAt === null ? entry.lastAt : Math.max(latestAt, entry.lastAt);
-    }
-    return { totalCount, trackedItems, latestAt };
-  }
-  function getClipboardTimeGroup(timestamp, now = Date.now()) {
-    if (!Number.isFinite(timestamp) || timestamp <= 0) return "earlier";
-    const nowDate = new Date(now);
-    const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
-    if (timestamp >= todayStart) {
-      return "today";
-    }
-    const yesterdayStart = todayStart - 24 * 60 * 60 * 1e3;
-    if (timestamp >= yesterdayStart) {
-      return "yesterday";
-    }
-    return "earlier";
-  }
-  var CONFIG_VERSION;
-  var init_storage = __esm({
-    "src/model/storage.ts"() {
-      "use strict";
-      init_constants();
-      init_item();
-      init_variable_memory();
-      CONFIG_VERSION = 1;
     }
   });
 
@@ -28084,6 +28191,12 @@ fi`;
       this.density = "comfortable";
       this.densityBtn = null;
       this.listEl = null;
+      /** 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017） */
+      this.miniMode = false;
+      this.miniModeBtn = null;
+      /** 常用语购物车暂存托盘（CAND-019 / TODO-FEAT-018） */
+      this.pasteTrayItems = [];
+      this.pasteTrayEl = null;
       /** 普通点击 = 主动作（insert；blockref = 插入引用）。含变量时先弹填充卡片（F1）。
        *  执行期防重入（R138）：双击行/按住 Enter 不得重复插入同一块。 */
       /** AI 变换代次：连点两个变换时丢弃慢的旧结果（R138） */
@@ -28098,6 +28211,7 @@ fi`;
       this.dragOverlay = null;
       this.dropCleanup = null;
       if (deps.density) this.density = deps.density;
+      if (deps.miniMode !== void 0) this.miniMode = deps.miniMode;
     }
     open() {
       var _a, _b, _c;
@@ -28289,6 +28403,19 @@ fi`;
       });
       this.densityBtn = densityBtn;
       search.appendChild(densityBtn);
+      const miniModeBtn = document.createElement("button");
+      miniModeBtn.type = "button";
+      miniModeBtn.className = "xlc-search-mini-btn" + (this.miniMode ? " xlc-search-mini-btn--active" : "");
+      miniModeBtn.dataset.xlcControl = "search.mini.toggle";
+      miniModeBtn.textContent = "\u{1F4D0}";
+      miniModeBtn.title = "\u8FF7\u4F60\u60AC\u6D6E\u6D6E\u6761\u6A21\u5F0F\uFF08\u6781\u7A84\u5355\u5217\u65E0\u906E\u6321\uFF0CAlt+M \u5207\u6362\uFF09";
+      miniModeBtn.setAttribute("aria-label", "\u5207\u6362\u8FF7\u4F60\u60AC\u6D6E\u6A21\u5F0F");
+      miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
+      miniModeBtn.addEventListener("click", () => {
+        this.toggleMiniMode();
+      });
+      this.miniModeBtn = miniModeBtn;
+      search.appendChild(miniModeBtn);
       searchBlock.appendChild(search);
       const searchHint = document.createElement("div");
       searchHint.className = "xlc-search-hint";
@@ -28671,6 +28798,7 @@ fi`;
       list.className = "xlc-list";
       this.listEl = list;
       this.applyDensity();
+      this.applyMiniMode();
       list.id = "xlc-search-results";
       list.tabIndex = 0;
       list.setAttribute("role", "list");
@@ -28769,6 +28897,12 @@ fi`;
       }
       root.appendChild(bodyWrap);
       root.appendChild(this.buildBatchBar());
+      const trayEl = document.createElement("div");
+      trayEl.className = "xlc-paste-tray";
+      trayEl.dataset.xlcControl = "search.paste-tray";
+      trayEl.style.display = "none";
+      this.pasteTrayEl = trayEl;
+      root.appendChild(trayEl);
       const footer = document.createElement("div");
       footer.className = "xlc-footer";
       footer.setAttribute("role", "toolbar");
@@ -29076,6 +29210,27 @@ fi`;
           if (!this.pinWindow) this.destroy();
         }
       });
+      copy.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        const entry = this.results[this.activeIndex];
+        if (entry) void this.showCopyFormatMenu(copy, entry);
+      });
+      const copyFormatBtn = document.createElement("button");
+      copyFormatBtn.type = "button";
+      copyFormatBtn.className = "b3-button xlc-copy-format-toggle";
+      copyFormatBtn.dataset.xlcControl = "preview.copy-format-toggle";
+      copyFormatBtn.textContent = "\u25BE";
+      copyFormatBtn.title = "\u9009\u62E9\u590D\u5236\u683C\u5F0F (\u7EAF\u6587\u672C/\u5BCC\u6587\u672CHTML/Markdown/\u5757\u5F15\u7528)";
+      copyFormatBtn.setAttribute("aria-label", "\u9009\u62E9\u590D\u5236\u683C\u5F0F");
+      copyFormatBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const entry = this.results[this.activeIndex];
+        if (entry) void this.showCopyFormatMenu(copyFormatBtn, entry);
+      });
+      const copyWrap = document.createElement("div");
+      copyWrap.className = "xlc-copy-btn-group";
+      copyWrap.appendChild(copy);
+      copyWrap.appendChild(copyFormatBtn);
       const aiBtn = document.createElement("button");
       aiBtn.className = "b3-button xlc-btn-ai";
       aiBtn.textContent = "\u2726 " + this.deps.t("aiTransform");
@@ -29196,7 +29351,7 @@ fi`;
         }
       });
       foot.appendChild(insert);
-      foot.appendChild(copy);
+      foot.appendChild(copyWrap);
       foot.appendChild(embedBtn);
       foot.appendChild(refBtn);
       foot.appendChild(aiBtn);
@@ -29440,11 +29595,22 @@ fi`;
     buildQuery() {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i;
       const el = (_a = this.dialog) == null ? void 0 : _a.element;
-      const text = (_c = (_b = el == null ? void 0 : el.querySelector(".xlc-search-input")) == null ? void 0 : _b.value) != null ? _c : "";
+      const rawText = (_c = (_b = el == null ? void 0 : el.querySelector(".xlc-search-input")) == null ? void 0 : _b.value) != null ? _c : "";
       const itemType = (_e = (_d = el == null ? void 0 : el.querySelector(".xlc-type-select")) == null ? void 0 : _d.value) != null ? _e : "";
       const tag = (_g = (_f = el == null ? void 0 : el.querySelector(".xlc-tag-select")) == null ? void 0 : _f.value) != null ? _g : "";
       const category = (_i = (_h = el == null ? void 0 : el.querySelector(".xlc-category-select")) == null ? void 0 : _h.value) != null ? _i : "";
-      return { text, itemType, tag, category, scope: this.currentScope };
+      const parsed = parseSearchPrefix(rawText);
+      const effectiveType = parsed.typeFilter || itemType;
+      const effectiveTag = parsed.tagFilter || tag;
+      const effectiveCategory = parsed.categoryFilter || category;
+      const effectiveScope = parsed.scopeFilter || this.currentScope;
+      return {
+        text: parsed.cleanQuery,
+        itemType: effectiveType,
+        tag: effectiveTag,
+        category: effectiveCategory,
+        scope: effectiveScope
+      };
     }
     async refresh() {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
@@ -30116,6 +30282,20 @@ fi`;
           void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
         });
         row.appendChild(star);
+        const trayBtn = document.createElement("button");
+        trayBtn.type = "button";
+        trayBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action-tray";
+        trayBtn.dataset.xlcControl = "item.add-tray";
+        const inTray = this.pasteTrayItems.some((it) => it.id === entry.id);
+        trayBtn.textContent = inTray ? "\u2713" : "\u{1F6D2}";
+        trayBtn.title = inTray ? "\u5DF2\u52A0\u5165\u6682\u5B58\u6258\u76D8" : "\u52A0\u5165\u6682\u5B58\u6258\u76D8 (Alt+A)";
+        trayBtn.setAttribute("aria-label", trayBtn.title);
+        trayBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.togglePasteTrayItem(entry);
+          trayBtn.textContent = this.pasteTrayItems.some((it) => it.id === entry.id) ? "\u2713" : "\u{1F6D2}";
+        });
+        row.appendChild(trayBtn);
       }
       return row;
     }
@@ -31369,7 +31549,7 @@ fi`;
     /** F1：插入前询问变量（设置可关；无 ask 字段零打扰；code 条目不询问）。
      *  perform 收到 fills（undefined=未触发询问，走原路径）。 */
     async insertEntryWithVars(entry, perform, options) {
-      var _a, _b, _c, _d;
+      var _a, _b, _c, _d, _e, _f;
       if (this.varFormOpen || this.primaryBusy) return;
       this.primaryBusy = true;
       this.syncPaneActions();
@@ -31428,9 +31608,10 @@ fi`;
         title: entry.title,
         fields,
         defaults,
+        profilePresets: (_d = (_c = this.deps).getProfilePresets) == null ? void 0 : _d.call(_c),
         templateText,
         itemId: entry.id,
-        presets: (_d = (_c = this.deps).getVariablePresets) == null ? void 0 : _d.call(_c, entry.id),
+        presets: (_f = (_e = this.deps).getVariablePresets) == null ? void 0 : _f.call(_e, entry.id),
         onSavePreset: (name, fills) => {
           var _a2, _b2;
           (_b2 = (_a2 = this.deps).saveVariablePreset) == null ? void 0 : _b2.call(_a2, entry.id, name, fills);
@@ -31505,6 +31686,98 @@ fi`;
       btn.appendChild(document.createTextNode(label));
       btn.addEventListener("click", () => void run());
       return btn;
+    }
+    /**
+     * 极速多格式复制直选菜单（CAND-017 / TODO-FEAT-016）
+     */
+    async showCopyFormatMenu(anchor, entry) {
+      var _a;
+      (_a = this.menuDismiss) == null ? void 0 : _a.call(this);
+      this.menuDismiss = null;
+      const menu = document.createElement("div");
+      menu.className = "xlc-menu xlc-copy-format-menu";
+      menu.setAttribute("role", "menu");
+      menu.setAttribute("aria-label", "\u591A\u683C\u5F0F\u590D\u5236\u83DC\u5355");
+      const formats = [
+        { kind: "text", icon: "\u{1F4C4}", title: "\u7EAF\u51C0\u6587\u672C (\u65E0\u683C\u5F0F)", desc: "\u5265\u79BB Markdown \u7B26\u53F7\uFF0C\u9002\u7528\u4E8E\u5FAE\u4FE1\u804A\u5929/\u9489\u9489" },
+        { kind: "wechat-html", icon: "\u{1F310}", title: "\u5FAE\u4FE1\u5BCC\u6587\u672C HTML", desc: "\u5E26\u6392\u7248\u6837\u5F0F\uFF0C\u590D\u5236\u540E\u7C98\u8D34\u5230\u5FAE\u4FE1\u516C\u4F17\u53F7/\u90AE\u4EF6" },
+        { kind: "markdown", icon: "\u{1F4DD}", title: "\u539F\u59CB Markdown", desc: "\u4FDD\u7559\u5B8C\u6574 Markdown \u53CD\u5F15\u53F7\u4E0E\u6807\u8BB0" },
+        { kind: "blockref", icon: "\u{1F517}", title: "\u601D\u6E90\u5757\u5F15\u7528\u8BED\u6CD5", desc: "\u751F\u6210 ((id '\u6807\u9898')) \u539F\u751F\u5757\u5F15\u7528" }
+      ];
+      for (const fmt of formats) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "xlc-menu-item";
+        btn.setAttribute("role", "menuitem");
+        btn.dataset.xlcControl = `copy-format.${fmt.kind}`;
+        const ic = document.createElement("span");
+        ic.className = "xlc-menu-icon";
+        ic.setAttribute("aria-hidden", "true");
+        ic.textContent = fmt.icon;
+        const titleEl = document.createElement("strong");
+        titleEl.textContent = fmt.title;
+        const subEl = document.createElement("div");
+        subEl.className = "xlc-menu-sub";
+        subEl.textContent = fmt.desc;
+        btn.append(ic, titleEl, subEl);
+        btn.addEventListener("click", async () => {
+          var _a2, _b, _c, _d, _e;
+          (_a2 = this.menuDismiss) == null ? void 0 : _a2.call(this);
+          let fullContent = entry.content || entry.summary || "";
+          if (typeof this.deps.preview === "function") {
+            try {
+              const kd = await this.deps.preview(entry.id);
+              if (kd) fullContent = kd;
+            } catch {
+            }
+          }
+          const formatted = formatItemContent(fullContent, fmt.kind, {
+            id: resolveEntryBlockId(entry) || entry.id,
+            title: entry.title
+          });
+          let success = false;
+          if (fmt.kind === "wechat-html" && formatted.html) {
+            success = await writeRichClipboard(formatted.text, formatted.html);
+          } else {
+            success = await this.deps.copyText(formatted.text);
+          }
+          if (success) {
+            (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "info", `\u5DF2\u590D\u5236\u300C${fmt.title}\u300D\u5230\u526A\u8D34\u677F`);
+            if (!this.pinWindow) this.destroy();
+          } else {
+            (_e = (_d = this.deps).notify) == null ? void 0 : _e.call(_d, "error", this.deps.t("copyFailed"));
+          }
+        });
+        menu.appendChild(btn);
+      }
+      const rect = anchor.getBoundingClientRect();
+      menu.style.position = "fixed";
+      menu.style.bottom = `${Math.max(10, window.innerHeight - rect.top + 6)}px`;
+      menu.style.left = `${Math.max(10, rect.left - 80)}px`;
+      menu.style.zIndex = "99999";
+      document.body.appendChild(menu);
+      const onDocClick = (ev) => {
+        var _a2;
+        if (!menu.contains(ev.target)) {
+          (_a2 = this.menuDismiss) == null ? void 0 : _a2.call(this);
+        }
+      };
+      const onDocKey = (ev) => {
+        var _a2;
+        if (ev.key === "Escape") {
+          (_a2 = this.menuDismiss) == null ? void 0 : _a2.call(this);
+        }
+      };
+      setTimeout(() => {
+        document.addEventListener("click", onDocClick);
+        document.addEventListener("keydown", onDocKey);
+      }, 10);
+      this.menuDismiss = () => {
+        document.removeEventListener("click", onDocClick);
+        document.removeEventListener("keydown", onDocKey);
+        menu.remove();
+        this.menuDismiss = null;
+      };
     }
     async showActionMenu(entry) {
       var _a, _b, _c, _d, _e, _f;
@@ -34012,6 +34285,18 @@ ${progress.progressBar}`);
         e.preventDefault();
         this.toggleDensity();
         return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
+        e.preventDefault();
+        this.toggleMiniMode();
+        return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "a" || e.key === "A")) {
+        e.preventDefault();
+        const entry = this.results[this.activeIndex];
+        if (entry) {
+          this.togglePasteTrayItem(entry);
+          if (this.listEl) this.renderList(this.listEl);
+        }
+        return;
       } else if (e.key === "Escape") {
         e.preventDefault();
         if (this.quickLookOpen) {
@@ -34219,6 +34504,140 @@ ${progress.progressBar}`);
         this.densityBtn.textContent = isCompact ? "\u2630" : "\u2637";
         this.densityBtn.title = isCompact ? "\u5F53\u524D\u4E3A\u7D27\u51D1\u5355\u884C\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u8212\u9002\u5361\u7247\uFF09" : "\u5F53\u524D\u4E3A\u8212\u9002\u5361\u7247\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u7D27\u51D1\u5355\u884C\uFF09";
         this.densityBtn.setAttribute("aria-pressed", String(isCompact));
+      }
+    }
+    toggleMiniMode() {
+      var _a, _b, _c, _d;
+      this.miniMode = !this.miniMode;
+      this.applyMiniMode();
+      (_b = (_a = this.deps).onMiniModeChange) == null ? void 0 : _b.call(_a, this.miniMode);
+      (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", this.miniMode ? "\u5DF2\u5F00\u542F\u6781\u7A84\u8FF7\u4F60\u6A21\u5F0F\uFF08\u5355\u5217\u65E0\u906E\u6321\uFF0CAlt+M \u5207\u6362\uFF09" : "\u5DF2\u5207\u6362\u4E3A\u6807\u51C6\u6A21\u5F0F");
+      return this.miniMode;
+    }
+    getMiniMode() {
+      return this.miniMode;
+    }
+    applyMiniMode() {
+      var _a;
+      const dialogWrap = (_a = this.dialog) == null ? void 0 : _a.element;
+      if (dialogWrap) {
+        dialogWrap.classList.toggle("xlc-dialog--mini", this.miniMode);
+      }
+      if (this.miniModeBtn) {
+        this.miniModeBtn.classList.toggle("xlc-search-mini-btn--active", this.miniMode);
+        this.miniModeBtn.title = this.miniMode ? "\u5DF2\u5F00\u542F\u6781\u7A84\u8FF7\u4F60\u6A21\u5F0F\uFF08Alt+M \u6062\u590D\u53CC\u680F\uFF09" : "\u8FF7\u4F60\u60AC\u6D6E\u6D6E\u6761\u6A21\u5F0F\uFF08\u6781\u7A84\u5355\u5217\u65E0\u906E\u6321\uFF0CAlt+M \u5207\u6362\uFF09";
+        this.miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
+      }
+    }
+    togglePasteTrayItem(entry) {
+      var _a, _b, _c, _d;
+      const idx = this.pasteTrayItems.findIndex((it) => it.id === entry.id);
+      if (idx >= 0) {
+        this.pasteTrayItems.splice(idx, 1);
+        (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", `\u5DF2\u4ECE\u6682\u5B58\u6258\u76D8\u79FB\u9664\u300C${entry.title}\u300D`);
+      } else {
+        this.pasteTrayItems.push({
+          id: entry.id,
+          title: entry.title,
+          content: entry.content || entry.summary || ""
+        });
+        (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", `\u5DF2\u52A0\u5165\u6682\u5B58\u6258\u76D8 (\u5F53\u524D\u5171 ${this.pasteTrayItems.length} \u9879)`);
+      }
+      this.updatePasteTray();
+    }
+    getPasteTrayItems() {
+      return [...this.pasteTrayItems];
+    }
+    clearPasteTray() {
+      this.pasteTrayItems = [];
+      this.updatePasteTray();
+    }
+    updatePasteTray() {
+      if (!this.pasteTrayEl) return;
+      if (this.pasteTrayItems.length === 0) {
+        this.pasteTrayEl.style.display = "none";
+        this.pasteTrayEl.replaceChildren();
+        return;
+      }
+      this.pasteTrayEl.style.display = "flex";
+      this.pasteTrayEl.replaceChildren();
+      const badge = document.createElement("span");
+      badge.className = "xlc-paste-tray-badge";
+      badge.textContent = `\u{1F6D2} \u6682\u5B58\u6258\u76D8 (${this.pasteTrayItems.length}\u9879)`;
+      const btnWrap = document.createElement("div");
+      btnWrap.className = "xlc-paste-tray-actions";
+      const insertBtn = document.createElement("button");
+      insertBtn.type = "button";
+      insertBtn.className = "b3-button xlc-btn-primary";
+      insertBtn.dataset.xlcControl = "paste-tray.merge-insert";
+      insertBtn.textContent = "\u2913 \u5408\u5E76\u63D2\u5165";
+      insertBtn.title = "\u5C06\u6258\u76D8\u4E2D\u7684\u5168\u90E8\u5E38\u7528\u8BED\u6309\u5E8F\u62FC\u63A5\u4E00\u6B21\u6027\u63D2\u5165\u5230\u7F16\u8F91\u5668";
+      insertBtn.setAttribute("aria-label", insertBtn.title);
+      insertBtn.addEventListener("click", () => void this.mergeInsertPasteTray());
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "b3-button";
+      copyBtn.dataset.xlcControl = "paste-tray.merge-copy";
+      copyBtn.textContent = "\u29C9 \u5408\u5E76\u590D\u5236";
+      copyBtn.title = "\u5C06\u6258\u76D8\u4E2D\u7684\u5168\u90E8\u5E38\u7528\u8BED\u62FC\u63A5\u590D\u5236\u5230\u526A\u8D34\u677F";
+      copyBtn.setAttribute("aria-label", copyBtn.title);
+      copyBtn.addEventListener("click", () => void this.mergeCopyPasteTray());
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "b3-button b3-button--cancel";
+      clearBtn.dataset.xlcControl = "paste-tray.clear";
+      clearBtn.textContent = "\u6E05\u7A7A";
+      clearBtn.addEventListener("click", () => this.clearPasteTray());
+      btnWrap.append(insertBtn, copyBtn, clearBtn);
+      this.pasteTrayEl.append(badge, btnWrap);
+    }
+    async mergeInsertPasteTray() {
+      var _a, _b, _c, _d, _e;
+      if (this.pasteTrayItems.length === 0) return;
+      const contents = [];
+      for (const it of this.pasteTrayItems) {
+        let text = it.content || "";
+        if (typeof this.deps.preview === "function") {
+          try {
+            const kd = await this.deps.preview(it.id);
+            if (kd) text = kd;
+          } catch {
+          }
+        }
+        if (text.trim()) contents.push(text.trim());
+      }
+      const merged = mergeTrayContents(contents.map((c) => ({ content: c })));
+      const ok2 = await this.deps.insertRaw(merged, (_a = this.insertTarget) != null ? _a : void 0);
+      if (ok2) {
+        (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "info", `\u5DF2\u5408\u5E76\u63D2\u5165 ${this.pasteTrayItems.length} \u9879\u5E38\u7528\u8BED`);
+        this.clearPasteTray();
+        if (!this.pinWindow) this.destroy();
+      } else {
+        (_e = (_d = this.deps).notify) == null ? void 0 : _e.call(_d, "error", "\u5408\u5E76\u63D2\u5165\u5931\u8D25");
+      }
+    }
+    async mergeCopyPasteTray() {
+      var _a, _b, _c, _d;
+      if (this.pasteTrayItems.length === 0) return;
+      const contents = [];
+      for (const it of this.pasteTrayItems) {
+        let text = it.content || "";
+        if (typeof this.deps.preview === "function") {
+          try {
+            const kd = await this.deps.preview(it.id);
+            if (kd) text = kd;
+          } catch {
+          }
+        }
+        if (text.trim()) contents.push(text.trim());
+      }
+      const merged = mergeTrayContents(contents.map((c) => ({ content: c })));
+      const ok2 = await this.deps.copyText(merged);
+      if (ok2) {
+        (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", `\u5DF2\u5408\u5E76\u590D\u5236 ${this.pasteTrayItems.length} \u9879\u5E38\u7528\u8BED\u5230\u526A\u8D34\u677F`);
+        if (!this.pinWindow) this.destroy();
+      } else {
+        (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "error", this.deps.t("copyFailed"));
       }
     }
     isPinWindow() {

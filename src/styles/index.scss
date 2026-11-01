@@ -599,6 +599,45 @@
         border-color: var(--b3-theme-primary);
       }
     }
+
+    // 极窄悬浮迷你模式切换按钮（📐，Alt+M · CAND-018 / TODO-FEAT-017）
+    .xlc-search-mini-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      margin-left: 2px;
+      border: 1px solid transparent;
+      border-radius: var(--xlc-radius-pill, 9999px);
+      background-color: transparent;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      opacity: 0.6;
+      transition: all var(--xlc-dur-fast) var(--xlc-ease);
+
+      &:hover {
+        opacity: 0.9;
+        background-color: var(--b3-theme-surface);
+        border-color: var(--b3-border-color);
+        transform: scale(1.08);
+      }
+
+      &:focus-visible {
+        opacity: 1;
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+
+      &--active {
+        opacity: 1;
+        color: var(--b3-theme-primary);
+        background-color: color-mix(in srgb, var(--b3-theme-primary) 14%, transparent);
+        border-color: var(--b3-theme-primary);
+      }
+    }
   }
 
   // ---- 筛选 chips（含自绘箭头的轻量下拉）----
@@ -3591,6 +3630,73 @@
     flex-direction: column;
     overflow: hidden;
   }
+}
+
+// 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017）
+.b3-dialog__container.xlc-dialog-host.xlc-dialog--mini,
+.xlc-dialog--mini {
+  width: min(330px, 92vw) !important;
+  max-width: 330px !important;
+
+  .xlc-pane {
+    display: none !important;
+  }
+
+  .xlc-list {
+    width: 100% !important;
+    border-right: none !important;
+  }
+
+  .xlc-filters,
+  .xlc-quick-filter-pills,
+  .xlc-search-hint {
+    display: none !important;
+  }
+
+  .xlc-search {
+    margin-bottom: var(--xlc-space-2);
+  }
+
+  .xlc-footer {
+    display: none !important;
+  }
+}
+
+// 常用语购物车暂存托盘栏（CAND-019 / TODO-FEAT-018）
+.xlc-paste-tray {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--xlc-space-2);
+  padding: var(--xlc-space-2) var(--xlc-space-3);
+  margin-top: var(--xlc-space-2);
+  background: color-mix(in srgb, var(--b3-theme-primary) 10%, var(--b3-theme-surface));
+  border: 1px dashed var(--b3-theme-primary);
+  border-radius: var(--xlc-radius);
+  animation: xlc-pop var(--xlc-dur-fast) var(--xlc-ease);
+
+  .xlc-paste-tray-badge {
+    font-size: 12px;
+    font-weight: var(--xlc-weight-semibold);
+    color: var(--b3-theme-primary);
+  }
+
+  .xlc-paste-tray-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-1);
+
+    .b3-button {
+      font-size: 11px;
+      min-height: 24px;
+      padding: 0 8px;
+    }
+  }
+}
+
+.xlc-row-action-tray {
+  font-size: 11px;
+  line-height: 1;
 }
 
 .b3-dialog__container.xlc-discovery-host {

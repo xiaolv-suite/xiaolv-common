@@ -324,3 +324,16 @@ export function formatItemContent(
     return { text: cleanText || raw };
 }
 
+/**
+ * 纯函数：将暂存托盘中的多条常用语按序拼接为合并长文本（CAND-019 / TODO-FEAT-018）
+ * 自动以双换行隔开，过滤空项
+ */
+export function mergeTrayContents(items: readonly { content?: string }[]): string {
+    if (!items || items.length === 0) return "";
+    return items
+        .map((it) => (it?.content ?? "").trim())
+        .filter(Boolean)
+        .join("\n\n");
+}
+
+

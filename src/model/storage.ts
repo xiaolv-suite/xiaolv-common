@@ -126,6 +126,8 @@ export interface SearchPrefs {
     savedDiscoveryViews?: SavedDiscoveryView[];
     /** 搜索结果行显示密度（CAND-012 / TODO-FEAT-011）："comfortable" (默认卡片双行) | "compact" (单行极速) */
     density?: "comfortable" | "compact";
+    /** 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017）：单列紧凑浮条无遮挡 */
+    miniMode?: boolean;
 }
 
 export type SavedDiscoveryScope = "document" | "notebook" | "tree" | "selected-notebook" | "all-notebooks";
@@ -362,6 +364,7 @@ export function normalizeState(raw: unknown): PluginState {
             density: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).density === "compact")
                 ? "compact"
                 : "comfortable",
+            miniMode: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).miniMode === true),
         },
         // 插入偏好默认开（F1/F3）；显式 false 才关
         insert: {

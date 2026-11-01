@@ -2041,6 +2041,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.state.search.density = density;
                 this.persistSoon();
             },
+            miniMode: this.state.search.miniMode ?? false,
+            onMiniModeChange: (mini) => {
+                this.state.search.miniMode = mini;
+                this.persistSoon();
+            },
             getProfilePresets: () => this.state.profilePresets ?? {},
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {

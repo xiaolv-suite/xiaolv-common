@@ -28,7 +28,7 @@ import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
 import {formatPlatformShortcut, detectShortcutConflicts} from "../model/hotkeys";
 import {calculateVirtualScrollWindow} from "./performance-utils";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
-import {renderWechatArticleHtml, writeRichClipboard, formatItemContent, ItemCopyFormat} from "../model/clipboard";
+import {renderWechatArticleHtml, writeRichClipboard, formatItemContent, ItemCopyFormat, mergeTrayContents} from "../model/clipboard";
 import {transformCase} from "../model/placeholders";
 import {evaluateMathExpression} from "../model/calculator";
 
@@ -127,6 +127,9 @@ export interface DialogDeps {
     /** 搜索结果行显示密度（CAND-012 / TODO-FEAT-011） */
     density?: "comfortable" | "compact";
     onDensityChange?: (density: "comfortable" | "compact") => void;
+    /** 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017） */
+    miniMode?: boolean;
+    onMiniModeChange?: (mini: boolean) => void;
     openSetup: () => void;
     /** 全局常驻名片池 / 身份档案（CAND-016 / TODO-FEAT-015） */
     getProfilePresets?: () => Record<string, string>;
@@ -222,9 +225,16 @@ export class CommonSearchDialog {
     private density: "comfortable" | "compact" = "comfortable";
     private densityBtn: HTMLButtonElement | null = null;
     private listEl: HTMLElement | null = null;
+    /** 极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017） */
+    private miniMode = false;
+    private miniModeBtn: HTMLButtonElement | null = null;
+    /** 常用语购物车暂存托盘（CAND-019 / TODO-FEAT-018） */
+    private pasteTrayItems: Array<{id: string; title: string; content?: string}> = [];
+    private pasteTrayEl: HTMLElement | null = null;
 
     constructor(private readonly deps: DialogDeps) {
         if (deps.density) this.density = deps.density;
+        if (deps.miniMode !== undefined) this.miniMode = deps.miniMode;
     }
 
     /** 定向插入目标（文档树入口；设置后 Enter/点按插入到该文档而非活动编辑器） */
@@ -435,6 +445,21 @@ export class CommonSearchDialog {
         });
         this.densityBtn = densityBtn;
         search.appendChild(densityBtn);
+
+        // 极窄迷你悬浮模式切换按钮（📐，Alt+M · CAND-018 / TODO-FEAT-017）
+        const miniModeBtn = document.createElement("button");
+        miniModeBtn.type = "button";
+        miniModeBtn.className = "xlc-search-mini-btn" + (this.miniMode ? " xlc-search-mini-btn--active" : "");
+        miniModeBtn.dataset.xlcControl = "search.mini.toggle";
+        miniModeBtn.textContent = "📐";
+        miniModeBtn.title = "迷你悬浮浮条模式（极窄单列无遮挡，Alt+M 切换）";
+        miniModeBtn.setAttribute("aria-label", "切换迷你悬浮模式");
+        miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
+        miniModeBtn.addEventListener("click", () => {
+            this.toggleMiniMode();
+        });
+        this.miniModeBtn = miniModeBtn;
+        search.appendChild(miniModeBtn);
 
         searchBlock.appendChild(search);
         const searchHint = document.createElement("div");
@@ -849,6 +874,7 @@ export class CommonSearchDialog {
         list.className = "xlc-list";
         this.listEl = list;
         this.applyDensity();
+        this.applyMiniMode();
         list.id = "xlc-search-results";
         list.tabIndex = 0;
         // 行内收藏/标签筛选按钮是可聚焦控件，不能嵌在 ARIA listbox option 内。
@@ -958,6 +984,14 @@ export class CommonSearchDialog {
         }
         root.appendChild(bodyWrap);
         root.appendChild(this.buildBatchBar());
+
+        // 常用语购物车暂存托盘栏（CAND-019 / TODO-FEAT-018）
+        const trayEl = document.createElement("div");
+        trayEl.className = "xlc-paste-tray";
+        trayEl.dataset.xlcControl = "search.paste-tray";
+        trayEl.style.display = "none";
+        this.pasteTrayEl = trayEl;
+        root.appendChild(trayEl);
 
         // 底栏（原型：左计数 / 右真源声明 + 设置入口；移动端=操作钮行 + 点按提示）
         const footer = document.createElement("div");
@@ -2420,6 +2454,22 @@ export class CommonSearchDialog {
                 void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
             });
             row.appendChild(star);
+
+            // 常用语购物车暂存托盘按钮（CAND-019 / TODO-FEAT-018）
+            const trayBtn = document.createElement("button");
+            trayBtn.type = "button";
+            trayBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action-tray";
+            trayBtn.dataset.xlcControl = "item.add-tray";
+            const inTray = this.pasteTrayItems.some((it) => it.id === entry.id);
+            trayBtn.textContent = inTray ? "✓" : "🛒";
+            trayBtn.title = inTray ? "已加入暂存托盘" : "加入暂存托盘 (Alt+A)";
+            trayBtn.setAttribute("aria-label", trayBtn.title);
+            trayBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.togglePasteTrayItem(entry);
+                trayBtn.textContent = this.pasteTrayItems.some((it) => it.id === entry.id) ? "✓" : "🛒";
+            });
+            row.appendChild(trayBtn);
         }
         return row;
     }
@@ -6380,6 +6430,20 @@ export class CommonSearchDialog {
             e.preventDefault();
             this.toggleDensity();
             return;
+        } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
+            // Alt+M: 切换极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017）
+            e.preventDefault();
+            this.toggleMiniMode();
+            return;
+        } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "a" || e.key === "A")) {
+            // Alt+A: 切换当前条目的暂存托盘状态（CAND-019 / TODO-FEAT-018）
+            e.preventDefault();
+            const entry = this.results[this.activeIndex];
+            if (entry) {
+                this.togglePasteTrayItem(entry);
+                if (this.listEl) this.renderList(this.listEl);
+            }
+            return;
         } else if (e.key === "Escape") {
             e.preventDefault();
             if (this.quickLookOpen) {
@@ -6609,6 +6673,149 @@ export class CommonSearchDialog {
             this.densityBtn.textContent = isCompact ? "☰" : "☷";
             this.densityBtn.title = isCompact ? "当前为紧凑单行视图（点击或 Alt+V 切换为舒适卡片）" : "当前为舒适卡片视图（点击或 Alt+V 切换为紧凑单行）";
             this.densityBtn.setAttribute("aria-pressed", String(isCompact));
+        }
+    }
+
+    public toggleMiniMode(): boolean {
+        this.miniMode = !this.miniMode;
+        this.applyMiniMode();
+        this.deps.onMiniModeChange?.(this.miniMode);
+        this.deps.notify?.("info", this.miniMode ? "已开启极窄迷你模式（单列无遮挡，Alt+M 切换）" : "已切换为标准模式");
+        return this.miniMode;
+    }
+
+    public getMiniMode(): boolean {
+        return this.miniMode;
+    }
+
+    private applyMiniMode(): void {
+        const dialogWrap = this.dialog?.element;
+        if (dialogWrap) {
+            dialogWrap.classList.toggle("xlc-dialog--mini", this.miniMode);
+        }
+        if (this.miniModeBtn) {
+            this.miniModeBtn.classList.toggle("xlc-search-mini-btn--active", this.miniMode);
+            this.miniModeBtn.title = this.miniMode ? "已开启极窄迷你模式（Alt+M 恢复双栏）" : "迷你悬浮浮条模式（极窄单列无遮挡，Alt+M 切换）";
+            this.miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
+        }
+    }
+
+    public togglePasteTrayItem(entry: SearchEntry): void {
+        const idx = this.pasteTrayItems.findIndex((it) => it.id === entry.id);
+        if (idx >= 0) {
+            this.pasteTrayItems.splice(idx, 1);
+            this.deps.notify?.("info", `已从暂存托盘移除「${entry.title}」`);
+        } else {
+            this.pasteTrayItems.push({
+                id: entry.id,
+                title: entry.title,
+                content: entry.content || entry.summary || "",
+            });
+            this.deps.notify?.("info", `已加入暂存托盘 (当前共 ${this.pasteTrayItems.length} 项)`);
+        }
+        this.updatePasteTray();
+    }
+
+    public getPasteTrayItems(): Array<{id: string; title: string; content?: string}> {
+        return [...this.pasteTrayItems];
+    }
+
+    public clearPasteTray(): void {
+        this.pasteTrayItems = [];
+        this.updatePasteTray();
+    }
+
+    private updatePasteTray(): void {
+        if (!this.pasteTrayEl) return;
+        if (this.pasteTrayItems.length === 0) {
+            this.pasteTrayEl.style.display = "none";
+            this.pasteTrayEl.replaceChildren();
+            return;
+        }
+
+        this.pasteTrayEl.style.display = "flex";
+        this.pasteTrayEl.replaceChildren();
+
+        const badge = document.createElement("span");
+        badge.className = "xlc-paste-tray-badge";
+        badge.textContent = `🛒 暂存托盘 (${this.pasteTrayItems.length}项)`;
+
+        const btnWrap = document.createElement("div");
+        btnWrap.className = "xlc-paste-tray-actions";
+
+        const insertBtn = document.createElement("button");
+        insertBtn.type = "button";
+        insertBtn.className = "b3-button xlc-btn-primary";
+        insertBtn.dataset.xlcControl = "paste-tray.merge-insert";
+        insertBtn.textContent = "⤓ 合并插入";
+        insertBtn.title = "将托盘中的全部常用语按序拼接一次性插入到编辑器";
+        insertBtn.setAttribute("aria-label", insertBtn.title);
+        insertBtn.addEventListener("click", () => void this.mergeInsertPasteTray());
+
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "b3-button";
+        copyBtn.dataset.xlcControl = "paste-tray.merge-copy";
+        copyBtn.textContent = "⧉ 合并复制";
+        copyBtn.title = "将托盘中的全部常用语拼接复制到剪贴板";
+        copyBtn.setAttribute("aria-label", copyBtn.title);
+        copyBtn.addEventListener("click", () => void this.mergeCopyPasteTray());
+
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "b3-button b3-button--cancel";
+        clearBtn.dataset.xlcControl = "paste-tray.clear";
+        clearBtn.textContent = "清空";
+        clearBtn.addEventListener("click", () => this.clearPasteTray());
+
+        btnWrap.append(insertBtn, copyBtn, clearBtn);
+        this.pasteTrayEl.append(badge, btnWrap);
+    }
+
+    public async mergeInsertPasteTray(): Promise<void> {
+        if (this.pasteTrayItems.length === 0) return;
+        const contents: string[] = [];
+        for (const it of this.pasteTrayItems) {
+            let text = it.content || "";
+            if (typeof this.deps.preview === "function") {
+                try {
+                    const kd = await this.deps.preview(it.id);
+                    if (kd) text = kd;
+                } catch {}
+            }
+            if (text.trim()) contents.push(text.trim());
+        }
+        const merged = mergeTrayContents(contents.map((c) => ({content: c})));
+        const ok = await this.deps.insertRaw(merged, this.insertTarget ?? undefined);
+        if (ok) {
+            this.deps.notify?.("info", `已合并插入 ${this.pasteTrayItems.length} 项常用语`);
+            this.clearPasteTray();
+            if (!this.pinWindow) this.destroy();
+        } else {
+            this.deps.notify?.("error", "合并插入失败");
+        }
+    }
+
+    public async mergeCopyPasteTray(): Promise<void> {
+        if (this.pasteTrayItems.length === 0) return;
+        const contents: string[] = [];
+        for (const it of this.pasteTrayItems) {
+            let text = it.content || "";
+            if (typeof this.deps.preview === "function") {
+                try {
+                    const kd = await this.deps.preview(it.id);
+                    if (kd) text = kd;
+                } catch {}
+            }
+            if (text.trim()) contents.push(text.trim());
+        }
+        const merged = mergeTrayContents(contents.map((c) => ({content: c})));
+        const ok = await this.deps.copyText(merged);
+        if (ok) {
+            this.deps.notify?.("info", `已合并复制 ${this.pasteTrayItems.length} 项常用语到剪贴板`);
+            if (!this.pinWindow) this.destroy();
+        } else {
+            this.deps.notify?.("error", this.deps.t("copyFailed"));
         }
     }
 
