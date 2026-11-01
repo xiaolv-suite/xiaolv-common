@@ -1234,6 +1234,7 @@ export class CaptureDialog {
                 const parsedAnnotation = parseSnippetAnnotations(markdown);
                 let finalTitle = (titleEl as HTMLInputElement).value.trim();
                 let finalTags = (tagsEl as HTMLInputElement).value ? (tagsEl as HTMLInputElement).value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : [];
+                let finalMarkdown = markdown;
                 if (parsedAnnotation.tags.length > 0 || parsedAnnotation.title) {
                     if (!finalTitle && parsedAnnotation.title) {
                         finalTitle = parsedAnnotation.title;
@@ -1241,10 +1242,13 @@ export class CaptureDialog {
                     for (const t of parsedAnnotation.tags) {
                         if (!finalTags.includes(t)) finalTags.push(t);
                     }
+                    if (parsedAnnotation.cleanText && parsedAnnotation.cleanText.trim()) {
+                        finalMarkdown = parsedAnnotation.cleanText.trim();
+                    }
                 }
                 void this.deps.createItem({
                     itemType: type,
-                    markdown,
+                    markdown: finalMarkdown,
                     title: finalTitle || undefined,
                     alias: (aliasEl as HTMLInputElement).value || undefined,
                     ...(resolvedShortcode ? {shortcode: resolvedShortcode} : {}),

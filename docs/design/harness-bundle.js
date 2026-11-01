@@ -16174,6 +16174,7 @@ ${res.progressBar}`;
               const parsedAnnotation = parseSnippetAnnotations(markdown);
               let finalTitle = titleEl.value.trim();
               let finalTags = tagsEl.value ? tagsEl.value.split(/[,，、;；\s]+/).map((s) => s.trim()).filter(Boolean) : [];
+              let finalMarkdown = markdown;
               if (parsedAnnotation.tags.length > 0 || parsedAnnotation.title) {
                 if (!finalTitle && parsedAnnotation.title) {
                   finalTitle = parsedAnnotation.title;
@@ -16181,10 +16182,13 @@ ${res.progressBar}`;
                 for (const t2 of parsedAnnotation.tags) {
                   if (!finalTags.includes(t2)) finalTags.push(t2);
                 }
+                if (parsedAnnotation.cleanText && parsedAnnotation.cleanText.trim()) {
+                  finalMarkdown = parsedAnnotation.cleanText.trim();
+                }
               }
               void this.deps.createItem({
                 itemType: type,
-                markdown,
+                markdown: finalMarkdown,
                 title: finalTitle || void 0,
                 alias: aliasEl.value || void 0,
                 ...resolvedShortcode ? { shortcode: resolvedShortcode } : {},
