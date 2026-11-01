@@ -24,6 +24,7 @@
     "check:package": "node scripts/check-package.cjs",
     "it:kernel": "node scripts/integration-kernel.cjs",
     "test:scale": "node scripts/scale-test.cjs --n 500",
+    "benchmark": "node scripts/benchmark-resource-performance.cjs",
     "serve:isolated": "node scripts/serve-isolated.cjs",
     "serve:isolated:stop": "node scripts/serve-isolated.cjs --stop"
   },
