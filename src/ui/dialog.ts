@@ -39,7 +39,7 @@ import {openPinboardDialog} from "./pinboard";
 import {openStarterPacksHubDialog} from "./starter-packs-dialog";
 import {getRecommendedEntries, DocumentContext} from "../model/contextual-recommend";
 import {getClipboardTimeGroup, MiniPosition, calculateMagneticSnap} from "../model/storage";
-import {STARTER_PACKS} from "../service/prompt-pack";
+import {STARTER_PACKS, StarterPackMeta} from "../service/prompt-pack";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -160,6 +160,8 @@ export interface DialogDeps {
     resetItemUsage?: (itemId: string) => boolean;
     /** 一键极速灌入开箱即用行业套件（CAND-034 / TODO-FEAT-029） */
     importStarterPackDirect?: (markdown: string) => Promise<{ok: boolean; count: number}>;
+    /** 在思源笔记本创建开箱套件专属文档并纳管（CAND-040 / TODO-FEAT-035） */
+    createStarterPackDedicatedDoc?: (pack: StarterPackMeta) => Promise<{ok: boolean; count: number; docId?: string; hPath?: string}>;
     /** 手动新建条目（移动端「＋ 新建」入口） */
     newItem: (titleCandidate?: string) => void;
     /** 从文本快速创建草稿（拖拽放置 / 面板非输入区快捷粘贴，ADR 0034 / T-0061） */
@@ -1210,6 +1212,7 @@ export class CommonSearchDialog {
                     t: this.deps.t,
                     notify: this.deps.notify,
                     importStarterPackDirect: this.deps.importStarterPackDirect,
+                    createStarterPackDedicatedDoc: this.deps.createStarterPackDedicatedDoc,
                     onImportSuccess: () => void this.refresh(),
                 });
             }

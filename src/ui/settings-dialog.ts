@@ -26,6 +26,7 @@ import {openSyncDiffModal} from "./sync-diff-modal";
 import {diffLibraries, SyncEntry} from "../model/sync-diff";
 import {countRememberedFields, clearAllMemory} from "../model/variable-memory";
 import {openStepByStepGuideDialog} from "./guide-dialog";
+import {openStarterPacksHubDialog} from "./starter-packs-dialog";
 
 type TFn = (key: string, ...args: string[]) => string;
 
@@ -3038,6 +3039,38 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
     dataBtns.appendChild(syncDiffBtn);
     dataSec.appendChild(dataBtns);
     
+    // 开箱即用套件市场直达入口（CAND-038 / TODO-FEAT-033）
+    const hubRow = document.createElement("div");
+    hubRow.className = "xlc-setting-row xlc-template-import-row xlc-starter-hub-setting-row";
+    const hubText = document.createElement("span");
+    hubText.className = "xlc-setting-text";
+    hubText.textContent = "📦 开箱即用套件市场：按需挑选商务财务、客服售后、开发运维与学术排版专属预置库。";
+    hubRow.appendChild(hubText);
+    const hubBtn = document.createElement("button");
+    hubBtn.type = "button";
+    hubBtn.className = "b3-button xlc-btn-primary";
+    hubBtn.textContent = "📦 浏览全量套件市场";
+    hubBtn.dataset.xlcControl = "settings.data.starterHub";
+    hubBtn.addEventListener("click", () => {
+        openStarterPacksHubDialog({
+            t: ctx.t,
+            notify: ctx.notify,
+            importStarterPackDirect: async (md) => {
+                const parsed = parseMarkdownPack(md);
+                if (parsed.items.length === 0) return {ok: false, count: 0};
+                const receipt = await ctx.importMarkdownItems(parsed.items, "skip");
+                if (receipt.created > 0 || receipt.skipped > 0 || receipt.failed === 0) {
+                    ctx.refreshSearch?.();
+                    return {ok: true, count: receipt.created || receipt.total};
+                }
+                return {ok: false, count: 0};
+            },
+            onImportSuccess: () => ctx.refreshSearch?.(),
+        });
+    });
+    hubRow.appendChild(hubBtn);
+    dataSec.appendChild(hubRow);
+
     // 提示包导入（R74）
     const templateRow = document.createElement("div");
     templateRow.className = "xlc-setting-row xlc-template-import-row";

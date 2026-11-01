@@ -52,6 +52,7 @@ import {queryEcosystemItems} from "./service/ecosystem";
 import {registerRaikiriModuleSafely} from "./ecosystem-bridge-kit";
 import {getActivePasteQueue} from "./model/paste-queue";
 import {DockView, type DockViewDeps} from "./ui/dock-view";
+import {buildDedicatedDocMarkdown, StarterPackMeta} from "./service/prompt-pack";
 
 declare let __webpack_public_path__: string;
 
@@ -2037,6 +2038,34 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     }
 
+    async createStarterPackDedicatedDoc(pack: StarterPackMeta): Promise<{ok: boolean; count: number; docId?: string; hPath?: string}> {
+        if (!this.library || !this.kernelClient) return {ok: false, count: 0};
+        try {
+            const nbReceipt = await this.library.listNotebooks();
+            if (!nbReceipt.ok || nbReceipt.data.length === 0) {
+                return {ok: false, count: 0};
+            }
+            const targetNotebookId = this.config?.mode === "notebook"
+                ? (this.config.notebookIds?.[0] || nbReceipt.data[0]!.id)
+                : nbReceipt.data[0]!.id;
+            const docTitle = `常用资产 · ${pack.name}`;
+            const docMd = buildDedicatedDocMarkdown(pack);
+            const res = await this.kernelClient.request<string>("createDocWithMd", {
+                notebook: targetNotebookId,
+                path: `/${docTitle}`,
+                markdown: docMd,
+            });
+            if (res) {
+                await this.library.ensureIndex(0);
+                this.notifyExternalDataChange();
+                return {ok: true, count: pack.itemCount, docId: res, hPath: `/${docTitle}`};
+            }
+            return {ok: false, count: 0};
+        } catch {
+            return {ok: false, count: 0};
+        }
+    }
+
     /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式，defaultAction 预设主操作模式，initialScope 预设初始检索范围 */
     openSearch(
         insertTarget?: {docId: string; hPath: string},
@@ -2128,6 +2157,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 };
             },
             importStarterPackDirect: (md) => this.importStarterPackDirect(md),
+            createStarterPackDedicatedDoc: (pack) => this.createStarterPackDedicatedDoc(pack),
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {
                 const loading = !this.library.getIndex();

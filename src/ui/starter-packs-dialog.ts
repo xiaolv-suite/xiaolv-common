@@ -20,6 +20,8 @@ export interface StarterPacksHubDeps {
     t: (key: string, ...args: string[]) => string;
     notify?: (type: "info" | "error", message: string) => void;
     importStarterPackDirect: (markdown: string) => Promise<{ok: boolean; count: number}>;
+    /** 在思源笔记本创建专属结构化文档并纳管（CAND-040 / TODO-FEAT-035） */
+    createStarterPackDedicatedDoc?: (pack: StarterPackMeta) => Promise<{ok: boolean; count: number; docId?: string; hPath?: string}>;
     onImportSuccess?: () => void;
 }
 
@@ -216,7 +218,37 @@ export function openStarterPacksHubDialog(deps: StarterPacksHubDeps): Dialog {
             }
         });
 
-        cardActs.append(previewBtn, installBtn);
+        if (deps.createStarterPackDedicatedDoc) {
+            const createDocBtn = document.createElement("button");
+            createDocBtn.type = "button";
+            createDocBtn.className = "b3-button b3-button--cancel xlc-starter-hub-doc-btn";
+            createDocBtn.dataset.xlcControl = `starter-hub.doc.${pack.id}`;
+            createDocBtn.textContent = "📁 新建专属文档";
+            createDocBtn.title = "在思源当前笔记本中创建专属结构化大纲文档并自动纳管";
+            createDocBtn.addEventListener("click", async () => {
+                createDocBtn.disabled = true;
+                createDocBtn.textContent = "⏳ 创建中...";
+                try {
+                    const res = await deps.createStarterPackDedicatedDoc!(pack);
+                    if (res.ok) {
+                        createDocBtn.textContent = "✓ 文档已建";
+                        deps.notify?.("info", `已在思源中成功创建《常用资产 · ${pack.name}》专属文档！`);
+                        deps.onImportSuccess?.();
+                    } else {
+                        createDocBtn.disabled = false;
+                        createDocBtn.textContent = "📁 新建专属文档";
+                        deps.notify?.("error", "文档创建失败，请检查笔记本状态");
+                    }
+                } catch {
+                    createDocBtn.disabled = false;
+                    createDocBtn.textContent = "📁 新建专属文档";
+                    deps.notify?.("error", "文档创建失败，请检查笔记本状态");
+                }
+            });
+            cardActs.append(previewBtn, installBtn, createDocBtn);
+        } else {
+            cardActs.append(previewBtn, installBtn);
+        }
         itemCard.append(cardMain, cardActs, previewDrawer);
         listEl.appendChild(itemCard);
     }
