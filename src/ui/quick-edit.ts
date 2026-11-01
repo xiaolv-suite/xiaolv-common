@@ -88,15 +88,6 @@ export function openQuickEditDialog(
         counter.setAttribute("role", "status");
         counter.setAttribute("aria-live", "polite");
     }
-    const updateCount = () => {
-        counter.textContent = `${textarea.value.length} 字符`;
-    };
-    updateCount();
-    textarea.addEventListener("input", updateCount);
-
-    footer.appendChild(hint);
-    footer.appendChild(counter);
-
     const errHint = document.createElement("div");
     errHint.id = "xlc-quick-edit-error";
     errHint.className = "xlc-form-error";
@@ -109,6 +100,19 @@ export function openQuickEditDialog(
         errHint.setAttribute("role", "alert");
         errHint.setAttribute("aria-live", "assertive");
     }
+
+    const updateCount = () => {
+        counter.textContent = `${textarea.value.length} 字符`;
+        if (errHint.style.display !== "none") {
+            errHint.style.display = "none";
+            errHint.textContent = "";
+        }
+    };
+    updateCount();
+    textarea.addEventListener("input", updateCount);
+
+    footer.appendChild(hint);
+    footer.appendChild(counter);
 
     const btnRow = document.createElement("div");
     btnRow.className = "xlc-quick-edit-actions";
