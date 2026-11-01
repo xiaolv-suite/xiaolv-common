@@ -151,7 +151,7 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🔒 Security Baseline & Known Boundaries
 
-- **Item container (superblock)**: Each item is one top-level block in the library document; multi-paragraph bodies live inside one superblock and item metadata stays on that block's `custom-xlc-*` attributes. Write, read-back, update, delete, per-item read-back of all 5 example packs, and the [10-step real-host release checklist](docs/release-checklist.md) (10/10 green) have been verified against an isolated SiYuan 3.8.9 kernel + real SiYuan desktop frontend.
+- **Item container (superblock)**: Each item is one top-level block in the library document; multi-paragraph bodies live inside one superblock and item metadata stays on that block's `custom-xlc-*` attributes. Write, read-back, update, delete, per-item read-back of all 5 example packs, and the [24-step real-host release checklist](scripts/e2e-real-checklist.cjs) (25/25 assertions green) have been verified against an isolated SiYuan 3.8.9 kernel + real SiYuan desktop frontend.
 - **Zero-SQL Redline**: Strictly zero calls to `/api/query/sql`; all operations rely on official structured APIs.
 - **Mobile Environment**: Touch and image clipboard operations on Android operate under graceful fallbacks.
 
@@ -159,7 +159,29 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.81] — 2026-11-01 (Latest Local Release)
+### [v0.10.82] — 2026-11-01 (Latest Local Release)
+
+v0.10.82 Local Release: Starter Packs Hub with ready-to-use industry suites & dedicated outline notebook doc creation, ultra-compact single-column Floating Mini Mode (`Alt+M` with 1~9 direct keys & collapse pill), deep Lv ecosystem interoperability (Raikiri snippet content contract alignment, dynamic ecosystem macro matrix, federated search, push to Lv Home memo, and Epoch 6 standardized event bus envelope), and 24-step (25 assertions) automated real-host E2E regression:
+- **Starter Packs Hub & Domain Presets (T-0808~T-0816 / Batch F12~F14)**:
+  - Persistent bottom footer entry (`footer.starter-packs`) with 4 industry suites: Business & Finance Invoicing, E-commerce Support & After-sales, Dev & Technical Operations, Writing Formatting & Academic Citations, plus Callout formatting and SuperMemo gradual reflection packs;
+  - **Expandable Drawer Previews**: Each suite features an eye button (`starter-hub.preview.*`) to inspect items, categories, and tags without installing;
+  - **1-Click Direct Enablement**: In-place import with automatic duplicate skipping based on stable logical IDs;
+  - **Dedicated SiYuan Outline Documents**: 1-click generation of structured outline documents (`常用资产 · 场景套件`) in the current notebook, anchoring native blocks directly.
+- **Floating Mini Mode (Batch F11)**:
+  - Toggle anytime via `Alt+M` or the `📐` button on the search bar;
+  - **1~9 Direct Trigger**: Micro numeric badges on the first 9 rows (`1`~`9` to insert, `Shift+1`~`9` to copy);
+  - **Top Drag Handle & Memory**: Drag anywhere with coordinate persistence;
+  - **1-Click Collapse to Floating Pill**: Minimizes to `search.mini.collapsed-pill` at the desktop margin, expanding on click.
+- **Deep Ecosystem Interoperability (T-0817~T-0820 / Batch F15)**:
+  - **External Bridge (window.xiaolvCommon) Contract Alignment**: Added populated `content` fields to search, recent, and get endpoints, ensuring Lv Raikiri (`siyuan-speed-switch`) and quickgate copy clean snippet text on Enter;
+  - **Dynamic Ecosystem Macro Matrix**: Asynchronous resolution of `{{xlc:home:today}}` / `{{xlc:butler:today}}` (Lv Home reminders), `{{xlc:task:today}}` (Task Horizon), `{{xlc:glean:recent}}` (Lv Glean clips), `{{xlc:contacts:recent}}` (Lv Contacts cards), and `{{xlc:checkin:today}}` (Lv Checkin) with timeout circuit breaking and graceful fallback text when uninstalled;
+  - **Federated Ecosystem Search**: Concurrent multi-plugin queries for reminders, clips, and habits with direct Enter insertion;
+  - **1-Click Push to Lv Home Memo**: Added `📋` promote action on clipboard history cards to create reminders directly in Lv Home;
+  - **Epoch 6 Event Bus Envelope**: Standardized all lifecycle events to `v: 1, source: "xiaolv-common", eventId, at, payload, idempotencyKey` with legacy flat properties retained for 100% backward compatibility.
+- **Automated 24-Step (25 Assertions) Real-Host E2E Testing**:
+  - Full `pnpm e2e:isolated` test pipeline passing 100% across isolated kernel acceptance (12/12), discovery (11/11), and real desktop browser checklist (25/25) with negative verification proof.
+
+### [v0.10.81] — 2026-11-01
 
 v0.10.81 Local Release: Default-on clipboard history with capacity tiers, 1-click clipboard-to-asset promotion with automatic annotation stripping & pinyin alias inference, native Protyle inline slash command expansion, purple highlight ring removal, interactive 4-step onboarding guide, and normalized settings page typography:
 - **Clipboard History Default ON & Capacity Setting (T-0775)**: `clipboardHistoryEnabled` defaults to `true` with zero cloud egress; default capacity of 30 items with 30/50/80/100 presets and strict 100-item cap; includes one-click clear button.
@@ -230,6 +252,7 @@ v0.10.81 Local Release: Default-on clipboard history with capacity tiers, 1-clic
 | `Space` | `Space` | Launcher | Open/close centered Quick Look preview modal |
 | `Tab` | `Tab` | Launcher | Quick recall alias match or toggle focus to preview |
 | `Alt + S` | `⌥ + S` | Launcher | Capture clipboard snippet or note block into library |
+| `Alt + M` | `⌥ + M` | Launcher | Toggle ultra-compact Floating Mini Mode / standard mode |
 | `Alt + T` | `⌥ + T` | Launcher | Cycle search scopes (All / Common / Recent / Star / Clip / Omni) |
 | `Alt + P` | `⌥ + P` | Launcher | Toggle pin window mode for continuous usage |
 | `Alt + Shift + D` | `⌥ + ⇧ + D` | Global | Toggle open/close snippet Dock panel |

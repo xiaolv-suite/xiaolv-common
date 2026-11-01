@@ -11,7 +11,7 @@
 // 本脚本只做进程编排与令牌读取；验收断言位于对应的 e2e-*.cjs 脚本。
 "use strict";
 
-const {spawn} = require("child_process");
+const {spawn, spawnSync} = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -188,7 +188,7 @@ async function main() {
 function killTree(pid) {
     try {
         if (process.platform === "win32") {
-            spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {stdio: "ignore"});
+            spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {stdio: "ignore"});
         } else {
             process.kill(pid, "SIGTERM");
         }

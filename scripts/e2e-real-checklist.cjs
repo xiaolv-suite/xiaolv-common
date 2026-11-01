@@ -119,6 +119,10 @@ function check(name, ok, detail = "") {
 }
 
 (async () => {
+    for (let i = 0; i < 5; i++) {
+        if (!await probe()) break;
+        await sleep(600);
+    }
     if (await probe()) {
         console.error(`[real-e2e] 端口 ${PORT} 已被占用，请更换 SIYUAN_REAL_PORT`);
         process.exit(1);
