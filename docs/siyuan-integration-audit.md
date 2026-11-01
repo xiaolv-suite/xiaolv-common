@@ -21,7 +21,7 @@
 
 ---
 
-## 二、 自动化验收全绿快照记录
+## 二、 自动化验收全绿快照记录（第一轮 222 项全覆盖验收通过）
 
 ```
 ✔ pnpm run check: 0 errors (TypeScript strict typecheck)
