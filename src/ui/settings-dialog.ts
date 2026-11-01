@@ -18,7 +18,7 @@ import {PROMPT_PACK_MD, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_MD, CALLOUT_PAC
 import type {SavedDiscoveryScope, SavedDiscoveryView} from "../model/storage";
 import {openCsvTsvImportWizard} from "./csv-tsv-wizard";
 import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doctor";
-import {calculateUsageInsights, type UsageItemMeta} from "../model/usage-insights";
+import {calculateUsageInsights, calculateHeatmap, buildDailyUsageMap, type UsageItemMeta} from "../model/usage-insights";
 import {detectEcosystem} from "../service/ecosystem";
 import {openSanitizerOptionsDialog} from "./export-sanitizer-modal";
 import type {SanitizerOptions} from "../model/export-sanitizer";
@@ -765,7 +765,9 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const clearBtn = document.createElement("button");
     clearBtn.className = "b3-button";
     clearBtn.setAttribute("aria-label", t("clearUsageBtn"));
-    const hasUsage = (): boolean => Object.values(ctx.state.usage).some((item) => item.count > 0);
+    const hasUsage = (): boolean =>
+        Object.values(ctx.state.usage).some((item) => item.count > 0) ||
+        Object.values(ctx.state.dailyUsage ?? {}).some((c) => c > 0);
     const syncClearUsage = (): void => {
         clearBtn.disabled = !hasUsage();
         clearBtn.textContent = hasUsage() ? t("clearUsageBtn") : t("clearUsageEmpty");
@@ -775,6 +777,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
         if (!hasUsage()) return;
         confirm("⚠️ " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
             ctx.state.usage = {};
+            ctx.state.dailyUsage = {};
             ctx.persistSoon();
             ctx.refreshSearch?.();
             syncClearUsage();
@@ -952,6 +955,67 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
             topSec.appendChild(pillsWrap);
             insightsBox.appendChild(topSec);
         }
+
+        // 近 30 天资产复用活跃热力图（TODO-FEAT-008 / CAND-009）
+        const dailyMap = buildDailyUsageMap(ctx.state.dailyUsage, usage);
+        const heatmap = calculateHeatmap(dailyMap, 30, Date.now());
+
+        const heatmapSec = document.createElement("div");
+        heatmapSec.className = "xlc-heatmap-section";
+        heatmapSec.dataset.xlcControl = "settings.usage.heatmap";
+        heatmapSec.setAttribute("role", "region");
+        heatmapSec.setAttribute("aria-label", "近30天资产复用活跃热力图");
+
+        const heatmapHead = document.createElement("div");
+        heatmapHead.className = "xlc-heatmap-head";
+
+        const heatmapTitle = document.createElement("span");
+        heatmapTitle.className = "xlc-heatmap-title";
+        heatmapTitle.textContent = `📅 近 30 天资产复用活跃度（累计 ${heatmap.totalCalls30Days} 次 · 活跃 ${heatmap.activeDays} 天）：`;
+        heatmapHead.appendChild(heatmapTitle);
+
+        const heatmapGrid = document.createElement("div");
+        heatmapGrid.className = "xlc-heatmap-grid";
+        heatmapGrid.setAttribute("role", "grid");
+        heatmapGrid.setAttribute("aria-label", "30天每日活跃热力格");
+
+        for (const day of heatmap.days) {
+            const cell = document.createElement("div");
+            cell.className = `xlc-heatmap-cell xlc-heatmap-cell--l${day.level}`;
+            cell.dataset.date = day.date;
+            cell.dataset.count = String(day.count);
+            cell.dataset.level = String(day.level);
+            cell.title = `${day.date}：${day.count} 次复用`;
+            cell.setAttribute("aria-label", cell.title);
+            cell.tabIndex = 0;
+            heatmapGrid.appendChild(cell);
+        }
+
+        const heatmapFoot = document.createElement("div");
+        heatmapFoot.className = "xlc-heatmap-foot";
+
+        const legendLabelLess = document.createElement("span");
+        legendLabelLess.className = "xlc-heatmap-legend-label";
+        legendLabelLess.textContent = "少";
+
+        const legendTrack = document.createElement("div");
+        legendTrack.className = "xlc-heatmap-legend-track";
+        for (let lvl = 0; lvl <= 4; lvl++) {
+            const legendCell = document.createElement("span");
+            legendCell.className = `xlc-heatmap-cell xlc-heatmap-cell--l${lvl}`;
+            legendCell.title = lvl === 0 ? "0 次" : lvl === 1 ? "1~2 次" : lvl === 2 ? "3~5 次" : lvl === 3 ? "6~9 次" : "10+ 次";
+            legendCell.setAttribute("aria-label", legendCell.title);
+            legendTrack.appendChild(legendCell);
+        }
+
+        const legendLabelMore = document.createElement("span");
+        legendLabelMore.className = "xlc-heatmap-legend-label";
+        legendLabelMore.textContent = "多";
+
+        heatmapFoot.append(legendLabelLess, legendTrack, legendLabelMore);
+
+        heatmapSec.append(heatmapHead, heatmapGrid, heatmapFoot);
+        insightsBox.appendChild(heatmapSec);
     };
 
     const paintSummary = (): void => {

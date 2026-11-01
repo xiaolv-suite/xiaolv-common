@@ -668,6 +668,9 @@ export class XiaolvCommonService {
             count: Math.min((current?.count ?? 0) + 1, 1_000_000),
             lastAt: Date.now(),
         };
+        const today = new Date().toISOString().slice(0, 10);
+        this.deps.state.dailyUsage ??= {};
+        this.deps.state.dailyUsage[today] = Math.min((this.deps.state.dailyUsage[today] ?? 0) + 1, 1_000_000);
         this.deps.onStateChange();
     }
 

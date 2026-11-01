@@ -184,6 +184,13 @@ export function pushRecentQuery(history: readonly string[], newQuery: string, li
     return [trimmed, ...history.filter((q) => q !== trimmed)].slice(0, limit);
 }
 
+/** 从最近搜索历史队列中移除指定历史词（TODO-FEAT-009） */
+export function removeRecentQuery(history: readonly string[], queryToRemove: string): string[] {
+    const target = (queryToRemove ?? "").trim();
+    if (!target) return [...history];
+    return history.filter((q) => q !== target);
+}
+
 /** 使用计数（F3）：插入/复制成功 +1；「常用」排序=次数×最近使用时间。侧车存储，可重建可清空。 */
 export interface UsageEntry {
     count: number;
@@ -248,6 +255,8 @@ export interface PluginState {
     clipboardHistory: ClipboardHistoryEntry[];
     /** 变量填参预设方案（按条目或模板标题归档的多套方案：itemId -> 方案名 -> 字段键值对） */
     variablePresets?: Record<string, Record<string, Record<string, string>>>;
+    /** 近 30 天每日使用统计计数（TODO-FEAT-008）：YYYY-MM-DD -> 计数 */
+    dailyUsage?: Record<string, number>;
 }
 
 export function normalizeState(raw: unknown): PluginState {
@@ -355,7 +364,19 @@ export function normalizeState(raw: unknown): PluginState {
         clipboardHistoryLimit: normalizeClipboardLimit(obj.clipboardHistoryLimit),
         clipboardHistory: normalizeClipboardHistory(obj.clipboardHistory, normalizeClipboardLimit(obj.clipboardHistoryLimit)),
         variablePresets: normalizeVariablePresets(obj.variablePresets),
+        dailyUsage: normalizeDailyUsage(obj.dailyUsage),
     };
+}
+
+export function normalizeDailyUsage(raw: unknown): Record<string, number> {
+    const dailyRaw = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const dailyUsage: Record<string, number> = {};
+    for (const [dateKey, val] of Object.entries(dailyRaw)) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey) && typeof val === "number" && Number.isInteger(val) && val > 0) {
+            dailyUsage[dateKey] = Math.min(val, 1_000_000);
+        }
+    }
+    return dailyUsage;
 }
 
 export function normalizeClipboardLimit(raw: unknown): number {

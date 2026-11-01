@@ -20,7 +20,7 @@ import {collectDefaults, rememberValues} from "./model/variable-memory";
 import {ExportedItem, buildBundle, validateImport, ConflictPolicy, ImportReceipt} from "./model/transfer";
 import {importBundle as importBundleCore} from "./service/importer";
 import {importMarkdownBundle} from "./service/import-markdown";
-import {LibraryConfig, CONFIG_VERSION, migrateState, normalizeLibraryConfig, normalizeSavedDiscoveryViews, normalizeState, PluginState, pushRecentQuery, type SavedDiscoveryView, pushClipboardHistory} from "./model/storage";
+import {LibraryConfig, CONFIG_VERSION, migrateState, normalizeLibraryConfig, normalizeSavedDiscoveryViews, normalizeState, PluginState, pushRecentQuery, removeRecentQuery, type SavedDiscoveryView, pushClipboardHistory} from "./model/storage";
 import {SearchContext, collectCategories, collectTags, searchEntries, applyBasicFilters, SearchEntry} from "./model/search";
 import {findDuplicateByContent} from "./model/dedupe";
 import {LruCache, PREVIEW_CACHE_CAPACITY, PREVIEW_CACHE_TTL_MS} from "./model/lru";
@@ -1781,6 +1781,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             count: Math.min((current?.count ?? 0) + 1, 1_000_000),
             lastAt: Date.now(),
         };
+        const today = new Date().toISOString().slice(0, 10);
+        this.state.dailyUsage ??= {};
+        this.state.dailyUsage[today] = Math.min((this.state.dailyUsage[today] ?? 0) + 1, 1_000_000);
         this.persistSoon();
     }
 
@@ -2347,6 +2350,10 @@ export default class XiaolvCommonPlugin extends Plugin {
             getRecentQueries: () => this.state.search.recentQueries ?? [],
             addRecentQuery: (q: string) => {
                 this.state.search.recentQueries = pushRecentQuery(this.state.search.recentQueries ?? [], q);
+                this.persistSoon();
+            },
+            removeRecentQuery: (q: string) => {
+                this.state.search.recentQueries = removeRecentQuery(this.state.search.recentQueries ?? [], q);
                 this.persistSoon();
             },
             clearRecentQueries: () => {

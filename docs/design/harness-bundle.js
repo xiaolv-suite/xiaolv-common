@@ -18878,7 +18878,7 @@ ${res.progressBar}`;
       observer == null ? void 0 : observer.disconnect();
       onClose == null ? void 0 : onClose();
     };
-    const dialog = new import_siyuan6.Dialog({
+    const dialog = new import_siyuan7.Dialog({
       title: t("csvImportTitle"),
       content: "",
       width: "min(800px, 96vw)",
@@ -19178,11 +19178,11 @@ ${res.progressBar}`;
     });
     ta.focus();
   }
-  var import_siyuan6;
+  var import_siyuan7;
   var init_csv_tsv_wizard = __esm({
     "src/ui/csv-tsv-wizard.ts"() {
       "use strict";
-      import_siyuan6 = __toESM(require_stub_dom());
+      import_siyuan7 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_csv_tsv_import();
       init_errors();
@@ -19441,6 +19441,55 @@ ${res.progressBar}`;
       topItems
     };
   }
+  function buildDailyUsageMap(dailyUsage, usage) {
+    const result = { ...dailyUsage != null ? dailyUsage : {} };
+    if (usage) {
+      for (const entry of Object.values(usage)) {
+        if (entry.lastAt && entry.lastAt > 0) {
+          const d = new Date(entry.lastAt);
+          const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          if (!result[dateKey]) {
+            result[dateKey] = Math.min(entry.count, 5);
+          }
+        }
+      }
+    }
+    return result;
+  }
+  function calculateHeatmap(dailyUsage, daysCount = 30, now = Date.now()) {
+    const days = [];
+    let totalCalls30Days = 0;
+    let maxDayCount = 0;
+    let activeDays = 0;
+    const msPerDay = 24 * 60 * 60 * 1e3;
+    for (let i = daysCount - 1; i >= 0; i--) {
+      const d = new Date(now - i * msPerDay);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dayStr = String(d.getDate()).padStart(2, "0");
+      const dateKey = `${y}-${m}-${dayStr}`;
+      const count = Math.max(0, Number(dailyUsage[dateKey]) || 0);
+      if (count > 0) activeDays++;
+      if (count > maxDayCount) maxDayCount = count;
+      totalCalls30Days += count;
+      let level = 0;
+      if (count >= 10) level = 4;
+      else if (count >= 6) level = 3;
+      else if (count >= 3) level = 2;
+      else if (count >= 1) level = 1;
+      days.push({
+        date: dateKey,
+        count,
+        level
+      });
+    }
+    return {
+      days,
+      totalCalls30Days,
+      maxDayCount,
+      activeDays
+    };
+  }
   var TYPING_CPM, INVOKE_OVERHEAD_KEYSTROKES, SEVEN_DAYS_MS;
   var init_usage_insights = __esm({
     "src/model/usage-insights.ts"() {
@@ -19672,10 +19721,10 @@ ${res.progressBar}`;
     };
   }
   function openSanitizerOptionsDialog(initialOptions, onConfirm) {
-    if (typeof import_siyuan7.Dialog === "undefined") return null;
+    if (typeof import_siyuan8.Dialog === "undefined") return null;
     let dialog;
     try {
-      dialog = new import_siyuan7.Dialog({
+      dialog = new import_siyuan8.Dialog({
         title: "\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879",
         content: "",
         width: "min(560px, 92vw)",
@@ -19705,13 +19754,13 @@ ${res.progressBar}`;
     if (innerHeader) innerHeader.style.display = "none";
     return dialog;
   }
-  var import_siyuan7, MockElement;
+  var import_siyuan8, MockElement;
   var init_export_sanitizer_modal = __esm({
     "src/ui/export-sanitizer-modal.ts"() {
       "use strict";
       init_clipboard();
       init_dialog_dom();
-      import_siyuan7 = __toESM(require_stub_dom());
+      import_siyuan8 = __toESM(require_stub_dom());
       MockElement = class {
         constructor(tagName = "div") {
           this._classes = /* @__PURE__ */ new Set();
@@ -20477,7 +20526,7 @@ ${res.progressBar}`;
     if (isBrowser) {
       let dialog = null;
       try {
-        dialog = new import_siyuan8.Dialog({
+        dialog = new import_siyuan9.Dialog({
           title: titleText,
           content: "",
           width: "min(960px, 94vw)",
@@ -20700,12 +20749,12 @@ ${res.progressBar}`;
       }
     };
   }
-  var import_siyuan8, MockElement2, STRATEGY_DESCRIPTIONS;
+  var import_siyuan9, MockElement2, STRATEGY_DESCRIPTIONS;
   var init_sync_diff_modal = __esm({
     "src/ui/sync-diff-modal.ts"() {
       "use strict";
       init_sync_diff();
-      import_siyuan8 = __toESM(require_stub_dom());
+      import_siyuan9 = __toESM(require_stub_dom());
       init_clipboard();
       init_dialog_dom();
       MockElement2 = class {
@@ -23434,7 +23483,7 @@ ${exception.mark.snippet}`;
     }
     activeSetupDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan9.Dialog({
+    const dialog = new import_siyuan10.Dialog({
       title: t("setupTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -23464,7 +23513,7 @@ ${exception.mark.snippet}`;
     }
     activeSettingsDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan9.Dialog({
+    const dialog = new import_siyuan10.Dialog({
       title: t("openSettings"),
       content: "",
       width: "min(720px, 92vw)",
@@ -23656,7 +23705,7 @@ ${exception.mark.snippet}`;
     }
     const all = Array.from(idx.items.values());
     const categories = Array.from(new Set(all.map((i) => i.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-    const dialog = new import_siyuan9.Dialog({
+    const dialog = new import_siyuan10.Dialog({
       title: t("packExportTitle"),
       content: "",
       width: "min(580px, 92vw)",
@@ -24021,7 +24070,7 @@ ${exception.mark.snippet}`;
         ctx.notify("info", t("clearClipboardEmpty"));
         return;
       }
-      (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
+      (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
         ctx.state.clipboardHistory = [];
         ctx.persistSoon();
         ctx.notify("info", t("clearClipboardDone"));
@@ -24044,7 +24093,10 @@ ${exception.mark.snippet}`;
     const clearBtn = document.createElement("button");
     clearBtn.className = "b3-button";
     clearBtn.setAttribute("aria-label", t("clearUsageBtn"));
-    const hasUsage = () => Object.values(ctx.state.usage).some((item) => item.count > 0);
+    const hasUsage = () => {
+      var _a2;
+      return Object.values(ctx.state.usage).some((item) => item.count > 0) || Object.values((_a2 = ctx.state.dailyUsage) != null ? _a2 : {}).some((c) => c > 0);
+    };
     const syncClearUsage = () => {
       clearBtn.disabled = !hasUsage();
       clearBtn.textContent = hasUsage() ? t("clearUsageBtn") : t("clearUsageEmpty");
@@ -24052,9 +24104,10 @@ ${exception.mark.snippet}`;
     syncClearUsage();
     clearBtn.addEventListener("click", () => {
       if (!hasUsage()) return;
-      (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
+      (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
         var _a2;
         ctx.state.usage = {};
+        ctx.state.dailyUsage = {};
         ctx.persistSoon();
         (_a2 = ctx.refreshSearch) == null ? void 0 : _a2.call(ctx);
         syncClearUsage();
@@ -24086,7 +24139,7 @@ ${exception.mark.snippet}`;
       if (countRememberedFields(ctx.state.variableMemory) === 0) return;
       const confirmTitle = "\u26A0\uFE0F " + (t("clearVariableMemoryBtn") || "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6");
       const confirmBody = t("clearVariableMemoryConfirm") || "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u8BB0\u4F4F\u7684\u6240\u6709\u53D8\u91CF\u5386\u53F2\u586B\u5199\u503C\u5417\uFF1F\u6761\u76EE\u6A21\u677F\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002";
-      (0, import_siyuan9.confirm)(confirmTitle, confirmBody, () => {
+      (0, import_siyuan10.confirm)(confirmTitle, confirmBody, () => {
         ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
         ctx.persistSoon();
         syncClearMem();
@@ -24210,6 +24263,54 @@ ${exception.mark.snippet}`;
         topSec.appendChild(pillsWrap);
         insightsBox.appendChild(topSec);
       }
+      const dailyMap = buildDailyUsageMap(ctx.state.dailyUsage, usage);
+      const heatmap = calculateHeatmap(dailyMap, 30, Date.now());
+      const heatmapSec = document.createElement("div");
+      heatmapSec.className = "xlc-heatmap-section";
+      heatmapSec.dataset.xlcControl = "settings.usage.heatmap";
+      heatmapSec.setAttribute("role", "region");
+      heatmapSec.setAttribute("aria-label", "\u8FD130\u5929\u8D44\u4EA7\u590D\u7528\u6D3B\u8DC3\u70ED\u529B\u56FE");
+      const heatmapHead = document.createElement("div");
+      heatmapHead.className = "xlc-heatmap-head";
+      const heatmapTitle = document.createElement("span");
+      heatmapTitle.className = "xlc-heatmap-title";
+      heatmapTitle.textContent = `\u{1F4C5} \u8FD1 30 \u5929\u8D44\u4EA7\u590D\u7528\u6D3B\u8DC3\u5EA6\uFF08\u7D2F\u8BA1 ${heatmap.totalCalls30Days} \u6B21 \xB7 \u6D3B\u8DC3 ${heatmap.activeDays} \u5929\uFF09\uFF1A`;
+      heatmapHead.appendChild(heatmapTitle);
+      const heatmapGrid = document.createElement("div");
+      heatmapGrid.className = "xlc-heatmap-grid";
+      heatmapGrid.setAttribute("role", "grid");
+      heatmapGrid.setAttribute("aria-label", "30\u5929\u6BCF\u65E5\u6D3B\u8DC3\u70ED\u529B\u683C");
+      for (const day of heatmap.days) {
+        const cell = document.createElement("div");
+        cell.className = `xlc-heatmap-cell xlc-heatmap-cell--l${day.level}`;
+        cell.dataset.date = day.date;
+        cell.dataset.count = String(day.count);
+        cell.dataset.level = String(day.level);
+        cell.title = `${day.date}\uFF1A${day.count} \u6B21\u590D\u7528`;
+        cell.setAttribute("aria-label", cell.title);
+        cell.tabIndex = 0;
+        heatmapGrid.appendChild(cell);
+      }
+      const heatmapFoot = document.createElement("div");
+      heatmapFoot.className = "xlc-heatmap-foot";
+      const legendLabelLess = document.createElement("span");
+      legendLabelLess.className = "xlc-heatmap-legend-label";
+      legendLabelLess.textContent = "\u5C11";
+      const legendTrack = document.createElement("div");
+      legendTrack.className = "xlc-heatmap-legend-track";
+      for (let lvl = 0; lvl <= 4; lvl++) {
+        const legendCell = document.createElement("span");
+        legendCell.className = `xlc-heatmap-cell xlc-heatmap-cell--l${lvl}`;
+        legendCell.title = lvl === 0 ? "0 \u6B21" : lvl === 1 ? "1~2 \u6B21" : lvl === 2 ? "3~5 \u6B21" : lvl === 3 ? "6~9 \u6B21" : "10+ \u6B21";
+        legendCell.setAttribute("aria-label", legendCell.title);
+        legendTrack.appendChild(legendCell);
+      }
+      const legendLabelMore = document.createElement("span");
+      legendLabelMore.className = "xlc-heatmap-legend-label";
+      legendLabelMore.textContent = "\u591A";
+      heatmapFoot.append(legendLabelLess, legendTrack, legendLabelMore);
+      heatmapSec.append(heatmapHead, heatmapGrid, heatmapFoot);
+      insightsBox.appendChild(heatmapSec);
     };
     const paintSummary = () => {
       const current = summarizeUsage(ctx.state.usage);
@@ -24792,7 +24893,7 @@ ${exception.mark.snippet}`;
       }
       const revision = setupRevision;
       const confirmText = mode === "new-notebook" ? t("setupIndependentConfirmCreate", notebookName, title) : t("setupConfirmCreate", title);
-      (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
+      (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
         if (creatingLibrary || setupRevision !== revision || modeSelect.value !== mode || mode === "new-doc" && nbSelect.value !== notebookId || mode === "new-notebook" && independentNotebookInput.value.trim() !== notebookName || nameInput.value.trim() !== title) return;
         creatingLibrary = true;
         clearOrphanReceipt();
@@ -25214,7 +25315,7 @@ ${exception.mark.snippet}`;
         delBtn.setAttribute("aria-label", `${t("delete")}\uFF1A${ct.name}`);
         delBtn.title = `${t("delete")}\uFF1A${ct.name}`;
         delBtn.addEventListener("click", () => {
-          (0, import_siyuan9.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
+          (0, import_siyuan10.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
             ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
             persistCt();
             repaintCt();
@@ -25383,7 +25484,7 @@ ${exception.mark.snippet}`;
         remove.textContent = t("savedViewsDelete");
         remove.setAttribute("aria-label", `${t("savedViewsDelete")}\uFF1A${view.name}`);
         remove.addEventListener("click", () => {
-          (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
+          (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
             var _a;
             if (ctx.deleteSavedDiscoveryView) {
               ctx.deleteSavedDiscoveryView(view.id);
@@ -25823,7 +25924,7 @@ fi`;
     const clearRecentsBtn = mkBtn(ctx.state.recents.length ? t("clearRecents") : t("clearRecentsEmpty"), void 0, "settings.data.clearRecents");
     clearRecentsBtn.addEventListener("click", () => {
       if (ctx.state.recents.length === 0 || clearRecentsBtn.disabled) return;
-      (0, import_siyuan9.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
+      (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
         var _a;
         ctx.state.recents = [];
         ctx.persistSoon();
@@ -26330,7 +26431,7 @@ fi`;
   }
   function openEspansoImportDialog(ctx, onClose) {
     const t = ctx.t;
-    const dialog = new import_siyuan9.Dialog({
+    const dialog = new import_siyuan10.Dialog({
       title: t("espansoTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -26495,7 +26596,7 @@ fi`;
     } catch (err) {
       throw new Error(ctx.aiErrorText(err));
     }
-    const dialog = new import_siyuan9.Dialog({
+    const dialog = new import_siyuan10.Dialog({
       title: t("tagAuditTitle"),
       content: "",
       width: "min(620px, 92vw)",
@@ -26546,7 +26647,7 @@ fi`;
   function openImportPolicyDialog(ctx, parsed, issues, source) {
     var _a, _b, _c;
     const t = ctx.t;
-    const dialog = new import_siyuan9.Dialog({
+    const dialog = new import_siyuan10.Dialog({
       title: t("importPolicyTitle"),
       content: "",
       width: "min(540px, 92vw)",
@@ -26750,11 +26851,11 @@ fi`;
     });
     body.appendChild(wrap);
   }
-  var import_siyuan9, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
+  var import_siyuan10, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
   var init_settings_dialog = __esm({
     "src/ui/settings-dialog.ts"() {
       "use strict";
-      import_siyuan9 = __toESM(require_stub_dom());
+      import_siyuan10 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_storage();
       init_constants();
@@ -26783,7 +26884,7 @@ fi`;
   });
 
   // src/ui/dialog.ts
-  var import_siyuan5 = __toESM(require_stub_dom());
+  var import_siyuan6 = __toESM(require_stub_dom());
   init_dialog_dom();
   init_item();
   init_clipboard_cleaner();
@@ -27795,6 +27896,111 @@ fi`;
   init_placeholders();
   init_calculator();
   init_guide_dialog();
+
+  // src/ui/share-card.ts
+  var import_siyuan5 = __toESM(require_stub_dom());
+  init_dialog_dom();
+  function openShareCardDialog(deps, item, shareCode) {
+    const dialog = new import_siyuan5.Dialog({
+      title: deps.t("shareCardTitle") || "\u5E38\u7528\u6761\u76EE\u4FBF\u643A\u5206\u4EAB\u5361\u7247",
+      content: "",
+      width: "min(560px, 92vw)"
+    });
+    mountPlatformDialogTitleWrap(dialog.element, deps.t("shareCardTitle") || "\u5E38\u7528\u6761\u76EE\u4FBF\u643A\u5206\u4EAB\u5361\u7247");
+    const body = getDialogBody(dialog.element);
+    if (!body) return dialog;
+    const container = document.createElement("div");
+    container.className = "xlc-share-card-container";
+    container.dataset.xlcControl = "share-card.container";
+    const metaBox = document.createElement("div");
+    metaBox.className = "xlc-share-card-meta";
+    const titleRow = document.createElement("div");
+    titleRow.className = "xlc-share-card-title-row";
+    const typeBadge = document.createElement("span");
+    typeBadge.className = "xlc-badge";
+    typeBadge.textContent = item.itemType || "text";
+    const titleEl = document.createElement("strong");
+    titleEl.className = "xlc-share-card-title";
+    titleEl.textContent = item.title || item.id;
+    titleRow.append(typeBadge, titleEl);
+    metaBox.appendChild(titleRow);
+    const tagsRow = document.createElement("div");
+    tagsRow.className = "xlc-share-card-tags";
+    if (item.category) {
+      const catChip = document.createElement("span");
+      catChip.className = "xlc-share-chip xlc-share-chip--category";
+      catChip.textContent = `\u{1F4C1} ${item.category}`;
+      tagsRow.appendChild(catChip);
+    }
+    if (item.tags && item.tags.length > 0) {
+      for (const t of item.tags.slice(0, 4)) {
+        const tagChip = document.createElement("span");
+        tagChip.className = "xlc-share-chip";
+        tagChip.textContent = `#${t.replace(/^#/, "")}`;
+        tagsRow.appendChild(tagChip);
+      }
+    }
+    if (item.varCount && item.varCount > 0) {
+      const varChip = document.createElement("span");
+      varChip.className = "xlc-share-chip xlc-share-chip--var";
+      varChip.textContent = `\u26A1 ${item.varCount} \u53D8\u91CF`;
+      tagsRow.appendChild(varChip);
+    }
+    if (tagsRow.children.length > 0) {
+      metaBox.appendChild(tagsRow);
+    }
+    if (item.summary) {
+      const preview = document.createElement("div");
+      preview.className = "xlc-share-card-preview";
+      preview.textContent = item.summary.slice(0, 300);
+      metaBox.appendChild(preview);
+    }
+    const codeSec = document.createElement("div");
+    codeSec.className = "xlc-share-card-code-sec";
+    const codeLabel = document.createElement("div");
+    codeLabel.className = "xlc-share-card-label";
+    codeLabel.textContent = "\u{1F4CB} \u4FBF\u643A\u5206\u4EAB\u7801\uFF08Base64 \u7D27\u51D1\u683C\u5F0F\uFF0C\u9632\u7BE1\u6539\u6821\u9A8C\uFF09\uFF1A";
+    const textarea = document.createElement("textarea");
+    textarea.className = "b3-text-field fn__block xlc-share-card-textarea";
+    textarea.readOnly = true;
+    textarea.value = shareCode;
+    textarea.rows = 4;
+    textarea.setAttribute("aria-label", "\u4FBF\u643A\u5206\u4EAB\u7801");
+    textarea.dataset.xlcControl = "share-card.textarea";
+    textarea.addEventListener("click", () => textarea.select());
+    codeSec.append(codeLabel, textarea);
+    const tip = document.createElement("div");
+    tip.className = "xlc-share-card-tip";
+    tip.textContent = deps.t("shareCardTip") || "\u{1F4A1} \u5BF9\u65B9\u65E0\u9700\u4EFB\u4F55\u914D\u7F6E\uFF0C\u76F4\u63A5\u5728\u5C0F\u9A74\u5E38\u7528\u4E3B\u641C\u7D22\u6846\u4E2D\u7C98\u8D34\u6B64\u5206\u4EAB\u7801\uFF08Ctrl+V\uFF09\uFF0C\u5373\u53EF\u79D2\u7EA7\u81EA\u52A8\u5BFC\u5165\uFF01";
+    const foot = document.createElement("div");
+    foot.className = "xlc-share-card-actions";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "b3-button b3-button--cancel";
+    closeBtn.textContent = deps.t("close") || "\u5173\u95ED";
+    closeBtn.dataset.xlcControl = "share-card.close";
+    closeBtn.addEventListener("click", () => dialog.destroy());
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "b3-button xlc-btn-primary";
+    copyBtn.textContent = deps.t("shareCardCopy") || "\u29C9 \u590D\u5236\u5206\u4EAB\u7801";
+    copyBtn.dataset.xlcControl = "share-card.copy";
+    copyBtn.addEventListener("click", async () => {
+      var _a;
+      await deps.copyText(shareCode);
+      copyBtn.textContent = deps.t("shareCardCopied") || "\u2713 \u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F";
+      (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", deps.t("copyCompactBundleSuccess") || "\u5DF2\u590D\u5236\u5206\u4EAB\u7801\u5230\u526A\u8D34\u677F");
+      setTimeout(() => {
+        copyBtn.textContent = deps.t("shareCardCopy") || "\u29C9 \u590D\u5236\u5206\u4EAB\u7801";
+      }, 1500);
+    });
+    foot.append(closeBtn, copyBtn);
+    container.append(metaBox, codeSec, tip, foot);
+    body.appendChild(container);
+    return dialog;
+  }
+
+  // src/ui/dialog.ts
   function resolveEntryBlockId(entry) {
     var _a;
     const strippedOmni = entry.id.startsWith("xlc-omni-") ? entry.id.slice("xlc-omni-".length) : entry.id;
@@ -27883,7 +28089,7 @@ fi`;
       }
       this.clipboardFormatFilter = "all";
       this.prevActiveElement = document.activeElement;
-      const dialog = new import_siyuan5.Dialog({
+      const dialog = new import_siyuan6.Dialog({
         title: this.deps.t("pluginName"),
         content: "",
         // 桌面采用宽松密度，减少截断并让双栏预览一次展示更多内容；移动端仍由 sheet 占满视口。
@@ -28135,13 +28341,19 @@ fi`;
         lbl.textContent = "\u{1F550} \u5386\u53F2:";
         historyBar.appendChild(lbl);
         for (const word of history) {
-          const pill = document.createElement("button");
-          pill.type = "button";
+          const pill = document.createElement("div");
           pill.className = "xlc-history-pill";
-          pill.textContent = word;
-          pill.title = `\u70B9\u51FB\u68C0\u7D22\u300C${word}\u300D`;
+          pill.dataset.xlcControl = "search.history.pill";
+          pill.title = `\u5386\u53F2\u8BCD\u300C${word}\u300D`;
           pill.setAttribute("aria-label", pill.title);
-          pill.addEventListener("click", () => {
+          const wordBtn = document.createElement("button");
+          wordBtn.type = "button";
+          wordBtn.className = "xlc-history-text-btn";
+          wordBtn.textContent = word;
+          wordBtn.title = `\u70B9\u51FB\u68C0\u7D22\u300C${word}\u300D`;
+          wordBtn.setAttribute("aria-label", wordBtn.title);
+          wordBtn.dataset.xlcControl = "search.history.item";
+          wordBtn.addEventListener("click", () => {
             input.value = word;
             input.dispatchEvent(new Event("input", { bubbles: true }));
             input.focus();
@@ -28151,6 +28363,23 @@ fi`;
             }
             void this.refresh();
           });
+          pill.appendChild(wordBtn);
+          if (this.deps.removeRecentQuery) {
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "xlc-history-del-btn";
+            delBtn.textContent = "\xD7";
+            delBtn.title = `\u5220\u9664\u5386\u53F2\u300C${word}\u300D`;
+            delBtn.setAttribute("aria-label", delBtn.title);
+            delBtn.dataset.xlcControl = "search.history.delete-item";
+            delBtn.addEventListener("click", (e) => {
+              var _a3, _b3;
+              e.stopPropagation();
+              (_b3 = (_a3 = this.deps).removeRecentQuery) == null ? void 0 : _b3.call(_a3, word);
+              updateHistoryBar();
+            });
+            pill.appendChild(delBtn);
+          }
           historyBar.appendChild(pill);
         }
         if (this.deps.clearRecentQueries) {
@@ -28617,7 +28846,7 @@ fi`;
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
     openUsageGuide() {
       var _a;
-      const guideDialog = new import_siyuan5.Dialog({
+      const guideDialog = new import_siyuan6.Dialog({
         title: this.deps.t("usageGuideTitle"),
         content: "",
         width: "min(600px, 92vw)",
@@ -31486,6 +31715,11 @@ fi`;
             const code = serializeCompactBundle(bundle);
             await this.deps.copyProviderPayload(code);
             (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", this.deps.t("copyCompactBundleSuccess"));
+            openShareCardDialog({
+              t: this.deps.t,
+              copyText: (text) => this.deps.copyProviderPayload(text),
+              notify: this.deps.notify
+            }, itemObj, code);
           });
           const textToolsPanel = document.createElement("div");
           textToolsPanel.className = "xlc-menu-text-tools-panel";
@@ -34550,7 +34784,7 @@ ${progress.progressBar}`);
   init_capture();
 
   // src/ui/discovery-dialog.ts
-  var import_siyuan10 = __toESM(require_stub_dom());
+  var import_siyuan11 = __toESM(require_stub_dom());
   init_constants();
   init_dialog_dom();
   init_item();
@@ -34828,7 +35062,7 @@ ${progress.progressBar}`);
       var _a, _b, _c;
       if (this.dialog) return;
       this.closed = false;
-      const dialog = new import_siyuan10.Dialog({
+      const dialog = new import_siyuan11.Dialog({
         title: (_a = this.options.title) != null ? _a : this.tx(this.titleKey()),
         content: "",
         width: "min(1040px, 94vw)",
@@ -34916,7 +35150,7 @@ ${progress.progressBar}`);
     openCloseConfirmation(onClosed) {
       var _a;
       if (this.closeConfirmationDialog || this.closed) return;
-      const dialog = new import_siyuan10.Dialog({
+      const dialog = new import_siyuan11.Dialog({
         title: this.tx("discoveryCloseTitle"),
         content: "",
         width: "min(440px, 92vw)",
@@ -36091,7 +36325,7 @@ ${progress.progressBar}`);
         pathLabel: ((_f = this.options.sourcePath) != null ? _f : "").slice(0, LIMITS.savedViewPathChars),
         defaultCategory: ((_h = (_g = this.defaultCategoryInput) == null ? void 0 : _g.value) != null ? _h : "").trim().slice(0, LIMITS.category)
       };
-      const dialog = new import_siyuan10.Dialog({
+      const dialog = new import_siyuan11.Dialog({
         title: this.tx("discoverySaveView"),
         content: "",
         width: "min(440px, 92vw)",
@@ -36590,7 +36824,7 @@ ${details.join("\n")}` : ""}`;
 
   // src/service/commands.ts
   var siyuan = __toESM(require_stub_dom());
-  var import_siyuan11 = __toESM(require_stub_dom());
+  var import_siyuan12 = __toESM(require_stub_dom());
   init_constants();
   init_actions();
   init_placeholders();
@@ -38876,8 +39110,12 @@ ${details.join("\n")}` : ""}`;
     setPasteQueueSuccess: "\u5DF2\u8BBE\u7ACB\u8FDE\u7EED\u53D6\u7528\u961F\u5217\uFF08\u5171 %s \u9879\uFF09\uFF0C\u6309 \u2325\u21E7Q \u4F9D\u6B21\u51FA\u6808\u7C98\u8D34",
     jsonFormat: "{} \u683C\u5F0F\u5316 JSON \u5E76\u590D\u5236",
     jsonCompact: "{} \u538B\u7F29 JSON \u5E76\u590D\u5236",
-    copyCompactBundle: "\u590D\u5236\u5355\u6761\u5206\u4EAB\u7801 (Compact Bundle)",
+    copyCompactBundle: "\u751F\u6210\u5355\u6761\u4FBF\u643A\u5206\u4EAB\u7801\u5361\u7247",
     copyCompactBundleSuccess: "\u5DF2\u751F\u6210\u5E76\u590D\u5236\u5355\u6761\u5206\u4EAB\u7801\uFF0C\u53D1\u7ED9\u597D\u53CB\u5728\u641C\u7D22\u6846\u7C98\u8D34\u5373\u53EF\u76F4\u63A5\u5BFC\u5165",
+    shareCardTitle: "\u5E38\u7528\u6761\u76EE\u4FBF\u643A\u5206\u4EAB\u5361\u7247",
+    shareCardCopy: "\u29C9 \u590D\u5236\u5206\u4EAB\u7801",
+    shareCardCopied: "\u2713 \u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F",
+    shareCardTip: "\u{1F4A1} \u5BF9\u65B9\u65E0\u9700\u4EFB\u4F55\u914D\u7F6E\uFF0C\u76F4\u63A5\u5728\u5C0F\u9A74\u5E38\u7528\u4E3B\u641C\u7D22\u6846\u4E2D\u7C98\u8D34\u6B64\u5206\u4EAB\u7801\uFF08Ctrl+V\uFF09\uFF0C\u5373\u53EF\u79D2\u7EA7\u81EA\u52A8\u5BFC\u5165\uFF01",
     detectedCompactBundle: "\u{1F4E5} \u8BC6\u522B\u5230\u5E38\u7528\u8BED\u5206\u4EAB\u5305\uFF08\u5171 %s \u9879\uFF09\uFF0C\u70B9\u51FB\u4E00\u952E\u5BFC\u5165\u5165\u5E93",
     importCompactBundleDone: "\u5DF2\u6210\u529F\u5BFC\u5165\u5206\u4EAB\u5305\u4E2D\u7684\u5E38\u7528\u6761\u76EE",
     clearSearch: "\u6E05\u7A7A\u641C\u7D22",

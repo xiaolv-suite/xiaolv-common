@@ -116,3 +116,92 @@ export function calculateUsageInsights(
         topItems,
     };
 }
+
+export interface HeatmapDay {
+    /** 日期，格式 YYYY-MM-DD */
+    date: string;
+    /** 当日复用调用频次 */
+    count: number;
+    /** 活跃等级 0..4 (GitHub standard: 0=无, 1=1-2, 2=3-5, 3=6-9, 4=10+) */
+    level: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface HeatmapResult {
+    days: HeatmapDay[];
+    totalCalls30Days: number;
+    maxDayCount: number;
+    activeDays: number;
+}
+
+/**
+ * 纯函数：聚合侧车每日使用记录，并可由已有 usage.lastAt 进行合理数据回填
+ */
+export function buildDailyUsageMap(
+    dailyUsage: Readonly<Record<string, number>> | undefined,
+    usage: Readonly<Record<string, UsageEntry>> | undefined,
+): Record<string, number> {
+    const result: Record<string, number> = {...(dailyUsage ?? {})};
+    if (usage) {
+        for (const entry of Object.values(usage)) {
+            if (entry.lastAt && entry.lastAt > 0) {
+                const d = new Date(entry.lastAt);
+                const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                if (!result[dateKey]) {
+                    result[dateKey] = Math.min(entry.count, 5);
+                }
+            }
+        }
+    }
+    return result;
+}
+
+/**
+ * 纯函数：计算近 30 天每日资产复用活跃热力分布（GitHub-style 贡献格数据模型）
+ * @param dailyUsage 每日使用记录 YYYY-MM-DD -> count
+ * @param daysCount 默认 30 天
+ * @param now 基准时间戳（ms）
+ */
+export function calculateHeatmap(
+    dailyUsage: Readonly<Record<string, number>>,
+    daysCount = 30,
+    now: number = Date.now(),
+): HeatmapResult {
+    const days: HeatmapDay[] = [];
+    let totalCalls30Days = 0;
+    let maxDayCount = 0;
+    let activeDays = 0;
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    for (let i = daysCount - 1; i >= 0; i--) {
+        const d = new Date(now - i * msPerDay);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dayStr = String(d.getDate()).padStart(2, "0");
+        const dateKey = `${y}-${m}-${dayStr}`;
+        const count = Math.max(0, Number(dailyUsage[dateKey]) || 0);
+
+        if (count > 0) activeDays++;
+        if (count > maxDayCount) maxDayCount = count;
+        totalCalls30Days += count;
+
+        let level: 0 | 1 | 2 | 3 | 4 = 0;
+        if (count >= 10) level = 4;
+        else if (count >= 6) level = 3;
+        else if (count >= 3) level = 2;
+        else if (count >= 1) level = 1;
+
+        days.push({
+            date: dateKey,
+            count,
+            level,
+        });
+    }
+
+    return {
+        days,
+        totalCalls30Days,
+        maxDayCount,
+        activeDays,
+    };
+}
+

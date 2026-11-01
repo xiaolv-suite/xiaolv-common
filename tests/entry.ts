@@ -61,6 +61,7 @@ import * as dockView from "../src/ui/dock-view";
 import * as csvTsvWizard from "../src/ui/csv-tsv-wizard";
 import * as hotkeys from "../src/model/hotkeys";
 import * as performanceUtils from "../src/ui/performance-utils";
+import * as shareCard from "../src/ui/share-card";
 
 export {
     item,
@@ -122,4 +123,5 @@ export {
     csvTsvWizard,
     hotkeys,
     performanceUtils,
+    shareCard,
 };

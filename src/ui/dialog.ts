@@ -34,6 +34,7 @@ import {evaluateMathExpression} from "../model/calculator";
 
 import {AdjacentBlocksContext} from "../service/omni-search";
 import {openStepByStepGuideDialog} from "./guide-dialog";
+import {openShareCardDialog} from "./share-card";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -95,6 +96,7 @@ export interface DialogDeps {
     /** 最近搜索历史队列（ADR 0043 / T-0070） */
     getRecentQueries?: () => string[];
     addRecentQuery?: (q: string) => void;
+    removeRecentQuery?: (q: string) => void;
     clearRecentQueries?: () => void;
     getClipboardHistory?: () => Array<{text: string; copiedAt: number}>;
     clearClipboardHistory?: () => void;
@@ -493,13 +495,20 @@ export class CommonSearchDialog {
             historyBar.appendChild(lbl);
 
             for (const word of history) {
-                const pill = document.createElement("button");
-                pill.type = "button";
+                const pill = document.createElement("div");
                 pill.className = "xlc-history-pill";
-                pill.textContent = word;
-                pill.title = `点击检索「${word}」`;
+                pill.dataset.xlcControl = "search.history.pill";
+                pill.title = `历史词「${word}」`;
                 pill.setAttribute("aria-label", pill.title);
-                pill.addEventListener("click", () => {
+
+                const wordBtn = document.createElement("button");
+                wordBtn.type = "button";
+                wordBtn.className = "xlc-history-text-btn";
+                wordBtn.textContent = word;
+                wordBtn.title = `点击检索「${word}」`;
+                wordBtn.setAttribute("aria-label", wordBtn.title);
+                wordBtn.dataset.xlcControl = "search.history.item";
+                wordBtn.addEventListener("click", () => {
                     input.value = word;
                     input.dispatchEvent(new Event("input", {bubbles: true}));
                     input.focus();
@@ -509,6 +518,24 @@ export class CommonSearchDialog {
                     }
                     void this.refresh();
                 });
+                pill.appendChild(wordBtn);
+
+                if (this.deps.removeRecentQuery) {
+                    const delBtn = document.createElement("button");
+                    delBtn.type = "button";
+                    delBtn.className = "xlc-history-del-btn";
+                    delBtn.textContent = "×";
+                    delBtn.title = `删除历史「${word}」`;
+                    delBtn.setAttribute("aria-label", delBtn.title);
+                    delBtn.dataset.xlcControl = "search.history.delete-item";
+                    delBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        this.deps.removeRecentQuery?.(word);
+                        updateHistoryBar();
+                    });
+                    pill.appendChild(delBtn);
+                }
+
                 historyBar.appendChild(pill);
             }
 
@@ -4064,6 +4091,11 @@ export class CommonSearchDialog {
                     const code = serializeCompactBundle(bundle);
                     await this.deps.copyProviderPayload(code);
                     this.deps.notify?.("info", this.deps.t("copyCompactBundleSuccess"));
+                    openShareCardDialog({
+                        t: this.deps.t,
+                        copyText: (text) => this.deps.copyProviderPayload(text),
+                        notify: this.deps.notify,
+                    }, itemObj, code);
                 });
 
                 // 界面减法（T-0754）：~180 个文本清洗/转换动作收进一个可搜索的「文本工具…」入口，默认不撑长菜单。

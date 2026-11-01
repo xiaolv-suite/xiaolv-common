@@ -272,7 +272,7 @@
       border: 1px solid var(--b3-border-color);
       color: var(--b3-theme-on-surface);
       font-size: 11px;
-      padding: 1px 7px;
+      padding: 0 4px 0 7px;
       border-radius: var(--b3-border-radius);
       cursor: pointer;
       line-height: var(--xlc-line-control);
@@ -290,6 +290,53 @@
       &:focus-visible {
         outline: 2px solid var(--xlc-accent);
         outline-offset: 1px;
+      }
+
+      .xlc-history-text-btn {
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        min-height: 22px;
+
+        &:focus-visible {
+          outline: 1px dashed var(--xlc-accent);
+        }
+      }
+
+      .xlc-history-del-btn {
+        background: transparent;
+        border: none;
+        padding: 0 2px;
+        margin-left: 4px;
+        font: inherit;
+        font-size: 12px;
+        line-height: 1;
+        color: inherit;
+        opacity: 0.6;
+        cursor: pointer;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 16px;
+        min-height: 16px;
+        transition: opacity var(--xlc-dur-fast), color var(--xlc-dur-fast);
+
+        &:hover {
+          opacity: 1;
+          color: var(--b3-theme-error);
+        }
+
+        &:focus-visible {
+          opacity: 1;
+          outline: 1px solid var(--b3-theme-error);
+        }
       }
     }
 
@@ -2691,6 +2738,107 @@
       color: var(--xlc-dark-card-sub);
       margin-top: var(--xlc-space-1);
       letter-spacing: 0;
+    }
+  }
+
+  .xlc-heatmap-section {
+    margin-top: var(--xlc-space-3);
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    background-color: var(--xlc-dark-card);
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius);
+    box-shadow: var(--xlc-shadow-sm);
+
+    .xlc-heatmap-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--xlc-space-2);
+
+      .xlc-heatmap-title {
+        font-size: 12px;
+        font-weight: var(--xlc-weight-semibold);
+        color: var(--b3-theme-on-surface);
+      }
+    }
+
+    .xlc-heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(30, minmax(6px, 1fr));
+      gap: 3px;
+      align-items: center;
+      padding: 2px 0;
+      overflow-x: auto;
+    }
+
+    .xlc-heatmap-cell {
+      aspect-ratio: 1;
+      min-width: 6px;
+      min-height: 12px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: transform var(--xlc-dur-fast) var(--xlc-ease),
+                  outline var(--xlc-dur-fast) var(--xlc-ease);
+
+      &:hover {
+        transform: scale(1.25);
+        z-index: 2;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+
+      &--l0 {
+        background-color: var(--b3-theme-surface-lighter);
+        opacity: 0.5;
+      }
+
+      &--l1 {
+        background-color: color-mix(in srgb, var(--b3-theme-primary) 28%, var(--b3-theme-surface-lighter));
+      }
+
+      &--l2 {
+        background-color: color-mix(in srgb, var(--b3-theme-primary) 52%, var(--b3-theme-surface-lighter));
+      }
+
+      &--l3 {
+        background-color: color-mix(in srgb, var(--b3-theme-primary) 76%, var(--b3-theme-surface-lighter));
+      }
+
+      &--l4 {
+        background-color: var(--b3-theme-primary);
+      }
+    }
+
+    .xlc-heatmap-foot {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      margin-top: var(--xlc-space-2);
+      font-size: 11px;
+      color: var(--b3-theme-on-surface-light);
+
+      .xlc-heatmap-legend-label {
+        font-size: 10px;
+        opacity: 0.8;
+      }
+
+      .xlc-heatmap-legend-track {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+
+        .xlc-heatmap-cell {
+          width: 10px;
+          height: 10px;
+          min-height: 10px;
+          min-width: 10px;
+          cursor: default;
+        }
+      }
     }
   }
 }
@@ -5963,6 +6111,117 @@
     }
   }
 }
+
+// ---------- 单条常用条目便携分享卡片（TODO-FEAT-010 / CAND-011）----------
+.xlc-share-card-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xlc-space-3);
+  padding: var(--xlc-space-3);
+
+  .xlc-share-card-meta {
+    background-color: var(--xlc-dark-card);
+    border: 1px solid var(--xlc-line);
+    border-radius: var(--xlc-radius);
+    padding: var(--xlc-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xlc-space-2);
+  }
+
+  .xlc-share-card-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-2);
+
+    .xlc-share-card-title {
+      font-size: 14px;
+      color: var(--b3-theme-on-surface);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .xlc-share-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+
+    .xlc-share-chip {
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: var(--b3-border-radius);
+      background-color: var(--b3-theme-surface);
+      border: 1px solid var(--b3-border-color);
+      color: var(--b3-theme-on-surface-light);
+
+      &--category {
+        border-color: var(--b3-theme-primary);
+        color: var(--b3-theme-primary);
+      }
+
+      &--var {
+        border-color: var(--xlc-amber);
+        color: var(--xlc-amber);
+      }
+    }
+  }
+
+  .xlc-share-card-preview {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--b3-theme-on-surface-light);
+    max-height: 60px;
+    overflow-y: auto;
+    background: var(--b3-theme-surface);
+    padding: var(--xlc-space-2);
+    border-radius: var(--xlc-radius-sm);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .xlc-share-card-code-sec {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xlc-space-1);
+
+    .xlc-share-card-label {
+      font-size: 12px;
+      font-weight: var(--xlc-weight-semibold);
+      color: var(--b3-theme-on-surface);
+    }
+
+    .xlc-share-card-textarea {
+      font-family: var(--b3-font-family-code);
+      font-size: 11px;
+      line-height: 1.4;
+      resize: vertical;
+      word-break: break-all;
+      background-color: var(--b3-theme-surface);
+    }
+  }
+
+  .xlc-share-card-tip {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--b3-theme-primary);
+    background-color: color-mix(in srgb, var(--b3-theme-primary) 10%, var(--b3-theme-surface));
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    border-radius: var(--xlc-radius-sm);
+    border: 1px dashed color-mix(in srgb, var(--b3-theme-primary) 40%, transparent);
+  }
+
+  .xlc-share-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xlc-space-2);
+    margin-top: var(--xlc-space-2);
+  }
+}
+
 
 
 
