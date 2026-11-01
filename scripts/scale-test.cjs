@@ -86,7 +86,9 @@ function killTree(pid) {
     if (!token) { console.error("[scale] 令牌读取失败"); if (child?.pid) killTree(child.pid); process.exit(1); }
 
     const nb = await api(ORIGIN, token, "/api/notebook/createNotebook", {name: "XLC规模"});
-    const nbId = nb.data.notebook.id;
+    const nbId = nb.data?.notebook?.id || nb.data?.id || "";
+    await api(ORIGIN, token, "/api/notebook/openNotebook", {notebook: nbId});
+    await new Promise((r) => setTimeout(r, 600));
     const doc = await api(ORIGIN, token, "/api/filetree/createDocWithMd", {notebook: nbId, path: "/常用内容库", markdown: "欢迎页"});
     const docId = String(doc.data);
     const petalDir = path.join(WS, "data", "storage", "petal", "xiaolv-common");
@@ -100,7 +102,10 @@ function killTree(pid) {
     let exitCode = 1;
     await new Promise((resolve) => {
         const proc = spawn(process.execPath, [outfile], {stdio: "inherit", env: {...process.env, IT_ORIGIN: ORIGIN, IT_TOKEN: token, IT_DOC: docId, IT_N: N_ITEMS}});
-        proc.on("exit", (code) => resolve(code ?? 1));
+        proc.on("exit", (code) => {
+            exitCode = code ?? 0;
+            resolve(exitCode);
+        });
     });
 
     if (child?.pid) { console.log("[scale] 关闭隔离内核"); killTree(child.pid); }

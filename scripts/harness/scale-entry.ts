@@ -30,7 +30,11 @@ const check = (name: string, ok: boolean, detail = "") => {
     for (let i = 0; i < N; i++) {
         const kind = i % 3 === 0 ? "code" : i % 3 === 1 ? "url" : "text";
         const md = kind === "code" ? "```sql\nSELECT " + i + ";\n```" : kind === "url" ? "https://example.com/item" + i : "规模测试条目" + i + "：正文内容用于摘要与搜索验证。";
-        const r = await lib.createItem({itemType: kind, markdown: md, title: "规模条目" + i});
+        let r = await lib.createItem({itemType: kind, markdown: md, title: "规模条目" + i});
+        if (!r.ok && (r.message?.includes("Access is denied") || r.message?.includes("rename"))) {
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            r = await lib.createItem({itemType: kind, markdown: md, title: "规模条目" + i});
+        }
         if (r.ok) okCount++;
         else { console.log("  createItem 失败 @" + i + ": " + r.message); break; }
     }
