@@ -261,6 +261,8 @@ export interface PluginState {
     dailyUsage?: Record<string, number>;
     /** 条目自定义手动排序权重字典（CAND-014 / TODO-FEAT-013）：itemId -> 排序权重序号 */
     customItemOrder?: Record<string, number>;
+    /** 全局常用名片池 / 身份档案（CAND-016 / TODO-FEAT-015）：变量名匹配时自动预填 */
+    profilePresets?: Record<string, string>;
 }
 
 export function normalizeState(raw: unknown): PluginState {
@@ -373,6 +375,7 @@ export function normalizeState(raw: unknown): PluginState {
         variablePresets: normalizeVariablePresets(obj.variablePresets),
         dailyUsage: normalizeDailyUsage(obj.dailyUsage),
         customItemOrder: normalizeCustomItemOrder(obj.customItemOrder),
+        profilePresets: normalizeProfilePresets(obj.profilePresets),
     };
 }
 
@@ -569,4 +572,58 @@ export function getClipboardTimeGroup(
     }
     return "earlier";
 }
+
+export function normalizeProfilePresets(raw: unknown): Record<string, string> {
+    const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const result: Record<string, string> = {};
+    for (const [k, v] of Object.entries(obj)) {
+        if (typeof k === "string" && k.trim() && typeof v === "string" && v.trim()) {
+            result[k.trim().slice(0, 64)] = v.trim().slice(0, 500);
+        }
+    }
+    return result;
+}
+
+/** 常用名片字段别名族（CAND-016 / TODO-FEAT-015） */
+export const PROFILE_FIELD_ALIASES: Record<string, string[]> = {
+    "姓名": ["姓名", "名字", "联系人", "收件人", "name"],
+    "手机号": ["手机号", "手机", "电话", "联系电话", "联系方式", "phone", "mobile", "tel"],
+    "邮箱": ["邮箱", "电子邮箱", "企业邮箱", "email", "mail"],
+    "公司": ["公司", "公司名称", "企业", "企业名称", "单位", "company"],
+    "税号": ["税号", "统一社会信用代码", "纳税人识别号", "taxid", "tax_no"],
+    "地址": ["地址", "收件地址", "详细地址", "邮寄地址", "address"],
+    "职务": ["职务", "职位", "头衔", "title", "position"],
+};
+
+/**
+ * 纯函数：根据变量名在全局个人档案池中模糊匹配预填值（CAND-016 / TODO-FEAT-015）
+ */
+export function matchProfilePreset(fieldName: string, presets?: Readonly<Record<string, string>>): string | undefined {
+    if (!presets || Object.keys(presets).length === 0) return undefined;
+    const clean = fieldName.trim().toLowerCase();
+    if (!clean) return undefined;
+
+    // 1. 直接精确命中
+    for (const [k, v] of Object.entries(presets)) {
+        if (k.trim().toLowerCase() === clean && v) return v;
+    }
+
+    // 2. 别名族命中
+    for (const [standardKey, aliases] of Object.entries(PROFILE_FIELD_ALIASES)) {
+        const isMatched = clean === standardKey.toLowerCase() || aliases.some((a) => clean === a.toLowerCase() || clean.includes(a.toLowerCase()));
+        if (isMatched) {
+            // 在预设中寻找命中该族内任意别名的键
+            for (const alias of aliases) {
+                for (const [k, v] of Object.entries(presets)) {
+                    if (k.trim().toLowerCase() === alias.toLowerCase() && v) {
+                        return v;
+                    }
+                }
+            }
+        }
+    }
+
+    return undefined;
+}
+
 

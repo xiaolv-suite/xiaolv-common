@@ -1630,6 +1630,31 @@
       }
     }
 
+    .xlc-copy-btn-group {
+      display: inline-flex;
+      align-items: stretch;
+
+      .b3-button:first-child {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+        border-right: none;
+      }
+
+      .xlc-copy-format-toggle {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        padding: 0 6px;
+        min-width: 20px;
+        font-size: 10px;
+        line-height: 1;
+        opacity: 0.85;
+
+        &:hover {
+          opacity: 1;
+        }
+      }
+    }
+
     .xlc-foot-spacer { flex: 1; }
   }
 
@@ -1734,6 +1759,17 @@
     // 紧凑变体（排序直选等小菜单，R108）
     &--compact {
       width: min(220px, calc(100% - 32px));
+    }
+
+    &.xlc-copy-format-menu {
+      width: min(290px, calc(100% - 32px));
+
+      .xlc-menu-sub {
+        font-size: 11px;
+        color: var(--b3-theme-on-surface-light);
+        opacity: 0.8;
+        margin-top: 2px;
+      }
     }
 
     .xlc-menu-lbl {
@@ -3049,6 +3085,21 @@
         font-size: var(--xlc-font-2xs);
         color: var(--xlc-var);
         margin-left: var(--xlc-space-2);
+      }
+
+      .xlc-varform-profile-badge {
+        display: inline-flex;
+        align-items: center;
+        font-size: 10px;
+        line-height: 1.2;
+        padding: 1px 5px;
+        border-radius: var(--b3-border-radius);
+        background-color: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent);
+        color: var(--b3-theme-primary);
+        border: 1px solid color-mix(in srgb, var(--b3-theme-primary) 30%, transparent);
+        margin-left: 6px;
+        cursor: default;
+        user-select: none;
       }
 
       .xlc-varform-recent-chip {

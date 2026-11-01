@@ -10,6 +10,7 @@ import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normaliz
 import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 import {escapeHtml} from "../model/clipboard";
+import {matchProfilePreset} from "../model/storage";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
     text: "TXT", markdown: "MD", url: "URL", code: "CODE",
@@ -23,6 +24,8 @@ export interface VariableFillOptions {
     fields: AskField[];
     /** 字段初值预填表（字段名 -> 预填值，由记忆表提供，ADR 0074） */
     defaults?: Record<string, string>;
+    /** 全局常驻名片池 / 身份档案（CAND-016 / TODO-FEAT-015） */
+    profilePresets?: Record<string, string>;
     /** 模板原始内容（用于交互式实时展开预览，G24 / ADR 0076） */
     templateText?: string;
     itemId?: string;
@@ -170,12 +173,26 @@ export function openVariableFillCard(options: VariableFillOptions): void {
             wrap.appendChild(datalist);
         }
         input.dataset.xlcVarField = field.name;
-        // 初值预填逻辑（ADR 0074）：记忆值优先，无记忆值时回退至模板声明的 defaultValue
+        // 初值预填逻辑（ADR 0074）：记忆值优先，次之全局名片池档案（CAND-016 / TODO-FEAT-015），最后回退至模板声明的 defaultValue
         const memoryValue = options.defaults ? options.defaults[field.name] : undefined;
+        const profileValue = matchProfilePreset(field.name, options.profilePresets);
         if (memoryValue !== undefined && memoryValue.length > 0) {
             input.value = memoryValue;
+        } else if (profileValue !== undefined && profileValue.length > 0) {
+            input.value = profileValue;
         } else if (field.defaultValue) {
             input.value = field.defaultValue;
+        }
+
+        // 全局个人档案命中指示徽章（CAND-016 / TODO-FEAT-015）
+        if ((!memoryValue || !memoryValue.trim()) && profileValue && profileValue.trim() && field.kind !== "toggle" && field.kind !== "multi") {
+            const profileBadge = document.createElement("span");
+            profileBadge.className = "xlc-varform-profile-badge";
+            profileBadge.dataset.xlcControl = `varform.profile.${fieldIndex}`;
+            profileBadge.title = `已从全局常用档案预填「${profileValue}」`;
+            profileBadge.setAttribute("aria-label", `已从全局常用档案预填「${profileValue}」`);
+            profileBadge.innerHTML = `<span class="xlc-profile-prefix" aria-hidden="true">👤 档案</span>`;
+            label.appendChild(profileBadge);
         }
 
         // 变量最近输入值极速点填胶囊（CAND-002 / TODO-FEAT-002）

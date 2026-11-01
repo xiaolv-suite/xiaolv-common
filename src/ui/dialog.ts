@@ -13,7 +13,7 @@ import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
 import {calculateTextMetrics, formatReadingMetrics} from "../model/text-metrics";
 import {toErrorMessage} from "../model/errors";
-import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch, findExactShortcodeMatch} from "../model/search";
+import {SearchEntry, SearchQuery, splitSearchTokens, findExactAliasMatch, findExactShortcodeMatch, parseSearchPrefix} from "../model/search";
 import {BatchTagCategoryPatch, BatchOperationReceipt} from "../model/batch-ops";
 import {InsertMode, buildBlockRef, buildEmbedBlock} from "../model/actions";
 import {TransformKind} from "../service/ai";
@@ -28,7 +28,7 @@ import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
 import {formatPlatformShortcut, detectShortcutConflicts} from "../model/hotkeys";
 import {calculateVirtualScrollWindow} from "./performance-utils";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
-import {renderWechatArticleHtml, writeRichClipboard} from "../model/clipboard";
+import {renderWechatArticleHtml, writeRichClipboard, formatItemContent, ItemCopyFormat} from "../model/clipboard";
 import {transformCase} from "../model/placeholders";
 import {evaluateMathExpression} from "../model/calculator";
 
@@ -128,6 +128,8 @@ export interface DialogDeps {
     density?: "comfortable" | "compact";
     onDensityChange?: (density: "comfortable" | "compact") => void;
     openSetup: () => void;
+    /** 全局常驻名片池 / 身份档案（CAND-016 / TODO-FEAT-015） */
+    getProfilePresets?: () => Record<string, string>;
     /** 提供方候选（pv: 虚拟条目；绝不进入块执行器） */
     providerSearch: (query: string) => Promise<ProviderRow[]>;
     insertProviderPayload: (payload: string, target?: {docId: string; hPath: string}) => Promise<boolean>;
@@ -1275,6 +1277,31 @@ export class CommonSearchDialog {
                 if (!this.pinWindow) this.destroy();
             }
         });
+
+        copy.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            const entry = this.results[this.activeIndex];
+            if (entry) void this.showCopyFormatMenu(copy, entry);
+        });
+
+        const copyFormatBtn = document.createElement("button");
+        copyFormatBtn.type = "button";
+        copyFormatBtn.className = "b3-button xlc-copy-format-toggle";
+        copyFormatBtn.dataset.xlcControl = "preview.copy-format-toggle";
+        copyFormatBtn.textContent = "▾";
+        copyFormatBtn.title = "选择复制格式 (纯文本/富文本HTML/Markdown/块引用)";
+        copyFormatBtn.setAttribute("aria-label", "选择复制格式");
+        copyFormatBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const entry = this.results[this.activeIndex];
+            if (entry) void this.showCopyFormatMenu(copyFormatBtn, entry);
+        });
+
+        const copyWrap = document.createElement("div");
+        copyWrap.className = "xlc-copy-btn-group";
+        copyWrap.appendChild(copy);
+        copyWrap.appendChild(copyFormatBtn);
+
         // AI 变换：打开动作菜单（含 AI 变换分区；原型窗格底部第三按钮）
         const aiBtn = document.createElement("button");
         aiBtn.className = "b3-button xlc-btn-ai";
@@ -1399,7 +1426,7 @@ export class CommonSearchDialog {
             }
         });
         foot.appendChild(insert);
-        foot.appendChild(copy);
+        foot.appendChild(copyWrap);
         foot.appendChild(embedBtn);
         foot.appendChild(refBtn);
         foot.appendChild(aiBtn);
@@ -1650,11 +1677,25 @@ export class CommonSearchDialog {
 
     private buildQuery(): SearchQuery {
         const el = this.dialog?.element;
-        const text = el?.querySelector<HTMLInputElement>(".xlc-search-input")?.value ?? "";
+        const rawText = el?.querySelector<HTMLInputElement>(".xlc-search-input")?.value ?? "";
         const itemType = (el?.querySelector<HTMLSelectElement>(".xlc-type-select")?.value ?? "") as "" | ItemType;
         const tag = el?.querySelector<HTMLSelectElement>(".xlc-tag-select")?.value ?? "";
         const category = el?.querySelector<HTMLSelectElement>(".xlc-category-select")?.value ?? "";
-        return {text, itemType, tag, category, scope: this.currentScope};
+
+        // 解析符号快捷前缀（#标签 / @分类 / type:类型 / scope:范围 · CAND-015 / TODO-FEAT-014）
+        const parsed = parseSearchPrefix(rawText);
+        const effectiveType = parsed.typeFilter || itemType;
+        const effectiveTag = parsed.tagFilter || tag;
+        const effectiveCategory = parsed.categoryFilter || category;
+        const effectiveScope = parsed.scopeFilter || this.currentScope;
+
+        return {
+            text: parsed.cleanQuery,
+            itemType: effectiveType,
+            tag: effectiveTag,
+            category: effectiveCategory,
+            scope: effectiveScope,
+        };
     }
 
     private async refresh(): Promise<void> {
@@ -3786,6 +3827,7 @@ export class CommonSearchDialog {
             title: entry.title,
             fields,
             defaults,
+            profilePresets: this.deps.getProfilePresets?.(),
             templateText,
             itemId: entry.id,
             presets: this.deps.getVariablePresets?.(entry.id),
@@ -3863,6 +3905,103 @@ export class CommonSearchDialog {
         btn.appendChild(document.createTextNode(label));
         btn.addEventListener("click", () => void run());
         return btn;
+    }
+
+    /**
+     * 极速多格式复制直选菜单（CAND-017 / TODO-FEAT-016）
+     */
+    private async showCopyFormatMenu(anchor: HTMLElement, entry: SearchEntry): Promise<void> {
+        this.menuDismiss?.();
+        this.menuDismiss = null;
+
+        const menu = document.createElement("div");
+        menu.className = "xlc-menu xlc-copy-format-menu";
+        menu.setAttribute("role", "menu");
+        menu.setAttribute("aria-label", "多格式复制菜单");
+
+        const formats: Array<{kind: ItemCopyFormat; icon: string; title: string; desc: string}> = [
+            {kind: "text", icon: "📄", title: "纯净文本 (无格式)", desc: "剥离 Markdown 符号，适用于微信聊天/钉钉"},
+            {kind: "wechat-html", icon: "🌐", title: "微信富文本 HTML", desc: "带排版样式，复制后粘贴到微信公众号/邮件"},
+            {kind: "markdown", icon: "📝", title: "原始 Markdown", desc: "保留完整 Markdown 反引号与标记"},
+            {kind: "blockref", icon: "🔗", title: "思源块引用语法", desc: "生成 ((id '标题')) 原生块引用"},
+        ];
+
+        for (const fmt of formats) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "xlc-menu-item";
+            btn.setAttribute("role", "menuitem");
+            btn.dataset.xlcControl = `copy-format.${fmt.kind}`;
+            const ic = document.createElement("span");
+            ic.className = "xlc-menu-icon";
+            ic.setAttribute("aria-hidden", "true");
+            ic.textContent = fmt.icon;
+
+            const titleEl = document.createElement("strong");
+            titleEl.textContent = fmt.title;
+
+            const subEl = document.createElement("div");
+            subEl.className = "xlc-menu-sub";
+            subEl.textContent = fmt.desc;
+
+            btn.append(ic, titleEl, subEl);
+            btn.addEventListener("click", async () => {
+                this.menuDismiss?.();
+                let fullContent = entry.content || entry.summary || "";
+                if (typeof this.deps.preview === "function") {
+                    try {
+                        const kd = await this.deps.preview(entry.id);
+                        if (kd) fullContent = kd;
+                    } catch {}
+                }
+                const formatted = formatItemContent(fullContent, fmt.kind, {
+                    id: resolveEntryBlockId(entry) || entry.id,
+                    title: entry.title,
+                });
+                let success = false;
+                if (fmt.kind === "wechat-html" && formatted.html) {
+                    success = await writeRichClipboard(formatted.text, formatted.html);
+                } else {
+                    success = await this.deps.copyText(formatted.text);
+                }
+                if (success) {
+                    this.deps.notify?.("info", `已复制「${fmt.title}」到剪贴板`);
+                    if (!this.pinWindow) this.destroy();
+                } else {
+                    this.deps.notify?.("error", this.deps.t("copyFailed"));
+                }
+            });
+            menu.appendChild(btn);
+        }
+
+        const rect = anchor.getBoundingClientRect();
+        menu.style.position = "fixed";
+        menu.style.bottom = `${Math.max(10, window.innerHeight - rect.top + 6)}px`;
+        menu.style.left = `${Math.max(10, rect.left - 80)}px`;
+        menu.style.zIndex = "99999";
+        document.body.appendChild(menu);
+
+        const onDocClick = (ev: MouseEvent) => {
+            if (!menu.contains(ev.target as Node)) {
+                this.menuDismiss?.();
+            }
+        };
+        const onDocKey = (ev: KeyboardEvent) => {
+            if (ev.key === "Escape") {
+                this.menuDismiss?.();
+            }
+        };
+        setTimeout(() => {
+            document.addEventListener("click", onDocClick);
+            document.addEventListener("keydown", onDocKey);
+        }, 10);
+
+        this.menuDismiss = () => {
+            document.removeEventListener("click", onDocClick);
+            document.removeEventListener("keydown", onDocKey);
+            menu.remove();
+            this.menuDismiss = null;
+        };
     }
 
     private async showActionMenu(entry: SearchEntry): Promise<void> {

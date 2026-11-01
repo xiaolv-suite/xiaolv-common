@@ -2,6 +2,8 @@
 // 核心场景：客服/邮件模板复制到外部富文本应用（Outlook、网页邮箱、飞书、微信、钉钉等）
 // 关键红线：绝对杜绝 XSS 注入，所有非转义用户输入一律转义为安全 HTML 实体。
 
+import {stripMarkdownFormatting} from "./clipboard-cleaner";
+
 /** HTML 特殊字符安全转义 */
 export function escapeHtml(text: string): string {
     return text
@@ -288,3 +290,37 @@ export async function writeRichClipboard(
 
     return false;
 }
+
+export type ItemCopyFormat = "text" | "wechat-html" | "markdown" | "blockref";
+
+/**
+ * 纯函数：根据目标复制格式转换常用语正文载荷（CAND-017 / TODO-FEAT-016）
+ * - text: 剥除 Markdown 符号的纯净文本（适合微信/QQ聊天）
+ * - wechat-html: 微信公众号/富文本排版 HTML
+ * - markdown: 原始完整 Markdown
+ * - blockref: 思源块引用语法
+ */
+export function formatItemContent(
+    markdown: string,
+    format: ItemCopyFormat,
+    meta?: { id?: string; title?: string }
+): { text: string; html?: string } {
+    const raw = (markdown ?? "").trim();
+    if (format === "markdown") {
+        return { text: raw };
+    }
+    if (format === "blockref") {
+        const id = meta?.id ?? "";
+        const title = meta?.title ?? "ref";
+        return { text: id ? `((${id} '${title.replace(/'/g, "\\'")}'))` : raw };
+    }
+    if (format === "wechat-html") {
+        const html = renderWechatArticleHtml(raw);
+        const cleanText = stripMarkdownFormatting(raw);
+        return { text: cleanText || raw, html };
+    }
+    // 默认 "text": 纯净纯文本
+    const cleanText = stripMarkdownFormatting(raw);
+    return { text: cleanText || raw };
+}
+

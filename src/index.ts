@@ -2041,6 +2041,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.state.search.density = density;
                 this.persistSoon();
             },
+            getProfilePresets: () => this.state.profilePresets ?? {},
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {
                 const loading = !this.library.getIndex();

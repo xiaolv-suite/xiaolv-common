@@ -828,3 +828,67 @@ export function findExactShortcodeMatch(
     }
     return matched;
 }
+
+export interface ParsedSearchPrefix {
+    cleanQuery: string;
+    tagFilter?: string;
+    categoryFilter?: string;
+    typeFilter?: "" | ItemType;
+    scopeFilter?: "all" | "favorites" | "recent" | "clipboard" | "current-doc" | "all-notes";
+}
+
+/**
+ * 纯函数：解析搜索框中的快捷符号前缀（CAND-015 / TODO-FEAT-014）
+ * 支持：
+ * - #标签 或 #标签名（含后随空格与关键字）-> tagFilter
+ * - @分类 或 @分类名（含后随空格与关键字）-> categoryFilter
+ * - type:code / type:text / type:markdown / type:url / type:asset / type:blockref -> typeFilter
+ * - scope:clip / scope:fav / scope:recent -> scopeFilter
+ */
+export function parseSearchPrefix(raw: string): ParsedSearchPrefix {
+    let clean = (raw ?? "").trim();
+    let tagFilter: string | undefined;
+    let categoryFilter: string | undefined;
+    let typeFilter: "" | ItemType | undefined;
+    let scopeFilter: ParsedSearchPrefix["scopeFilter"] | undefined;
+
+    // 匹配 type:xxx
+    const typeMatch = clean.match(/(?:^|\s)type:(text|code|markdown|url|asset|blockref|structure)(?:\s|$)/i);
+    if (typeMatch && typeMatch[1]) {
+        typeFilter = typeMatch[1].toLowerCase() as ItemType;
+        clean = clean.replace(typeMatch[0], " ").trim();
+    }
+
+    // 匹配 scope:xxx
+    const scopeMatch = clean.match(/(?:^|\s)scope:(all|favorites|fav|recent|clipboard|clip|current-doc|all-notes)(?:\s|$)/i);
+    if (scopeMatch && scopeMatch[1]) {
+        const sc = scopeMatch[1].toLowerCase();
+        if (sc === "fav") scopeFilter = "favorites";
+        else if (sc === "clip") scopeFilter = "clipboard";
+        else scopeFilter = sc as any;
+        clean = clean.replace(scopeMatch[0], " ").trim();
+    }
+
+    // 匹配 #标签（支持 #标签名 或 #标签名#，避开单纯单个 #）
+    const tagMatch = clean.match(/(?:^|\s)#([\w\u4e00-\u9fa5\-_\/]+)#?(?:\s|$)/);
+    if (tagMatch && tagMatch[1]) {
+        tagFilter = tagMatch[1];
+        clean = clean.replace(tagMatch[0], " ").trim();
+    }
+
+    // 匹配 @分类（支持 @分类名 或 @分类/子分类）
+    const catMatch = clean.match(/(?:^|\s)@([\w\u4e00-\u9fa5\-_\/]+)(?:\s|$)/);
+    if (catMatch && catMatch[1]) {
+        categoryFilter = catMatch[1];
+        clean = clean.replace(catMatch[0], " ").trim();
+    }
+
+    return {
+        cleanQuery: clean.replace(/\s+/g, " ").trim(),
+        tagFilter,
+        categoryFilter,
+        typeFilter,
+        scopeFilter,
+    };
+}
+
