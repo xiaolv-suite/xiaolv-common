@@ -31606,7 +31606,7 @@ fi`;
       });
     }
     async runPrimary(entry) {
-      var _a, _b, _c, _d;
+      var _a, _b, _c, _d, _e, _f;
       const cleanQuery = this.lastQueryText.replace(/^\?+/, "").trim();
       if (cleanQuery) (_b = (_a = this.deps).addRecentQuery) == null ? void 0 : _b.call(_a, cleanQuery);
       if (this.primaryBusy || this.varFormOpen) return;
@@ -31616,8 +31616,13 @@ fi`;
           const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
           const plain = kramdownToPlainText(raw || entry.summary || "");
           await this.deps.copyProviderPayload(plain);
-          if (!this.pinWindow) this.destroy();
-          (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", "\u5DF2\u590D\u5236\u6761\u76EE\u5185\u5BB9\u5230\u526A\u8D34\u677F");
+          if (this.deps.autoMinimizeOnDone) {
+            this.destroy();
+            (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", this.deps.t("globalQuickMiniDone"));
+          } else {
+            if (!this.pinWindow) this.destroy();
+            (_f = (_e = this.deps).notify) == null ? void 0 : _f.call(_e, "info", "\u5DF2\u590D\u5236\u6761\u76EE\u5185\u5BB9\u5230\u526A\u8D34\u677F");
+          }
         } finally {
           this.primaryBusy = false;
         }
@@ -35319,7 +35324,7 @@ ${progress.progressBar}`);
       }
     }
     destroy() {
-      var _a, _b, _c, _d;
+      var _a, _b, _c, _d, _e, _f;
       if (this.isDestroying) return;
       this.isDestroying = true;
       if (this.inputDebounce) {
@@ -35344,8 +35349,11 @@ ${progress.progressBar}`);
       const dlg = this.dialog;
       this.dialog = null;
       dlg == null ? void 0 : dlg.destroy();
+      if (this.deps.autoMinimizeOnDone) {
+        (_e = (_d = this.deps).onReturnToBackground) == null ? void 0 : _e.call(_d);
+      }
       try {
-        (_d = this.prevActiveElement) == null ? void 0 : _d.focus();
+        (_f = this.prevActiveElement) == null ? void 0 : _f.focus();
       } catch {
       }
       this.prevActiveElement = null;
@@ -40141,7 +40149,9 @@ ${details.join("\n")}` : ""}`;
     openClipboardHistory: "\u6253\u5F00\u526A\u8D34\u677F\u5386\u53F2",
     promoteClipboardSuccess: "\u5DF2\u5C06\u300C%s\u300D\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED",
     promoteToCommon: "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED",
-    editAndPromote: "\u7F16\u8F91\u540E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED"
+    editAndPromote: "\u7F16\u8F91\u540E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED",
+    globalQuickMini: "\u5168\u5C40\u547C\u51FA\u5E38\u7528\u8BED\u8FF7\u4F60\u6761 (\u8DE8\u5E94\u7528/\u540E\u53F0\u53EF\u7528)",
+    globalQuickMiniDone: "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\u5E76\u91CD\u65B0\u9000\u56DE\u540E\u53F0\uFF0C\u53EF\u5728\u5916\u90E8\u8F6F\u4EF6\u4E2D\u76F4\u63A5 Ctrl+V \u7C98\u8D34"
   };
 
   // scripts/harness/entry.ts

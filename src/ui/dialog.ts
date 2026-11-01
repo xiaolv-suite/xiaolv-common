@@ -136,6 +136,11 @@ export interface DialogDeps {
     /** 迷你条折叠贴边微型胶囊状态（CAND-023 / TODO-FEAT-021） */
     miniCollapsed?: boolean;
     onMiniCollapsedChange?: (collapsed: boolean) => void;
+    /** 是否从外部软件全局热键呼出（CAND-027 / TODO-FEAT-022） */
+    isGlobalInvocation?: boolean;
+    /** 复制完成或关闭时是否自动退回后台归还焦点（CAND-029 / TODO-FEAT-024） */
+    autoMinimizeOnDone?: boolean;
+    onReturnToBackground?: () => void;
     openSetup: () => void;
     /** 全局常驻名片池 / 身份档案（CAND-016 / TODO-FEAT-015） */
     getProfilePresets?: () => Record<string, string>;
@@ -3864,8 +3869,13 @@ export class CommonSearchDialog {
                 const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
                 const plain = kramdownToPlainText(raw || entry.summary || "");
                 await this.deps.copyProviderPayload(plain);
-                if (!this.pinWindow) this.destroy();
-                this.deps.notify?.("info", "已复制条目内容到剪贴板");
+                if (this.deps.autoMinimizeOnDone) {
+                    this.destroy();
+                    this.deps.notify?.("info", this.deps.t("globalQuickMiniDone"));
+                } else {
+                    if (!this.pinWindow) this.destroy();
+                    this.deps.notify?.("info", "已复制条目内容到剪贴板");
+                }
             } finally {
                 this.primaryBusy = false;
             }
@@ -7570,6 +7580,9 @@ export class CommonSearchDialog {
         const dlg = this.dialog;
         this.dialog = null;
         dlg?.destroy();
+        if (this.deps.autoMinimizeOnDone) {
+            this.deps.onReturnToBackground?.();
+        }
         try {
             this.prevActiveElement?.focus();
         } catch {}

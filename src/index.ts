@@ -886,6 +886,13 @@ export default class XiaolvCommonPlugin extends Plugin {
             hotkey: "⌥⇧C",
             callback: () => this.openSearch(),
         });
+        // 系统全局热键呼出常用语迷你条（跨软件/思源后台最小化可用 · CAND-027 / TODO-FEAT-022）
+        this.addCommand({
+            langKey: "globalQuickMini",
+            hotkey: "⌥⇧M",
+            globalCallback: () => this.handleGlobalQuickMini(),
+            callback: () => this.handleGlobalQuickMini(),
+        });
         this.addCommand({
             langKey: "toggleDock",
             hotkey: "⌥⇧D",
@@ -1989,8 +1996,43 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.quickAccessPopoverDismiss = cleanup;
     }
 
+    public handleGlobalQuickMini(): void {
+        this.openSearch(undefined, undefined, undefined, "copy", undefined, {
+            miniMode: true,
+            isGlobalInvocation: true,
+            autoMinimizeOnDone: true,
+        });
+    }
+
+    public returnToBackground(): void {
+        try {
+            if (typeof window !== "undefined" && (window as any).require) {
+                const electron = (window as any).require("electron");
+                const win = electron?.remote?.getCurrentWindow?.();
+                if (win && typeof win.minimize === "function") {
+                    win.minimize();
+                    return;
+                }
+            }
+        } catch {}
+        if (typeof window !== "undefined") {
+            window.blur();
+        }
+    }
+
     /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式，defaultAction 预设主操作模式，initialScope 预设初始检索范围 */
-    openSearch(insertTarget?: {docId: string; hPath: string}, initialQuery?: string, surroundText?: string, defaultAction?: "insert" | "copy" | "openSource", initialScope?: SearchScope): void {
+    openSearch(
+        insertTarget?: {docId: string; hPath: string},
+        initialQuery?: string,
+        surroundText?: string,
+        defaultAction?: "insert" | "copy" | "openSource",
+        initialScope?: SearchScope,
+        options?: {
+            miniMode?: boolean;
+            isGlobalInvocation?: boolean;
+            autoMinimizeOnDone?: boolean;
+        }
+    ): void {
         if (!this.library || !this.capture || !this.service) {
             showMessage(this.i18nFn()("startupFailed", "services unavailable"), 7000, "error");
             return;
@@ -2041,11 +2083,14 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.state.search.density = density;
                 this.persistSoon();
             },
-            miniMode: this.state.search.miniMode ?? false,
+            miniMode: options?.miniMode !== undefined ? options.miniMode : (this.state.search.miniMode ?? false),
             onMiniModeChange: (mini) => {
                 this.state.search.miniMode = mini;
                 this.persistSoon();
             },
+            isGlobalInvocation: options?.isGlobalInvocation,
+            autoMinimizeOnDone: options?.autoMinimizeOnDone,
+            onReturnToBackground: () => this.returnToBackground(),
             miniPosition: this.state.search.miniPosition,
             onMiniPositionChange: (pos) => {
                 this.state.search.miniPosition = pos;
