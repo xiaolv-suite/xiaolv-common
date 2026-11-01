@@ -59,10 +59,15 @@ export interface CaptureDeps {
 /** 选区 → 条目类型推断 */
 export function inferTypeFromText(text: string): ItemType {
     const trimmed = text.trim();
+    if (/^!\[[^\]]*\]\((assets\/[^)\s]+)[^)]*\)$/.test(trimmed)
+        || /^!\[[^\]]*\]\([^)]+\)$/.test(trimmed)
+        || /^data:image\/\w+;base64,/i.test(trimmed)
+        || /^https?:\/\/\S+\.(?:png|jpe?g|gif|webp|svg)(?:\?\S*)?$/i.test(trimmed)) {
+        return "image";
+    }
+    if (/\]\((assets\/[^)\s]+)[^)]*\)/.test(trimmed)) return "asset";
     if (/^https?:\/\/\S+$/i.test(trimmed)) return "url";
     if (/^```[\w+#.-]*\s*\n[\s\S]*\n```\s*$/.test(trimmed)) return "code";
-    if (/^!\[[^\]]*\]\((assets\/[^)\s]+)[^)]*\)$/.test(trimmed)) return "image";
-    if (/\]\((assets\/[^)\s]+)[^)]*\)/.test(trimmed)) return "asset";
     if (/^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|\*\*/.test(trimmed) || trimmed.includes("\n")) return "markdown";
     return "text";
 }

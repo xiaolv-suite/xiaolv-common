@@ -202,6 +202,8 @@ export class CommonSearchDialog {
     private updateHistoryBarRef: (() => void) | null = null;
     private syncQueueChipRef: (() => void) | null = null;
     private compactBundleCandidate: ExportBundle | null = null;
+    /** 剪贴板搜索流格式过滤（全部/纯文本/图片素材/代码片段 · CAND-001 / TODO-FEAT-001） */
+    private clipboardFormatFilter: "all" | "text" | "image" | "code" = "all";
     /** 宿主拒绝请求时覆盖旧列表，避免用户继续对过期结果执行写操作。 */
     private accessIssueMessage: string | null = null;
     // 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。
@@ -219,6 +221,7 @@ export class CommonSearchDialog {
         if (this.deps.initialScope) {
             this.currentScope = this.deps.initialScope;
         }
+        this.clipboardFormatFilter = "all";
         this.prevActiveElement = (document.activeElement as HTMLElement | null);
         const dialog = new Dialog({
             title: this.deps.t("pluginName"),
@@ -667,6 +670,41 @@ export class CommonSearchDialog {
             track.appendChild(chip);
         }
         filters.appendChild(track);
+
+        // 剪贴板流多格式切换胶囊（全部/纯文本/图片素材/代码片段 · CAND-001 / TODO-FEAT-001）
+        const clipFormatTrack = document.createElement("div");
+        clipFormatTrack.className = "xlc-clip-format-pills";
+        clipFormatTrack.dataset.xlcControl = "filter.clipboard-formats";
+        if (typeof clipFormatTrack.setAttribute === "function") {
+            clipFormatTrack.setAttribute("role", "radiogroup");
+            clipFormatTrack.setAttribute("aria-label", "剪贴板格式过滤");
+        }
+        clipFormatTrack.style.display = this.currentScope === "clipboard" ? "inline-flex" : "none";
+
+        const clipFormats: Array<{id: "all" | "text" | "image" | "code"; label: string}> = [
+            {id: "all", label: "全部"},
+            {id: "text", label: "纯文本"},
+            {id: "image", label: "图片素材"},
+            {id: "code", label: "代码片段"},
+        ];
+
+        for (const fmt of clipFormats) {
+            const pill = document.createElement("button");
+            pill.type = "button";
+            pill.className = "xlc-chip xlc-clip-format-chip" + (this.clipboardFormatFilter === fmt.id ? " xlc-chip--on" : "");
+            pill.dataset.format = fmt.id;
+            pill.dataset.xlcControl = `filter.clip.${fmt.id}`;
+            pill.textContent = fmt.label;
+            pill.addEventListener("click", () => {
+                this.clipboardFormatFilter = fmt.id;
+                for (const p of clipFormatTrack.querySelectorAll<HTMLButtonElement>(".xlc-clip-format-chip")) {
+                    p.classList.toggle("xlc-chip--on", p.dataset.format === fmt.id);
+                }
+                void this.refresh();
+            });
+            clipFormatTrack.appendChild(pill);
+        }
+        filters.appendChild(clipFormatTrack);
 
         const queueChip = document.createElement("button");
         queueChip.type = "button";
@@ -1526,6 +1564,10 @@ export class CommonSearchDialog {
             chip.classList.toggle("xlc-chip--on", on);
             chip.classList.toggle("xlc-scope-chip--on", on);
         });
+        const clipFormatTrack = this.dialog?.element.querySelector<HTMLElement>(".xlc-clip-format-pills");
+        if (clipFormatTrack) {
+            clipFormatTrack.style.display = this.currentScope === "clipboard" ? "inline-flex" : "none";
+        }
         const searchBox = this.dialog?.element.querySelector<HTMLElement>(".xlc-search");
         if (searchBox) {
             searchBox.classList.toggle("xlc-search--omni-mode", this.currentScope === "all-notes");
@@ -1651,6 +1693,24 @@ export class CommonSearchDialog {
                             } catch {}
                         }
                         return false;
+                    });
+                }
+                // 剪贴板格式过滤器（CAND-001 / TODO-FEAT-001）
+                if (this.clipboardFormatFilter !== "all") {
+                    filtered = filtered.filter((h) => {
+                        const parsed = parseSnippetAnnotations(h.text);
+                        const cleanText = parsed.cleanText || h.text;
+                        const inferred = inferTypeFromText(cleanText);
+                        if (this.clipboardFormatFilter === "image") {
+                            return inferred === "image";
+                        }
+                        if (this.clipboardFormatFilter === "code") {
+                            return inferred === "code";
+                        }
+                        if (this.clipboardFormatFilter === "text") {
+                            return inferred === "text" || inferred === "markdown";
+                        }
+                        return true;
                     });
                 }
                 const adapter = getPinyinAdapter();
@@ -2635,7 +2695,23 @@ export class CommonSearchDialog {
                     if (entry) list.appendChild(this.createEntryRow(entry, i));
                 }
                 list.appendChild(bottomSpacer);
+                // 虚拟列表触底分割线（CAND-003 / TODO-FEAT-003）
+                if (this.results.length >= 50 && end >= this.results.length) {
+                    const bottomDivider = document.createElement("div");
+                    bottomDivider.className = "xlc-list-end-divider";
+                    bottomDivider.dataset.xlcControl = "search.list-end";
+                    bottomDivider.innerHTML = `<span class="xlc-end-mark" aria-hidden="true">✓</span> <span>已加载全部 ${this.results.length} 项常用语</span>`;
+                    list.appendChild(bottomDivider);
+                }
                 this.paintActive();
+                // 实时更新底栏可视区间（如 [1-12 / 86]）
+                const countEl = this.dialog?.element.querySelector<HTMLElement>(".xlc-footer-count");
+                if (countEl && !this.deps.isMobile() && this.results.length >= 50) {
+                    const base = countEl.dataset.baseText || countEl.textContent || "";
+                    if (!countEl.dataset.baseText) countEl.dataset.baseText = base;
+                    const cleanBase = countEl.dataset.baseText.replace(/\s*·\s*\[\d+-\d+\s*\/\s*\d+\]/, "");
+                    countEl.textContent = `${cleanBase} · [${start + 1}-${end} / ${this.results.length}]`;
+                }
             };
             let rafId: number | null = null;
             const scheduleRender = (): void => {

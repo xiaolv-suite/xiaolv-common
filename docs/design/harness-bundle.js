@@ -9843,6 +9843,229 @@ ${codeText}`;
     }
   });
 
+  // src/model/clipboard.ts
+  function escapeHtml(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function isMarkdownFormattingPresent(text) {
+    if (!text || !text.trim()) return false;
+    return /(\*\*|__)[^\s].*?(\*\*|__)/.test(text) || // 粗体
+    /~~[^\s].*?~~/.test(text) || // 删除线
+    /`[^`\n]+`/.test(text) || // 行内代码
+    /```[\s\S]*?```/.test(text) || // 代码块
+    /^#{1,6}\s+/m.test(text) || // 标题
+    /^>\s+/m.test(text) || // 引用
+    /^[-*+]\s+/m.test(text) || // 无序列表
+    /^\d+\.\s+/m.test(text) || // 有序列表
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/.test(text);
+  }
+  function renderSafeHtmlFromMarkdown(markdown) {
+    var _a;
+    if (!markdown || !markdown.trim()) return "";
+    const codeBlocks = [];
+    const inlineCodes = [];
+    let raw = markdown.replace(/\r\n/g, "\n").replace(/\{:[^}]*\}/g, "");
+    raw = raw.replace(/(?:^|\n)```([a-zA-Z0-9_-]*)\n([\s\S]*?)\n```(?:\n|$)/g, (_match, lang, code) => {
+      const escapedCode = escapeHtml(code);
+      const langAttr = lang ? ` data-language="${escapeHtml(lang)}"` : "";
+      const html = `<pre${langAttr} style="background-color: #f6f8fa; padding: 12px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.5; overflow-x: auto; margin: 0.8em 0;"><code>${escapedCode}</code></pre>`;
+      const placeholder = `XLCCODEBLOCK${codeBlocks.length}XLC`;
+      codeBlocks.push(html);
+      return `
+
+${placeholder}
+
+`;
+    });
+    let safe = escapeHtml(raw);
+    safe = safe.replace(/`([^`\n]+)`/g, (_match, code) => {
+      const html = `<code style="background-color: rgba(175, 184, 193, 0.2); padding: 0.2em 0.4em; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 85%;">${code}</code>`;
+      const placeholder = `XLCINLINECODE${inlineCodes.length}XLC`;
+      inlineCodes.push(html);
+      return placeholder;
+    });
+    safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, (_match, text, href) => {
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: #0969da; text-decoration: underline;">${text}</a>`;
+    });
+    safe = safe.replace(/(\*\*|__)(.*?)\1/g, "<strong>$2</strong>");
+    safe = safe.replace(/~~(.*?)~~/g, "<del>$1</del>");
+    safe = safe.replace(/(?<![*_])(\*|_)(?![*_])(.*?)\1(?![*_])/g, "<em>$2</em>");
+    const rawParagraphs = safe.split(/\n{2,}/);
+    const htmlParagraphs = [];
+    for (const para of rawParagraphs) {
+      const trimmed = para.trim();
+      if (!trimmed) continue;
+      if (/^XLCCODEBLOCK\d+XLC$/.test(trimmed)) {
+        htmlParagraphs.push(trimmed);
+        continue;
+      }
+      const hMatch = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+      if (hMatch && !trimmed.includes("\n")) {
+        const level = hMatch[1].length;
+        const content = hMatch[2];
+        const sizeMap = { 1: "1.6em", 2: "1.4em", 3: "1.2em", 4: "1.1em", 5: "1em", 6: "0.9em" };
+        htmlParagraphs.push(`<h${level} style="font-size: ${(_a = sizeMap[level]) != null ? _a : "1.1em"}; font-weight: 600; margin: 0.8em 0 0.4em 0;">${content}</h${level}>`);
+        continue;
+      }
+      const lines = trimmed.split("\n");
+      if (lines.every((line) => line.startsWith("&gt;") || line.trim() === "")) {
+        const quoteContent = lines.map((line) => line.replace(/^&gt;\s?/, "")).join("<br>");
+        htmlParagraphs.push(`<blockquote style="margin: 0.8em 0; padding: 0.4em 0.8em; border-left: 3px solid #d0d7de; color: #57606a; background-color: #f6f8fa;">${quoteContent}</blockquote>`);
+        continue;
+      }
+      let currentListType = null;
+      let currentListItems = [];
+      const flushList = () => {
+        if (currentListType && currentListItems.length > 0) {
+          const tag = currentListType;
+          const itemsHtml = currentListItems.map((li) => li.startsWith("<li") ? `  ${li}` : `  <li style="margin: 0.2em 0;">${li}</li>`).join("\n");
+          htmlParagraphs.push(`<${tag} style="margin: 0.6em 0; padding-left: 1.5em;">
+${itemsHtml}
+</${tag}>`);
+          currentListType = null;
+          currentListItems = [];
+        }
+      };
+      const currentParaLines = [];
+      const flushPara = () => {
+        if (currentParaLines.length > 0) {
+          htmlParagraphs.push(`<p style="margin: 0.6em 0; line-height: 1.6;">${currentParaLines.join("<br>")}</p>`);
+          currentParaLines.length = 0;
+        }
+      };
+      for (const line of lines) {
+        const taskMatch = /^[-*]\s+\[([ xX])\]\s+(.*)$/.exec(line);
+        const ulMatch = /^[-*]\s+(.*)$/.exec(line);
+        const olMatch = /^\d+\.\s+(.*)$/.exec(line);
+        if (taskMatch) {
+          flushPara();
+          if (currentListType !== "ul") flushList();
+          currentListType = "ul";
+          const isDone = taskMatch[1].toLowerCase() === "x";
+          const itemBody = taskMatch[2];
+          const rendered = isDone ? `<del>${itemBody}</del>` : itemBody;
+          currentListItems.push(`<li style="list-style-type: none; margin: 0.25em 0;"><input type="checkbox" ${isDone ? "checked" : ""} disabled style="margin-right: 6px; vertical-align: -1px;">${rendered}</li>`);
+        } else if (ulMatch) {
+          flushPara();
+          if (currentListType !== "ul") flushList();
+          currentListType = "ul";
+          currentListItems.push(`<li style="margin: 0.2em 0;">${ulMatch[1]}</li>`);
+        } else if (olMatch) {
+          flushPara();
+          if (currentListType !== "ol") flushList();
+          currentListType = "ol";
+          currentListItems.push(`<li style="margin: 0.2em 0;">${olMatch[1]}</li>`);
+        } else {
+          flushList();
+          currentParaLines.push(line);
+        }
+      }
+      flushList();
+      flushPara();
+    }
+    let finalHtml = htmlParagraphs.join("\n");
+    finalHtml = finalHtml.replace(/XLCINLINECODE(\d+)XLC/g, (_m, idxStr) => {
+      var _a2;
+      return (_a2 = inlineCodes[Number(idxStr)]) != null ? _a2 : "";
+    });
+    finalHtml = finalHtml.replace(/XLCCODEBLOCK(\d+)XLC/g, (_m, idxStr) => {
+      var _a2;
+      return (_a2 = codeBlocks[Number(idxStr)]) != null ? _a2 : "";
+    });
+    return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #24292f;">
+${finalHtml}
+</div>`;
+  }
+  function renderWechatArticleHtml(markdown) {
+    const rawHtml = renderSafeHtmlFromMarkdown(markdown);
+    if (!rawHtml) return "";
+    return `
+<section style="font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; font-size: 15px; line-height: 1.8; letter-spacing: 0.5px; color: #353535; text-align: justify; word-break: break-word; padding: 10px 0;">
+  ${rawHtml}
+</section>`.trim();
+  }
+  async function writeRichClipboard(text, html, options) {
+    var _a, _b;
+    const navClipboard = (_a = options == null ? void 0 : options.clipboard) != null ? _a : typeof navigator !== "undefined" ? navigator.clipboard : void 0;
+    const isSecure = (_b = options == null ? void 0 : options.isSecure) != null ? _b : typeof window !== "undefined" ? window.isSecureContext : true;
+    if (navClipboard && isSecure) {
+      if (html && typeof ClipboardItem !== "undefined" && typeof navClipboard.write === "function") {
+        try {
+          const textBlob = new Blob([text], { type: "text/plain" });
+          const htmlBlob = new Blob([html], { type: "text/html" });
+          const item = new ClipboardItem({
+            "text/plain": textBlob,
+            "text/html": htmlBlob
+          });
+          await navClipboard.write([item]);
+          return true;
+        } catch {
+        }
+      }
+      if (typeof navClipboard.writeText === "function") {
+        try {
+          await navClipboard.writeText(text);
+          return true;
+        } catch {
+        }
+      }
+    }
+    if (typeof document !== "undefined") {
+      if (html && typeof document.createRange === "function" && typeof window !== "undefined") {
+        try {
+          const div = document.createElement("div");
+          div.innerHTML = html;
+          div.style.position = "fixed";
+          div.style.left = "-9999px";
+          div.style.top = "-9999px";
+          document.body.appendChild(div);
+          const range = document.createRange();
+          range.selectNodeContents(div);
+          const selection = window.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+            const ok2 = document.execCommand("copy");
+            selection.removeAllRanges();
+            div.remove();
+            if (ok2) return true;
+          }
+          div.remove();
+        } catch {
+        }
+      }
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.top = "0";
+        ta.style.left = "0";
+        ta.style.width = "2em";
+        ta.style.height = "2em";
+        ta.style.padding = "0";
+        ta.style.border = "none";
+        ta.style.outline = "none";
+        ta.style.boxShadow = "none";
+        ta.style.background = "transparent";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        const okFlag = document.execCommand("copy");
+        ta.remove();
+        return okFlag;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+  var init_clipboard = __esm({
+    "src/model/clipboard.ts"() {
+      "use strict";
+    }
+  });
+
   // src/ui/variable-form.ts
   function renderLivePreviewText(templateText, fills, maxChars = 1e3) {
     if (!templateText) return "";
@@ -9961,6 +10184,28 @@ ${codeText}`;
         input.value = memoryValue;
       } else if (field.defaultValue) {
         input.value = field.defaultValue;
+      }
+      if (memoryValue && memoryValue.trim() && field.kind !== "toggle" && field.kind !== "multi") {
+        const recentChip = document.createElement("button");
+        recentChip.type = "button";
+        recentChip.className = "xlc-varform-recent-chip";
+        recentChip.dataset.xlcControl = `varform.recent.${fieldIndex}`;
+        recentChip.title = `\u70B9\u51FB\u586B\u5165\u4E0A\u6B21\u4F7F\u7528\u503C: ${memoryValue}`;
+        if (typeof recentChip.setAttribute === "function") {
+          recentChip.setAttribute("aria-label", `\u4E0A\u6B21\u4F7F\u7528\u503C: ${memoryValue}`);
+        }
+        const displayVal = memoryValue.length > 12 ? `${memoryValue.slice(0, 12)}\u2026` : memoryValue;
+        const safeRecentVal = escapeHtml(displayVal);
+        recentChip.innerHTML = `<span class="xlc-recent-prefix" aria-hidden="true">\u23F1 \u4E0A\u6B21:</span> <span class="xlc-recent-val">${safeRecentVal}</span>`;
+        recentChip.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          input.value = memoryValue;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          input.focus();
+        });
+        label.appendChild(recentChip);
       }
       wrap.appendChild(input);
       if (field.kind === "toggle") {
@@ -14486,6 +14731,7 @@ ${res.progressBar}`;
       init_clipboard_cleaner();
       init_template_wizard();
       init_placeholders();
+      init_clipboard();
       TYPE_BADGES = {
         text: "TXT",
         markdown: "MD",
@@ -15056,10 +15302,12 @@ ${res.progressBar}`;
   }
   function inferTypeFromText(text) {
     const trimmed = text.trim();
+    if (/^!\[[^\]]*\]\((assets\/[^)\s]+)[^)]*\)$/.test(trimmed) || /^!\[[^\]]*\]\([^)]+\)$/.test(trimmed) || /^data:image\/\w+;base64,/i.test(trimmed) || /^https?:\/\/\S+\.(?:png|jpe?g|gif|webp|svg)(?:\?\S*)?$/i.test(trimmed)) {
+      return "image";
+    }
+    if (/\]\((assets\/[^)\s]+)[^)]*\)/.test(trimmed)) return "asset";
     if (/^https?:\/\/\S+$/i.test(trimmed)) return "url";
     if (/^```[\w+#.-]*\s*\n[\s\S]*\n```\s*$/.test(trimmed)) return "code";
-    if (/^!\[[^\]]*\]\((assets\/[^)\s]+)[^)]*\)$/.test(trimmed)) return "image";
-    if (/\]\((assets\/[^)\s]+)[^)]*\)/.test(trimmed)) return "asset";
     if (/^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|\*\*/.test(trimmed) || trimmed.includes("\n")) return "markdown";
     return "text";
   }
@@ -16712,229 +16960,6 @@ ${res.progressBar}`;
       init_export_sanitizer();
       init_clipboard_cleaner();
       COMPACT_BUNDLE_PREFIX = "xlc-bundle:";
-    }
-  });
-
-  // src/model/clipboard.ts
-  function escapeHtml(text) {
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  }
-  function isMarkdownFormattingPresent(text) {
-    if (!text || !text.trim()) return false;
-    return /(\*\*|__)[^\s].*?(\*\*|__)/.test(text) || // 粗体
-    /~~[^\s].*?~~/.test(text) || // 删除线
-    /`[^`\n]+`/.test(text) || // 行内代码
-    /```[\s\S]*?```/.test(text) || // 代码块
-    /^#{1,6}\s+/m.test(text) || // 标题
-    /^>\s+/m.test(text) || // 引用
-    /^[-*+]\s+/m.test(text) || // 无序列表
-    /^\d+\.\s+/m.test(text) || // 有序列表
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/.test(text);
-  }
-  function renderSafeHtmlFromMarkdown(markdown) {
-    var _a;
-    if (!markdown || !markdown.trim()) return "";
-    const codeBlocks = [];
-    const inlineCodes = [];
-    let raw = markdown.replace(/\r\n/g, "\n").replace(/\{:[^}]*\}/g, "");
-    raw = raw.replace(/(?:^|\n)```([a-zA-Z0-9_-]*)\n([\s\S]*?)\n```(?:\n|$)/g, (_match, lang, code) => {
-      const escapedCode = escapeHtml(code);
-      const langAttr = lang ? ` data-language="${escapeHtml(lang)}"` : "";
-      const html = `<pre${langAttr} style="background-color: #f6f8fa; padding: 12px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.5; overflow-x: auto; margin: 0.8em 0;"><code>${escapedCode}</code></pre>`;
-      const placeholder = `XLCCODEBLOCK${codeBlocks.length}XLC`;
-      codeBlocks.push(html);
-      return `
-
-${placeholder}
-
-`;
-    });
-    let safe = escapeHtml(raw);
-    safe = safe.replace(/`([^`\n]+)`/g, (_match, code) => {
-      const html = `<code style="background-color: rgba(175, 184, 193, 0.2); padding: 0.2em 0.4em; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 85%;">${code}</code>`;
-      const placeholder = `XLCINLINECODE${inlineCodes.length}XLC`;
-      inlineCodes.push(html);
-      return placeholder;
-    });
-    safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, (_match, text, href) => {
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: #0969da; text-decoration: underline;">${text}</a>`;
-    });
-    safe = safe.replace(/(\*\*|__)(.*?)\1/g, "<strong>$2</strong>");
-    safe = safe.replace(/~~(.*?)~~/g, "<del>$1</del>");
-    safe = safe.replace(/(?<![*_])(\*|_)(?![*_])(.*?)\1(?![*_])/g, "<em>$2</em>");
-    const rawParagraphs = safe.split(/\n{2,}/);
-    const htmlParagraphs = [];
-    for (const para of rawParagraphs) {
-      const trimmed = para.trim();
-      if (!trimmed) continue;
-      if (/^XLCCODEBLOCK\d+XLC$/.test(trimmed)) {
-        htmlParagraphs.push(trimmed);
-        continue;
-      }
-      const hMatch = /^(#{1,6})\s+(.*)$/.exec(trimmed);
-      if (hMatch && !trimmed.includes("\n")) {
-        const level = hMatch[1].length;
-        const content = hMatch[2];
-        const sizeMap = { 1: "1.6em", 2: "1.4em", 3: "1.2em", 4: "1.1em", 5: "1em", 6: "0.9em" };
-        htmlParagraphs.push(`<h${level} style="font-size: ${(_a = sizeMap[level]) != null ? _a : "1.1em"}; font-weight: 600; margin: 0.8em 0 0.4em 0;">${content}</h${level}>`);
-        continue;
-      }
-      const lines = trimmed.split("\n");
-      if (lines.every((line) => line.startsWith("&gt;") || line.trim() === "")) {
-        const quoteContent = lines.map((line) => line.replace(/^&gt;\s?/, "")).join("<br>");
-        htmlParagraphs.push(`<blockquote style="margin: 0.8em 0; padding: 0.4em 0.8em; border-left: 3px solid #d0d7de; color: #57606a; background-color: #f6f8fa;">${quoteContent}</blockquote>`);
-        continue;
-      }
-      let currentListType = null;
-      let currentListItems = [];
-      const flushList = () => {
-        if (currentListType && currentListItems.length > 0) {
-          const tag = currentListType;
-          const itemsHtml = currentListItems.map((li) => li.startsWith("<li") ? `  ${li}` : `  <li style="margin: 0.2em 0;">${li}</li>`).join("\n");
-          htmlParagraphs.push(`<${tag} style="margin: 0.6em 0; padding-left: 1.5em;">
-${itemsHtml}
-</${tag}>`);
-          currentListType = null;
-          currentListItems = [];
-        }
-      };
-      const currentParaLines = [];
-      const flushPara = () => {
-        if (currentParaLines.length > 0) {
-          htmlParagraphs.push(`<p style="margin: 0.6em 0; line-height: 1.6;">${currentParaLines.join("<br>")}</p>`);
-          currentParaLines.length = 0;
-        }
-      };
-      for (const line of lines) {
-        const taskMatch = /^[-*]\s+\[([ xX])\]\s+(.*)$/.exec(line);
-        const ulMatch = /^[-*]\s+(.*)$/.exec(line);
-        const olMatch = /^\d+\.\s+(.*)$/.exec(line);
-        if (taskMatch) {
-          flushPara();
-          if (currentListType !== "ul") flushList();
-          currentListType = "ul";
-          const isDone = taskMatch[1].toLowerCase() === "x";
-          const itemBody = taskMatch[2];
-          const rendered = isDone ? `<del>${itemBody}</del>` : itemBody;
-          currentListItems.push(`<li style="list-style-type: none; margin: 0.25em 0;"><input type="checkbox" ${isDone ? "checked" : ""} disabled style="margin-right: 6px; vertical-align: -1px;">${rendered}</li>`);
-        } else if (ulMatch) {
-          flushPara();
-          if (currentListType !== "ul") flushList();
-          currentListType = "ul";
-          currentListItems.push(`<li style="margin: 0.2em 0;">${ulMatch[1]}</li>`);
-        } else if (olMatch) {
-          flushPara();
-          if (currentListType !== "ol") flushList();
-          currentListType = "ol";
-          currentListItems.push(`<li style="margin: 0.2em 0;">${olMatch[1]}</li>`);
-        } else {
-          flushList();
-          currentParaLines.push(line);
-        }
-      }
-      flushList();
-      flushPara();
-    }
-    let finalHtml = htmlParagraphs.join("\n");
-    finalHtml = finalHtml.replace(/XLCINLINECODE(\d+)XLC/g, (_m, idxStr) => {
-      var _a2;
-      return (_a2 = inlineCodes[Number(idxStr)]) != null ? _a2 : "";
-    });
-    finalHtml = finalHtml.replace(/XLCCODEBLOCK(\d+)XLC/g, (_m, idxStr) => {
-      var _a2;
-      return (_a2 = codeBlocks[Number(idxStr)]) != null ? _a2 : "";
-    });
-    return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #24292f;">
-${finalHtml}
-</div>`;
-  }
-  function renderWechatArticleHtml(markdown) {
-    const rawHtml = renderSafeHtmlFromMarkdown(markdown);
-    if (!rawHtml) return "";
-    return `
-<section style="font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; font-size: 15px; line-height: 1.8; letter-spacing: 0.5px; color: #353535; text-align: justify; word-break: break-word; padding: 10px 0;">
-  ${rawHtml}
-</section>`.trim();
-  }
-  async function writeRichClipboard(text, html, options) {
-    var _a, _b;
-    const navClipboard = (_a = options == null ? void 0 : options.clipboard) != null ? _a : typeof navigator !== "undefined" ? navigator.clipboard : void 0;
-    const isSecure = (_b = options == null ? void 0 : options.isSecure) != null ? _b : typeof window !== "undefined" ? window.isSecureContext : true;
-    if (navClipboard && isSecure) {
-      if (html && typeof ClipboardItem !== "undefined" && typeof navClipboard.write === "function") {
-        try {
-          const textBlob = new Blob([text], { type: "text/plain" });
-          const htmlBlob = new Blob([html], { type: "text/html" });
-          const item = new ClipboardItem({
-            "text/plain": textBlob,
-            "text/html": htmlBlob
-          });
-          await navClipboard.write([item]);
-          return true;
-        } catch {
-        }
-      }
-      if (typeof navClipboard.writeText === "function") {
-        try {
-          await navClipboard.writeText(text);
-          return true;
-        } catch {
-        }
-      }
-    }
-    if (typeof document !== "undefined") {
-      if (html && typeof document.createRange === "function" && typeof window !== "undefined") {
-        try {
-          const div = document.createElement("div");
-          div.innerHTML = html;
-          div.style.position = "fixed";
-          div.style.left = "-9999px";
-          div.style.top = "-9999px";
-          document.body.appendChild(div);
-          const range = document.createRange();
-          range.selectNodeContents(div);
-          const selection = window.getSelection();
-          if (selection) {
-            selection.removeAllRanges();
-            selection.addRange(range);
-            const ok2 = document.execCommand("copy");
-            selection.removeAllRanges();
-            div.remove();
-            if (ok2) return true;
-          }
-          div.remove();
-        } catch {
-        }
-      }
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.top = "0";
-        ta.style.left = "0";
-        ta.style.width = "2em";
-        ta.style.height = "2em";
-        ta.style.padding = "0";
-        ta.style.border = "none";
-        ta.style.outline = "none";
-        ta.style.boxShadow = "none";
-        ta.style.background = "transparent";
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        ta.setSelectionRange(0, text.length);
-        const okFlag = document.execCommand("copy");
-        ta.remove();
-        return okFlag;
-      } catch {
-        return false;
-      }
-    }
-    return false;
-  }
-  var init_clipboard = __esm({
-    "src/model/clipboard.ts"() {
-      "use strict";
     }
   });
 
@@ -27831,6 +27856,8 @@ fi`;
       this.updateHistoryBarRef = null;
       this.syncQueueChipRef = null;
       this.compactBundleCandidate = null;
+      /** 剪贴板搜索流格式过滤（全部/纯文本/图片素材/代码片段 · CAND-001 / TODO-FEAT-001） */
+      this.clipboardFormatFilter = "all";
       /** 宿主拒绝请求时覆盖旧列表，避免用户继续对过期结果执行写操作。 */
       this.accessIssueMessage = null;
       /** 普通点击 = 主动作（insert；blockref = 插入引用）。含变量时先弹填充卡片（F1）。
@@ -27854,6 +27881,7 @@ fi`;
       if (this.deps.initialScope) {
         this.currentScope = this.deps.initialScope;
       }
+      this.clipboardFormatFilter = "all";
       this.prevActiveElement = document.activeElement;
       const dialog = new import_siyuan5.Dialog({
         title: this.deps.t("pluginName"),
@@ -28274,6 +28302,37 @@ fi`;
         track.appendChild(chip);
       }
       filters.appendChild(track);
+      const clipFormatTrack = document.createElement("div");
+      clipFormatTrack.className = "xlc-clip-format-pills";
+      clipFormatTrack.dataset.xlcControl = "filter.clipboard-formats";
+      if (typeof clipFormatTrack.setAttribute === "function") {
+        clipFormatTrack.setAttribute("role", "radiogroup");
+        clipFormatTrack.setAttribute("aria-label", "\u526A\u8D34\u677F\u683C\u5F0F\u8FC7\u6EE4");
+      }
+      clipFormatTrack.style.display = this.currentScope === "clipboard" ? "inline-flex" : "none";
+      const clipFormats = [
+        { id: "all", label: "\u5168\u90E8" },
+        { id: "text", label: "\u7EAF\u6587\u672C" },
+        { id: "image", label: "\u56FE\u7247\u7D20\u6750" },
+        { id: "code", label: "\u4EE3\u7801\u7247\u6BB5" }
+      ];
+      for (const fmt of clipFormats) {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "xlc-chip xlc-clip-format-chip" + (this.clipboardFormatFilter === fmt.id ? " xlc-chip--on" : "");
+        pill.dataset.format = fmt.id;
+        pill.dataset.xlcControl = `filter.clip.${fmt.id}`;
+        pill.textContent = fmt.label;
+        pill.addEventListener("click", () => {
+          this.clipboardFormatFilter = fmt.id;
+          for (const p of clipFormatTrack.querySelectorAll(".xlc-clip-format-chip")) {
+            p.classList.toggle("xlc-chip--on", p.dataset.format === fmt.id);
+          }
+          void this.refresh();
+        });
+        clipFormatTrack.appendChild(pill);
+      }
+      filters.appendChild(clipFormatTrack);
       const queueChip = document.createElement("button");
       queueChip.type = "button";
       queueChip.className = "xlc-chip xlc-queue-chip";
@@ -29080,17 +29139,21 @@ fi`;
       void isMobile;
     }
     syncScopeChips() {
-      var _a, _b, _c, _d;
+      var _a, _b, _c, _d, _e;
       (_a = this.dialog) == null ? void 0 : _a.element.querySelectorAll(".xlc-scope-chip").forEach((chip) => {
         const on = chip.dataset.scope === this.currentScope;
         chip.classList.toggle("xlc-chip--on", on);
         chip.classList.toggle("xlc-scope-chip--on", on);
       });
-      const searchBox = (_b = this.dialog) == null ? void 0 : _b.element.querySelector(".xlc-search");
+      const clipFormatTrack = (_b = this.dialog) == null ? void 0 : _b.element.querySelector(".xlc-clip-format-pills");
+      if (clipFormatTrack) {
+        clipFormatTrack.style.display = this.currentScope === "clipboard" ? "inline-flex" : "none";
+      }
+      const searchBox = (_c = this.dialog) == null ? void 0 : _c.element.querySelector(".xlc-search");
       if (searchBox) {
         searchBox.classList.toggle("xlc-search--omni-mode", this.currentScope === "all-notes");
       }
-      const input = (_c = this.dialog) == null ? void 0 : _c.element.querySelector(".xlc-search-input");
+      const input = (_d = this.dialog) == null ? void 0 : _d.element.querySelector(".xlc-search-input");
       if (input) {
         let ph = this.deps.t("searchPlaceholder");
         if (this.currentScope === "all-notes") {
@@ -29109,7 +29172,7 @@ fi`;
         input.placeholder = ph;
         input.setAttribute("aria-label", ph);
       }
-      (_d = this.updateHistoryBarRef) == null ? void 0 : _d.call(this);
+      (_e = this.updateHistoryBarRef) == null ? void 0 : _e.call(this);
     }
     buildQuery() {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i;
@@ -29207,6 +29270,23 @@ fi`;
                 }
               }
               return false;
+            });
+          }
+          if (this.clipboardFormatFilter !== "all") {
+            filtered = filtered.filter((h) => {
+              const parsed = parseSnippetAnnotations(h.text);
+              const cleanText = parsed.cleanText || h.text;
+              const inferred = inferTypeFromText(cleanText);
+              if (this.clipboardFormatFilter === "image") {
+                return inferred === "image";
+              }
+              if (this.clipboardFormatFilter === "code") {
+                return inferred === "code";
+              }
+              if (this.clipboardFormatFilter === "text") {
+                return inferred === "text" || inferred === "markdown";
+              }
+              return true;
             });
           }
           const adapter = getPinyinAdapter();
@@ -30094,6 +30174,7 @@ fi`;
         const bottomSpacer = document.createElement("div");
         bottomSpacer.dataset.xlcSpacer = "bottom";
         const renderWindow = (requestedIndex) => {
+          var _a2;
           const viewport = Math.max(list.clientHeight || 480, rowHeight * 6);
           let start;
           let end;
@@ -30115,7 +30196,21 @@ fi`;
             if (entry) list.appendChild(this.createEntryRow(entry, i));
           }
           list.appendChild(bottomSpacer);
+          if (this.results.length >= 50 && end >= this.results.length) {
+            const bottomDivider = document.createElement("div");
+            bottomDivider.className = "xlc-list-end-divider";
+            bottomDivider.dataset.xlcControl = "search.list-end";
+            bottomDivider.innerHTML = `<span class="xlc-end-mark" aria-hidden="true">\u2713</span> <span>\u5DF2\u52A0\u8F7D\u5168\u90E8 ${this.results.length} \u9879\u5E38\u7528\u8BED</span>`;
+            list.appendChild(bottomDivider);
+          }
           this.paintActive();
+          const countEl = (_a2 = this.dialog) == null ? void 0 : _a2.element.querySelector(".xlc-footer-count");
+          if (countEl && !this.deps.isMobile() && this.results.length >= 50) {
+            const base = countEl.dataset.baseText || countEl.textContent || "";
+            if (!countEl.dataset.baseText) countEl.dataset.baseText = base;
+            const cleanBase = countEl.dataset.baseText.replace(/\s*·\s*\[\d+-\d+\s*\/\s*\d+\]/, "");
+            countEl.textContent = `${cleanBase} \xB7 [${start + 1}-${end} / ${this.results.length}]`;
+          }
         };
         let rafId = null;
         const scheduleRender = () => {
