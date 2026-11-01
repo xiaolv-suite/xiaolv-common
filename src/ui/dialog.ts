@@ -38,6 +38,7 @@ import {openShareCardDialog} from "./share-card";
 import {openPinboardDialog} from "./pinboard";
 import {getRecommendedEntries, DocumentContext} from "../model/contextual-recommend";
 import {getClipboardTimeGroup, MiniPosition, calculateMagneticSnap} from "../model/storage";
+import {STARTER_PACKS} from "../service/prompt-pack";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -156,6 +157,8 @@ export interface DialogDeps {
     getUsage: () => Record<string, {count: number; lastAt: number}>;
     /** 重置单条条目使用频次（ADR 0045 / T-0072） */
     resetItemUsage?: (itemId: string) => boolean;
+    /** 一键极速灌入开箱即用行业套件（CAND-034 / TODO-FEAT-029） */
+    importStarterPackDirect?: (markdown: string) => Promise<{ok: boolean; count: number}>;
     /** 手动新建条目（移动端「＋ 新建」入口） */
     newItem: (titleCandidate?: string) => void;
     /** 从文本快速创建草稿（拖拽放置 / 面板非输入区快捷粘贴，ADR 0034 / T-0061） */
@@ -2696,6 +2699,75 @@ export class CommonSearchDialog {
                 hint.className = "xlc-empty-hint";
                 hint.textContent = this.deps.t("emptyLibrarySub");
                 empty.appendChild(hint);
+
+                // 行业开箱即用套件一秒直装（CAND-034 / TODO-FEAT-029）
+                if (this.deps.importStarterPackDirect) {
+                    const kitsBox = document.createElement("div");
+                    kitsBox.className = "xlc-starter-kits-box";
+                    kitsBox.dataset.xlcControl = "empty.starter-kits";
+
+                    const kitsTitle = document.createElement("div");
+                    kitsTitle.className = "xlc-starter-kits-title";
+                    kitsTitle.textContent = "🚀 挑选场景专属预置库，一秒装载直接上手：";
+                    kitsBox.appendChild(kitsTitle);
+
+                    const kitsGrid = document.createElement("div");
+                    kitsGrid.className = "xlc-starter-kits-grid";
+
+                    for (const pack of STARTER_PACKS) {
+                        const card = document.createElement("div");
+                        card.className = "xlc-starter-kit-card";
+                        card.dataset.xlcControl = `starter-kit.card.${pack.id}`;
+
+                        const cardTop = document.createElement("div");
+                        cardTop.className = "xlc-starter-kit-card-top";
+
+                        const iconSpan = document.createElement("span");
+                        iconSpan.className = "xlc-starter-kit-icon";
+                        iconSpan.textContent = pack.icon;
+
+                        const nameSpan = document.createElement("strong");
+                        nameSpan.className = "xlc-starter-kit-name";
+                        nameSpan.textContent = pack.name;
+
+                        cardTop.append(iconSpan, nameSpan);
+
+                        const tagLine = document.createElement("div");
+                        tagLine.className = "xlc-starter-kit-tagline";
+                        tagLine.textContent = pack.tagline;
+
+                        const installBtn = document.createElement("button");
+                        installBtn.type = "button";
+                        installBtn.className = "b3-button b3-button--small xlc-btn-primary xlc-starter-kit-btn";
+                        installBtn.dataset.xlcControl = `starter-kit.install.${pack.id}`;
+                        installBtn.textContent = `＋ 装入 (${pack.itemCount}项)`;
+                        installBtn.addEventListener("click", async () => {
+                            installBtn.disabled = true;
+                            installBtn.textContent = "⏳ 装入中...";
+                            try {
+                                const res = await this.deps.importStarterPackDirect!(pack.markdown);
+                                if (res.ok) {
+                                    this.deps.notify?.("info", `已成功装入「${pack.name}」共 ${res.count} 项常用语！`);
+                                    void this.refresh();
+                                } else {
+                                    installBtn.disabled = false;
+                                    installBtn.textContent = `＋ 装入 (${pack.itemCount}项)`;
+                                    this.deps.notify?.("error", "装入失败，请稍后重试");
+                                }
+                            } catch {
+                                installBtn.disabled = false;
+                                installBtn.textContent = `＋ 装入 (${pack.itemCount}项)`;
+                                this.deps.notify?.("error", "装入失败，请稍后重试");
+                            }
+                        });
+
+                        card.append(cardTop, tagLine, installBtn);
+                        kitsGrid.appendChild(card);
+                    }
+
+                    kitsBox.appendChild(kitsGrid);
+                    empty.appendChild(kitsBox);
+                }
 
                 // 空库是新用户最常遇到的页面，保留一条随时可回看的使用路径。
                 const guide = document.createElement("button");

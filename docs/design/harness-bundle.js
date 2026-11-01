@@ -17429,413 +17429,6 @@ ${res.progressBar}`;
     }
   });
 
-  // src/model/zip.ts
-  function crc32(data) {
-    var _a;
-    let c = 0 ^ -1;
-    for (const byte of data) c = c >>> 8 ^ ((_a = CRC_TABLE[(c ^ byte) & 255]) != null ? _a : 0);
-    return (c ^ -1) >>> 0;
-  }
-  function dosDateTime() {
-    const time = 0;
-    const date = 2026 - 1980 << 9 | 1 << 5 | 1;
-    return { time, date };
-  }
-  function u16(arr, value) {
-    arr.push(value & 255, value >>> 8 & 255);
-  }
-  function u32(arr, value) {
-    arr.push(value & 255, value >>> 8 & 255, value >>> 16 & 255, value >>> 24 & 255);
-  }
-  function buildZip(entries) {
-    if (entries.length === 0) throw new Error("zip: no entries");
-    if (entries.length > 65535) throw new Error("zip: too many entries");
-    const { time, date } = dosDateTime();
-    const localParts = [];
-    const centralParts = [];
-    let offset = 0;
-    for (const entry of entries) {
-      if (!entry.name || entry.name.startsWith("/") || entry.name.includes("..") || entry.name.includes("\\")) {
-        throw new Error(`zip: unsafe entry name ${entry.name}`);
-      }
-      const nameBytes = new TextEncoder().encode(entry.name);
-      const crc = crc32(entry.data);
-      const local = [];
-      u32(local, 67324752);
-      u16(local, 20);
-      u16(local, 0);
-      u16(local, 0);
-      u16(local, time);
-      u16(local, date);
-      u32(local, crc);
-      u32(local, entry.data.length);
-      u32(local, entry.data.length);
-      u16(local, nameBytes.length);
-      u16(local, 0);
-      local.push(...nameBytes);
-      const headerOffset = offset;
-      localParts.push(local, Array.from(entry.data));
-      const central = [];
-      u32(central, 33639248);
-      u16(central, 20);
-      u16(central, 20);
-      u16(central, 0);
-      u16(central, 0);
-      u16(central, time);
-      u16(central, date);
-      u32(central, crc);
-      u32(central, entry.data.length);
-      u32(central, entry.data.length);
-      u16(central, nameBytes.length);
-      u16(central, 0);
-      u16(central, 0);
-      u16(central, 0);
-      u16(central, 0);
-      u32(central, 0);
-      u32(central, headerOffset);
-      central.push(...nameBytes);
-      centralParts.push(central);
-      offset += local.length + entry.data.length;
-    }
-    const centralStart = offset;
-    let centralSize = 0;
-    const out = [];
-    for (const part of localParts) out.push(...part);
-    for (const part of centralParts) {
-      out.push(...part);
-      centralSize += part.length;
-    }
-    const eocd = [];
-    u32(eocd, 101010256);
-    u16(eocd, 0);
-    u16(eocd, 0);
-    u16(eocd, entries.length);
-    u16(eocd, entries.length);
-    u32(eocd, centralSize);
-    u32(eocd, centralStart);
-    u16(eocd, 0);
-    out.push(...eocd);
-    return new Uint8Array(out);
-  }
-  var CRC_TABLE;
-  var init_zip = __esm({
-    "src/model/zip.ts"() {
-      "use strict";
-      CRC_TABLE = (() => {
-        const table = new Uint32Array(256);
-        for (let n = 0; n < 256; n++) {
-          let c = n;
-          for (let k = 0; k < 8; k++) c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
-          table[n] = c >>> 0;
-        }
-        return table;
-      })();
-    }
-  });
-
-  // src/service/export-markdown.ts
-  async function buildMarkdownExport(items, kramdownById, fetchAssetBytes, packOrOptions) {
-    var _a, _b, _c;
-    const pack = packOrOptions && "name" in packOrOptions ? packOrOptions : packOrOptions == null ? void 0 : packOrOptions.pack;
-    const sanitizer = packOrOptions && "sanitizer" in packOrOptions ? packOrOptions.sanitizer : void 0;
-    const oneLine = (value) => value.replace(/[\r\n]+/g, " ").trim();
-    for (const item of items) {
-      if (!kramdownById.has(item.id)) {
-        throw new ExportIntegrityError("body-missing", item.title || item.id);
-      }
-    }
-    const entries = [];
-    const skippedAssets = [];
-    const assetEntries = /* @__PURE__ */ new Map();
-    const usedNames = /* @__PURE__ */ new Set(["items.md"]);
-    let assetCount = 0;
-    const varNames = [];
-    for (const item of items) {
-      if (item.itemType === "code") continue;
-      let text = (_a = kramdownById.get(item.id)) != null ? _a : "";
-      if (sanitizer) {
-        text = sanitizeTextForExport(text, sanitizer).text;
-      }
-      for (const field of listAskFields(text)) {
-        if (!varNames.includes(field.name)) varNames.push(field.name);
-        if (varNames.length >= LIMITS.maxAskFields) break;
-      }
-      if (varNames.length >= LIMITS.maxAskFields) break;
-    }
-    const snippetNames = [];
-    for (const item of items) {
-      if (item.itemType === "code") continue;
-      for (const snippet of listSnippetRefs((_b = kramdownById.get(item.id)) != null ? _b : "")) {
-        if (!snippetNames.includes(snippet)) snippetNames.push(snippet);
-        if (snippetNames.length >= 16) break;
-      }
-      if (snippetNames.length >= 16) break;
-    }
-    const mdParts = [
-      "# \u5C0F\u9A74\u5E38\u7528\uFF08\u5185\u6D4B\u7248\uFF09 \xB7 \u6761\u76EE\u5BFC\u51FA",
-      "",
-      `> \u5BFC\u51FA\u81EA\u601D\u6E90\u63D2\u4EF6\u300C\u5C0F\u9A74\u5E38\u7528\uFF08\u5185\u6D4B\u7248\uFF09\u300D\uFF0C\u5171 ${items.length} \u6761\u3002\u8D44\u6E90\u4F4D\u4E8E assets/\uFF0C\u6761\u76EE\u5185\u94FE\u63A5\u4E3A\u76F8\u5BF9\u8DEF\u5F84\u3002`,
-      ""
-    ];
-    if (pack && pack.name.trim()) {
-      const manifest = [
-        `<!-- xlc-pack`,
-        `name: ${oneLine(pack.name).slice(0, LIMITS.title)}`,
-        `items: ${items.length}`,
-        varNames.length ? `vars: ${varNames.join(",")}` : "",
-        snippetNames.length ? `snippets: ${snippetNames.join(",")}` : "",
-        `-->`
-      ].filter(Boolean).join("\n");
-      mdParts.unshift(manifest, "");
-    }
-    let totalLen = mdParts.reduce((length, part) => length + part.length, 0) + mdParts.length - 1;
-    for (const item of items) {
-      let kramdown = (_c = kramdownById.get(item.id)) != null ? _c : "";
-      if (sanitizer && item.itemType !== "code") {
-        kramdown = sanitizeTextForExport(kramdown, sanitizer).text;
-      }
-      const meta = [
-        `<!-- xlc-item`,
-        `id: ${item.id}`,
-        `type: ${item.itemType}`,
-        item.alias ? `alias: ${oneLine(item.alias)}` : "",
-        item.shortcode ? `shortcode: ${oneLine(item.shortcode)}` : "",
-        item.tags.length ? `tags: ${item.tags.map(oneLine).join(",")}` : "",
-        item.category ? `category: ${oneLine(item.category)}` : "",
-        item.source.sourceDocId ? `source-doc: ${oneLine(item.source.sourceDocId)}` : "",
-        item.source.sourceBlockId ? `source-block: ${oneLine(item.source.sourceBlockId)}` : "",
-        item.source.sourceType ? `source-type: ${oneLine(item.source.sourceType)}` : "",
-        item.url ? `url: ${oneLine(item.url)}` : "",
-        item.targetBlockId ? `target: ${oneLine(item.targetBlockId)}` : "",
-        `-->`
-      ].filter(Boolean).join("\n");
-      const itemParts = [`## ${oneLine(item.title || item.id)}`, "", meta, "", kramdown, ""];
-      totalLen += itemParts.reduce((length, part) => length + part.length, 0) + itemParts.length;
-      if (totalLen > LIMITS.contentChars) {
-        throw new ExportIntegrityError("too-large", "", String(LIMITS.contentChars));
-      }
-      mdParts.push(...itemParts);
-      if (item.itemType === "image" || item.itemType === "asset") {
-        const assetPath = extractAssetPath(kramdown);
-        if (assetPath && !assetEntries.has(assetPath)) {
-          const bytes = await fetchAssetBytes(assetPath);
-          if (bytes && bytes.length > 0) {
-            const name = assetPath;
-            usedNames.add(name);
-            assetEntries.set(assetPath, { name, data: bytes });
-            assetCount++;
-          } else {
-            skippedAssets.push(assetPath);
-          }
-        }
-      }
-    }
-    const markdown = mdParts.join("\n");
-    entries.push({ name: "items.md", data: new TextEncoder().encode(markdown) });
-    entries.push(...assetEntries.values());
-    return { entries, itemCount: items.length, assetCount, skippedAssets, varNames, snippetNames };
-  }
-  var ExportIntegrityError;
-  var init_export_markdown = __esm({
-    "src/service/export-markdown.ts"() {
-      "use strict";
-      init_actions();
-      init_constants();
-      init_variables();
-      init_export_sanitizer();
-      ExportIntegrityError = class extends Error {
-        constructor(reason, itemLabel = "", detail = "") {
-          super(`export-${reason}${itemLabel ? `: ${itemLabel}` : ""}${detail ? `: ${detail}` : ""}`);
-          this.reason = reason;
-          this.itemLabel = itemLabel;
-          this.detail = detail;
-          this.name = "ExportIntegrityError";
-        }
-      };
-    }
-  });
-
-  // src/service/importer.ts
-  var init_importer = __esm({
-    "src/service/importer.ts"() {
-      "use strict";
-      init_transfer();
-      init_item();
-      init_kramdown();
-      init_errors();
-    }
-  });
-
-  // src/service/import-markdown.ts
-  function parseMetadata(lines) {
-    const fields = /* @__PURE__ */ new Map();
-    let titleHint = "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed === ITEM_COMMENT_START || trimmed === ITEM_COMMENT_END) continue;
-      const idx = trimmed.indexOf(":");
-      if (idx <= 0) continue;
-      fields.set(trimmed.slice(0, idx).trim(), trimmed.slice(idx + 1).trim());
-    }
-    return { fields, titleHint };
-  }
-  function parsePackManifest(md, firstItemAt) {
-    var _a, _b, _c;
-    const start = md.indexOf(PACK_COMMENT_START);
-    if (start === -1 || start > firstItemAt) return void 0;
-    const end = md.indexOf(ITEM_COMMENT_END, start);
-    if (end === -1) return void 0;
-    const fields = parseMetadata(md.slice(start + PACK_COMMENT_START.length, end).split("\n")).fields;
-    const name = ((_a = fields.get("name")) != null ? _a : "").slice(0, LIMITS.title);
-    const vars = ((_b = fields.get("vars")) != null ? _b : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.maxAskFields);
-    const snippets = ((_c = fields.get("snippets")) != null ? _c : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 16);
-    if (!name) return void 0;
-    return { name, vars, ...snippets.length > 0 ? { snippets } : {} };
-  }
-  function buildPackDependencyMap(items) {
-    const map = {};
-    for (const it of items) {
-      if (it.itemType === "code") continue;
-      const refs = listSnippetRefs(it.kramdown);
-      if (refs.length > 0) {
-        map[it.title || it.id] = refs;
-      }
-    }
-    return map;
-  }
-  function parseMarkdownPack(md) {
-    var _a, _b;
-    const items = [];
-    const issues = [];
-    const seenIds = /* @__PURE__ */ new Set();
-    if (!md || !md.includes(ITEM_COMMENT_START)) return { items, issues };
-    const firstItemAt = md.indexOf(ITEM_COMMENT_START);
-    const pack = parsePackManifest(md, firstItemAt);
-    const commentStarts = [];
-    const commentEnds = [];
-    let hasUnclosed = false;
-    let scan = 0;
-    while (true) {
-      const start = md.indexOf(ITEM_COMMENT_START, scan);
-      if (start === -1) break;
-      const end = md.indexOf(ITEM_COMMENT_END, start);
-      if (end === -1) {
-        hasUnclosed = true;
-        break;
-      }
-      commentStarts.push(start);
-      commentEnds.push(end + ITEM_COMMENT_END.length);
-      scan = start + ITEM_COMMENT_START.length;
-      if (commentStarts.length > LIMITS.maxItems) break;
-    }
-    const chunks = [];
-    for (let i = 0; i < commentStarts.length; i++) {
-      const itemStart = (_a = commentStarts[i]) != null ? _a : 0;
-      const lowerBound = i > 0 ? (_b = commentEnds[i - 1]) != null ? _b : 0 : 0;
-      const titleLineStart = md.lastIndexOf("\n## ", itemStart) + 1;
-      const chunkStart = Math.max(Math.min(titleLineStart, itemStart), lowerBound);
-      const nextCommentStart = commentStarts[i + 1];
-      const nextTitleStart = nextCommentStart === void 0 ? -1 : md.lastIndexOf("\n## ", nextCommentStart) + 1;
-      const chunkEnd = nextTitleStart > itemStart ? nextTitleStart : nextCommentStart != null ? nextCommentStart : md.length;
-      chunks.push(md.slice(chunkStart, chunkEnd));
-    }
-    chunks.forEach((chunk, index) => {
-      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
-      const endIdx = chunk.indexOf(ITEM_COMMENT_END);
-      if (endIdx === -1) {
-        issues.push({ index, reason: "metadata-comment-unclosed" });
-        return;
-      }
-      const metaLines = chunk.slice(0, endIdx).split("\n");
-      const { fields } = parseMetadata(metaLines);
-      const id = (_a2 = fields.get("id")) != null ? _a2 : "";
-      if (!/^xlc-[0-9a-z]{10,40}$/.test(id)) {
-        issues.push({ index, reason: "invalid-id" });
-        return;
-      }
-      if (seenIds.has(id)) {
-        issues.push({ index, reason: "duplicate-id" });
-        return;
-      }
-      const itemType = (_b2 = fields.get("type")) != null ? _b2 : "text";
-      if (!isItemType(itemType)) {
-        issues.push({ index, reason: "invalid-item-type" });
-        return;
-      }
-      const url = (_c = fields.get("url")) != null ? _c : "";
-      if (url && !isSafeHttpUrl(url)) {
-        issues.push({ index, reason: "invalid-url" });
-        return;
-      }
-      let title = "";
-      const before = chunk.slice(0, chunk.indexOf(ITEM_COMMENT_START));
-      for (const line of before.split("\n")) {
-        const m = line.match(TITLE_RE);
-        const matched = m == null ? void 0 : m[1];
-        if (matched) title = matched.trim();
-      }
-      if (!title && fields.get("alias")) title = (_d = fields.get("alias")) != null ? _d : "";
-      const body = chunk.slice(endIdx + ITEM_COMMENT_END.length).replace(/^\s*\n/, "").replace(/\n\s*$/, "");
-      const shortcode = cleanShortcode((_e = fields.get("shortcode")) != null ? _e : "");
-      seenIds.add(id);
-      items.push({
-        id,
-        itemType,
-        title: title.slice(0, LIMITS.title),
-        alias: ((_f = fields.get("alias")) != null ? _f : "").slice(0, LIMITS.alias),
-        ...shortcode ? { shortcode } : {},
-        tags: ((_g = fields.get("tags")) != null ? _g : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.tags),
-        category: ((_h = fields.get("category")) != null ? _h : "").slice(0, LIMITS.category),
-        kramdown: body.slice(0, LIMITS.contentChars),
-        source: {
-          sourceDocId: (_i = fields.get("source-doc")) != null ? _i : "",
-          sourceBlockId: (_j = fields.get("source-block")) != null ? _j : "",
-          sourceType: (_k = fields.get("source-type")) != null ? _k : "external"
-        },
-        url,
-        targetBlockId: (_l = fields.get("target")) != null ? _l : "",
-        createdAt: 0,
-        updatedAt: Date.now()
-      });
-    });
-    if (hasUnclosed) issues.push({ index: commentStarts.length, reason: "metadata-comment-unclosed" });
-    const packTitles = new Set(items.map((it) => it.title).filter(Boolean));
-    const allReferencedSnippets = /* @__PURE__ */ new Set();
-    for (const it of items) {
-      if (it.itemType === "code") continue;
-      for (const ref of listSnippetRefs(it.kramdown)) {
-        allReferencedSnippets.add(ref);
-      }
-    }
-    if (pack == null ? void 0 : pack.snippets) {
-      for (const sn of pack.snippets) allReferencedSnippets.add(sn);
-    }
-    const missingSnippets = Array.from(allReferencedSnippets).filter((snTitle) => !packTitles.has(snTitle));
-    let finalPack = pack;
-    if (missingSnippets.length > 0) {
-      finalPack = finalPack ? { ...finalPack, missingSnippets } : { name: "", vars: [], missingSnippets };
-    }
-    const dependencyMap = buildPackDependencyMap(items);
-    if (Object.keys(dependencyMap).length > 0) {
-      finalPack = finalPack ? { ...finalPack, dependencyMap } : { name: "", vars: [], dependencyMap };
-    }
-    return { items, issues, pack: finalPack };
-  }
-  var ITEM_COMMENT_START, ITEM_COMMENT_END, PACK_COMMENT_START, TITLE_RE;
-  var init_import_markdown = __esm({
-    "src/service/import-markdown.ts"() {
-      "use strict";
-      init_constants();
-      init_importer();
-      init_item();
-      init_variables();
-      ITEM_COMMENT_START = "<!-- xlc-item";
-      ITEM_COMMENT_END = "-->";
-      PACK_COMMENT_START = "<!-- xlc-pack";
-      TITLE_RE = /^##\s+(.+)$/;
-    }
-  });
-
   // src/service/prompt-pack.ts
   function buildInitialLibraryDocMarkdown(title) {
     const docTitle = title || "\u5E38\u7528\u5185\u5BB9\u5E93";
@@ -17959,7 +17552,7 @@ ${res.progressBar}`;
       ""
     ].join("\n");
   }
-  var PROMPT_PACK_NAME, PROMPT_PACK_MD, REFORMULATION_PACK_NAME, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_NAME, TASK_HORIZON_PACK_MD, CALLOUT_PACK_NAME, CALLOUT_PACK_MD, ACADEMIC_CITATION_PACK_NAME, ACADEMIC_CITATION_PACK_MD;
+  var PROMPT_PACK_NAME, PROMPT_PACK_MD, REFORMULATION_PACK_NAME, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_NAME, TASK_HORIZON_PACK_MD, CALLOUT_PACK_NAME, CALLOUT_PACK_MD, ACADEMIC_CITATION_PACK_NAME, ACADEMIC_CITATION_PACK_MD, BUSINESS_FINANCE_PACK_NAME, BUSINESS_FINANCE_PACK_MD, CUSTOMER_SERVICE_PACK_NAME, CUSTOMER_SERVICE_PACK_MD, DEVELOPER_DEVOPS_PACK_NAME, DEVELOPER_DEVOPS_PACK_MD, WRITING_ACADEMIC_PACK_NAME, WRITING_ACADEMIC_PACK_MD, STARTER_PACKS;
   var init_prompt_pack = __esm({
     "src/service/prompt-pack.ts"() {
       "use strict";
@@ -18643,6 +18236,729 @@ ${res.progressBar}`;
         "{{xlc:ask:\u4E3B\u8981\u4F5C\u8005}} ({{xlc:ask:\u51FA\u7248\u5E74}}). {{xlc:ask:\u6587\u732E\u9898\u540D}}. *{{xlc:ask:\u671F\u520A\u520A\u540D}}*, *{{xlc:ask:\u5377\u53F7}}*({{xlc:ask:\u671F\u53F7}}), {{xlc:ask:\u8D77\u6B62\u9875\u7801}}. https://doi.org/{{xlc:ask:DOI\u53F7}}",
         "```"
       ].join("\n");
+      BUSINESS_FINANCE_PACK_NAME = "\u5546\u52A1\u4E0E\u8D22\u52A1\u5F00\u7968\u5957\u4EF6";
+      BUSINESS_FINANCE_PACK_MD = [
+        "<!-- xlc-pack",
+        `name: ${BUSINESS_FINANCE_PACK_NAME}`,
+        "items: 6",
+        "vars: \u4F01\u4E1A\u5168\u79F0,\u7EB3\u7A0E\u4EBA\u8BC6\u522B\u53F7,\u6536\u4EF6\u4EBA\u59D3\u540D,\u624B\u673A\u53F7,\u7701\u5E02\u533A,\u8BE6\u7EC6\u95E8\u724C\u5730\u5740,\u62DC\u8BBF\u65E5\u671F,\u5BF9\u63A5\u4EBA\u59D3\u540D,\u9879\u76EE\u540D\u79F0,\u5408\u540C\u7F16\u53F7",
+        "-->",
+        `# ${BUSINESS_FINANCE_PACK_NAME}`,
+        "",
+        "> \u5546\u52A1\u63A5\u5F85\u3001\u8D22\u52A1\u5F00\u7968\u3001\u5BF9\u516C\u4ED8\u6B3E\u4E0E\u5FEB\u9012\u6536\u5BC4\u9AD8\u9891\u8D44\u4EA7\u5305\u3002",
+        "",
+        "## \u{1F3E2} \u4F01\u4E1A\u5F00\u7968\u7A0E\u53F7\uFF08\u7EDF\u4E00\u793E\u4F1A\u4FE1\u7528\u4EE3\u7801\uFF09",
+        "<!-- xlc-item",
+        "id: xlc-biz00000001",
+        "type: text",
+        "tags: \u7A0E\u53F7,\u5F00\u7968,\u8D22\u52A1",
+        "category: \u5546\u52A1\u8D22\u52A1",
+        "source-type: external",
+        "-->",
+        "91110108MA00000000 @\u516C\u53F8\u5F00\u7968\u7A0E\u53F7",
+        "",
+        "## \u{1F4C4} \u5B8C\u6574\u589E\u503C\u7A0E\u4E13\u7528\u53D1\u7968\u5F00\u7968\u8D44\u6599\u5361\u7247",
+        "<!-- xlc-item",
+        "id: xlc-biz00000002",
+        "type: structure",
+        "tags: \u5F00\u7968\u8D44\u6599,\u53D1\u7968\u62AC\u5934,\u4E13\u7968",
+        "category: \u5546\u52A1\u8D22\u52A1",
+        "source-type: external",
+        "-->",
+        "\u4F01\u4E1A\u540D\u79F0\uFF1A{{xlc:ask:\u4F01\u4E1A\u5168\u79F0}}\n\u7EB3\u7A0E\u4EBA\u8BC6\u522B\u53F7\uFF1A91110108MA00000000\n\u5F00\u6237\u94F6\u884C\uFF1A\u4E2D\u56FD\u5DE5\u5546\u94F6\u884C\u5317\u4EAC\u4E2D\u5173\u6751\u652F\u884C\n\u94F6\u884C\u8D26\u53F7\uFF1A0200 0010 0900 1234 567\n\u6CE8\u518C\u5730\u5740\uFF1A\u5317\u4EAC\u5E02\u6D77\u6DC0\u533A\u4E2D\u5173\u6751\u5357\u5927\u88571\u53F7\u9662\n\u7535\u8BDD\uFF1A010-88886666",
+        "",
+        "## \u{1F4B3} \u5B98\u65B9\u5BF9\u516C\u94F6\u884C\u6253\u6B3E\u8D26\u6237",
+        "<!-- xlc-item",
+        "id: xlc-biz00000003",
+        "type: structure",
+        "tags: \u94F6\u884C\u6253\u6B3E,\u5BF9\u516C\u8D26\u6237,\u8D22\u52A1\u8F6C\u8D26",
+        "category: \u5546\u52A1\u8D22\u52A1",
+        "source-type: external",
+        "-->",
+        "\u6237\u540D\uFF1A\u5C0F\u9A74\u79D1\u6280\u6709\u9650\u516C\u53F8\n\u8D26\u53F7\uFF1A0200 0010 0900 1234 567\n\u5F00\u6237\u884C\uFF1A\u4E2D\u56FD\u5DE5\u5546\u94F6\u884C\u80A1\u4EFD\u6709\u9650\u516C\u53F8\u5317\u4EAC\u4E2D\u5173\u6751\u652F\u884C\n\u5927\u989D\u884C\u53F7\uFF1A102100000108",
+        "",
+        "## \u{1F4E6} \u5546\u52A1\u4E0E\u529E\u516C\u9ED8\u8BA4\u6536\u4EF6\u5730\u5740",
+        "<!-- xlc-item",
+        "id: xlc-biz00000004",
+        "type: structure",
+        "tags: \u6536\u4EF6\u5730\u5740,\u5FEB\u9012,\u5BC4\u9001",
+        "category: \u5546\u52A1\u8D22\u52A1",
+        "source-type: external",
+        "-->",
+        "\u6536\u4EF6\u4EBA\uFF1A{{xlc:ask:\u6536\u4EF6\u4EBA\u59D3\u540D}}\n\u7535\u8BDD\uFF1A{{xlc:ask:\u624B\u673A\u53F7}}\n\u6536\u8D27\u5730\u5740\uFF1A\u5317\u4EAC\u5E02\u6D77\u6DC0\u533A\u4E2D\u5173\u6751\u5357\u5927\u88571\u53F7\u9662A\u5EA712\u5C42\u884C\u653F\u524D\u53F0\n\u90AE\u7F16\uFF1A100080",
+        "",
+        "## \u{1F91D} \u5546\u52A1\u62DC\u8BBF\u521D\u6B21\u6C9F\u901A\u611F\u8C22\u4FE1",
+        "<!-- xlc-item",
+        "id: xlc-biz00000005",
+        "type: markdown",
+        "tags: \u5546\u52A1\u6C9F\u901A,\u62DC\u8BBF\u81F4\u8C22,\u5408\u4F5C\u8DDF\u8FDB",
+        "category: \u5546\u52A1\u8D22\u52A1",
+        "source-type: external",
+        "-->",
+        "\u5C0A\u656C\u7684 {{xlc:ask:\u5BF9\u63A5\u4EBA\u59D3\u540D}}\uFF1A\n\n\u975E\u5E38\u611F\u8C22\u60A8\u4E8E {{xlc:ask:\u62DC\u8BBF\u65E5\u671F}} \u70ED\u60C5\u63A5\u5F85\uFF01\u5173\u4E8E\u4EA4\u6D41\u4E2D\u63A2\u8BA8\u7684\u300C{{xlc:ask:\u9879\u76EE\u540D\u79F0}}\u300D\u5408\u4F5C\u65B9\u6848\uFF0C\u6211\u4EEC\u5DF2\u5B8C\u6210\u521D\u6B65\u68B3\u7406\uFF0C\u8BE6\u89C1\u968F\u4FE1\u9644\u5448\u7684\u6587\u4EF6\u3002\u671F\u5F85\u4E0B\u5468\u8FDB\u4E00\u6B65\u6DF1\u5165\u6C9F\u901A\uFF01",
+        "",
+        "## \u{1F4EE} \u5408\u540C\u5BC4\u9001\u4E0E\u76D6\u7AE0\u8DDF\u8FDB\u51FD",
+        "<!-- xlc-item",
+        "id: xlc-biz00000006",
+        "type: text",
+        "tags: \u5408\u540C\u5BC4\u9001,\u76D6\u7AE0\u8DDF\u8FDB,\u5546\u52A1",
+        "category: \u5546\u52A1\u8D22\u52A1",
+        "source-type: external",
+        "-->",
+        "\u60A8\u597D\uFF0C\u5173\u4E8E\u300C{{xlc:ask:\u9879\u76EE\u540D\u79F0}}\u300D\u53CC\u65B9\u5408\u4F5C\u5408\u540C\uFF08\u5408\u540C\u7F16\u53F7\uFF1A{{xlc:ask:\u5408\u540C\u7F16\u53F7}}\uFF09\u5DF2\u76D6\u7AE0\u5BC4\u51FA\uFF08\u987A\u4E30\u5355\u53F7\uFF1A{{xlc:clipboard}}\uFF09\uFF0C\u8BF7\u67E5\u6536\u540E\u56DE\u5BC4\u4E00\u4EFD\uFF0C\u795D\u5408\u4F5C\u6109\u5FEB\uFF01 @\u5408\u540C\u5BC4\u9001\u8DDF\u8FDB"
+      ].join("\n");
+      CUSTOMER_SERVICE_PACK_NAME = "\u7535\u5546\u5BA2\u670D\u4E0E\u552E\u540E\u6C9F\u901A\u5957\u4EF6";
+      CUSTOMER_SERVICE_PACK_MD = [
+        "<!-- xlc-pack",
+        `name: ${CUSTOMER_SERVICE_PACK_NAME}`,
+        "items: 6",
+        "vars: \u5BA2\u6237\u6635\u79F0,\u8BA2\u5355\u53F7,\u5EF6\u671F\u5929\u6570,\u8865\u507F\u91D1\u989D,\u9000\u6362\u539F\u56E0,\u9000\u56DE\u5FEB\u9012\u5355\u53F7,\u91CD\u5BC4\u5355\u53F7",
+        "-->",
+        `# ${CUSTOMER_SERVICE_PACK_NAME}`,
+        "",
+        "> \u7535\u5546\u63A5\u5F85\u3001\u53D1\u8D27\u5EF6\u8FDF\u9053\u6B49\u3001\u9000\u6362\u8D27\u5904\u7406\u4E0E\u5B89\u629A\u597D\u8BC4\u5E38\u7528\u8BDD\u672F\u3002",
+        "",
+        "## \u{1F647} \u8BA2\u5355\u53D1\u8D27\u5EF6\u8FDF\u81F4\u6B49\u4E0E\u8865\u507F\u901A\u77E5",
+        "<!-- xlc-item",
+        "id: xlc-cs000000001",
+        "type: markdown",
+        "tags: \u81F4\u6B49,\u53D1\u8D27\u5EF6\u8FDF,\u8865\u507F\u65B9\u6848",
+        "category: \u5BA2\u6237\u670D\u52A1",
+        "source-type: external",
+        "-->",
+        "\u5C0A\u656C\u7684 {{xlc:ask:\u5BA2\u6237\u6635\u79F0}}\uFF1A\n\n\u60A8\u597D\uFF01\u975E\u5E38\u62B1\u6B49\u56E0\u4ED3\u5E93\u914D\u8D27\u6392\u5355\uFF0C\u60A8\u7684\u8BA2\u5355\uFF08{{xlc:ask:\u8BA2\u5355\u53F7}}\uFF09\u9884\u8BA1\u5EF6\u8FDF {{xlc:ask:\u5EF6\u671F\u5929\u6570}} \u5929\u53D1\u51FA\u3002\u4E3A\u8868\u6B49\u610F\uFF0C\u5DF2\u4E3A\u60A8\u5B89\u6392\u52A0\u6025\u987A\u4E30\u53D1\u8D27\uFF0C\u5E76\u4E3A\u60A8\u7533\u8BF7\u4E86 {{xlc:ask:\u8865\u507F\u91D1\u989D}} \u5143\u4E13\u5C5E\u4F18\u60E0\u5238\uFF0C\u8BF7\u60A8\u8C05\u89E3\uFF01",
+        "",
+        "## \u{1F504} \u552E\u540E\u6807\u51C6\u9000\u6362\u8D27\u5730\u5740\u4E0E\u6D41\u7A0B\u6307\u5F15",
+        "<!-- xlc-item",
+        "id: xlc-cs000000002",
+        "type: structure",
+        "tags: \u9000\u6362\u8D27,\u552E\u540E\u5730\u5740,\u9000\u6B3E\u6307\u5F15",
+        "category: \u5BA2\u6237\u670D\u52A1",
+        "source-type: external",
+        "-->",
+        "\u3010\u9000\u6362\u8D27\u5BC4\u56DE\u4FE1\u606F\u3011\n\u6536\u4EF6\u4EBA\uFF1A\u552E\u540E\u4ED3\u50A8\u4E2D\u5FC3\uFF08\u62D2\u6536\u5230\u4ED8\uFF09\n\u7535\u8BDD\uFF1A021-66668888\n\u5730\u5740\uFF1A\u4E0A\u6D77\u5E02\u5609\u5B9A\u533A\u5B89\u4EAD\u7269\u6D41\u56ED\u533A5\u53F7\u5E93\u552E\u540E\u7EC4\n\u9644\u8A00\uFF1A\u8BF7\u52A1\u5FC5\u5728\u5305\u88F9\u5185\u653E\u7F6E\u4FBF\u6761\u6CE8\u660E\u60A8\u7684\u8BA2\u5355\u53F7\u4E0E\u9000\u6362\u539F\u56E0\u3002",
+        "",
+        "## \u{1F4AC} \u5E38\u89C1\u552E\u540E\u95EE\u9898\u63A5\u5F85\u5B89\u629A\u8BDD\u672F",
+        "<!-- xlc-item",
+        "id: xlc-cs000000003",
+        "type: text",
+        "tags: \u5BA2\u670D\u56DE\u590D,\u63A5\u5F85\u5B89\u629A,\u552E\u540E\u5904\u7406",
+        "category: \u5BA2\u6237\u670D\u52A1",
+        "source-type: external",
+        "-->",
+        "\u4EB2\u4EB2\u975E\u5E38\u7406\u89E3\u60A8\u7684\u5FC3\u60C5\uFF0C\u8BF7\u60A8\u5343\u4E07\u522B\u7740\u6025\uFF01\u60A8\u9047\u5230\u7684\u95EE\u9898\u6211\u5DF2\u4E3A\u60A8\u4E13\u6848\u767B\u8BB0\uFF0C\u73B0\u5728\u7ACB\u523B\u8054\u7CFB\u4E13\u5C5E\u5DE5\u7A0B\u5E08\u8DDF\u8FDB\u6838\u5B9E\uFF0C\u4ECA\u5929\u4E0B\u73ED\u524D\u4E00\u5B9A\u7ED9\u60A8\u6EE1\u610F\u89E3\u51B3\u65B9\u6848\uFF01 @\u552E\u540E\u5B89\u629A\u5E94\u7B54",
+        "",
+        "## \u2B50 \u6EE1\u610F\u5EA6\u56DE\u8BBF\u4E0E\u597D\u8BC4\u5F15\u5BFC",
+        "<!-- xlc-item",
+        "id: xlc-cs000000004",
+        "type: text",
+        "tags: \u597D\u8BC4\u5F15\u5BFC,\u56DE\u8BBF,\u6EE1\u610F\u5EA6",
+        "category: \u5BA2\u6237\u670D\u52A1",
+        "source-type: external",
+        "-->",
+        "\u4EB2\uFF0C\u770B\u5230\u60A8\u7684\u95EE\u9898\u5DF2\u59A5\u5584\u89E3\u51B3\uFF0C\u5C0F\u59B9\u60AC\u7740\u7684\u5FC3\u603B\u7B97\u653E\u4E0B\u5566\uFF01\u5982\u679C\u5BF9\u672C\u6B21\u670D\u52A1\u8FD8\u6EE1\u610F\uFF0C\u8F9B\u82E6\u52A8\u52A8\u5C0F\u624B\u7ED9\u4E2A5\u661F\u597D\u8BC4\u54E6\uFF0C\u622A\u56FE\u53D1\u6211\u8FD8\u80FD\u9886\u53D65\u5143\u65E0\u95E8\u69DB\u7EA2\u5305\u54DF\uFF01 @\u597D\u8BC4\u5F15\u5BFC",
+        "",
+        "## \u{1F69A} \u6362\u8D27\u91CD\u5BC4\u65B0\u5355\u53F7\u540C\u6B65\u901A\u77E5",
+        "<!-- xlc-item",
+        "id: xlc-cs000000005",
+        "type: text",
+        "tags: \u6362\u8D27\u901A\u77E5,\u5FEB\u9012\u5355\u53F7,\u7269\u6D41\u8DDF\u8FDB",
+        "category: \u5BA2\u6237\u670D\u52A1",
+        "source-type: external",
+        "-->",
+        "\u4EB2\u4EB2\uFF0C\u60A8\u7533\u8BF7\u6362\u8D27\u7684\u65B0\u54C1\u5DF2\u901A\u8FC7\u987A\u4E30\u5BC4\u51FA\u5566\uFF0C\u7269\u6D41\u5355\u53F7\uFF1A{{xlc:ask:\u91CD\u5BC4\u5355\u53F7}}\uFF0C\u9884\u8BA12\u5929\u5185\u9001\u8FBE\uFF0C\u8BF7\u6CE8\u610F\u67E5\u6536\u54E6\uFF01 @\u6362\u8D27\u5355\u53F7\u540C\u6B65",
+        "",
+        "## \u{1F9FE} \u53D1\u7968\u8865\u5F00\u767B\u8BB0\u6307\u5F15",
+        "<!-- xlc-item",
+        "id: xlc-cs000000006",
+        "type: text",
+        "tags: \u53D1\u7968\u8865\u5F00,\u8D22\u52A1\u5F00\u7968,\u552E\u540E\u767B\u8BB0",
+        "category: \u5BA2\u6237\u670D\u52A1",
+        "source-type: external",
+        "-->",
+        "\u4EB2\uFF0C\u5DF2\u4E3A\u60A8\u767B\u8BB0\u53D1\u7968\u8865\u5F00\u9700\u6C42\uFF0C\u8BF7\u63D0\u4F9B\u60A8\u7684\u3010\u53D1\u7968\u62AC\u5934\u3001\u7A0E\u53F7\u53CA\u63A5\u6536\u7535\u5B50\u53D1\u7968\u7684\u90AE\u7BB1\u3011\uFF0C\u8D22\u52A1\u5C06\u57281-2\u4E2A\u5DE5\u4F5C\u65E5\u5185\u5F00\u5177\u5E76\u53D1\u9001\u5230\u60A8\u7684\u90AE\u7BB1\u4E2D\uFF01 @\u53D1\u7968\u8865\u5F00\u6307\u5F15"
+      ].join("\n");
+      DEVELOPER_DEVOPS_PACK_NAME = "\u5F00\u53D1\u4E0E\u7CFB\u7EDF\u8FD0\u7EF4\u5E38\u7528\u6307\u4EE4\u5957\u4EF6";
+      DEVELOPER_DEVOPS_PACK_MD = [
+        "<!-- xlc-pack",
+        `name: ${DEVELOPER_DEVOPS_PACK_NAME}`,
+        "items: 6",
+        "vars: \u5206\u652F\u540D,\u63D0\u4EA4\u4FE1\u606F,\u5BB9\u5668\u540D,\u7AEF\u53E3\u53F7,\u6570\u636E\u5E93\u540D,\u8868\u540D",
+        "-->",
+        `# ${DEVELOPER_DEVOPS_PACK_NAME}`,
+        "",
+        "> \u7EC8\u7AEF\u547D\u4EE4\u3001Docker \u5BB9\u5668\u8FD0\u7EF4\u3001Git \u5DE5\u4F5C\u6D41\u4E0E SQL \u8BCA\u65AD\u5E38\u7528\u4EE3\u7801\u4EF6\u3002",
+        "",
+        "## \u{1F419} Git \u5E26\u5206\u652F\u4E0E\u5B89\u5168\u63D0\u4EA4\u7EC4\u5408",
+        "<!-- xlc-item",
+        "id: xlc-dev000000001",
+        "type: code",
+        "tags: Git,\u7EC8\u7AEF\u547D\u4EE4,\u4EE3\u7801\u63D0\u4EA4",
+        "category: \u5F00\u53D1\u8FD0\u7EF4",
+        "source-type: external",
+        "-->",
+        '```bash\ngit checkout -b {{xlc:ask:\u5206\u652F\u540D}}\ngit add .\ngit commit -m "{{xlc:ask:\u63D0\u4EA4\u4FE1\u606F}}"\ngit push -u origin {{xlc:ask:\u5206\u652F\u540D}}\n```',
+        "",
+        "## \u{1F433} Docker \u5E38\u7528\u6E05\u7406\u4E0E\u5355\u884C\u8FD0\u884C",
+        "<!-- xlc-item",
+        "id: xlc-dev000000002",
+        "type: code",
+        "tags: Docker,\u5BB9\u5668\u8FD0\u7EF4,Linux",
+        "category: \u5F00\u53D1\u8FD0\u7EF4",
+        "source-type: external",
+        "-->",
+        "```bash\ndocker run -d --name {{xlc:ask:\u5BB9\u5668\u540D}} -p {{xlc:ask:\u7AEF\u53E3\u53F7}}:80 --restart unless-stopped {{xlc:clipboard}}\n```",
+        "",
+        "## \u{1F50D} MySQL \u6162\u67E5\u8BE2\u8BCA\u65AD\u4E0E\u7D22\u5F15\u547D\u4E2D\u5206\u6790",
+        "<!-- xlc-item",
+        "id: xlc-dev000000003",
+        "type: code",
+        "tags: MySQL,SQL\u5206\u6790,\u6570\u636E\u5E93\u6027\u80FD",
+        "category: \u5F00\u53D1\u8FD0\u7EF4",
+        "source-type: external",
+        "-->",
+        "```sql\nEXPLAIN ANALYZE\nSELECT * FROM {{xlc:ask:\u8868\u540D}}\nWHERE status = 1 AND created_at >= NOW() - INTERVAL 7 DAY\nORDER BY id DESC LIMIT 50;\n```",
+        "",
+        "## \u{1F310} Nginx \u751F\u4EA7\u53CD\u5411\u4EE3\u7406\u4E0E HTTPS \u6807\u5934\u914D\u7F6E",
+        "<!-- xlc-item",
+        "id: xlc-dev000000004",
+        "type: code",
+        "tags: Nginx,\u53CD\u5411\u4EE3\u7406,\u8FD0\u7EF4\u914D\u7F6E",
+        "category: \u5F00\u53D1\u8FD0\u7EF4",
+        "source-type: external",
+        "-->",
+        "```nginx\nlocation /api/ {\n    proxy_pass http://127.0.0.1:{{xlc:ask:\u7AEF\u53E3\u53F7}};\n    proxy_set_header Host $host;\n    proxy_set_header X-Real-IP $remote_addr;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    proxy_set_header X-Forwarded-Proto $scheme;\n}\n```",
+        "",
+        "## \u2699 \u5E38\u7528\u6B63\u5219\u8868\u8FBE\u5F0F\u5408\u96C6\uFF08\u624B\u673A/\u90AE\u7BB1/\u8EAB\u4EFD\u8BC1\uFF09",
+        "<!-- xlc-item",
+        "id: xlc-dev000000005",
+        "type: code",
+        "tags: \u6B63\u5219\u8868\u8FBE\u5F0F,Regex,\u6821\u9A8C",
+        "category: \u5F00\u53D1\u8FD0\u7EF4",
+        "source-type: external",
+        "-->",
+        "```javascript\n// \u624B\u673A\u53F7: /^1[3-9]\\d{9}$/\n// \u90AE\u7BB1: /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/\n// \u4E8C\u4EE3\u8EAB\u4EFD\u8BC1: /^[1-9]\\d{5}(18|19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[0-9Xx]$/\n```",
+        "",
+        "## \u26A1 cURL \u63A5\u53E3\u8017\u65F6\u7EDF\u8BA1\u4E0E\u683C\u5F0F\u5316\u8F93\u51FA",
+        "<!-- xlc-item",
+        "id: xlc-dev000000006",
+        "type: code",
+        "tags: cURL,\u63A5\u53E3\u6D4B\u8BD5,\u7F51\u7EDC\u8BCA\u65AD",
+        "category: \u5F00\u53D1\u8FD0\u7EF4",
+        "source-type: external",
+        "-->",
+        '```bash\ncurl -w "DNS: %{time_namelookup}s | Connect: %{time_connect}s | TTFB: %{time_starttransfer}s | Total: %{time_total}s\\n" -o /dev/null -s "{{xlc:clipboard}}"\n```'
+      ].join("\n");
+      WRITING_ACADEMIC_PACK_NAME = "\u5199\u4F5C\u6392\u7248\u4E0E\u5B66\u672F\u89C4\u8303\u5957\u4EF6";
+      WRITING_ACADEMIC_PACK_MD = [
+        "<!-- xlc-pack",
+        `name: ${WRITING_ACADEMIC_PACK_NAME}`,
+        "items: 5",
+        "vars: \u8B66\u544A\u91CD\u70B9,\u4E3B\u8981\u4F5C\u8005,\u6587\u732E\u9898\u540D,\u520A\u540D,\u51FA\u7248\u5E74,\u5377\u53F7,\u8D77\u6B62\u9875\u7801",
+        "-->",
+        `# ${WRITING_ACADEMIC_PACK_NAME}`,
+        "",
+        "> Callout \u7ED3\u6784\u3001\u4E2D\u82F1\u6587\u5B66\u672F\u671F\u520A\u5F15\u6587\u6807\u51C6\u4E0E\u7ED3\u6784\u5316\u6392\u7248\u89C4\u8303\u3002",
+        "",
+        "## \u{1F4A1} Callout \u91CD\u70B9\u63D0\u793A\u4E0E\u63D0\u793A\u5757",
+        "<!-- xlc-item",
+        "id: xlc-write0000001",
+        "type: markdown",
+        "tags: Callout,\u6392\u7248,\u63D0\u793A\u5757",
+        "category: \u5199\u4F5C\u6392\u7248",
+        "source-type: external",
+        "-->",
+        "> [!NOTE]\n> **\u6838\u5FC3\u8981\u70B9**\uFF1A{{xlc:ask:\u6838\u5FC3\u8BF4\u660E}}\n> \u63D0\u793A\uFF1A\u672C\u90E8\u5206\u4E3A\u5FC5\u8BFB\u5185\u5BB9\uFF0C\u8BF7\u5728\u6267\u884C\u524D\u4ED4\u7EC6\u6838\u5BF9\u53C2\u6570\u3002",
+        "",
+        "## \u26A0\uFE0F Callout \u5371\u9669\u4E0E\u91CD\u8981\u8B66\u544A\u5757",
+        "<!-- xlc-item",
+        "id: xlc-write0000002",
+        "type: markdown",
+        "tags: Callout,\u8B66\u544A,\u6392\u7248",
+        "category: \u5199\u4F5C\u6392\u7248",
+        "source-type: external",
+        "-->",
+        "> [!WARNING]\n> **\u98CE\u9669\u8B66\u793A**\uFF1A{{xlc:ask:\u8B66\u544A\u91CD\u70B9}}\n> \u6B64\u64CD\u4F5C\u4E0D\u53EF\u9006\uFF0C\u8BF7\u5728\u65AD\u7F51\u5907\u4EFD\u540E\u518D\u884C\u6267\u884C\uFF01",
+        "",
+        "## \u{1F4DA} GB/T 7714-2015 \u4E2D\u6587\u5B66\u672F\u671F\u520A\u8BBA\u6587\u5F15\u6587",
+        "<!-- xlc-item",
+        "id: xlc-write0000003",
+        "type: code",
+        "tags: \u5B66\u672F,\u5F15\u6587,\u56FD\u6807,GB7714",
+        "category: \u5199\u4F5C\u6392\u7248",
+        "source-type: external",
+        "-->",
+        "```markdown\n[1] {{xlc:ask:\u4E3B\u8981\u4F5C\u8005}}. {{xlc:ask:\u6587\u732E\u9898\u540D}}[J]. {{xlc:ask:\u520A\u540D}}, {{xlc:ask:\u51FA\u7248\u5E74}}, {{xlc:ask:\u5377\u53F7}}: {{xlc:ask:\u8D77\u6B62\u9875\u7801}}.\n```",
+        "",
+        "## \u{1F310} APA 7th \u82F1\u6587\u671F\u520A\u5F15\u6587\u683C\u5F0F",
+        "<!-- xlc-item",
+        "id: xlc-write0000004",
+        "type: code",
+        "tags: \u5B66\u672F,\u5F15\u6587,APA,\u82F1\u6587\u671F\u520A",
+        "category: \u5199\u4F5C\u6392\u7248",
+        "source-type: external",
+        "-->",
+        "```markdown\n{{xlc:ask:\u4E3B\u8981\u4F5C\u8005}} ({{xlc:ask:\u51FA\u7248\u5E74}}). {{xlc:ask:\u6587\u732E\u9898\u540D}}. *{{xlc:ask:\u520A\u540D}}*, *{{xlc:ask:\u5377\u53F7}}*, {{xlc:ask:\u8D77\u6B62\u9875\u7801}}.\n```",
+        "",
+        "## \u2696 \u6DF1\u5EA6\u5206\u6790\u4E09\u6BB5\u5F0F\u7ED3\u8BBA\u91D1\u53E5\u7ED3\u6784",
+        "<!-- xlc-item",
+        "id: xlc-write0000005",
+        "type: markdown",
+        "tags: \u5199\u4F5C\u6846\u67B6,\u7ED3\u8BBA\u6BB5\u843D,\u91D1\u53E5",
+        "category: \u5199\u4F5C\u6392\u7248",
+        "source-type: external",
+        "-->",
+        "**\u4E00\u3001 \u6838\u5FC3\u4E8B\u5B9E\u4E0E\u77DB\u76FE**\uFF1A{{xlc:ask:\u6838\u5FC3\u4E8B\u5B9E}}\n\n**\u4E8C\u3001 \u6DF1\u5C42\u6839\u56E0\u5256\u6790**\uFF1A{{xlc:ask:\u6839\u56E0\u62C6\u89E3}}\n\n**\u4E09\u3001 \u51B3\u65AD\u4E0E\u884C\u52A8\u8DEF\u7EBF**\uFF1A{{xlc:ask:\u884C\u52A8\u7EB2\u9886}}"
+      ].join("\n");
+      STARTER_PACKS = [
+        {
+          id: "starter-biz",
+          icon: "\u{1F4BC}",
+          name: "\u5546\u52A1\u4E0E\u8D22\u52A1\u5F00\u7968\u5957\u4EF6",
+          tagline: "\u7A0E\u53F7/\u5F00\u7968\u8D44\u6599/\u5BF9\u516C\u6253\u6B3E/\u987A\u4E30\u5730\u5740",
+          description: "\u6DB5\u76D6\u5F00\u7968\u8D44\u8D28\u3001\u94F6\u884C\u8D26\u53F7\u3001\u6536\u53D1\u4EF6\u683C\u5F0F\u4E0E\u5546\u52A1\u611F\u8C22\u4FE1\uFF0C\u5546\u52A1\u5BF9\u516C\u5FC5\u5907\u3002",
+          category: "\u5546\u52A1\u8D22\u52A1",
+          itemCount: 6,
+          markdown: BUSINESS_FINANCE_PACK_MD
+        },
+        {
+          id: "starter-cs",
+          icon: "\u{1F3A7}",
+          name: "\u7535\u5546\u5BA2\u670D\u4E0E\u552E\u540E\u6C9F\u901A\u5957\u4EF6",
+          tagline: "\u53D1\u8D27\u5EF6\u8FDF\u81F4\u6B49/\u9000\u6362\u8D27\u6307\u5F15/\u597D\u8BC4\u5B89\u629A",
+          description: "\u9AD8\u9891\u5BA2\u6237\u6C9F\u901A\u8BDD\u672F\uFF0C\u652F\u6301\u5DE5\u5355\u53F7\u4E0E\u65E5\u671F\u52A8\u6001\u53D8\u91CF\uFF0C\u5927\u5E45\u63D0\u5347\u56DE\u590D\u8D28\u91CF\u3002",
+          category: "\u5BA2\u6237\u670D\u52A1",
+          itemCount: 6,
+          markdown: CUSTOMER_SERVICE_PACK_MD
+        },
+        {
+          id: "starter-dev",
+          icon: "\u{1F4BB}",
+          name: "\u5F00\u53D1\u4E0E\u7CFB\u7EDF\u8FD0\u7EF4\u5E38\u7528\u6307\u4EE4",
+          tagline: "Git\u63D0\u4EA4/Docker/MySQL\u8BCA\u65AD/Nginx",
+          description: "\u5E38\u7528\u751F\u4EA7\u547D\u4EE4\u3001\u53CD\u5411\u4EE3\u7406\u3001\u6B63\u5219\u8868\u8FBE\u5F0F\u4E0E\u538B\u6D4B\u8BCA\u65AD\uFF0C\u6781\u901F\u7C98\u8D34\u7EC8\u7AEF\u3002",
+          category: "\u5F00\u53D1\u8FD0\u7EF4",
+          itemCount: 6,
+          markdown: DEVELOPER_DEVOPS_PACK_MD
+        },
+        {
+          id: "starter-write",
+          icon: "\u{1F4DD}",
+          name: "\u5199\u4F5C\u6392\u7248\u4E0E\u5B66\u672F\u89C4\u8303\u5957\u4EF6",
+          tagline: "Callout\u8B66\u544A/GB7714\u56FD\u6807/APA\u5F15\u6587",
+          description: "\u7ED3\u6784\u5316\u7B14\u8BB0\u6392\u7248\u4E0E\u4E2D\u82F1\u6587\u8BBA\u6587\u5F15\u6587\u89C4\u8303\uFF0C\u5B66\u672F\u79D1\u7814\u4E0E\u5185\u5BB9\u535A\u4E3B\u5229\u5668\u3002",
+          category: "\u5199\u4F5C\u6392\u7248",
+          itemCount: 5,
+          markdown: WRITING_ACADEMIC_PACK_MD
+        }
+      ];
+    }
+  });
+
+  // src/model/zip.ts
+  function crc32(data) {
+    var _a;
+    let c = 0 ^ -1;
+    for (const byte of data) c = c >>> 8 ^ ((_a = CRC_TABLE[(c ^ byte) & 255]) != null ? _a : 0);
+    return (c ^ -1) >>> 0;
+  }
+  function dosDateTime() {
+    const time = 0;
+    const date = 2026 - 1980 << 9 | 1 << 5 | 1;
+    return { time, date };
+  }
+  function u16(arr, value) {
+    arr.push(value & 255, value >>> 8 & 255);
+  }
+  function u32(arr, value) {
+    arr.push(value & 255, value >>> 8 & 255, value >>> 16 & 255, value >>> 24 & 255);
+  }
+  function buildZip(entries) {
+    if (entries.length === 0) throw new Error("zip: no entries");
+    if (entries.length > 65535) throw new Error("zip: too many entries");
+    const { time, date } = dosDateTime();
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    for (const entry of entries) {
+      if (!entry.name || entry.name.startsWith("/") || entry.name.includes("..") || entry.name.includes("\\")) {
+        throw new Error(`zip: unsafe entry name ${entry.name}`);
+      }
+      const nameBytes = new TextEncoder().encode(entry.name);
+      const crc = crc32(entry.data);
+      const local = [];
+      u32(local, 67324752);
+      u16(local, 20);
+      u16(local, 0);
+      u16(local, 0);
+      u16(local, time);
+      u16(local, date);
+      u32(local, crc);
+      u32(local, entry.data.length);
+      u32(local, entry.data.length);
+      u16(local, nameBytes.length);
+      u16(local, 0);
+      local.push(...nameBytes);
+      const headerOffset = offset;
+      localParts.push(local, Array.from(entry.data));
+      const central = [];
+      u32(central, 33639248);
+      u16(central, 20);
+      u16(central, 20);
+      u16(central, 0);
+      u16(central, 0);
+      u16(central, time);
+      u16(central, date);
+      u32(central, crc);
+      u32(central, entry.data.length);
+      u32(central, entry.data.length);
+      u16(central, nameBytes.length);
+      u16(central, 0);
+      u16(central, 0);
+      u16(central, 0);
+      u16(central, 0);
+      u32(central, 0);
+      u32(central, headerOffset);
+      central.push(...nameBytes);
+      centralParts.push(central);
+      offset += local.length + entry.data.length;
+    }
+    const centralStart = offset;
+    let centralSize = 0;
+    const out = [];
+    for (const part of localParts) out.push(...part);
+    for (const part of centralParts) {
+      out.push(...part);
+      centralSize += part.length;
+    }
+    const eocd = [];
+    u32(eocd, 101010256);
+    u16(eocd, 0);
+    u16(eocd, 0);
+    u16(eocd, entries.length);
+    u16(eocd, entries.length);
+    u32(eocd, centralSize);
+    u32(eocd, centralStart);
+    u16(eocd, 0);
+    out.push(...eocd);
+    return new Uint8Array(out);
+  }
+  var CRC_TABLE;
+  var init_zip = __esm({
+    "src/model/zip.ts"() {
+      "use strict";
+      CRC_TABLE = (() => {
+        const table = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+          let c = n;
+          for (let k = 0; k < 8; k++) c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+          table[n] = c >>> 0;
+        }
+        return table;
+      })();
+    }
+  });
+
+  // src/service/export-markdown.ts
+  async function buildMarkdownExport(items, kramdownById, fetchAssetBytes, packOrOptions) {
+    var _a, _b, _c;
+    const pack = packOrOptions && "name" in packOrOptions ? packOrOptions : packOrOptions == null ? void 0 : packOrOptions.pack;
+    const sanitizer = packOrOptions && "sanitizer" in packOrOptions ? packOrOptions.sanitizer : void 0;
+    const oneLine = (value) => value.replace(/[\r\n]+/g, " ").trim();
+    for (const item of items) {
+      if (!kramdownById.has(item.id)) {
+        throw new ExportIntegrityError("body-missing", item.title || item.id);
+      }
+    }
+    const entries = [];
+    const skippedAssets = [];
+    const assetEntries = /* @__PURE__ */ new Map();
+    const usedNames = /* @__PURE__ */ new Set(["items.md"]);
+    let assetCount = 0;
+    const varNames = [];
+    for (const item of items) {
+      if (item.itemType === "code") continue;
+      let text = (_a = kramdownById.get(item.id)) != null ? _a : "";
+      if (sanitizer) {
+        text = sanitizeTextForExport(text, sanitizer).text;
+      }
+      for (const field of listAskFields(text)) {
+        if (!varNames.includes(field.name)) varNames.push(field.name);
+        if (varNames.length >= LIMITS.maxAskFields) break;
+      }
+      if (varNames.length >= LIMITS.maxAskFields) break;
+    }
+    const snippetNames = [];
+    for (const item of items) {
+      if (item.itemType === "code") continue;
+      for (const snippet of listSnippetRefs((_b = kramdownById.get(item.id)) != null ? _b : "")) {
+        if (!snippetNames.includes(snippet)) snippetNames.push(snippet);
+        if (snippetNames.length >= 16) break;
+      }
+      if (snippetNames.length >= 16) break;
+    }
+    const mdParts = [
+      "# \u5C0F\u9A74\u5E38\u7528\uFF08\u5185\u6D4B\u7248\uFF09 \xB7 \u6761\u76EE\u5BFC\u51FA",
+      "",
+      `> \u5BFC\u51FA\u81EA\u601D\u6E90\u63D2\u4EF6\u300C\u5C0F\u9A74\u5E38\u7528\uFF08\u5185\u6D4B\u7248\uFF09\u300D\uFF0C\u5171 ${items.length} \u6761\u3002\u8D44\u6E90\u4F4D\u4E8E assets/\uFF0C\u6761\u76EE\u5185\u94FE\u63A5\u4E3A\u76F8\u5BF9\u8DEF\u5F84\u3002`,
+      ""
+    ];
+    if (pack && pack.name.trim()) {
+      const manifest = [
+        `<!-- xlc-pack`,
+        `name: ${oneLine(pack.name).slice(0, LIMITS.title)}`,
+        `items: ${items.length}`,
+        varNames.length ? `vars: ${varNames.join(",")}` : "",
+        snippetNames.length ? `snippets: ${snippetNames.join(",")}` : "",
+        `-->`
+      ].filter(Boolean).join("\n");
+      mdParts.unshift(manifest, "");
+    }
+    let totalLen = mdParts.reduce((length, part) => length + part.length, 0) + mdParts.length - 1;
+    for (const item of items) {
+      let kramdown = (_c = kramdownById.get(item.id)) != null ? _c : "";
+      if (sanitizer && item.itemType !== "code") {
+        kramdown = sanitizeTextForExport(kramdown, sanitizer).text;
+      }
+      const meta = [
+        `<!-- xlc-item`,
+        `id: ${item.id}`,
+        `type: ${item.itemType}`,
+        item.alias ? `alias: ${oneLine(item.alias)}` : "",
+        item.shortcode ? `shortcode: ${oneLine(item.shortcode)}` : "",
+        item.tags.length ? `tags: ${item.tags.map(oneLine).join(",")}` : "",
+        item.category ? `category: ${oneLine(item.category)}` : "",
+        item.source.sourceDocId ? `source-doc: ${oneLine(item.source.sourceDocId)}` : "",
+        item.source.sourceBlockId ? `source-block: ${oneLine(item.source.sourceBlockId)}` : "",
+        item.source.sourceType ? `source-type: ${oneLine(item.source.sourceType)}` : "",
+        item.url ? `url: ${oneLine(item.url)}` : "",
+        item.targetBlockId ? `target: ${oneLine(item.targetBlockId)}` : "",
+        `-->`
+      ].filter(Boolean).join("\n");
+      const itemParts = [`## ${oneLine(item.title || item.id)}`, "", meta, "", kramdown, ""];
+      totalLen += itemParts.reduce((length, part) => length + part.length, 0) + itemParts.length;
+      if (totalLen > LIMITS.contentChars) {
+        throw new ExportIntegrityError("too-large", "", String(LIMITS.contentChars));
+      }
+      mdParts.push(...itemParts);
+      if (item.itemType === "image" || item.itemType === "asset") {
+        const assetPath = extractAssetPath(kramdown);
+        if (assetPath && !assetEntries.has(assetPath)) {
+          const bytes = await fetchAssetBytes(assetPath);
+          if (bytes && bytes.length > 0) {
+            const name = assetPath;
+            usedNames.add(name);
+            assetEntries.set(assetPath, { name, data: bytes });
+            assetCount++;
+          } else {
+            skippedAssets.push(assetPath);
+          }
+        }
+      }
+    }
+    const markdown = mdParts.join("\n");
+    entries.push({ name: "items.md", data: new TextEncoder().encode(markdown) });
+    entries.push(...assetEntries.values());
+    return { entries, itemCount: items.length, assetCount, skippedAssets, varNames, snippetNames };
+  }
+  var ExportIntegrityError;
+  var init_export_markdown = __esm({
+    "src/service/export-markdown.ts"() {
+      "use strict";
+      init_actions();
+      init_constants();
+      init_variables();
+      init_export_sanitizer();
+      ExportIntegrityError = class extends Error {
+        constructor(reason, itemLabel = "", detail = "") {
+          super(`export-${reason}${itemLabel ? `: ${itemLabel}` : ""}${detail ? `: ${detail}` : ""}`);
+          this.reason = reason;
+          this.itemLabel = itemLabel;
+          this.detail = detail;
+          this.name = "ExportIntegrityError";
+        }
+      };
+    }
+  });
+
+  // src/service/importer.ts
+  var init_importer = __esm({
+    "src/service/importer.ts"() {
+      "use strict";
+      init_transfer();
+      init_item();
+      init_kramdown();
+      init_errors();
+    }
+  });
+
+  // src/service/import-markdown.ts
+  function parseMetadata(lines) {
+    const fields = /* @__PURE__ */ new Map();
+    let titleHint = "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === ITEM_COMMENT_START || trimmed === ITEM_COMMENT_END) continue;
+      const idx = trimmed.indexOf(":");
+      if (idx <= 0) continue;
+      fields.set(trimmed.slice(0, idx).trim(), trimmed.slice(idx + 1).trim());
+    }
+    return { fields, titleHint };
+  }
+  function parsePackManifest(md, firstItemAt) {
+    var _a, _b, _c;
+    const start = md.indexOf(PACK_COMMENT_START);
+    if (start === -1 || start > firstItemAt) return void 0;
+    const end = md.indexOf(ITEM_COMMENT_END, start);
+    if (end === -1) return void 0;
+    const fields = parseMetadata(md.slice(start + PACK_COMMENT_START.length, end).split("\n")).fields;
+    const name = ((_a = fields.get("name")) != null ? _a : "").slice(0, LIMITS.title);
+    const vars = ((_b = fields.get("vars")) != null ? _b : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.maxAskFields);
+    const snippets = ((_c = fields.get("snippets")) != null ? _c : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 16);
+    if (!name) return void 0;
+    return { name, vars, ...snippets.length > 0 ? { snippets } : {} };
+  }
+  function buildPackDependencyMap(items) {
+    const map = {};
+    for (const it of items) {
+      if (it.itemType === "code") continue;
+      const refs = listSnippetRefs(it.kramdown);
+      if (refs.length > 0) {
+        map[it.title || it.id] = refs;
+      }
+    }
+    return map;
+  }
+  function parseMarkdownPack(md) {
+    var _a, _b;
+    const items = [];
+    const issues = [];
+    const seenIds = /* @__PURE__ */ new Set();
+    if (!md || !md.includes(ITEM_COMMENT_START)) return { items, issues };
+    const firstItemAt = md.indexOf(ITEM_COMMENT_START);
+    const pack = parsePackManifest(md, firstItemAt);
+    const commentStarts = [];
+    const commentEnds = [];
+    let hasUnclosed = false;
+    let scan = 0;
+    while (true) {
+      const start = md.indexOf(ITEM_COMMENT_START, scan);
+      if (start === -1) break;
+      const end = md.indexOf(ITEM_COMMENT_END, start);
+      if (end === -1) {
+        hasUnclosed = true;
+        break;
+      }
+      commentStarts.push(start);
+      commentEnds.push(end + ITEM_COMMENT_END.length);
+      scan = start + ITEM_COMMENT_START.length;
+      if (commentStarts.length > LIMITS.maxItems) break;
+    }
+    const chunks = [];
+    for (let i = 0; i < commentStarts.length; i++) {
+      const itemStart = (_a = commentStarts[i]) != null ? _a : 0;
+      const lowerBound = i > 0 ? (_b = commentEnds[i - 1]) != null ? _b : 0 : 0;
+      const titleLineStart = md.lastIndexOf("\n## ", itemStart) + 1;
+      const chunkStart = Math.max(Math.min(titleLineStart, itemStart), lowerBound);
+      const nextCommentStart = commentStarts[i + 1];
+      const nextTitleStart = nextCommentStart === void 0 ? -1 : md.lastIndexOf("\n## ", nextCommentStart) + 1;
+      const chunkEnd = nextTitleStart > itemStart ? nextTitleStart : nextCommentStart != null ? nextCommentStart : md.length;
+      chunks.push(md.slice(chunkStart, chunkEnd));
+    }
+    chunks.forEach((chunk, index) => {
+      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+      const endIdx = chunk.indexOf(ITEM_COMMENT_END);
+      if (endIdx === -1) {
+        issues.push({ index, reason: "metadata-comment-unclosed" });
+        return;
+      }
+      const metaLines = chunk.slice(0, endIdx).split("\n");
+      const { fields } = parseMetadata(metaLines);
+      const id = (_a2 = fields.get("id")) != null ? _a2 : "";
+      if (!/^xlc-[0-9a-z]{10,40}$/.test(id)) {
+        issues.push({ index, reason: "invalid-id" });
+        return;
+      }
+      if (seenIds.has(id)) {
+        issues.push({ index, reason: "duplicate-id" });
+        return;
+      }
+      const itemType = (_b2 = fields.get("type")) != null ? _b2 : "text";
+      if (!isItemType(itemType)) {
+        issues.push({ index, reason: "invalid-item-type" });
+        return;
+      }
+      const url = (_c = fields.get("url")) != null ? _c : "";
+      if (url && !isSafeHttpUrl(url)) {
+        issues.push({ index, reason: "invalid-url" });
+        return;
+      }
+      let title = "";
+      const before = chunk.slice(0, chunk.indexOf(ITEM_COMMENT_START));
+      for (const line of before.split("\n")) {
+        const m = line.match(TITLE_RE);
+        const matched = m == null ? void 0 : m[1];
+        if (matched) title = matched.trim();
+      }
+      if (!title && fields.get("alias")) title = (_d = fields.get("alias")) != null ? _d : "";
+      const body = chunk.slice(endIdx + ITEM_COMMENT_END.length).replace(/^\s*\n/, "").replace(/\n\s*$/, "");
+      const shortcode = cleanShortcode((_e = fields.get("shortcode")) != null ? _e : "");
+      seenIds.add(id);
+      items.push({
+        id,
+        itemType,
+        title: title.slice(0, LIMITS.title),
+        alias: ((_f = fields.get("alias")) != null ? _f : "").slice(0, LIMITS.alias),
+        ...shortcode ? { shortcode } : {},
+        tags: ((_g = fields.get("tags")) != null ? _g : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.tags),
+        category: ((_h = fields.get("category")) != null ? _h : "").slice(0, LIMITS.category),
+        kramdown: body.slice(0, LIMITS.contentChars),
+        source: {
+          sourceDocId: (_i = fields.get("source-doc")) != null ? _i : "",
+          sourceBlockId: (_j = fields.get("source-block")) != null ? _j : "",
+          sourceType: (_k = fields.get("source-type")) != null ? _k : "external"
+        },
+        url,
+        targetBlockId: (_l = fields.get("target")) != null ? _l : "",
+        createdAt: 0,
+        updatedAt: Date.now()
+      });
+    });
+    if (hasUnclosed) issues.push({ index: commentStarts.length, reason: "metadata-comment-unclosed" });
+    const packTitles = new Set(items.map((it) => it.title).filter(Boolean));
+    const allReferencedSnippets = /* @__PURE__ */ new Set();
+    for (const it of items) {
+      if (it.itemType === "code") continue;
+      for (const ref of listSnippetRefs(it.kramdown)) {
+        allReferencedSnippets.add(ref);
+      }
+    }
+    if (pack == null ? void 0 : pack.snippets) {
+      for (const sn of pack.snippets) allReferencedSnippets.add(sn);
+    }
+    const missingSnippets = Array.from(allReferencedSnippets).filter((snTitle) => !packTitles.has(snTitle));
+    let finalPack = pack;
+    if (missingSnippets.length > 0) {
+      finalPack = finalPack ? { ...finalPack, missingSnippets } : { name: "", vars: [], missingSnippets };
+    }
+    const dependencyMap = buildPackDependencyMap(items);
+    if (Object.keys(dependencyMap).length > 0) {
+      finalPack = finalPack ? { ...finalPack, dependencyMap } : { name: "", vars: [], dependencyMap };
+    }
+    return { items, issues, pack: finalPack };
+  }
+  var ITEM_COMMENT_START, ITEM_COMMENT_END, PACK_COMMENT_START, TITLE_RE;
+  var init_import_markdown = __esm({
+    "src/service/import-markdown.ts"() {
+      "use strict";
+      init_constants();
+      init_importer();
+      init_item();
+      init_variables();
+      ITEM_COMMENT_START = "<!-- xlc-item";
+      ITEM_COMMENT_END = "-->";
+      PACK_COMMENT_START = "<!-- xlc-pack";
+      TITLE_RE = /^##\s+(.+)$/;
     }
   });
 
@@ -28328,6 +28644,7 @@ fi`;
 
   // src/ui/dialog.ts
   init_storage();
+  init_prompt_pack();
   function resolveEntryBlockId(entry) {
     var _a;
     const strippedOmni = entry.id.startsWith("xlc-omni-") ? entry.id.slice("xlc-omni-".length) : entry.id;
@@ -30697,6 +31014,63 @@ fi`;
           hint.className = "xlc-empty-hint";
           hint.textContent = this.deps.t("emptyLibrarySub");
           empty.appendChild(hint);
+          if (this.deps.importStarterPackDirect) {
+            const kitsBox = document.createElement("div");
+            kitsBox.className = "xlc-starter-kits-box";
+            kitsBox.dataset.xlcControl = "empty.starter-kits";
+            const kitsTitle = document.createElement("div");
+            kitsTitle.className = "xlc-starter-kits-title";
+            kitsTitle.textContent = "\u{1F680} \u6311\u9009\u573A\u666F\u4E13\u5C5E\u9884\u7F6E\u5E93\uFF0C\u4E00\u79D2\u88C5\u8F7D\u76F4\u63A5\u4E0A\u624B\uFF1A";
+            kitsBox.appendChild(kitsTitle);
+            const kitsGrid = document.createElement("div");
+            kitsGrid.className = "xlc-starter-kits-grid";
+            for (const pack of STARTER_PACKS) {
+              const card = document.createElement("div");
+              card.className = "xlc-starter-kit-card";
+              card.dataset.xlcControl = `starter-kit.card.${pack.id}`;
+              const cardTop = document.createElement("div");
+              cardTop.className = "xlc-starter-kit-card-top";
+              const iconSpan = document.createElement("span");
+              iconSpan.className = "xlc-starter-kit-icon";
+              iconSpan.textContent = pack.icon;
+              const nameSpan = document.createElement("strong");
+              nameSpan.className = "xlc-starter-kit-name";
+              nameSpan.textContent = pack.name;
+              cardTop.append(iconSpan, nameSpan);
+              const tagLine = document.createElement("div");
+              tagLine.className = "xlc-starter-kit-tagline";
+              tagLine.textContent = pack.tagline;
+              const installBtn = document.createElement("button");
+              installBtn.type = "button";
+              installBtn.className = "b3-button b3-button--small xlc-btn-primary xlc-starter-kit-btn";
+              installBtn.dataset.xlcControl = `starter-kit.install.${pack.id}`;
+              installBtn.textContent = `\uFF0B \u88C5\u5165 (${pack.itemCount}\u9879)`;
+              installBtn.addEventListener("click", async () => {
+                var _a2, _b2, _c2, _d2, _e2, _f;
+                installBtn.disabled = true;
+                installBtn.textContent = "\u23F3 \u88C5\u5165\u4E2D...";
+                try {
+                  const res = await this.deps.importStarterPackDirect(pack.markdown);
+                  if (res.ok) {
+                    (_b2 = (_a2 = this.deps).notify) == null ? void 0 : _b2.call(_a2, "info", `\u5DF2\u6210\u529F\u88C5\u5165\u300C${pack.name}\u300D\u5171 ${res.count} \u9879\u5E38\u7528\u8BED\uFF01`);
+                    void this.refresh();
+                  } else {
+                    installBtn.disabled = false;
+                    installBtn.textContent = `\uFF0B \u88C5\u5165 (${pack.itemCount}\u9879)`;
+                    (_d2 = (_c2 = this.deps).notify) == null ? void 0 : _d2.call(_c2, "error", "\u88C5\u5165\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+                  }
+                } catch {
+                  installBtn.disabled = false;
+                  installBtn.textContent = `\uFF0B \u88C5\u5165 (${pack.itemCount}\u9879)`;
+                  (_f = (_e2 = this.deps).notify) == null ? void 0 : _f.call(_e2, "error", "\u88C5\u5165\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+                }
+              });
+              card.append(cardTop, tagLine, installBtn);
+              kitsGrid.appendChild(card);
+            }
+            kitsBox.appendChild(kitsGrid);
+            empty.appendChild(kitsBox);
+          }
           const guide = document.createElement("button");
           guide.type = "button";
           guide.className = "b3-button xlc-btn-ghost xlc-empty-action";

@@ -65,6 +65,7 @@ import * as shareCard from "../src/ui/share-card";
 import * as expansion from "../src/model/expansion";
 import * as contextualRecommend from "../src/model/contextual-recommend";
 import * as pinboard from "../src/ui/pinboard";
+import * as promptPack from "../src/service/prompt-pack";
 
 export {
     item,

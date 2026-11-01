@@ -19,7 +19,7 @@ import {escapeHtml, isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown} fro
 import {collectDefaults, rememberValues} from "./model/variable-memory";
 import {ExportedItem, buildBundle, validateImport, ConflictPolicy, ImportReceipt} from "./model/transfer";
 import {importBundle as importBundleCore} from "./service/importer";
-import {importMarkdownBundle} from "./service/import-markdown";
+import {importMarkdownBundle, parseMarkdownPack} from "./service/import-markdown";
 import {LibraryConfig, CONFIG_VERSION, migrateState, normalizeLibraryConfig, normalizeSavedDiscoveryViews, normalizeState, PluginState, pushRecentQuery, removeRecentQuery, type SavedDiscoveryView, pushClipboardHistory} from "./model/storage";
 import {SearchContext, collectCategories, collectTags, searchEntries, applyBasicFilters, SearchEntry} from "./model/search";
 import {findDuplicateByContent} from "./model/dedupe";
@@ -2020,6 +2020,23 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     }
 
+    async importStarterPackDirect(markdown: string): Promise<{ok: boolean; count: number}> {
+        if (!this.library) return {ok: false, count: 0};
+        try {
+            const parsed = parseMarkdownPack(markdown);
+            if (parsed.items.length === 0) return {ok: false, count: 0};
+            const receipt = await this.importMarkdownItems(parsed.items, "skip");
+            if (receipt.created > 0 || receipt.skipped > 0 || receipt.failed === 0) {
+                await this.library.ensureIndex(0);
+                this.notifyExternalDataChange();
+                return {ok: true, count: receipt.created || receipt.total};
+            }
+            return {ok: false, count: 0};
+        } catch {
+            return {ok: false, count: 0};
+        }
+    }
+
     /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式，defaultAction 预设主操作模式，initialScope 预设初始检索范围 */
     openSearch(
         insertTarget?: {docId: string; hPath: string},
@@ -2110,6 +2127,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     hPath: info?.hPath,
                 };
             },
+            importStarterPackDirect: (md) => this.importStarterPackDirect(md),
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {
                 const loading = !this.library.getIndex();
