@@ -1591,6 +1591,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
                 this.openEditDialog(got.data);
             },
+            getCustomOrder: () => this.state.customItemOrder ?? {},
+            setCustomOrder: (ord) => {
+                this.state.customItemOrder = ord;
+                this.persistSoon();
+            },
         };
     }
 
@@ -2031,6 +2036,11 @@ export default class XiaolvCommonPlugin extends Plugin {
             initialScope,
             surroundText,
             defaultActionMode: defaultAction,
+            density: this.state.search.density ?? "comfortable",
+            onDensityChange: (density) => {
+                this.state.search.density = density;
+                this.persistSoon();
+            },
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {
                 const loading = !this.library.getIndex();

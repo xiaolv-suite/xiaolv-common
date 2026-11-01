@@ -35,6 +35,7 @@ import {evaluateMathExpression} from "../model/calculator";
 import {AdjacentBlocksContext} from "../service/omni-search";
 import {openStepByStepGuideDialog} from "./guide-dialog";
 import {openShareCardDialog} from "./share-card";
+import {getClipboardTimeGroup} from "../model/storage";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -123,6 +124,9 @@ export interface DialogDeps {
     getSort: () => ItemSortMode;
     /** 排序直选（R108：排序应可枚举而非循环切换——Raycast 动作可枚举惯例） */
     setSort: (sort: ItemSortMode) => void;
+    /** 搜索结果行显示密度（CAND-012 / TODO-FEAT-011） */
+    density?: "comfortable" | "compact";
+    onDensityChange?: (density: "comfortable" | "compact") => void;
     openSetup: () => void;
     /** 提供方候选（pv: 虚拟条目；绝不进入块执行器） */
     providerSearch: (query: string) => Promise<ProviderRow[]>;
@@ -208,12 +212,18 @@ export class CommonSearchDialog {
     private clipboardFormatFilter: "all" | "text" | "image" | "code" = "all";
     /** 宿主拒绝请求时覆盖旧列表，避免用户继续对过期结果执行写操作。 */
     private accessIssueMessage: string | null = null;
-    // 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。
+    /** 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。 */
     private static readonly VIRTUAL_THRESHOLD = 80;
     private static readonly VIRTUAL_ROW_HEIGHT = 72;
     private static readonly VIRTUAL_OVERSCAN = 8;
+    /** 搜索结果行显示密度（紧凑单行 / 舒适卡片 · CAND-012 / TODO-FEAT-011） */
+    private density: "comfortable" | "compact" = "comfortable";
+    private densityBtn: HTMLButtonElement | null = null;
+    private listEl: HTMLElement | null = null;
 
-    constructor(private readonly deps: DialogDeps) {}
+    constructor(private readonly deps: DialogDeps) {
+        if (deps.density) this.density = deps.density;
+    }
 
     /** 定向插入目标（文档树入口；设置后 Enter/点按插入到该文档而非活动编辑器） */
     insertTarget?: {docId: string; hPath: string} | null;
@@ -408,6 +418,21 @@ export class CommonSearchDialog {
             this.togglePinWindow();
         });
         search.appendChild(pinBtn);
+
+        // 视图密度切换按钮（紧凑单行 / 舒适卡片双视图，支持 Alt+V 切换 · CAND-012 / TODO-FEAT-011）
+        const densityBtn = document.createElement("button");
+        densityBtn.type = "button";
+        densityBtn.className = "xlc-search-density-btn" + (this.density === "compact" ? " xlc-search-density-btn--compact" : "");
+        densityBtn.dataset.xlcControl = "search.density.toggle";
+        densityBtn.textContent = this.density === "compact" ? "☰" : "☷";
+        densityBtn.title = this.density === "compact" ? "当前为紧凑单行视图（点击或 Alt+V 切换为舒适卡片）" : "当前为舒适卡片视图（点击或 Alt+V 切换为紧凑单行）";
+        densityBtn.setAttribute("aria-label", "切换视图密度");
+        densityBtn.setAttribute("aria-pressed", String(this.density === "compact"));
+        densityBtn.addEventListener("click", () => {
+            this.toggleDensity();
+        });
+        this.densityBtn = densityBtn;
+        search.appendChild(densityBtn);
 
         searchBlock.appendChild(search);
         const searchHint = document.createElement("div");
@@ -820,6 +845,8 @@ export class CommonSearchDialog {
         bodyWrap.className = "xlc-body";
         const list = document.createElement("div");
         list.className = "xlc-list";
+        this.listEl = list;
+        this.applyDensity();
         list.id = "xlc-search-results";
         list.tabIndex = 0;
         // 行内收藏/标签筛选按钮是可聚焦控件，不能嵌在 ARIA listbox option 内。
@@ -2779,6 +2806,7 @@ export class CommonSearchDialog {
         } else {
             let commonHeaderPlaced = false;
             let omniHeaderPlaced = false;
+            let lastClipTimeGroup: "today" | "yesterday" | "earlier" | null = null;
             const hasCommon = this.results.some((r) => !r.isOmni);
             const hasOmni = this.results.some((r) => r.isOmni);
 
@@ -2789,6 +2817,21 @@ export class CommonSearchDialog {
                     if (head) placeGroupHead(head.label, head.count);
                 }
                 const entry = this.results[i];
+                if (this.currentScope === "clipboard" && entry?.createdAt && groupLabels.length === 0) {
+                    const tg = getClipboardTimeGroup(entry.createdAt);
+                    if (tg !== lastClipTimeGroup) {
+                        lastClipTimeGroup = tg;
+                        const timeHead = document.createElement("div");
+                        timeHead.className = `xlc-group-head xlc-clipboard-time-head xlc-clipboard-time-head--${tg}`;
+                        timeHead.dataset.xlcControl = "search.clipboard.time-head";
+                        timeHead.dataset.timeGroup = tg;
+                        timeHead.setAttribute("aria-hidden", "true");
+                        const icon = tg === "today" ? "📌" : tg === "yesterday" ? "⏱️" : "📅";
+                        const title = tg === "today" ? "今天" : tg === "yesterday" ? "昨天" : "更早";
+                        timeHead.textContent = `${icon} ${title}`;
+                        list.appendChild(timeHead);
+                    }
+                }
                 if (entry && !entry.isOmni && !commonHeaderPlaced && hasCommon && hasOmni && groupLabels.length === 0) {
                     commonHeaderPlaced = true;
                     const cHead = document.createElement("div");
@@ -6193,6 +6236,11 @@ export class CommonSearchDialog {
             e.preventDefault();
             this.togglePinWindow();
             return;
+        } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "v" || e.key === "V")) {
+            // Alt+V: 切换搜索结果显示密度（紧凑单行 / 舒适卡片 · CAND-012 / TODO-FEAT-011）
+            e.preventDefault();
+            this.toggleDensity();
+            return;
         } else if (e.key === "Escape") {
             e.preventDefault();
             if (this.quickLookOpen) {
@@ -6398,6 +6446,31 @@ export class CommonSearchDialog {
         }
         this.deps.notify?.("info", this.pinWindow ? "已开启窗口固定：连续复制或插入将保持窗口打开 (Alt+P 切换)" : "已关闭窗口固定");
         return this.pinWindow;
+    }
+
+    public toggleDensity(): "comfortable" | "compact" {
+        this.density = this.density === "compact" ? "comfortable" : "compact";
+        this.applyDensity();
+        this.deps.onDensityChange?.(this.density);
+        this.deps.notify?.("info", this.density === "compact" ? "已切换为紧凑单行视图 (Alt+V 切换)" : "已切换为舒适卡片视图 (Alt+V 切换)");
+        return this.density;
+    }
+
+    public getDensity(): "comfortable" | "compact" {
+        return this.density;
+    }
+
+    private applyDensity(): void {
+        const isCompact = this.density === "compact";
+        if (this.listEl) {
+            this.listEl.classList.toggle("xlc-list--compact", isCompact);
+        }
+        if (this.densityBtn) {
+            this.densityBtn.classList.toggle("xlc-search-density-btn--compact", isCompact);
+            this.densityBtn.textContent = isCompact ? "☰" : "☷";
+            this.densityBtn.title = isCompact ? "当前为紧凑单行视图（点击或 Alt+V 切换为舒适卡片）" : "当前为舒适卡片视图（点击或 Alt+V 切换为紧凑单行）";
+            this.densityBtn.setAttribute("aria-pressed", String(isCompact));
+        }
     }
 
     public isPinWindow(): boolean {

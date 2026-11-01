@@ -16,6 +16,7 @@ import {hasDynamicMacros, expandMacroPreview} from "../model/variables";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {parseSnippetAnnotations} from "../model/item";
 import {buildHierarchyTree, HierarchyNode} from "../model/hierarchy";
+import {applyCustomOrder, reorderItem} from "../model/storage";
 
 function escapeDockHtml(raw: string): string {
     return String(raw ?? "")
@@ -46,6 +47,9 @@ export interface DockViewDeps {
     isSourceMissing: (entry: SearchEntry) => boolean;
     hasActiveEditor?: () => boolean;
     editItem?: (itemId: string) => Promise<void>;
+    /** 获取条目手动自定义排序权重（CAND-014 / TODO-FEAT-013） */
+    getCustomOrder?: () => Record<string, number>;
+    setCustomOrder?: (order: Record<string, number>) => void;
 }
 
 export class DockView {
@@ -540,8 +544,11 @@ export class DockView {
 
                     if (!isCollapsed) {
                         const directEntries = groups.get(node.path) || [];
-                        for (const entry of directEntries) {
-                            const row = this.renderItemRow(entry, globalIdx++);
+                        const orderedEntries = applyCustomOrder(directEntries, this.deps.getCustomOrder?.());
+                        for (let itemIdx = 0; itemIdx < orderedEntries.length; itemIdx++) {
+                            const entry = orderedEntries[itemIdx];
+                            if (!entry) continue;
+                            const row = this.renderItemRow(entry, globalIdx++, orderedEntries, itemIdx);
                             if (node.depth > 0) {
                                 row.style.marginLeft = `${node.depth * 12}px`;
                             }
@@ -568,7 +575,7 @@ export class DockView {
         }
     }
 
-    private renderItemRow(entry: SearchEntry, index: number): HTMLElement {
+    private renderItemRow(entry: SearchEntry, index: number, groupEntries?: SearchEntry[], itemIdx?: number): HTMLElement {
         const row = document.createElement("div");
         row.className = "xlc-dock-row" + (index === this.activeIndex ? " xlc-dock-row--active" : "");
         row.dataset.index = String(index);
@@ -706,6 +713,43 @@ export class DockView {
             }
         });
         hoverActs.appendChild(favBtn);
+
+        // 自定义排序上移/下移按钮（CAND-014 / TODO-FEAT-013）
+        if (groupEntries && typeof itemIdx === "number" && this.deps.setCustomOrder && groupEntries.length > 1) {
+            const upBtn = document.createElement("button");
+            upBtn.type = "button";
+            upBtn.className = "xlc-dock-act-btn xlc-dock-act-btn--order";
+            upBtn.dataset.xlcControl = "dock.item.order-up";
+            upBtn.title = "在当前分类内上移";
+            if (typeof upBtn.setAttribute === "function") upBtn.setAttribute("aria-label", "在当前分类内上移");
+            upBtn.textContent = "↑";
+            upBtn.disabled = itemIdx === 0;
+            upBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (itemIdx === 0) return;
+                const newOrder = reorderItem(groupEntries, entry.id, "up", this.deps.getCustomOrder?.());
+                this.deps.setCustomOrder?.(newOrder);
+                this.renderList();
+            });
+            hoverActs.appendChild(upBtn);
+
+            const downBtn = document.createElement("button");
+            downBtn.type = "button";
+            downBtn.className = "xlc-dock-act-btn xlc-dock-act-btn--order";
+            downBtn.dataset.xlcControl = "dock.item.order-down";
+            downBtn.title = "在当前分类内下移";
+            if (typeof downBtn.setAttribute === "function") downBtn.setAttribute("aria-label", "在当前分类内下移");
+            downBtn.textContent = "↓";
+            downBtn.disabled = itemIdx === groupEntries.length - 1;
+            downBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (itemIdx === groupEntries.length - 1) return;
+                const newOrder = reorderItem(groupEntries, entry.id, "down", this.deps.getCustomOrder?.());
+                this.deps.setCustomOrder?.(newOrder);
+                this.renderList();
+            });
+            hoverActs.appendChild(downBtn);
+        }
 
         row.appendChild(hoverActs);
 

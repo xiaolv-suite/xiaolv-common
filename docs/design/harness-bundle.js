@@ -17265,6 +17265,19 @@ ${res.progressBar}`;
     }
     return { totalCount, trackedItems, latestAt };
   }
+  function getClipboardTimeGroup(timestamp, now = Date.now()) {
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return "earlier";
+    const nowDate = new Date(now);
+    const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
+    if (timestamp >= todayStart) {
+      return "today";
+    }
+    const yesterdayStart = todayStart - 24 * 60 * 60 * 1e3;
+    if (timestamp >= yesterdayStart) {
+      return "yesterday";
+    }
+    return "earlier";
+  }
   var CONFIG_VERSION;
   var init_storage = __esm({
     "src/model/storage.ts"() {
@@ -28001,6 +28014,7 @@ fi`;
   }
 
   // src/ui/dialog.ts
+  init_storage();
   function resolveEntryBlockId(entry) {
     var _a;
     const strippedOmni = entry.id.startsWith("xlc-omni-") ? entry.id.slice("xlc-omni-".length) : entry.id;
@@ -28066,6 +28080,10 @@ fi`;
       this.clipboardFormatFilter = "all";
       /** 宿主拒绝请求时覆盖旧列表，避免用户继续对过期结果执行写操作。 */
       this.accessIssueMessage = null;
+      /** 搜索结果行显示密度（紧凑单行 / 舒适卡片 · CAND-012 / TODO-FEAT-011） */
+      this.density = "comfortable";
+      this.densityBtn = null;
+      this.listEl = null;
       /** 普通点击 = 主动作（insert；blockref = 插入引用）。含变量时先弹填充卡片（F1）。
        *  执行期防重入（R138）：双击行/按住 Enter 不得重复插入同一块。 */
       /** AI 变换代次：连点两个变换时丢弃慢的旧结果（R138） */
@@ -28079,6 +28097,7 @@ fi`;
       this.prevActiveElement = null;
       this.dragOverlay = null;
       this.dropCleanup = null;
+      if (deps.density) this.density = deps.density;
     }
     open() {
       var _a, _b, _c;
@@ -28257,6 +28276,19 @@ fi`;
         this.togglePinWindow();
       });
       search.appendChild(pinBtn);
+      const densityBtn = document.createElement("button");
+      densityBtn.type = "button";
+      densityBtn.className = "xlc-search-density-btn" + (this.density === "compact" ? " xlc-search-density-btn--compact" : "");
+      densityBtn.dataset.xlcControl = "search.density.toggle";
+      densityBtn.textContent = this.density === "compact" ? "\u2630" : "\u2637";
+      densityBtn.title = this.density === "compact" ? "\u5F53\u524D\u4E3A\u7D27\u51D1\u5355\u884C\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u8212\u9002\u5361\u7247\uFF09" : "\u5F53\u524D\u4E3A\u8212\u9002\u5361\u7247\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u7D27\u51D1\u5355\u884C\uFF09";
+      densityBtn.setAttribute("aria-label", "\u5207\u6362\u89C6\u56FE\u5BC6\u5EA6");
+      densityBtn.setAttribute("aria-pressed", String(this.density === "compact"));
+      densityBtn.addEventListener("click", () => {
+        this.toggleDensity();
+      });
+      this.densityBtn = densityBtn;
+      search.appendChild(densityBtn);
       searchBlock.appendChild(search);
       const searchHint = document.createElement("div");
       searchHint.className = "xlc-search-hint";
@@ -28637,6 +28669,8 @@ fi`;
       bodyWrap.className = "xlc-body";
       const list = document.createElement("div");
       list.className = "xlc-list";
+      this.listEl = list;
+      this.applyDensity();
       list.id = "xlc-search-results";
       list.tabIndex = 0;
       list.setAttribute("role", "list");
@@ -30474,6 +30508,7 @@ fi`;
       } else {
         let commonHeaderPlaced = false;
         let omniHeaderPlaced = false;
+        let lastClipTimeGroup = null;
         const hasCommon = this.results.some((r) => !r.isOmni);
         const hasOmni = this.results.some((r) => r.isOmni);
         for (let i = 0; i < this.results.length; i++) {
@@ -30483,6 +30518,21 @@ fi`;
             if (head) placeGroupHead(head.label, head.count);
           }
           const entry = this.results[i];
+          if (this.currentScope === "clipboard" && (entry == null ? void 0 : entry.createdAt) && groupLabels.length === 0) {
+            const tg = getClipboardTimeGroup(entry.createdAt);
+            if (tg !== lastClipTimeGroup) {
+              lastClipTimeGroup = tg;
+              const timeHead = document.createElement("div");
+              timeHead.className = `xlc-group-head xlc-clipboard-time-head xlc-clipboard-time-head--${tg}`;
+              timeHead.dataset.xlcControl = "search.clipboard.time-head";
+              timeHead.dataset.timeGroup = tg;
+              timeHead.setAttribute("aria-hidden", "true");
+              const icon = tg === "today" ? "\u{1F4CC}" : tg === "yesterday" ? "\u23F1\uFE0F" : "\u{1F4C5}";
+              const title = tg === "today" ? "\u4ECA\u5929" : tg === "yesterday" ? "\u6628\u5929" : "\u66F4\u65E9";
+              timeHead.textContent = `${icon} ${title}`;
+              list.appendChild(timeHead);
+            }
+          }
           if (entry && !entry.isOmni && !commonHeaderPlaced && hasCommon && hasOmni && groupLabels.length === 0) {
             commonHeaderPlaced = true;
             const cHead = document.createElement("div");
@@ -33958,6 +34008,10 @@ ${progress.progressBar}`);
         e.preventDefault();
         this.togglePinWindow();
         return;
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "v" || e.key === "V")) {
+        e.preventDefault();
+        this.toggleDensity();
+        return;
       } else if (e.key === "Escape") {
         e.preventDefault();
         if (this.quickLookOpen) {
@@ -34143,6 +34197,29 @@ ${progress.progressBar}`);
       }
       (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "info", this.pinWindow ? "\u5DF2\u5F00\u542F\u7A97\u53E3\u56FA\u5B9A\uFF1A\u8FDE\u7EED\u590D\u5236\u6216\u63D2\u5165\u5C06\u4FDD\u6301\u7A97\u53E3\u6253\u5F00 (Alt+P \u5207\u6362)" : "\u5DF2\u5173\u95ED\u7A97\u53E3\u56FA\u5B9A");
       return this.pinWindow;
+    }
+    toggleDensity() {
+      var _a, _b, _c, _d;
+      this.density = this.density === "compact" ? "comfortable" : "compact";
+      this.applyDensity();
+      (_b = (_a = this.deps).onDensityChange) == null ? void 0 : _b.call(_a, this.density);
+      (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "info", this.density === "compact" ? "\u5DF2\u5207\u6362\u4E3A\u7D27\u51D1\u5355\u884C\u89C6\u56FE (Alt+V \u5207\u6362)" : "\u5DF2\u5207\u6362\u4E3A\u8212\u9002\u5361\u7247\u89C6\u56FE (Alt+V \u5207\u6362)");
+      return this.density;
+    }
+    getDensity() {
+      return this.density;
+    }
+    applyDensity() {
+      const isCompact = this.density === "compact";
+      if (this.listEl) {
+        this.listEl.classList.toggle("xlc-list--compact", isCompact);
+      }
+      if (this.densityBtn) {
+        this.densityBtn.classList.toggle("xlc-search-density-btn--compact", isCompact);
+        this.densityBtn.textContent = isCompact ? "\u2630" : "\u2637";
+        this.densityBtn.title = isCompact ? "\u5F53\u524D\u4E3A\u7D27\u51D1\u5355\u884C\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u8212\u9002\u5361\u7247\uFF09" : "\u5F53\u524D\u4E3A\u8212\u9002\u5361\u7247\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u7D27\u51D1\u5355\u884C\uFF09";
+        this.densityBtn.setAttribute("aria-pressed", String(isCompact));
+      }
     }
     isPinWindow() {
       return this.pinWindow;
@@ -34773,7 +34850,7 @@ ${progress.progressBar}`);
       }
     }
   };
-  // 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。
+  /** 搜索服务最多返回 100 条；80 以上即可明显减少首屏 DOM，同时保留小结果集的简单路径。 */
   _CommonSearchDialog.VIRTUAL_THRESHOLD = 80;
   _CommonSearchDialog.VIRTUAL_ROW_HEIGHT = 72;
   _CommonSearchDialog.VIRTUAL_OVERSCAN = 8;

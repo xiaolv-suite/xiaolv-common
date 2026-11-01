@@ -124,6 +124,8 @@ export interface SearchPrefs {
     recentQueries?: string[];
     /** Saved tag-scoped discovery shortcuts. Sidecar UI state only; source blocks remain canonical. */
     savedDiscoveryViews?: SavedDiscoveryView[];
+    /** 搜索结果行显示密度（CAND-012 / TODO-FEAT-011）："comfortable" (默认卡片双行) | "compact" (单行极速) */
+    density?: "comfortable" | "compact";
 }
 
 export type SavedDiscoveryScope = "document" | "notebook" | "tree" | "selected-notebook" | "all-notebooks";
@@ -257,6 +259,8 @@ export interface PluginState {
     variablePresets?: Record<string, Record<string, Record<string, string>>>;
     /** 近 30 天每日使用统计计数（TODO-FEAT-008）：YYYY-MM-DD -> 计数 */
     dailyUsage?: Record<string, number>;
+    /** 条目自定义手动排序权重字典（CAND-014 / TODO-FEAT-013）：itemId -> 排序权重序号 */
+    customItemOrder?: Record<string, number>;
 }
 
 export function normalizeState(raw: unknown): PluginState {
@@ -353,6 +357,9 @@ export function normalizeState(raw: unknown): PluginState {
             savedDiscoveryViews: obj.search !== null && typeof obj.search === "object"
                 ? normalizeSavedDiscoveryViews((obj.search as SearchPrefs).savedDiscoveryViews)
                 : [],
+            density: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).density === "compact")
+                ? "compact"
+                : "comfortable",
         },
         // 插入偏好默认开（F1/F3）；显式 false 才关
         insert: {
@@ -365,6 +372,7 @@ export function normalizeState(raw: unknown): PluginState {
         clipboardHistory: normalizeClipboardHistory(obj.clipboardHistory, normalizeClipboardLimit(obj.clipboardHistoryLimit)),
         variablePresets: normalizeVariablePresets(obj.variablePresets),
         dailyUsage: normalizeDailyUsage(obj.dailyUsage),
+        customItemOrder: normalizeCustomItemOrder(obj.customItemOrder),
     };
 }
 
@@ -482,3 +490,83 @@ export function serializeLibraryConfig(config: LibraryConfig): Record<string, un
     if (!normalized) throw new Error("invalid library config");
     return normalized as unknown as Record<string, unknown>;
 }
+
+export function normalizeCustomItemOrder(raw: unknown): Record<string, number> {
+    const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const result: Record<string, number> = {};
+    for (const [id, val] of Object.entries(obj)) {
+        if (typeof id === "string" && id.startsWith("xlc-") && id.length <= 48 && typeof val === "number" && Number.isFinite(val)) {
+            result[id] = Math.round(val);
+        }
+    }
+    return result;
+}
+
+/**
+ * 纯函数：根据侧车自定义排序权重重排条目列表（CAND-014 / TODO-FEAT-013）
+ * 未指定权重的条目自然保底排在最后，并保持既有相对顺序
+ */
+export function applyCustomOrder<T extends {id: string}>(
+    items: readonly T[],
+    customOrder?: Readonly<Record<string, number>>
+): T[] {
+    if (!customOrder || Object.keys(customOrder).length === 0) return [...items];
+    return [...items].sort((a, b) => {
+        const valA = customOrder[a.id];
+        const valB = customOrder[b.id];
+        const orderA = typeof valA === "number" ? valA : 999999;
+        const orderB = typeof valB === "number" ? valB : 999999;
+        if (orderA !== orderB) return orderA - orderB;
+        return 0;
+    });
+}
+
+/**
+ * 纯函数：上移或下移分类列表内的条目，重新分配间隔权重并返回更新后的字典（CAND-014 / TODO-FEAT-013）
+ */
+export function reorderItem<T extends {id: string}>(
+    items: readonly T[],
+    targetId: string,
+    direction: "up" | "down",
+    currentOrder?: Readonly<Record<string, number>>
+): Record<string, number> {
+    const sorted = applyCustomOrder(items, currentOrder);
+    const idx = sorted.findIndex((it) => it.id === targetId);
+    if (idx < 0) return {...(currentOrder ?? {})};
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= sorted.length) return {...(currentOrder ?? {})};
+
+    const copy = [...sorted];
+    const itemA = copy[idx];
+    const itemB = copy[targetIdx];
+    if (!itemA || !itemB) return {...(currentOrder ?? {})};
+    copy[idx] = itemB;
+    copy[targetIdx] = itemA;
+
+    const result: Record<string, number> = {...(currentOrder ?? {})};
+    copy.forEach((it, i) => {
+        result[it.id] = (i + 1) * 10;
+    });
+    return result;
+}
+
+/**
+ * 纯函数：根据时间戳计算剪贴板条目自然时间分段（今天/昨天/更早）（CAND-013 / TODO-FEAT-012）
+ */
+export function getClipboardTimeGroup(
+    timestamp: number,
+    now: number = Date.now()
+): "today" | "yesterday" | "earlier" {
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return "earlier";
+    const nowDate = new Date(now);
+    const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
+    if (timestamp >= todayStart) {
+        return "today";
+    }
+    const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+    if (timestamp >= yesterdayStart) {
+        return "yesterday";
+    }
+    return "earlier";
+}
+
