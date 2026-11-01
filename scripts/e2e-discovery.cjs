@@ -81,10 +81,23 @@ function firstBlockId(response) {
 }
 
 async function main() {
-    const notebooksResponse = await api("/api/notebook/lsNotebooks");
-    const notebooks = (notebooksResponse?.notebooks ?? []).filter((notebook) => !notebook.closed);
-    assert.ok(notebooks.length, "an open notebook is required");
-    const notebook = notebooks[0].id;
+    let createdNotebook = "";
+    let notebook = "";
+    try {
+        const nbRes = await api("/api/notebook/createNotebook", {name: `E2E-Discovery-${Date.now()}`});
+        if (nbRes?.notebook?.id) {
+            createdNotebook = nbRes.notebook.id;
+            notebook = createdNotebook;
+            await api("/api/notebook/openNotebook", {notebook});
+            await new Promise((r) => setTimeout(r, 600));
+        }
+    } catch {}
+    if (!notebook) {
+        const notebooksResponse = await api("/api/notebook/lsNotebooks");
+        const notebooks = (notebooksResponse?.notebooks ?? []).filter((n) => !n.closed);
+        assert.ok(notebooks.length, "an open notebook is required");
+        notebook = notebooks[0].id;
+    }
     const docs = [];
     const sourceBlocks = [];
     const referenceSourceBlocks = [];
@@ -355,6 +368,10 @@ async function main() {
         }
         if (residue.length) {
             for (const error of residue) console.error(`RESIDUE: ${error}`);
+        }
+        if (createdNotebook) {
+            try { await api("/api/notebook/removeNotebook", {notebook: createdNotebook}); }
+            catch (error) { cleanupErrors.push(`remove notebook ${createdNotebook}: ${error.message}`); }
         }
         if (cleanupErrors.length || residue.length) {
             process.exitCode = 1;

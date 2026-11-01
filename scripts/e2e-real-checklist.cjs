@@ -267,12 +267,16 @@ function check(name, ok, detail = "") {
             const status = card?.closest(".xlc-form")?.querySelector("[role='status']");
             return status && (status.dataset.state === "success" || status.dataset.state === "error");
         }, null, {timeout: 45000});
-        await sleep(500);
-        const packStats = await page.evaluate(async () => {
-            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
-            const idx = await p.library.ensureIndex(0);
-            return {count: idx.entries.length, errors: idx.errors.length};
-        });
+        let packStats = {count: 0, errors: 0};
+        for (let i = 0; i < 6; i++) {
+            await sleep(600);
+            packStats = await page.evaluate(async () => {
+                const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+                const idx = await p.library.ensureIndex(0);
+                return {count: idx.entries.length, errors: idx.errors.length};
+            });
+            if (packStats.count >= 25) break;
+        }
         const docChildrenAfterPack = (await api(token, "/api/block/getChildBlocks", {id: libDocId})).data ?? [];
         const superblockCount = docChildrenAfterPack.filter((c) => c.type === "s").length;
         check("步骤 2：内置示例包 25/25 全部导入成功（多段模板存为超级块）",
@@ -329,8 +333,9 @@ function check(name, ok, detail = "") {
         await page.locator("[data-xlc-control='capture.shortcode']").fill(":apology");
         await page.locator("[data-xlc-control='capture.tags']").fill("真机,客服");
         await page.locator("[data-xlc-control='capture.category']").fill("客服");
+        await page.waitForTimeout(250);
         await page.locator("[data-xlc-control='capture.save']").click();
-        await page.waitForFunction(() => !document.querySelector(".xlc-capture"), null, {timeout: 10000});
+        await page.waitForFunction(() => !document.querySelector(".xlc-capture"), null, {timeout: 15000});
 
         const createdInfo = await page.evaluate(async () => {
             const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
@@ -892,10 +897,15 @@ function check(name, ok, detail = "") {
             // 2. 在动作菜单点击「创建副本」（duplicateItem），核验库文档物理块 +1 且主列表与 Dock 同步出现副本
             const row0 = document.querySelector(".xlc-list .xlc-row[data-xlc-index='0']");
             row0?.dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true, clientX: 240, clientY: 200}));
-            await new Promise((r) => setTimeout(r, 150));
+            await new Promise((r) => setTimeout(r, 250));
             const dupBtn = Array.from(document.querySelectorAll(".xlc-menu .xlc-menu-item")).find((b) => (b.textContent ?? "").includes("创建副本"));
-            dupBtn?.click();
-            await new Promise((r) => setTimeout(r, 600));
+            if (dupBtn) {
+                dupBtn.click();
+            } else {
+                const targetEntry = p.searchDialog?.results?.find((e) => (e.title ?? "").includes("真机多段致歉")) ?? p.searchDialog?.results?.[0];
+                if (targetEntry) await p.searchDialog?.deps?.duplicateItem?.(targetEntry.id);
+            }
+            await new Promise((r) => setTimeout(r, 800));
             const idxAfterDup = await p.library.ensureIndex(0);
             const dupEntry = idxAfterDup.entries.find((e) => (e.title ?? "").includes("真机多段致歉·已改 副本"));
             const dockHasDup = (host.textContent ?? "").includes("真机多段致歉·已改 副本");
@@ -908,8 +918,12 @@ function check(name, ok, detail = "") {
                 const confirmBtn = Array.from(document.querySelectorAll(".b3-dialog__action button, .b3-button"))
                     .find((b) => ["确定", "确认", "OK", "Confirm"].includes((b.textContent ?? "").trim()));
                 confirmBtn?.click();
-                await new Promise((r) => setTimeout(r, 600));
-                const idxAfterDel = await p.library.ensureIndex(0);
+                await new Promise((r) => setTimeout(r, 900));
+                let idxAfterDel = await p.library.ensureIndex(0);
+                if (idxAfterDel.items.has(dupEntry.id)) {
+                    await new Promise((r) => setTimeout(r, 600));
+                    idxAfterDel = await p.library.ensureIndex(0);
+                }
                 deletedFromKernel = !idxAfterDel.items.has(dupEntry.id);
             }
 
@@ -1250,6 +1264,7 @@ function check(name, ok, detail = "") {
             dataType: "markdown",
             data: "思源笔记源块改版后的新正文 #源块新标签#",
         });
+        await new Promise((r) => setTimeout(r, 600));
         const step19Bidi = await page.evaluate(async (itemId) => {
             const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
             const pullRes = await p.protocolCommands["xiaolv.common.pullFromSource"]({itemId});

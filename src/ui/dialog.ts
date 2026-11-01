@@ -367,7 +367,10 @@ export class CommonSearchDialog {
             if (this.isComposing) return;
             // 200ms 输入防抖（雷切同款预算）：本地过滤本身便宜，但 ? 语义找/provider 请求每键一次不可接受
             if (this.inputDebounce) clearTimeout(this.inputDebounce);
-            this.inputDebounce = setTimeout(() => void this.refresh(), 200);
+            this.inputDebounce = setTimeout(() => {
+                this.inputDebounce = null;
+                void this.refresh();
+            }, 200);
         });
         input.addEventListener("compositionstart", () => {
             this.isComposing = true;
@@ -377,7 +380,10 @@ export class CommonSearchDialog {
             syncQMark();
             this.syncScopeChips();
             if (this.inputDebounce) clearTimeout(this.inputDebounce);
-            this.inputDebounce = setTimeout(() => void this.refresh(), 50);
+            this.inputDebounce = setTimeout(() => {
+                this.inputDebounce = null;
+                void this.refresh();
+            }, 50);
         });
         input.addEventListener("keydown", (e) => void this.onKeydown(e));
         search.appendChild(qMark);
@@ -2147,15 +2153,29 @@ export class CommonSearchDialog {
                 saveBtn.disabled = isCaptured;
                 saveBtn.addEventListener("click", async (e) => {
                     e.stopPropagation();
+                    if (saveBtn.disabled || this.capturedOmniIds.has(entry.id)) return;
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = "…";
                     if (this.deps.createFromOmni) {
-                        const ok = await this.deps.createFromOmni(entry);
-                        if (ok) {
-                            this.capturedOmniIds.add(entry.id);
-                            saveBtn.textContent = "✓";
-                            saveBtn.disabled = true;
-                            saveBtn.title = "已沉淀为常用语";
-                            this.syncPaneActions();
+                        try {
+                            const ok = await this.deps.createFromOmni(entry);
+                            if (ok) {
+                                this.capturedOmniIds.add(entry.id);
+                                saveBtn.textContent = "✓";
+                                saveBtn.disabled = true;
+                                saveBtn.title = "已沉淀为常用语";
+                                this.syncPaneActions();
+                            } else {
+                                saveBtn.disabled = false;
+                                saveBtn.textContent = "⭐";
+                            }
+                        } catch {
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = "⭐";
                         }
+                    } else {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = "⭐";
                     }
                 });
                 actionsWrap.appendChild(saveBtn);
@@ -2204,15 +2224,29 @@ export class CommonSearchDialog {
                 saveBtn.disabled = isCaptured;
                 saveBtn.addEventListener("click", async (e) => {
                     e.stopPropagation();
+                    if (saveBtn.disabled || this.capturedOmniIds.has(entry.id)) return;
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = "…";
                     if (this.deps.createFromOmni) {
-                        const ok = await this.deps.createFromOmni(entry);
-                        if (ok) {
-                            this.capturedOmniIds.add(entry.id);
-                            saveBtn.textContent = "✓";
-                            saveBtn.disabled = true;
-                            saveBtn.title = "已收录入常用库";
-                            this.syncPaneActions();
+                        try {
+                            const ok = await this.deps.createFromOmni(entry);
+                            if (ok) {
+                                this.capturedOmniIds.add(entry.id);
+                                saveBtn.textContent = "✓";
+                                saveBtn.disabled = true;
+                                saveBtn.title = "已收录入常用库";
+                                this.syncPaneActions();
+                            } else {
+                                saveBtn.disabled = false;
+                                saveBtn.textContent = "✦";
+                            }
+                        } catch {
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = "✦";
                         }
+                    } else {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = "✦";
                     }
                 });
                 actionsWrap.appendChild(saveBtn);
@@ -6141,18 +6175,25 @@ export class CommonSearchDialog {
             // 一键收录快捷键（Alt+S / Ctrl+Shift+S）：如果是全域或剪贴板结果则快速收录/沉淀入库
             const entry = this.results[this.activeIndex];
             if (entry?.isOmni && this.deps.createFromOmni) {
+                if (this.capturedOmniIds.has(entry.id)) return;
                 e.preventDefault();
-                const ok = await this.deps.createFromOmni(entry);
-                if (ok) {
-                    this.capturedOmniIds.add(entry.id);
-                    this.syncPaneActions();
-                    const activeRow = this.dialog?.element.querySelector<HTMLElement>(`[data-xlc-item-id="${entry.id}"]`);
-                    const rowSaveBtn = activeRow?.querySelector<HTMLButtonElement>('[data-xlc-control="item.save-to-common"]');
-                    if (rowSaveBtn) {
-                        rowSaveBtn.textContent = "✓";
-                        rowSaveBtn.disabled = true;
-                        rowSaveBtn.title = entry.id.startsWith("xlc-clip-") ? "已沉淀为常用语" : "已收录入常用库";
+                this.capturedOmniIds.add(entry.id);
+                try {
+                    const ok = await this.deps.createFromOmni(entry);
+                    if (ok) {
+                        this.syncPaneActions();
+                        const activeRow = this.dialog?.element.querySelector<HTMLElement>(`[data-xlc-item-id="${entry.id}"]`);
+                        const rowSaveBtn = activeRow?.querySelector<HTMLButtonElement>('[data-xlc-control="item.save-to-common"]');
+                        if (rowSaveBtn) {
+                            rowSaveBtn.textContent = "✓";
+                            rowSaveBtn.disabled = true;
+                            rowSaveBtn.title = entry.id.startsWith("xlc-clip-") ? "已沉淀为常用语" : "已收录入常用库";
+                        }
+                    } else {
+                        this.capturedOmniIds.delete(entry.id);
                     }
+                } catch {
+                    this.capturedOmniIds.delete(entry.id);
                 }
                 return;
             }

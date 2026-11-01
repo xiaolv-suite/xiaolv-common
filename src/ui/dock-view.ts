@@ -196,7 +196,10 @@ export class DockView {
         this.searchInput.addEventListener("input", () => {
             this.clearBtn.style.display = this.searchInput.value ? "inline-flex" : "none";
             if (this.debounceTimer) clearTimeout(this.debounceTimer);
-            this.debounceTimer = setTimeout(() => void this.refresh(), 180);
+            this.debounceTimer = setTimeout(() => {
+                this.debounceTimer = null;
+                void this.refresh();
+            }, 180);
         });
         this.searchInput.addEventListener("keydown", (e) => {
             if (e.key === "ArrowDown") {
@@ -598,6 +601,13 @@ export class DockView {
             favBtn.title = updatedTitle;
             if (typeof favBtn.setAttribute === "function") favBtn.setAttribute("aria-label", updatedTitle);
             favBtn.classList.toggle("xlc-dock-act-btn--fav", isFav);
+            if (this.currentScope === "favorites" && !isFav) {
+                setTimeout(() => {
+                    if (!this.isDestroyed && this.currentScope === "favorites") {
+                        void this.refresh();
+                    }
+                }, 160);
+            }
         });
         hoverActs.appendChild(favBtn);
 

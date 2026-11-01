@@ -27984,7 +27984,10 @@ fi`;
         this.deps.setLastQuery(input.value.replace(/^\?+/, ""));
         if (this.isComposing) return;
         if (this.inputDebounce) clearTimeout(this.inputDebounce);
-        this.inputDebounce = setTimeout(() => void this.refresh(), 200);
+        this.inputDebounce = setTimeout(() => {
+          this.inputDebounce = null;
+          void this.refresh();
+        }, 200);
       });
       input.addEventListener("compositionstart", () => {
         this.isComposing = true;
@@ -27994,7 +27997,10 @@ fi`;
         syncQMark();
         this.syncScopeChips();
         if (this.inputDebounce) clearTimeout(this.inputDebounce);
-        this.inputDebounce = setTimeout(() => void this.refresh(), 50);
+        this.inputDebounce = setTimeout(() => {
+          this.inputDebounce = null;
+          void this.refresh();
+        }, 50);
       });
       input.addEventListener("keydown", (e) => void this.onKeydown(e));
       search.appendChild(qMark);
@@ -29652,15 +29658,29 @@ fi`;
           saveBtn.disabled = isCaptured;
           saveBtn.addEventListener("click", async (e) => {
             e.stopPropagation();
+            if (saveBtn.disabled || this.capturedOmniIds.has(entry.id)) return;
+            saveBtn.disabled = true;
+            saveBtn.textContent = "\u2026";
             if (this.deps.createFromOmni) {
-              const ok2 = await this.deps.createFromOmni(entry);
-              if (ok2) {
-                this.capturedOmniIds.add(entry.id);
-                saveBtn.textContent = "\u2713";
-                saveBtn.disabled = true;
-                saveBtn.title = "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED";
-                this.syncPaneActions();
+              try {
+                const ok2 = await this.deps.createFromOmni(entry);
+                if (ok2) {
+                  this.capturedOmniIds.add(entry.id);
+                  saveBtn.textContent = "\u2713";
+                  saveBtn.disabled = true;
+                  saveBtn.title = "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED";
+                  this.syncPaneActions();
+                } else {
+                  saveBtn.disabled = false;
+                  saveBtn.textContent = "\u2B50";
+                }
+              } catch {
+                saveBtn.disabled = false;
+                saveBtn.textContent = "\u2B50";
               }
+            } else {
+              saveBtn.disabled = false;
+              saveBtn.textContent = "\u2B50";
             }
           });
           actionsWrap.appendChild(saveBtn);
@@ -29707,15 +29727,29 @@ fi`;
           saveBtn.disabled = isCaptured;
           saveBtn.addEventListener("click", async (e) => {
             e.stopPropagation();
+            if (saveBtn.disabled || this.capturedOmniIds.has(entry.id)) return;
+            saveBtn.disabled = true;
+            saveBtn.textContent = "\u2026";
             if (this.deps.createFromOmni) {
-              const ok2 = await this.deps.createFromOmni(entry);
-              if (ok2) {
-                this.capturedOmniIds.add(entry.id);
-                saveBtn.textContent = "\u2713";
-                saveBtn.disabled = true;
-                saveBtn.title = "\u5DF2\u6536\u5F55\u5165\u5E38\u7528\u5E93";
-                this.syncPaneActions();
+              try {
+                const ok2 = await this.deps.createFromOmni(entry);
+                if (ok2) {
+                  this.capturedOmniIds.add(entry.id);
+                  saveBtn.textContent = "\u2713";
+                  saveBtn.disabled = true;
+                  saveBtn.title = "\u5DF2\u6536\u5F55\u5165\u5E38\u7528\u5E93";
+                  this.syncPaneActions();
+                } else {
+                  saveBtn.disabled = false;
+                  saveBtn.textContent = "\u2726";
+                }
+              } catch {
+                saveBtn.disabled = false;
+                saveBtn.textContent = "\u2726";
               }
+            } else {
+              saveBtn.disabled = false;
+              saveBtn.textContent = "\u2726";
             }
           });
           actionsWrap.appendChild(saveBtn);
@@ -33668,18 +33702,25 @@ ${progress.progressBar}`);
       } else if ((e.altKey || (e.ctrlKey || e.metaKey) && e.shiftKey) && (e.key === "s" || e.key === "S")) {
         const entry = this.results[this.activeIndex];
         if ((entry == null ? void 0 : entry.isOmni) && this.deps.createFromOmni) {
+          if (this.capturedOmniIds.has(entry.id)) return;
           e.preventDefault();
-          const ok2 = await this.deps.createFromOmni(entry);
-          if (ok2) {
-            this.capturedOmniIds.add(entry.id);
-            this.syncPaneActions();
-            const activeRow = (_M = this.dialog) == null ? void 0 : _M.element.querySelector(`[data-xlc-item-id="${entry.id}"]`);
-            const rowSaveBtn = activeRow == null ? void 0 : activeRow.querySelector('[data-xlc-control="item.save-to-common"]');
-            if (rowSaveBtn) {
-              rowSaveBtn.textContent = "\u2713";
-              rowSaveBtn.disabled = true;
-              rowSaveBtn.title = entry.id.startsWith("xlc-clip-") ? "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : "\u5DF2\u6536\u5F55\u5165\u5E38\u7528\u5E93";
+          this.capturedOmniIds.add(entry.id);
+          try {
+            const ok2 = await this.deps.createFromOmni(entry);
+            if (ok2) {
+              this.syncPaneActions();
+              const activeRow = (_M = this.dialog) == null ? void 0 : _M.element.querySelector(`[data-xlc-item-id="${entry.id}"]`);
+              const rowSaveBtn = activeRow == null ? void 0 : activeRow.querySelector('[data-xlc-control="item.save-to-common"]');
+              if (rowSaveBtn) {
+                rowSaveBtn.textContent = "\u2713";
+                rowSaveBtn.disabled = true;
+                rowSaveBtn.title = entry.id.startsWith("xlc-clip-") ? "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : "\u5DF2\u6536\u5F55\u5165\u5E38\u7528\u5E93";
+              }
+            } else {
+              this.capturedOmniIds.delete(entry.id);
             }
+          } catch {
+            this.capturedOmniIds.delete(entry.id);
           }
           return;
         }

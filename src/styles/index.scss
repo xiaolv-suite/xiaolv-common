@@ -1305,6 +1305,7 @@
     line-height: var(--xlc-leading-loose);
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
     color: var(--b3-theme-on-background);
     overscroll-behavior: contain;
 
