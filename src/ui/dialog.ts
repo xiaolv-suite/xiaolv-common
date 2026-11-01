@@ -36,6 +36,7 @@ import {AdjacentBlocksContext} from "../service/omni-search";
 import {openStepByStepGuideDialog} from "./guide-dialog";
 import {openShareCardDialog} from "./share-card";
 import {openPinboardDialog} from "./pinboard";
+import {openStarterPacksHubDialog} from "./starter-packs-dialog";
 import {getRecommendedEntries, DocumentContext} from "../model/contextual-recommend";
 import {getClipboardTimeGroup, MiniPosition, calculateMagneticSnap} from "../model/storage";
 import {STARTER_PACKS} from "../service/prompt-pack";
@@ -1194,6 +1195,27 @@ export class CommonSearchDialog {
             });
         });
         footer.appendChild(stepGuide);
+
+        // 开箱即用套件市场直达入口（随时自主挑选启用 · CAND-036 / TODO-FEAT-031）
+        const starterPacksBtn = document.createElement("button");
+        starterPacksBtn.type = "button";
+        starterPacksBtn.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-starter-packs";
+        starterPacksBtn.dataset.xlcControl = "footer.starter-packs";
+        starterPacksBtn.textContent = "📦 " + (this.deps.t("starterPacksBtn") || "开箱套件");
+        starterPacksBtn.title = "打开开箱即用套件市场，随时挑选启用行业场景常用语";
+        starterPacksBtn.setAttribute("aria-label", "打开开箱即用套件市场");
+        starterPacksBtn.addEventListener("click", () => {
+            if (this.deps.importStarterPackDirect) {
+                openStarterPacksHubDialog({
+                    t: this.deps.t,
+                    notify: this.deps.notify,
+                    importStarterPackDirect: this.deps.importStarterPackDirect,
+                    onImportSuccess: () => void this.refresh(),
+                });
+            }
+        });
+        footer.appendChild(starterPacksBtn);
+
         // 设置入口双端可达（移动端无顶栏/命令面板，此处是唯一设置路径）
         const gear = document.createElement("button");
         gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";

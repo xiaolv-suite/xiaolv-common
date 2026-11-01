@@ -1162,7 +1162,7 @@ export const STARTER_PACKS: StarterPackMeta[] = [
     {
         id: "starter-dev",
         icon: "💻",
-        name: "开发与系统运维常用指令",
+        name: DEVELOPER_DEVOPS_PACK_NAME,
         tagline: "Git提交/Docker/MySQL诊断/Nginx",
         description: "常用生产命令、反向代理、正则表达式与压测诊断，极速粘贴终端。",
         category: "开发运维",

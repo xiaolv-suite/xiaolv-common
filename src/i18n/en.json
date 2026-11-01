@@ -716,5 +716,7 @@
   "promoteToCommon": "Promote to Snippet",
   "editAndPromote": "Edit and Promote to Snippet",
   "globalQuickMini": "Global Quick Mini Snippets (Cross-app / Background)",
-  "globalQuickMiniDone": "Copied to clipboard and returned to background, press Ctrl+V to paste"
+  "globalQuickMiniDone": "Copied to clipboard and returned to background, press Ctrl+V to paste",
+  "starterPacksTitle": "Starter Packs Hub",
+  "starterPacksBtn": "Starter Packs"
 }

@@ -66,6 +66,7 @@ import * as expansion from "../src/model/expansion";
 import * as contextualRecommend from "../src/model/contextual-recommend";
 import * as pinboard from "../src/ui/pinboard";
 import * as promptPack from "../src/service/prompt-pack";
+import * as starterPacksDialog from "../src/ui/starter-packs-dialog";
 
 export {
     item,
@@ -131,4 +132,5 @@ export {
     expansion,
     contextualRecommend,
     pinboard,
+    starterPacksDialog,
 };

@@ -18534,7 +18534,7 @@ ${res.progressBar}`;
         {
           id: "starter-dev",
           icon: "\u{1F4BB}",
-          name: "\u5F00\u53D1\u4E0E\u7CFB\u7EDF\u8FD0\u7EF4\u5E38\u7528\u6307\u4EE4",
+          name: DEVELOPER_DEVOPS_PACK_NAME,
           tagline: "Git\u63D0\u4EA4/Docker/MySQL\u8BCA\u65AD/Nginx",
           description: "\u5E38\u7528\u751F\u4EA7\u547D\u4EE4\u3001\u53CD\u5411\u4EE3\u7406\u3001\u6B63\u5219\u8868\u8FBE\u5F0F\u4E0E\u538B\u6D4B\u8BCA\u65AD\uFF0C\u6781\u901F\u7C98\u8D34\u7EC8\u7AEF\u3002",
           category: "\u5F00\u53D1\u8FD0\u7EF4",
@@ -18552,6 +18552,187 @@ ${res.progressBar}`;
           markdown: WRITING_ACADEMIC_PACK_MD
         }
       ];
+    }
+  });
+
+  // src/service/importer.ts
+  var init_importer = __esm({
+    "src/service/importer.ts"() {
+      "use strict";
+      init_transfer();
+      init_item();
+      init_kramdown();
+      init_errors();
+    }
+  });
+
+  // src/service/import-markdown.ts
+  function parseMetadata(lines) {
+    const fields = /* @__PURE__ */ new Map();
+    let titleHint = "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === ITEM_COMMENT_START || trimmed === ITEM_COMMENT_END) continue;
+      const idx = trimmed.indexOf(":");
+      if (idx <= 0) continue;
+      fields.set(trimmed.slice(0, idx).trim(), trimmed.slice(idx + 1).trim());
+    }
+    return { fields, titleHint };
+  }
+  function parsePackManifest(md, firstItemAt) {
+    var _a, _b, _c;
+    const start = md.indexOf(PACK_COMMENT_START);
+    if (start === -1 || start > firstItemAt) return void 0;
+    const end = md.indexOf(ITEM_COMMENT_END, start);
+    if (end === -1) return void 0;
+    const fields = parseMetadata(md.slice(start + PACK_COMMENT_START.length, end).split("\n")).fields;
+    const name = ((_a = fields.get("name")) != null ? _a : "").slice(0, LIMITS.title);
+    const vars = ((_b = fields.get("vars")) != null ? _b : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.maxAskFields);
+    const snippets = ((_c = fields.get("snippets")) != null ? _c : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 16);
+    if (!name) return void 0;
+    return { name, vars, ...snippets.length > 0 ? { snippets } : {} };
+  }
+  function buildPackDependencyMap(items) {
+    const map = {};
+    for (const it of items) {
+      if (it.itemType === "code") continue;
+      const refs = listSnippetRefs(it.kramdown);
+      if (refs.length > 0) {
+        map[it.title || it.id] = refs;
+      }
+    }
+    return map;
+  }
+  function parseMarkdownPack(md) {
+    var _a, _b;
+    const items = [];
+    const issues = [];
+    const seenIds = /* @__PURE__ */ new Set();
+    if (!md || !md.includes(ITEM_COMMENT_START)) return { items, issues };
+    const firstItemAt = md.indexOf(ITEM_COMMENT_START);
+    const pack = parsePackManifest(md, firstItemAt);
+    const commentStarts = [];
+    const commentEnds = [];
+    let hasUnclosed = false;
+    let scan = 0;
+    while (true) {
+      const start = md.indexOf(ITEM_COMMENT_START, scan);
+      if (start === -1) break;
+      const end = md.indexOf(ITEM_COMMENT_END, start);
+      if (end === -1) {
+        hasUnclosed = true;
+        break;
+      }
+      commentStarts.push(start);
+      commentEnds.push(end + ITEM_COMMENT_END.length);
+      scan = start + ITEM_COMMENT_START.length;
+      if (commentStarts.length > LIMITS.maxItems) break;
+    }
+    const chunks = [];
+    for (let i = 0; i < commentStarts.length; i++) {
+      const itemStart = (_a = commentStarts[i]) != null ? _a : 0;
+      const lowerBound = i > 0 ? (_b = commentEnds[i - 1]) != null ? _b : 0 : 0;
+      const titleLineStart = md.lastIndexOf("\n## ", itemStart) + 1;
+      const chunkStart = Math.max(Math.min(titleLineStart, itemStart), lowerBound);
+      const nextCommentStart = commentStarts[i + 1];
+      const nextTitleStart = nextCommentStart === void 0 ? -1 : md.lastIndexOf("\n## ", nextCommentStart) + 1;
+      const chunkEnd = nextTitleStart > itemStart ? nextTitleStart : nextCommentStart != null ? nextCommentStart : md.length;
+      chunks.push(md.slice(chunkStart, chunkEnd));
+    }
+    chunks.forEach((chunk, index) => {
+      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+      const endIdx = chunk.indexOf(ITEM_COMMENT_END);
+      if (endIdx === -1) {
+        issues.push({ index, reason: "metadata-comment-unclosed" });
+        return;
+      }
+      const metaLines = chunk.slice(0, endIdx).split("\n");
+      const { fields } = parseMetadata(metaLines);
+      const id = (_a2 = fields.get("id")) != null ? _a2 : "";
+      if (!/^xlc-[0-9a-z]{10,40}$/.test(id)) {
+        issues.push({ index, reason: "invalid-id" });
+        return;
+      }
+      if (seenIds.has(id)) {
+        issues.push({ index, reason: "duplicate-id" });
+        return;
+      }
+      const itemType = (_b2 = fields.get("type")) != null ? _b2 : "text";
+      if (!isItemType(itemType)) {
+        issues.push({ index, reason: "invalid-item-type" });
+        return;
+      }
+      const url = (_c = fields.get("url")) != null ? _c : "";
+      if (url && !isSafeHttpUrl(url)) {
+        issues.push({ index, reason: "invalid-url" });
+        return;
+      }
+      let title = "";
+      const before = chunk.slice(0, chunk.indexOf(ITEM_COMMENT_START));
+      for (const line of before.split("\n")) {
+        const m = line.match(TITLE_RE);
+        const matched = m == null ? void 0 : m[1];
+        if (matched) title = matched.trim();
+      }
+      if (!title && fields.get("alias")) title = (_d = fields.get("alias")) != null ? _d : "";
+      const body = chunk.slice(endIdx + ITEM_COMMENT_END.length).replace(/^\s*\n/, "").replace(/\n\s*$/, "");
+      const shortcode = cleanShortcode((_e = fields.get("shortcode")) != null ? _e : "");
+      seenIds.add(id);
+      items.push({
+        id,
+        itemType,
+        title: title.slice(0, LIMITS.title),
+        alias: ((_f = fields.get("alias")) != null ? _f : "").slice(0, LIMITS.alias),
+        ...shortcode ? { shortcode } : {},
+        tags: ((_g = fields.get("tags")) != null ? _g : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.tags),
+        category: ((_h = fields.get("category")) != null ? _h : "").slice(0, LIMITS.category),
+        kramdown: body.slice(0, LIMITS.contentChars),
+        source: {
+          sourceDocId: (_i = fields.get("source-doc")) != null ? _i : "",
+          sourceBlockId: (_j = fields.get("source-block")) != null ? _j : "",
+          sourceType: (_k = fields.get("source-type")) != null ? _k : "external"
+        },
+        url,
+        targetBlockId: (_l = fields.get("target")) != null ? _l : "",
+        createdAt: 0,
+        updatedAt: Date.now()
+      });
+    });
+    if (hasUnclosed) issues.push({ index: commentStarts.length, reason: "metadata-comment-unclosed" });
+    const packTitles = new Set(items.map((it) => it.title).filter(Boolean));
+    const allReferencedSnippets = /* @__PURE__ */ new Set();
+    for (const it of items) {
+      if (it.itemType === "code") continue;
+      for (const ref of listSnippetRefs(it.kramdown)) {
+        allReferencedSnippets.add(ref);
+      }
+    }
+    if (pack == null ? void 0 : pack.snippets) {
+      for (const sn of pack.snippets) allReferencedSnippets.add(sn);
+    }
+    const missingSnippets = Array.from(allReferencedSnippets).filter((snTitle) => !packTitles.has(snTitle));
+    let finalPack = pack;
+    if (missingSnippets.length > 0) {
+      finalPack = finalPack ? { ...finalPack, missingSnippets } : { name: "", vars: [], missingSnippets };
+    }
+    const dependencyMap = buildPackDependencyMap(items);
+    if (Object.keys(dependencyMap).length > 0) {
+      finalPack = finalPack ? { ...finalPack, dependencyMap } : { name: "", vars: [], dependencyMap };
+    }
+    return { items, issues, pack: finalPack };
+  }
+  var ITEM_COMMENT_START, ITEM_COMMENT_END, PACK_COMMENT_START, TITLE_RE;
+  var init_import_markdown = __esm({
+    "src/service/import-markdown.ts"() {
+      "use strict";
+      init_constants();
+      init_importer();
+      init_item();
+      init_variables();
+      ITEM_COMMENT_START = "<!-- xlc-item";
+      ITEM_COMMENT_END = "-->";
+      PACK_COMMENT_START = "<!-- xlc-pack";
+      TITLE_RE = /^##\s+(.+)$/;
     }
   });
 
@@ -18778,187 +18959,6 @@ ${res.progressBar}`;
           this.name = "ExportIntegrityError";
         }
       };
-    }
-  });
-
-  // src/service/importer.ts
-  var init_importer = __esm({
-    "src/service/importer.ts"() {
-      "use strict";
-      init_transfer();
-      init_item();
-      init_kramdown();
-      init_errors();
-    }
-  });
-
-  // src/service/import-markdown.ts
-  function parseMetadata(lines) {
-    const fields = /* @__PURE__ */ new Map();
-    let titleHint = "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed === ITEM_COMMENT_START || trimmed === ITEM_COMMENT_END) continue;
-      const idx = trimmed.indexOf(":");
-      if (idx <= 0) continue;
-      fields.set(trimmed.slice(0, idx).trim(), trimmed.slice(idx + 1).trim());
-    }
-    return { fields, titleHint };
-  }
-  function parsePackManifest(md, firstItemAt) {
-    var _a, _b, _c;
-    const start = md.indexOf(PACK_COMMENT_START);
-    if (start === -1 || start > firstItemAt) return void 0;
-    const end = md.indexOf(ITEM_COMMENT_END, start);
-    if (end === -1) return void 0;
-    const fields = parseMetadata(md.slice(start + PACK_COMMENT_START.length, end).split("\n")).fields;
-    const name = ((_a = fields.get("name")) != null ? _a : "").slice(0, LIMITS.title);
-    const vars = ((_b = fields.get("vars")) != null ? _b : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.maxAskFields);
-    const snippets = ((_c = fields.get("snippets")) != null ? _c : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 16);
-    if (!name) return void 0;
-    return { name, vars, ...snippets.length > 0 ? { snippets } : {} };
-  }
-  function buildPackDependencyMap(items) {
-    const map = {};
-    for (const it of items) {
-      if (it.itemType === "code") continue;
-      const refs = listSnippetRefs(it.kramdown);
-      if (refs.length > 0) {
-        map[it.title || it.id] = refs;
-      }
-    }
-    return map;
-  }
-  function parseMarkdownPack(md) {
-    var _a, _b;
-    const items = [];
-    const issues = [];
-    const seenIds = /* @__PURE__ */ new Set();
-    if (!md || !md.includes(ITEM_COMMENT_START)) return { items, issues };
-    const firstItemAt = md.indexOf(ITEM_COMMENT_START);
-    const pack = parsePackManifest(md, firstItemAt);
-    const commentStarts = [];
-    const commentEnds = [];
-    let hasUnclosed = false;
-    let scan = 0;
-    while (true) {
-      const start = md.indexOf(ITEM_COMMENT_START, scan);
-      if (start === -1) break;
-      const end = md.indexOf(ITEM_COMMENT_END, start);
-      if (end === -1) {
-        hasUnclosed = true;
-        break;
-      }
-      commentStarts.push(start);
-      commentEnds.push(end + ITEM_COMMENT_END.length);
-      scan = start + ITEM_COMMENT_START.length;
-      if (commentStarts.length > LIMITS.maxItems) break;
-    }
-    const chunks = [];
-    for (let i = 0; i < commentStarts.length; i++) {
-      const itemStart = (_a = commentStarts[i]) != null ? _a : 0;
-      const lowerBound = i > 0 ? (_b = commentEnds[i - 1]) != null ? _b : 0 : 0;
-      const titleLineStart = md.lastIndexOf("\n## ", itemStart) + 1;
-      const chunkStart = Math.max(Math.min(titleLineStart, itemStart), lowerBound);
-      const nextCommentStart = commentStarts[i + 1];
-      const nextTitleStart = nextCommentStart === void 0 ? -1 : md.lastIndexOf("\n## ", nextCommentStart) + 1;
-      const chunkEnd = nextTitleStart > itemStart ? nextTitleStart : nextCommentStart != null ? nextCommentStart : md.length;
-      chunks.push(md.slice(chunkStart, chunkEnd));
-    }
-    chunks.forEach((chunk, index) => {
-      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
-      const endIdx = chunk.indexOf(ITEM_COMMENT_END);
-      if (endIdx === -1) {
-        issues.push({ index, reason: "metadata-comment-unclosed" });
-        return;
-      }
-      const metaLines = chunk.slice(0, endIdx).split("\n");
-      const { fields } = parseMetadata(metaLines);
-      const id = (_a2 = fields.get("id")) != null ? _a2 : "";
-      if (!/^xlc-[0-9a-z]{10,40}$/.test(id)) {
-        issues.push({ index, reason: "invalid-id" });
-        return;
-      }
-      if (seenIds.has(id)) {
-        issues.push({ index, reason: "duplicate-id" });
-        return;
-      }
-      const itemType = (_b2 = fields.get("type")) != null ? _b2 : "text";
-      if (!isItemType(itemType)) {
-        issues.push({ index, reason: "invalid-item-type" });
-        return;
-      }
-      const url = (_c = fields.get("url")) != null ? _c : "";
-      if (url && !isSafeHttpUrl(url)) {
-        issues.push({ index, reason: "invalid-url" });
-        return;
-      }
-      let title = "";
-      const before = chunk.slice(0, chunk.indexOf(ITEM_COMMENT_START));
-      for (const line of before.split("\n")) {
-        const m = line.match(TITLE_RE);
-        const matched = m == null ? void 0 : m[1];
-        if (matched) title = matched.trim();
-      }
-      if (!title && fields.get("alias")) title = (_d = fields.get("alias")) != null ? _d : "";
-      const body = chunk.slice(endIdx + ITEM_COMMENT_END.length).replace(/^\s*\n/, "").replace(/\n\s*$/, "");
-      const shortcode = cleanShortcode((_e = fields.get("shortcode")) != null ? _e : "");
-      seenIds.add(id);
-      items.push({
-        id,
-        itemType,
-        title: title.slice(0, LIMITS.title),
-        alias: ((_f = fields.get("alias")) != null ? _f : "").slice(0, LIMITS.alias),
-        ...shortcode ? { shortcode } : {},
-        tags: ((_g = fields.get("tags")) != null ? _g : "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.tags),
-        category: ((_h = fields.get("category")) != null ? _h : "").slice(0, LIMITS.category),
-        kramdown: body.slice(0, LIMITS.contentChars),
-        source: {
-          sourceDocId: (_i = fields.get("source-doc")) != null ? _i : "",
-          sourceBlockId: (_j = fields.get("source-block")) != null ? _j : "",
-          sourceType: (_k = fields.get("source-type")) != null ? _k : "external"
-        },
-        url,
-        targetBlockId: (_l = fields.get("target")) != null ? _l : "",
-        createdAt: 0,
-        updatedAt: Date.now()
-      });
-    });
-    if (hasUnclosed) issues.push({ index: commentStarts.length, reason: "metadata-comment-unclosed" });
-    const packTitles = new Set(items.map((it) => it.title).filter(Boolean));
-    const allReferencedSnippets = /* @__PURE__ */ new Set();
-    for (const it of items) {
-      if (it.itemType === "code") continue;
-      for (const ref of listSnippetRefs(it.kramdown)) {
-        allReferencedSnippets.add(ref);
-      }
-    }
-    if (pack == null ? void 0 : pack.snippets) {
-      for (const sn of pack.snippets) allReferencedSnippets.add(sn);
-    }
-    const missingSnippets = Array.from(allReferencedSnippets).filter((snTitle) => !packTitles.has(snTitle));
-    let finalPack = pack;
-    if (missingSnippets.length > 0) {
-      finalPack = finalPack ? { ...finalPack, missingSnippets } : { name: "", vars: [], missingSnippets };
-    }
-    const dependencyMap = buildPackDependencyMap(items);
-    if (Object.keys(dependencyMap).length > 0) {
-      finalPack = finalPack ? { ...finalPack, dependencyMap } : { name: "", vars: [], dependencyMap };
-    }
-    return { items, issues, pack: finalPack };
-  }
-  var ITEM_COMMENT_START, ITEM_COMMENT_END, PACK_COMMENT_START, TITLE_RE;
-  var init_import_markdown = __esm({
-    "src/service/import-markdown.ts"() {
-      "use strict";
-      init_constants();
-      init_importer();
-      init_item();
-      init_variables();
-      ITEM_COMMENT_START = "<!-- xlc-item";
-      ITEM_COMMENT_END = "-->";
-      PACK_COMMENT_START = "<!-- xlc-pack";
-      TITLE_RE = /^##\s+(.+)$/;
     }
   });
 
@@ -19347,7 +19347,7 @@ ${res.progressBar}`;
       observer == null ? void 0 : observer.disconnect();
       onClose == null ? void 0 : onClose();
     };
-    const dialog = new import_siyuan8.Dialog({
+    const dialog = new import_siyuan9.Dialog({
       title: t("csvImportTitle"),
       content: "",
       width: "min(800px, 96vw)",
@@ -19647,11 +19647,11 @@ ${res.progressBar}`;
     });
     ta.focus();
   }
-  var import_siyuan8;
+  var import_siyuan9;
   var init_csv_tsv_wizard = __esm({
     "src/ui/csv-tsv-wizard.ts"() {
       "use strict";
-      import_siyuan8 = __toESM(require_stub_dom());
+      import_siyuan9 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_csv_tsv_import();
       init_errors();
@@ -20190,10 +20190,10 @@ ${res.progressBar}`;
     };
   }
   function openSanitizerOptionsDialog(initialOptions, onConfirm) {
-    if (typeof import_siyuan9.Dialog === "undefined") return null;
+    if (typeof import_siyuan10.Dialog === "undefined") return null;
     let dialog;
     try {
-      dialog = new import_siyuan9.Dialog({
+      dialog = new import_siyuan10.Dialog({
         title: "\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879",
         content: "",
         width: "min(560px, 92vw)",
@@ -20223,13 +20223,13 @@ ${res.progressBar}`;
     if (innerHeader) innerHeader.style.display = "none";
     return dialog;
   }
-  var import_siyuan9, MockElement;
+  var import_siyuan10, MockElement;
   var init_export_sanitizer_modal = __esm({
     "src/ui/export-sanitizer-modal.ts"() {
       "use strict";
       init_clipboard();
       init_dialog_dom();
-      import_siyuan9 = __toESM(require_stub_dom());
+      import_siyuan10 = __toESM(require_stub_dom());
       MockElement = class {
         constructor(tagName = "div") {
           this._classes = /* @__PURE__ */ new Set();
@@ -20995,7 +20995,7 @@ ${res.progressBar}`;
     if (isBrowser) {
       let dialog = null;
       try {
-        dialog = new import_siyuan10.Dialog({
+        dialog = new import_siyuan11.Dialog({
           title: titleText,
           content: "",
           width: "min(960px, 94vw)",
@@ -21218,12 +21218,12 @@ ${res.progressBar}`;
       }
     };
   }
-  var import_siyuan10, MockElement2, STRATEGY_DESCRIPTIONS;
+  var import_siyuan11, MockElement2, STRATEGY_DESCRIPTIONS;
   var init_sync_diff_modal = __esm({
     "src/ui/sync-diff-modal.ts"() {
       "use strict";
       init_sync_diff();
-      import_siyuan10 = __toESM(require_stub_dom());
+      import_siyuan11 = __toESM(require_stub_dom());
       init_clipboard();
       init_dialog_dom();
       MockElement2 = class {
@@ -23952,7 +23952,7 @@ ${exception.mark.snippet}`;
     }
     activeSetupDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan11.Dialog({
+    const dialog = new import_siyuan12.Dialog({
       title: t("setupTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -23982,7 +23982,7 @@ ${exception.mark.snippet}`;
     }
     activeSettingsDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan11.Dialog({
+    const dialog = new import_siyuan12.Dialog({
       title: t("openSettings"),
       content: "",
       width: "min(720px, 92vw)",
@@ -24174,7 +24174,7 @@ ${exception.mark.snippet}`;
     }
     const all = Array.from(idx.items.values());
     const categories = Array.from(new Set(all.map((i) => i.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-    const dialog = new import_siyuan11.Dialog({
+    const dialog = new import_siyuan12.Dialog({
       title: t("packExportTitle"),
       content: "",
       width: "min(580px, 92vw)",
@@ -24539,7 +24539,7 @@ ${exception.mark.snippet}`;
         ctx.notify("info", t("clearClipboardEmpty"));
         return;
       }
-      (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
+      (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
         ctx.state.clipboardHistory = [];
         ctx.persistSoon();
         ctx.notify("info", t("clearClipboardDone"));
@@ -24573,7 +24573,7 @@ ${exception.mark.snippet}`;
     syncClearUsage();
     clearBtn.addEventListener("click", () => {
       if (!hasUsage()) return;
-      (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
+      (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
         var _a2;
         ctx.state.usage = {};
         ctx.state.dailyUsage = {};
@@ -24608,7 +24608,7 @@ ${exception.mark.snippet}`;
       if (countRememberedFields(ctx.state.variableMemory) === 0) return;
       const confirmTitle = "\u26A0\uFE0F " + (t("clearVariableMemoryBtn") || "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6");
       const confirmBody = t("clearVariableMemoryConfirm") || "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u8BB0\u4F4F\u7684\u6240\u6709\u53D8\u91CF\u5386\u53F2\u586B\u5199\u503C\u5417\uFF1F\u6761\u76EE\u6A21\u677F\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002";
-      (0, import_siyuan11.confirm)(confirmTitle, confirmBody, () => {
+      (0, import_siyuan12.confirm)(confirmTitle, confirmBody, () => {
         ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
         ctx.persistSoon();
         syncClearMem();
@@ -25362,7 +25362,7 @@ ${exception.mark.snippet}`;
       }
       const revision = setupRevision;
       const confirmText = mode === "new-notebook" ? t("setupIndependentConfirmCreate", notebookName, title) : t("setupConfirmCreate", title);
-      (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
+      (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
         if (creatingLibrary || setupRevision !== revision || modeSelect.value !== mode || mode === "new-doc" && nbSelect.value !== notebookId || mode === "new-notebook" && independentNotebookInput.value.trim() !== notebookName || nameInput.value.trim() !== title) return;
         creatingLibrary = true;
         clearOrphanReceipt();
@@ -25784,7 +25784,7 @@ ${exception.mark.snippet}`;
         delBtn.setAttribute("aria-label", `${t("delete")}\uFF1A${ct.name}`);
         delBtn.title = `${t("delete")}\uFF1A${ct.name}`;
         delBtn.addEventListener("click", () => {
-          (0, import_siyuan11.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
+          (0, import_siyuan12.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
             ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
             persistCt();
             repaintCt();
@@ -25953,7 +25953,7 @@ ${exception.mark.snippet}`;
         remove.textContent = t("savedViewsDelete");
         remove.setAttribute("aria-label", `${t("savedViewsDelete")}\uFF1A${view.name}`);
         remove.addEventListener("click", () => {
-          (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
+          (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
             var _a;
             if (ctx.deleteSavedDiscoveryView) {
               ctx.deleteSavedDiscoveryView(view.id);
@@ -26393,7 +26393,7 @@ fi`;
     const clearRecentsBtn = mkBtn(ctx.state.recents.length ? t("clearRecents") : t("clearRecentsEmpty"), void 0, "settings.data.clearRecents");
     clearRecentsBtn.addEventListener("click", () => {
       if (ctx.state.recents.length === 0 || clearRecentsBtn.disabled) return;
-      (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
+      (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
         var _a;
         ctx.state.recents = [];
         ctx.persistSoon();
@@ -26900,7 +26900,7 @@ fi`;
   }
   function openEspansoImportDialog(ctx, onClose) {
     const t = ctx.t;
-    const dialog = new import_siyuan11.Dialog({
+    const dialog = new import_siyuan12.Dialog({
       title: t("espansoTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -27065,7 +27065,7 @@ fi`;
     } catch (err) {
       throw new Error(ctx.aiErrorText(err));
     }
-    const dialog = new import_siyuan11.Dialog({
+    const dialog = new import_siyuan12.Dialog({
       title: t("tagAuditTitle"),
       content: "",
       width: "min(620px, 92vw)",
@@ -27116,7 +27116,7 @@ fi`;
   function openImportPolicyDialog(ctx, parsed, issues, source) {
     var _a, _b, _c;
     const t = ctx.t;
-    const dialog = new import_siyuan11.Dialog({
+    const dialog = new import_siyuan12.Dialog({
       title: t("importPolicyTitle"),
       content: "",
       width: "min(540px, 92vw)",
@@ -27320,11 +27320,11 @@ fi`;
     });
     body.appendChild(wrap);
   }
-  var import_siyuan11, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
+  var import_siyuan12, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
   var init_settings_dialog = __esm({
     "src/ui/settings-dialog.ts"() {
       "use strict";
-      import_siyuan11 = __toESM(require_stub_dom());
+      import_siyuan12 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_storage();
       init_constants();
@@ -27353,7 +27353,7 @@ fi`;
   });
 
   // src/ui/dialog.ts
-  var import_siyuan7 = __toESM(require_stub_dom());
+  var import_siyuan8 = __toESM(require_stub_dom());
   init_dialog_dom();
   init_item();
   init_clipboard_cleaner();
@@ -28579,6 +28579,196 @@ fi`;
     return dialog;
   }
 
+  // src/ui/starter-packs-dialog.ts
+  var import_siyuan7 = __toESM(require_stub_dom());
+  init_dialog_dom();
+  init_prompt_pack();
+  init_import_markdown();
+  var ALL_HUB_PACKS = [
+    ...STARTER_PACKS,
+    {
+      id: "pack-general-demo",
+      icon: "\u{1F31F}",
+      name: PROMPT_PACK_NAME,
+      tagline: "\u5730\u5740/\u90AE\u7BB1/\u8054\u7CFB\u65B9\u5F0F/\u5BA2\u670D/\u4EE3\u7801/\u8EAB\u4EFD",
+      description: "25\u9879\u7ECF\u5178\u901A\u7528\u5E38\u7528\u8BED\u7EFC\u5408\u793A\u4F8B\u5305\uFF0C\u8986\u76D6\u65E5\u5E38\u751F\u6D3B\u3001\u529E\u516C\u4E0E\u7814\u53D1\u57FA\u7840\u9AD8\u9891\u4EF6\u3002",
+      category: "\u7EFC\u5408\u901A\u7528",
+      itemCount: 25,
+      markdown: PROMPT_PACK_MD
+    },
+    {
+      id: "pack-callout",
+      icon: "\u{1F4A1}",
+      name: "Callout \u7ED3\u6784\u5316\u63D0\u793A\u5305",
+      tagline: "\u91CD\u70B9/\u6CE8\u610F/\u5371\u9669/\u6210\u529F\u7B49\u4E94\u7C7B\u8B66\u544A\u5757",
+      description: "\u4E13\u4E3A\u601D\u6E90\u7B14\u8BB0\u5B9A\u5236\u7684\u73B0\u4EE3 Callout \u63D0\u793A\u5757\u8BED\u6CD5\u6A21\u677F\uFF0C\u6392\u7248\u5FC5\u5907\u3002",
+      category: "\u7B14\u8BB0\u6392\u7248",
+      itemCount: 5,
+      markdown: CALLOUT_PACK_MD
+    },
+    {
+      id: "pack-supermemo",
+      icon: "\u{1F504}",
+      name: "\u6E10\u8FDB\u53CD\u601D\u4E0E\u95F4\u9694\u590D\u4E60\u5305",
+      tagline: "SuperMemo\u5F0F\u5361\u7247\u601D\u8003\u4E0E\u6279\u5224\u6027\u53CD\u601D",
+      description: "\u6DF1\u5EA6\u601D\u8003\u4E0E\u77E5\u8BC6\u5185\u5316\u6A21\u677F\uFF0C\u52A9\u529B\u6784\u5EFA\u957F\u671F\u590D\u5229\u77E5\u8BC6\u4F53\u7CFB\u3002",
+      category: "\u77E5\u8BC6\u7BA1\u7406",
+      itemCount: 6,
+      markdown: REFORMULATION_PACK_MD
+    },
+    {
+      id: "pack-citation",
+      icon: "\u{1F4D6}",
+      name: "\u5B66\u672F\u5F15\u6587\u4E0E\u53C2\u8003\u6587\u732E\u5305",
+      tagline: "\u4E13\u8457/\u671F\u520A/\u5B66\u4F4D\u8BBA\u6587\u6807\u51C6\u89C4\u8303",
+      description: "\u56FD\u6807\u4E0E\u82F1\u6587\u5F15\u6587\u89C4\u8303\uFF0C\u8BBA\u6587\u5199\u4F5C\u4E0E\u5B66\u672F\u7B14\u8BB0\u5F15\u7528\u3002",
+      category: "\u5B66\u672F\u79D1\u7814",
+      itemCount: 4,
+      markdown: ACADEMIC_CITATION_PACK_MD
+    },
+    {
+      id: "pack-task-horizon",
+      icon: "\u{1F3AF}",
+      name: "Task Horizon \u4EFB\u52A1\u89C4\u5212\u5305",
+      tagline: "\u65E5\u8BA1\u5212/\u5468\u590D\u76D8/\u6708\u5EA6\u89C6\u754C\u770B\u677F",
+      description: "GTD \u4E0E\u65F6\u95F4\u7BA1\u7406\u6A21\u677F\uFF0C\u638C\u63A7\u6BCF\u65E5\u5F85\u529E\u4E0E\u6218\u7565\u8282\u594F\u3002",
+      category: "\u751F\u4EA7\u529B\u89C4\u5212",
+      itemCount: 3,
+      markdown: TASK_HORIZON_PACK_MD
+    }
+  ];
+  function openStarterPacksHubDialog(deps) {
+    const dialog = new import_siyuan7.Dialog({
+      title: deps.t("starterPacksTitle") || "\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A (Starter Packs Hub)",
+      content: "",
+      width: "min(720px, 94vw)"
+    });
+    mountPlatformDialogTitleWrap(dialog.element, deps.t("starterPacksTitle") || "\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A (Starter Packs Hub)");
+    const body = getDialogBody(dialog.element);
+    if (!body) return dialog;
+    const container = document.createElement("div");
+    container.className = "xlc-starter-hub-container";
+    container.dataset.xlcControl = "starter-hub.container";
+    const header = document.createElement("div");
+    header.className = "xlc-starter-hub-header";
+    const titleEl = document.createElement("strong");
+    titleEl.className = "xlc-starter-hub-header-title";
+    titleEl.textContent = "\u{1F4E6} \u6311\u9009\u9002\u5408\u60A8\u5DE5\u4F5C\u6D41\u7684\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\uFF08\u51C6\u5907\u5C31\u7EEA\uFF0C\u968F\u65F6\u81EA\u4E3B\u542F\u7528\uFF09\uFF1A";
+    const descEl = document.createElement("p");
+    descEl.className = "xlc-starter-hub-header-desc";
+    descEl.textContent = "\u6240\u6709\u5957\u4EF6\u6761\u76EE\u5747\u4E3A\u7EAF\u51C0\u6B63\u6587\u4E0E\u89C4\u8303\u5C5E\u6027\uFF0C\u4E00\u952E\u88C5\u5165\u5F53\u524D\u5E38\u7528\u5E93\u3002\u5DF2\u5B58\u5728\u7684\u6761\u76EE\u81EA\u52A8\u8DF3\u8FC7\uFF0C\u7EDD\u4E0D\u91CD\u590D\u6C61\u67D3\u60A8\u7684\u5E93\u3002";
+    header.append(titleEl, descEl);
+    const listEl = document.createElement("div");
+    listEl.className = "xlc-starter-hub-list";
+    for (const pack of ALL_HUB_PACKS) {
+      const itemCard = document.createElement("div");
+      itemCard.className = "xlc-starter-hub-card";
+      itemCard.dataset.xlcControl = `starter-hub.card.${pack.id}`;
+      const cardMain = document.createElement("div");
+      cardMain.className = "xlc-starter-hub-card-main";
+      const cardTop = document.createElement("div");
+      cardTop.className = "xlc-starter-hub-card-top";
+      const iconSpan = document.createElement("span");
+      iconSpan.className = "xlc-starter-hub-icon";
+      iconSpan.textContent = pack.icon;
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "xlc-starter-hub-name";
+      nameSpan.textContent = pack.name;
+      const countBadge = document.createElement("span");
+      countBadge.className = "xlc-starter-hub-count";
+      countBadge.textContent = `${pack.itemCount} \u9879\u6761\u76EE`;
+      cardTop.append(iconSpan, nameSpan, countBadge);
+      const taglineEl = document.createElement("div");
+      taglineEl.className = "xlc-starter-hub-tagline";
+      taglineEl.textContent = pack.tagline;
+      const descText = document.createElement("div");
+      descText.className = "xlc-starter-hub-desc";
+      descText.textContent = pack.description;
+      cardMain.append(cardTop, taglineEl, descText);
+      const cardActs = document.createElement("div");
+      cardActs.className = "xlc-starter-hub-card-acts";
+      const previewBtn = document.createElement("button");
+      previewBtn.type = "button";
+      previewBtn.className = "b3-button b3-button--cancel xlc-starter-hub-preview-btn";
+      previewBtn.dataset.xlcControl = `starter-hub.preview.${pack.id}`;
+      previewBtn.textContent = "\u{1F441} \u67E5\u770B\u5185\u5BB9";
+      const previewDrawer = document.createElement("div");
+      previewDrawer.className = "xlc-starter-hub-drawer";
+      previewDrawer.style.display = "none";
+      previewBtn.addEventListener("click", () => {
+        const isShowing = previewDrawer.style.display !== "none";
+        if (isShowing) {
+          previewDrawer.style.display = "none";
+          previewBtn.textContent = "\u{1F441} \u67E5\u770B\u5185\u5BB9";
+        } else {
+          if (previewDrawer.children.length === 0) {
+            const parsed = parseMarkdownPack(pack.markdown);
+            for (const it of parsed.items) {
+              const previewRow = document.createElement("div");
+              previewRow.className = "xlc-starter-hub-preview-row";
+              const rowTitle = document.createElement("span");
+              rowTitle.className = "xlc-starter-hub-preview-title";
+              rowTitle.textContent = `\u2022 ${it.title}`;
+              const rowTag = document.createElement("span");
+              rowTag.className = "xlc-starter-hub-preview-tag";
+              rowTag.textContent = `#${it.category || "\u5E38\u7528"}`;
+              previewRow.append(rowTitle, rowTag);
+              previewDrawer.appendChild(previewRow);
+            }
+          }
+          previewDrawer.style.display = "flex";
+          previewBtn.textContent = "\u25B2 \u6536\u8D77\u5185\u5BB9";
+        }
+      });
+      const installBtn = document.createElement("button");
+      installBtn.type = "button";
+      installBtn.className = "b3-button xlc-btn-primary xlc-starter-hub-install-btn";
+      installBtn.dataset.xlcControl = `starter-hub.install.${pack.id}`;
+      installBtn.textContent = `\uFF0B \u4E00\u952E\u542F\u7528 (${pack.itemCount}\u9879)`;
+      installBtn.addEventListener("click", async () => {
+        var _a, _b, _c, _d;
+        installBtn.disabled = true;
+        installBtn.textContent = "\u23F3 \u6B63\u5728\u88C5\u5165...";
+        try {
+          const res = await deps.importStarterPackDirect(pack.markdown);
+          if (res.ok) {
+            installBtn.textContent = "\u2713 \u5DF2\u542F\u7528";
+            installBtn.classList.remove("xlc-btn-primary");
+            installBtn.classList.add("b3-button--cancel");
+            (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", `\u5DF2\u6210\u529F\u5C06\u300C${pack.name}\u300D\u5171 ${res.count} \u9879\u6761\u76EE\u88C5\u5165\u5F53\u524D\u5E93\uFF01`);
+            (_b = deps.onImportSuccess) == null ? void 0 : _b.call(deps);
+          } else {
+            installBtn.disabled = false;
+            installBtn.textContent = `\uFF0B \u4E00\u952E\u542F\u7528 (${pack.itemCount}\u9879)`;
+            (_c = deps.notify) == null ? void 0 : _c.call(deps, "error", "\u88C5\u5165\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+          }
+        } catch {
+          installBtn.disabled = false;
+          installBtn.textContent = `\uFF0B \u4E00\u952E\u542F\u7528 (${pack.itemCount}\u9879)`;
+          (_d = deps.notify) == null ? void 0 : _d.call(deps, "error", "\u88C5\u5165\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+        }
+      });
+      cardActs.append(previewBtn, installBtn);
+      itemCard.append(cardMain, cardActs, previewDrawer);
+      listEl.appendChild(itemCard);
+    }
+    const footEl = document.createElement("div");
+    footEl.className = "xlc-starter-hub-foot";
+    const footTip = document.createElement("span");
+    footTip.className = "xlc-starter-hub-foot-tip";
+    footTip.textContent = "\u{1F4A1} \u60A8\u53EF\u968F\u65F6\u5728\u6B64\u6311\u9009\u5E76\u542F\u7528\u65B0\u5957\u4EF6\uFF0C\u6240\u6709\u5185\u5BB9\u5747\u4FDD\u5B58\u5728\u60A8\u7684\u601D\u6E90\u7B14\u8BB0\u5E93\u4E2D\u3002";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "b3-button xlc-btn-primary";
+    closeBtn.dataset.xlcControl = "starter-hub.close";
+    closeBtn.textContent = deps.t("close") || "\u5173\u95ED";
+    closeBtn.addEventListener("click", () => dialog.destroy());
+    footEl.append(footTip, closeBtn);
+    container.append(header, listEl, footEl);
+    body.appendChild(container);
+    return dialog;
+  }
+
   // src/model/contextual-recommend.ts
   var RECOMMEND_THRESHOLD = 50;
   function calculateContextualScore(entry, docCtx) {
@@ -28750,7 +28940,7 @@ fi`;
       }
       this.clipboardFormatFilter = "all";
       this.prevActiveElement = document.activeElement;
-      const dialog = new import_siyuan7.Dialog({
+      const dialog = new import_siyuan8.Dialog({
         title: this.deps.t("pluginName"),
         content: "",
         // 桌面采用宽松密度，减少截断并让双栏预览一次展示更多内容；移动端仍由 sheet 占满视口。
@@ -29593,6 +29783,24 @@ fi`;
         });
       });
       footer.appendChild(stepGuide);
+      const starterPacksBtn = document.createElement("button");
+      starterPacksBtn.type = "button";
+      starterPacksBtn.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-starter-packs";
+      starterPacksBtn.dataset.xlcControl = "footer.starter-packs";
+      starterPacksBtn.textContent = "\u{1F4E6} " + (this.deps.t("starterPacksBtn") || "\u5F00\u7BB1\u5957\u4EF6");
+      starterPacksBtn.title = "\u6253\u5F00\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A\uFF0C\u968F\u65F6\u6311\u9009\u542F\u7528\u884C\u4E1A\u573A\u666F\u5E38\u7528\u8BED";
+      starterPacksBtn.setAttribute("aria-label", "\u6253\u5F00\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A");
+      starterPacksBtn.addEventListener("click", () => {
+        if (this.deps.importStarterPackDirect) {
+          openStarterPacksHubDialog({
+            t: this.deps.t,
+            notify: this.deps.notify,
+            importStarterPackDirect: this.deps.importStarterPackDirect,
+            onImportSuccess: () => void this.refresh()
+          });
+        }
+      });
+      footer.appendChild(starterPacksBtn);
       const gear = document.createElement("button");
       gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";
       gear.dataset.xlcControl = "footer.settings";
@@ -29625,7 +29833,7 @@ fi`;
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
     openUsageGuide() {
       var _a;
-      const guideDialog = new import_siyuan7.Dialog({
+      const guideDialog = new import_siyuan8.Dialog({
         title: this.deps.t("usageGuideTitle"),
         content: "",
         width: "min(600px, 92vw)",
@@ -36119,7 +36327,7 @@ ${progress.progressBar}`);
   init_capture();
 
   // src/ui/discovery-dialog.ts
-  var import_siyuan12 = __toESM(require_stub_dom());
+  var import_siyuan13 = __toESM(require_stub_dom());
   init_constants();
   init_dialog_dom();
   init_item();
@@ -36397,7 +36605,7 @@ ${progress.progressBar}`);
       var _a, _b, _c;
       if (this.dialog) return;
       this.closed = false;
-      const dialog = new import_siyuan12.Dialog({
+      const dialog = new import_siyuan13.Dialog({
         title: (_a = this.options.title) != null ? _a : this.tx(this.titleKey()),
         content: "",
         width: "min(1040px, 94vw)",
@@ -36485,7 +36693,7 @@ ${progress.progressBar}`);
     openCloseConfirmation(onClosed) {
       var _a;
       if (this.closeConfirmationDialog || this.closed) return;
-      const dialog = new import_siyuan12.Dialog({
+      const dialog = new import_siyuan13.Dialog({
         title: this.tx("discoveryCloseTitle"),
         content: "",
         width: "min(440px, 92vw)",
@@ -37660,7 +37868,7 @@ ${progress.progressBar}`);
         pathLabel: ((_f = this.options.sourcePath) != null ? _f : "").slice(0, LIMITS.savedViewPathChars),
         defaultCategory: ((_h = (_g = this.defaultCategoryInput) == null ? void 0 : _g.value) != null ? _h : "").trim().slice(0, LIMITS.category)
       };
-      const dialog = new import_siyuan12.Dialog({
+      const dialog = new import_siyuan13.Dialog({
         title: this.tx("discoverySaveView"),
         content: "",
         width: "min(440px, 92vw)",
@@ -38159,7 +38367,7 @@ ${details.join("\n")}` : ""}`;
 
   // src/service/commands.ts
   var siyuan = __toESM(require_stub_dom());
-  var import_siyuan13 = __toESM(require_stub_dom());
+  var import_siyuan14 = __toESM(require_stub_dom());
   init_constants();
   init_actions();
   init_placeholders();
@@ -40734,7 +40942,9 @@ ${details.join("\n")}` : ""}`;
     promoteToCommon: "\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED",
     editAndPromote: "\u7F16\u8F91\u540E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED",
     globalQuickMini: "\u5168\u5C40\u547C\u51FA\u5E38\u7528\u8BED\u8FF7\u4F60\u6761 (\u8DE8\u5E94\u7528/\u540E\u53F0\u53EF\u7528)",
-    globalQuickMiniDone: "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\u5E76\u91CD\u65B0\u9000\u56DE\u540E\u53F0\uFF0C\u53EF\u5728\u5916\u90E8\u8F6F\u4EF6\u4E2D\u76F4\u63A5 Ctrl+V \u7C98\u8D34"
+    globalQuickMiniDone: "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\u5E76\u91CD\u65B0\u9000\u56DE\u540E\u53F0\uFF0C\u53EF\u5728\u5916\u90E8\u8F6F\u4EF6\u4E2D\u76F4\u63A5 Ctrl+V \u7C98\u8D34",
+    starterPacksTitle: "\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A (Starter Packs Hub)",
+    starterPacksBtn: "\u5F00\u7BB1\u5957\u4EF6"
   };
 
   // scripts/harness/entry.ts
