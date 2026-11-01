@@ -35,6 +35,8 @@ import {evaluateMathExpression} from "../model/calculator";
 import {AdjacentBlocksContext} from "../service/omni-search";
 import {openStepByStepGuideDialog} from "./guide-dialog";
 import {openShareCardDialog} from "./share-card";
+import {openPinboardDialog} from "./pinboard";
+import {getRecommendedEntries, DocumentContext} from "../model/contextual-recommend";
 import {getClipboardTimeGroup, MiniPosition, calculateMagneticSnap} from "../model/storage";
 
 /**
@@ -141,6 +143,8 @@ export interface DialogDeps {
     /** 复制完成或关闭时是否自动退回后台归还焦点（CAND-029 / TODO-FEAT-024） */
     autoMinimizeOnDone?: boolean;
     onReturnToBackground?: () => void;
+    /** 获取当前活动编辑文档上下文（CAND-031 / TODO-FEAT-026） */
+    getDocumentContext?: () => DocumentContext;
     openSetup: () => void;
     /** 全局常驻名片池 / 身份档案（CAND-016 / TODO-FEAT-015） */
     getProfilePresets?: () => Record<string, string>;
@@ -3021,6 +3025,30 @@ export class CommonSearchDialog {
             let lastClipTimeGroup: "today" | "yesterday" | "earlier" | null = null;
             const hasCommon = this.results.some((r) => !r.isOmni);
             const hasOmni = this.results.some((r) => r.isOmni);
+
+            // 当前文档上下文智能感知推荐（CAND-031 / TODO-FEAT-026）
+            if (this.currentScope === "all" && !this.lastQueryText && groupLabels.length === 0 && this.deps.getDocumentContext) {
+                const docCtx = this.deps.getDocumentContext();
+                const recs = getRecommendedEntries(this.results, docCtx, 3);
+                if (recs.length > 0) {
+                    const recHead = document.createElement("div");
+                    recHead.className = "xlc-group-head xlc-group-head--recommend";
+                    recHead.dataset.xlcControl = "search.recommend-head";
+                    recHead.textContent = `🎯 当前文档智能推荐 (${recs.length})`;
+                    list.appendChild(recHead);
+                    for (const r of recs) {
+                        const recRow = this.createEntryRow(r.entry, -1);
+                        recRow.classList.add("xlc-row--recommend");
+                        if (r.reasons.length > 0) {
+                            const reasonSpan = document.createElement("span");
+                            reasonSpan.className = "xlc-recommend-reason";
+                            reasonSpan.textContent = r.reasons[0]!;
+                            recRow.querySelector(".xlc-row-title")?.appendChild(reasonSpan);
+                        }
+                        list.appendChild(recRow);
+                    }
+                }
+            }
 
             for (let i = 0; i < this.results.length; i++) {
                 while (headCursor + 1 < groupLabels.length && i === headStarts[headCursor + 1]) {
@@ -7031,7 +7059,22 @@ export class CommonSearchDialog {
         clearBtn.textContent = "清空";
         clearBtn.addEventListener("click", () => this.clearPasteTray());
 
-        btnWrap.append(insertBtn, copyBtn, clearBtn);
+        const pinboardBtn = document.createElement("button");
+        pinboardBtn.type = "button";
+        pinboardBtn.className = "b3-button xlc-btn-ghost";
+        pinboardBtn.dataset.xlcControl = "paste-tray.pinboard";
+        pinboardBtn.textContent = "⊞ 连环拼板";
+        pinboardBtn.title = "将托盘中的常用语以连环拼板卡片形式展开（点击秒复并高亮变绿）";
+        pinboardBtn.setAttribute("aria-label", pinboardBtn.title);
+        pinboardBtn.addEventListener("click", () => {
+            openPinboardDialog({
+                t: this.deps.t,
+                copyText: (t) => this.deps.copyText(t),
+                notify: this.deps.notify,
+            }, "暂存常用语连环拼板", this.pasteTrayItems);
+        });
+
+        btnWrap.append(insertBtn, copyBtn, pinboardBtn, clearBtn);
         this.pasteTrayEl.append(headRow, itemsRow, btnWrap);
     }
 

@@ -62,6 +62,9 @@ import * as csvTsvWizard from "../src/ui/csv-tsv-wizard";
 import * as hotkeys from "../src/model/hotkeys";
 import * as performanceUtils from "../src/ui/performance-utils";
 import * as shareCard from "../src/ui/share-card";
+import * as expansion from "../src/model/expansion";
+import * as contextualRecommend from "../src/model/contextual-recommend";
+import * as pinboard from "../src/ui/pinboard";
 
 export {
     item,
@@ -124,4 +127,7 @@ export {
     hotkeys,
     performanceUtils,
     shareCard,
+    expansion,
+    contextualRecommend,
+    pinboard,
 };

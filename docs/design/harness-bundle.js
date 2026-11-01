@@ -19031,7 +19031,7 @@ ${res.progressBar}`;
       observer == null ? void 0 : observer.disconnect();
       onClose == null ? void 0 : onClose();
     };
-    const dialog = new import_siyuan7.Dialog({
+    const dialog = new import_siyuan8.Dialog({
       title: t("csvImportTitle"),
       content: "",
       width: "min(800px, 96vw)",
@@ -19331,11 +19331,11 @@ ${res.progressBar}`;
     });
     ta.focus();
   }
-  var import_siyuan7;
+  var import_siyuan8;
   var init_csv_tsv_wizard = __esm({
     "src/ui/csv-tsv-wizard.ts"() {
       "use strict";
-      import_siyuan7 = __toESM(require_stub_dom());
+      import_siyuan8 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_csv_tsv_import();
       init_errors();
@@ -19874,10 +19874,10 @@ ${res.progressBar}`;
     };
   }
   function openSanitizerOptionsDialog(initialOptions, onConfirm) {
-    if (typeof import_siyuan8.Dialog === "undefined") return null;
+    if (typeof import_siyuan9.Dialog === "undefined") return null;
     let dialog;
     try {
-      dialog = new import_siyuan8.Dialog({
+      dialog = new import_siyuan9.Dialog({
         title: "\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879",
         content: "",
         width: "min(560px, 92vw)",
@@ -19907,13 +19907,13 @@ ${res.progressBar}`;
     if (innerHeader) innerHeader.style.display = "none";
     return dialog;
   }
-  var import_siyuan8, MockElement;
+  var import_siyuan9, MockElement;
   var init_export_sanitizer_modal = __esm({
     "src/ui/export-sanitizer-modal.ts"() {
       "use strict";
       init_clipboard();
       init_dialog_dom();
-      import_siyuan8 = __toESM(require_stub_dom());
+      import_siyuan9 = __toESM(require_stub_dom());
       MockElement = class {
         constructor(tagName = "div") {
           this._classes = /* @__PURE__ */ new Set();
@@ -20679,7 +20679,7 @@ ${res.progressBar}`;
     if (isBrowser) {
       let dialog = null;
       try {
-        dialog = new import_siyuan9.Dialog({
+        dialog = new import_siyuan10.Dialog({
           title: titleText,
           content: "",
           width: "min(960px, 94vw)",
@@ -20902,12 +20902,12 @@ ${res.progressBar}`;
       }
     };
   }
-  var import_siyuan9, MockElement2, STRATEGY_DESCRIPTIONS;
+  var import_siyuan10, MockElement2, STRATEGY_DESCRIPTIONS;
   var init_sync_diff_modal = __esm({
     "src/ui/sync-diff-modal.ts"() {
       "use strict";
       init_sync_diff();
-      import_siyuan9 = __toESM(require_stub_dom());
+      import_siyuan10 = __toESM(require_stub_dom());
       init_clipboard();
       init_dialog_dom();
       MockElement2 = class {
@@ -23636,7 +23636,7 @@ ${exception.mark.snippet}`;
     }
     activeSetupDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan10.Dialog({
+    const dialog = new import_siyuan11.Dialog({
       title: t("setupTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -23666,7 +23666,7 @@ ${exception.mark.snippet}`;
     }
     activeSettingsDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan10.Dialog({
+    const dialog = new import_siyuan11.Dialog({
       title: t("openSettings"),
       content: "",
       width: "min(720px, 92vw)",
@@ -23858,7 +23858,7 @@ ${exception.mark.snippet}`;
     }
     const all = Array.from(idx.items.values());
     const categories = Array.from(new Set(all.map((i) => i.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-    const dialog = new import_siyuan10.Dialog({
+    const dialog = new import_siyuan11.Dialog({
       title: t("packExportTitle"),
       content: "",
       width: "min(580px, 92vw)",
@@ -24223,7 +24223,7 @@ ${exception.mark.snippet}`;
         ctx.notify("info", t("clearClipboardEmpty"));
         return;
       }
-      (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
+      (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
         ctx.state.clipboardHistory = [];
         ctx.persistSoon();
         ctx.notify("info", t("clearClipboardDone"));
@@ -24257,7 +24257,7 @@ ${exception.mark.snippet}`;
     syncClearUsage();
     clearBtn.addEventListener("click", () => {
       if (!hasUsage()) return;
-      (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
+      (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
         var _a2;
         ctx.state.usage = {};
         ctx.state.dailyUsage = {};
@@ -24292,7 +24292,7 @@ ${exception.mark.snippet}`;
       if (countRememberedFields(ctx.state.variableMemory) === 0) return;
       const confirmTitle = "\u26A0\uFE0F " + (t("clearVariableMemoryBtn") || "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6");
       const confirmBody = t("clearVariableMemoryConfirm") || "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u8BB0\u4F4F\u7684\u6240\u6709\u53D8\u91CF\u5386\u53F2\u586B\u5199\u503C\u5417\uFF1F\u6761\u76EE\u6A21\u677F\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002";
-      (0, import_siyuan10.confirm)(confirmTitle, confirmBody, () => {
+      (0, import_siyuan11.confirm)(confirmTitle, confirmBody, () => {
         ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
         ctx.persistSoon();
         syncClearMem();
@@ -25046,7 +25046,7 @@ ${exception.mark.snippet}`;
       }
       const revision = setupRevision;
       const confirmText = mode === "new-notebook" ? t("setupIndependentConfirmCreate", notebookName, title) : t("setupConfirmCreate", title);
-      (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
+      (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
         if (creatingLibrary || setupRevision !== revision || modeSelect.value !== mode || mode === "new-doc" && nbSelect.value !== notebookId || mode === "new-notebook" && independentNotebookInput.value.trim() !== notebookName || nameInput.value.trim() !== title) return;
         creatingLibrary = true;
         clearOrphanReceipt();
@@ -25468,7 +25468,7 @@ ${exception.mark.snippet}`;
         delBtn.setAttribute("aria-label", `${t("delete")}\uFF1A${ct.name}`);
         delBtn.title = `${t("delete")}\uFF1A${ct.name}`;
         delBtn.addEventListener("click", () => {
-          (0, import_siyuan10.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
+          (0, import_siyuan11.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
             ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
             persistCt();
             repaintCt();
@@ -25637,7 +25637,7 @@ ${exception.mark.snippet}`;
         remove.textContent = t("savedViewsDelete");
         remove.setAttribute("aria-label", `${t("savedViewsDelete")}\uFF1A${view.name}`);
         remove.addEventListener("click", () => {
-          (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
+          (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
             var _a;
             if (ctx.deleteSavedDiscoveryView) {
               ctx.deleteSavedDiscoveryView(view.id);
@@ -26077,7 +26077,7 @@ fi`;
     const clearRecentsBtn = mkBtn(ctx.state.recents.length ? t("clearRecents") : t("clearRecentsEmpty"), void 0, "settings.data.clearRecents");
     clearRecentsBtn.addEventListener("click", () => {
       if (ctx.state.recents.length === 0 || clearRecentsBtn.disabled) return;
-      (0, import_siyuan10.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
+      (0, import_siyuan11.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
         var _a;
         ctx.state.recents = [];
         ctx.persistSoon();
@@ -26584,7 +26584,7 @@ fi`;
   }
   function openEspansoImportDialog(ctx, onClose) {
     const t = ctx.t;
-    const dialog = new import_siyuan10.Dialog({
+    const dialog = new import_siyuan11.Dialog({
       title: t("espansoTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -26749,7 +26749,7 @@ fi`;
     } catch (err) {
       throw new Error(ctx.aiErrorText(err));
     }
-    const dialog = new import_siyuan10.Dialog({
+    const dialog = new import_siyuan11.Dialog({
       title: t("tagAuditTitle"),
       content: "",
       width: "min(620px, 92vw)",
@@ -26800,7 +26800,7 @@ fi`;
   function openImportPolicyDialog(ctx, parsed, issues, source) {
     var _a, _b, _c;
     const t = ctx.t;
-    const dialog = new import_siyuan10.Dialog({
+    const dialog = new import_siyuan11.Dialog({
       title: t("importPolicyTitle"),
       content: "",
       width: "min(540px, 92vw)",
@@ -27004,11 +27004,11 @@ fi`;
     });
     body.appendChild(wrap);
   }
-  var import_siyuan10, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
+  var import_siyuan11, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
   var init_settings_dialog = __esm({
     "src/ui/settings-dialog.ts"() {
       "use strict";
-      import_siyuan10 = __toESM(require_stub_dom());
+      import_siyuan11 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_storage();
       init_constants();
@@ -27037,7 +27037,7 @@ fi`;
   });
 
   // src/ui/dialog.ts
-  var import_siyuan6 = __toESM(require_stub_dom());
+  var import_siyuan7 = __toESM(require_stub_dom());
   init_dialog_dom();
   init_item();
   init_clipboard_cleaner();
@@ -28153,6 +28153,179 @@ fi`;
     return dialog;
   }
 
+  // src/ui/pinboard.ts
+  var import_siyuan6 = __toESM(require_stub_dom());
+  init_dialog_dom();
+  function openPinboardDialog(deps, title, items) {
+    const dialog = new import_siyuan6.Dialog({
+      title: title || "\u8FDE\u73AF\u53D6\u7528\u62FC\u677F",
+      content: "",
+      width: "min(640px, 92vw)"
+    });
+    mountPlatformDialogTitleWrap(dialog.element, title || "\u8FDE\u73AF\u53D6\u7528\u62FC\u677F");
+    const body = getDialogBody(dialog.element);
+    if (!body) return dialog;
+    const container = document.createElement("div");
+    container.className = "xlc-pinboard-container";
+    container.dataset.xlcControl = "pinboard.container";
+    const headBar = document.createElement("div");
+    headBar.className = "xlc-pinboard-head";
+    const titleEl = document.createElement("div");
+    titleEl.className = "xlc-pinboard-title";
+    titleEl.textContent = `\u{1F4CB} ${title}\uFF08\u5171 ${items.length} \u9879\uFF0C\u70B9\u51FB\u5361\u7247\u5373\u523B\u590D\u5236\uFF09\uFF1A`;
+    const progressEl = document.createElement("span");
+    progressEl.className = "xlc-pinboard-progress";
+    progressEl.textContent = `\u5DF2\u590D\u5236 0 / ${items.length}`;
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "b3-button b3-button--cancel xlc-pinboard-reset";
+    resetBtn.dataset.xlcControl = "pinboard.reset";
+    resetBtn.textContent = "\u91CD\u7F6E\u8FDB\u5EA6";
+    headBar.append(titleEl, progressEl, resetBtn);
+    const grid = document.createElement("div");
+    grid.className = "xlc-pinboard-grid";
+    grid.setAttribute("role", "list");
+    const copiedSet = /* @__PURE__ */ new Set();
+    const updateProgress = () => {
+      progressEl.textContent = `\u5DF2\u590D\u5236 ${copiedSet.size} / ${items.length}`;
+    };
+    resetBtn.addEventListener("click", () => {
+      var _a;
+      copiedSet.clear();
+      updateProgress();
+      grid.querySelectorAll(".xlc-pinboard-card").forEach((card) => {
+        card.classList.remove("xlc-pinboard-card--copied");
+        const status = card.querySelector(".xlc-pinboard-status");
+        if (status) status.textContent = "\u70B9\u51FB\u590D\u5236";
+      });
+      (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", "\u5DF2\u91CD\u7F6E\u62FC\u677F\u53D6\u7528\u8FDB\u5EA6");
+    });
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const card = document.createElement("div");
+      card.className = "xlc-pinboard-card";
+      card.dataset.xlcControl = `pinboard.card.${i}`;
+      card.setAttribute("role", "listitem");
+      card.tabIndex = 0;
+      const cardTop = document.createElement("div");
+      cardTop.className = "xlc-pinboard-card-top";
+      const ord = document.createElement("span");
+      ord.className = "xlc-pinboard-ord";
+      ord.textContent = String(i + 1);
+      const cardTitle = document.createElement("strong");
+      cardTitle.className = "xlc-pinboard-card-title";
+      cardTitle.textContent = it.title || it.id;
+      const statusBadge = document.createElement("span");
+      statusBadge.className = "xlc-pinboard-status";
+      statusBadge.textContent = "\u70B9\u51FB\u590D\u5236";
+      cardTop.append(ord, cardTitle, statusBadge);
+      const cardBody = document.createElement("div");
+      cardBody.className = "xlc-pinboard-card-body";
+      cardBody.textContent = (it.content || it.summary || "").slice(0, 120);
+      card.append(cardTop, cardBody);
+      const doCopy = async () => {
+        var _a, _b;
+        const textToCopy = it.content || it.summary || "";
+        const ok2 = await deps.copyText(textToCopy);
+        if (ok2) {
+          copiedSet.add(it.id);
+          card.classList.add("xlc-pinboard-card--copied");
+          statusBadge.textContent = "\u2713 \u5DF2\u590D\u5236";
+          updateProgress();
+          (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", `\u5DF2\u590D\u5236\u300C${it.title}\u300D`);
+        } else {
+          (_b = deps.notify) == null ? void 0 : _b.call(deps, "error", deps.t("copyFailed") || "\u590D\u5236\u5931\u8D25");
+        }
+      };
+      card.addEventListener("click", doCopy);
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          void doCopy();
+        }
+      });
+      grid.appendChild(card);
+    }
+    const footBar = document.createElement("div");
+    footBar.className = "xlc-pinboard-foot";
+    const tip = document.createElement("div");
+    tip.className = "xlc-pinboard-tip";
+    tip.textContent = "\u{1F4A1} \u652F\u6301\u4E00\u8FB9\u5728\u5916\u90E8\u5BF9\u516C\u586B\u5355\uFF0C\u4E00\u8FB9\u70B9\u51FB\u4E0A\u65B9\u5361\u7247\u4F9D\u6B21\u590D\u5236\uFF0C\u65E0\u9700\u91CD\u590D\u641C\u7D22\uFF01";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "b3-button xlc-btn-primary";
+    closeBtn.dataset.xlcControl = "pinboard.close";
+    closeBtn.textContent = deps.t("close") || "\u5173\u95ED";
+    closeBtn.addEventListener("click", () => dialog.destroy());
+    footBar.append(tip, closeBtn);
+    container.append(headBar, grid, footBar);
+    body.appendChild(container);
+    return dialog;
+  }
+
+  // src/model/contextual-recommend.ts
+  var RECOMMEND_THRESHOLD = 50;
+  function calculateContextualScore(entry, docCtx) {
+    var _a, _b, _c, _d;
+    if (!docCtx || !docCtx.title && !docCtx.hPath && (!docCtx.tags || docCtx.tags.length === 0) && (!docCtx.recentDocItemIds || docCtx.recentDocItemIds.length === 0)) {
+      return { score: 0, reasons: [] };
+    }
+    let score = 0;
+    const reasons = [];
+    const docTitle = ((_a = docCtx.title) != null ? _a : "").trim().toLowerCase();
+    const docPath = ((_b = docCtx.hPath) != null ? _b : "").trim().toLowerCase();
+    const docTags = ((_c = docCtx.tags) != null ? _c : []).map((t) => t.replace(/^#/, "").toLowerCase());
+    const recentIds = new Set((_d = docCtx.recentDocItemIds) != null ? _d : []);
+    if (recentIds.has(entry.id)) {
+      score += 100;
+      reasons.push("\u672C\u6587\u6863\u9AD8\u9891\u4F7F\u7528");
+    }
+    if (entry.category && docTitle) {
+      const cat = entry.category.toLowerCase();
+      const catParts = cat.split(/[\/\-_]/).map((p) => p.trim()).filter(Boolean);
+      const hit = docTitle.includes(cat) || catParts.some((p) => p.length >= 2 && docTitle.includes(p));
+      if (hit) {
+        score += 80;
+        reasons.push(`\u5339\u914D\u5206\u7C7B\u300C${entry.category}\u300D`);
+      }
+    }
+    if (entry.tags && entry.tags.length > 0 && docTags.length > 0) {
+      const overlap = entry.tags.filter((t) => docTags.includes(t.replace(/^#/, "").toLowerCase()));
+      if (overlap.length > 0) {
+        score += Math.min(80, overlap.length * 40);
+        reasons.push(`\u5171\u6709\u6807\u7B7E #${overlap[0]}`);
+      }
+    }
+    if (docTitle && entry.title) {
+      const cleanTitle = entry.title.toLowerCase();
+      if (docTitle.includes(cleanTitle) || cleanTitle.length >= 3 && cleanTitle.includes(docTitle)) {
+        score += 50;
+        reasons.push("\u5339\u914D\u6587\u6863\u6807\u9898");
+      }
+    }
+    if (entry.category && docPath) {
+      const cat = entry.category.toLowerCase();
+      const catParts = cat.split(/[\/\-_]/).map((p) => p.trim()).filter(Boolean);
+      const hit = docPath.includes(cat) || catParts.some((p) => p.length >= 2 && docPath.includes(p));
+      if (hit && !reasons.some((r) => r.includes(entry.category))) {
+        score += 40;
+        reasons.push(`\u8DEF\u5F84\u5305\u542B\u5206\u7C7B\u300C${entry.category}\u300D`);
+      }
+    }
+    return { score, reasons };
+  }
+  function getRecommendedEntries(entries, docCtx, limit = 5) {
+    const results = [];
+    for (const entry of entries) {
+      const { score, reasons } = calculateContextualScore(entry, docCtx);
+      if (score >= RECOMMEND_THRESHOLD) {
+        results.push({ entry, score, reasons });
+      }
+    }
+    results.sort((a, b) => b.score - a.score);
+    return results.slice(0, limit);
+  }
+
   // src/ui/dialog.ts
   init_storage();
   function resolveEntryBlockId(entry) {
@@ -28260,7 +28433,7 @@ fi`;
       }
       this.clipboardFormatFilter = "all";
       this.prevActiveElement = document.activeElement;
-      const dialog = new import_siyuan6.Dialog({
+      const dialog = new import_siyuan7.Dialog({
         title: this.deps.t("pluginName"),
         content: "",
         // 桌面采用宽松密度，减少截断并让双栏预览一次展示更多内容；移动端仍由 sheet 占满视口。
@@ -29135,7 +29308,7 @@ fi`;
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
     openUsageGuide() {
       var _a;
-      const guideDialog = new import_siyuan6.Dialog({
+      const guideDialog = new import_siyuan7.Dialog({
         title: this.deps.t("usageGuideTitle"),
         content: "",
         width: "min(600px, 92vw)",
@@ -30429,7 +30602,7 @@ fi`;
       return row;
     }
     renderList(list) {
-      var _a, _b, _c, _d;
+      var _a, _b, _c, _d, _e;
       (_a = this.virtualListCleanup) == null ? void 0 : _a.call(this);
       this.virtualListCleanup = null;
       this.virtualEnsureIndex = null;
@@ -30646,7 +30819,7 @@ fi`;
           importBtn.textContent = label;
           importBtn.setAttribute("aria-label", label);
           importBtn.addEventListener("click", async () => {
-            var _a2, _b2, _c2, _d2, _e, _f;
+            var _a2, _b2, _c2, _d2, _e2, _f;
             importBtn.disabled = true;
             importBtn.textContent = this.deps.t("loading");
             try {
@@ -30654,7 +30827,7 @@ fi`;
               (_b2 = (_a2 = this.deps).notify) == null ? void 0 : _b2.call(_a2, "info", this.deps.t("importCompactBundleDone"));
               (_d2 = (_c2 = this.dialog) == null ? void 0 : _c2.element.querySelector(".xlc-search-input")) == null ? void 0 : _d2.focus();
             } catch (err) {
-              (_f = (_e = this.deps).notify) == null ? void 0 : _f.call(_e, "error", toErrorMessage(err));
+              (_f = (_e2 = this.deps).notify) == null ? void 0 : _f.call(_e2, "error", toErrorMessage(err));
               importBtn.disabled = false;
             }
           });
@@ -30820,6 +30993,28 @@ fi`;
         let lastClipTimeGroup = null;
         const hasCommon = this.results.some((r) => !r.isOmni);
         const hasOmni = this.results.some((r) => r.isOmni);
+        if (this.currentScope === "all" && !this.lastQueryText && groupLabels.length === 0 && this.deps.getDocumentContext) {
+          const docCtx = this.deps.getDocumentContext();
+          const recs = getRecommendedEntries(this.results, docCtx, 3);
+          if (recs.length > 0) {
+            const recHead = document.createElement("div");
+            recHead.className = "xlc-group-head xlc-group-head--recommend";
+            recHead.dataset.xlcControl = "search.recommend-head";
+            recHead.textContent = `\u{1F3AF} \u5F53\u524D\u6587\u6863\u667A\u80FD\u63A8\u8350 (${recs.length})`;
+            list.appendChild(recHead);
+            for (const r of recs) {
+              const recRow = this.createEntryRow(r.entry, -1);
+              recRow.classList.add("xlc-row--recommend");
+              if (r.reasons.length > 0) {
+                const reasonSpan = document.createElement("span");
+                reasonSpan.className = "xlc-recommend-reason";
+                reasonSpan.textContent = r.reasons[0];
+                (_e = recRow.querySelector(".xlc-row-title")) == null ? void 0 : _e.appendChild(reasonSpan);
+              }
+              list.appendChild(recRow);
+            }
+          }
+        }
         for (let i = 0; i < this.results.length; i++) {
           while (headCursor + 1 < groupLabels.length && i === headStarts[headCursor + 1]) {
             headCursor++;
@@ -34841,7 +35036,21 @@ ${progress.progressBar}`);
       clearBtn.dataset.xlcControl = "paste-tray.clear";
       clearBtn.textContent = "\u6E05\u7A7A";
       clearBtn.addEventListener("click", () => this.clearPasteTray());
-      btnWrap.append(insertBtn, copyBtn, clearBtn);
+      const pinboardBtn = document.createElement("button");
+      pinboardBtn.type = "button";
+      pinboardBtn.className = "b3-button xlc-btn-ghost";
+      pinboardBtn.dataset.xlcControl = "paste-tray.pinboard";
+      pinboardBtn.textContent = "\u229E \u8FDE\u73AF\u62FC\u677F";
+      pinboardBtn.title = "\u5C06\u6258\u76D8\u4E2D\u7684\u5E38\u7528\u8BED\u4EE5\u8FDE\u73AF\u62FC\u677F\u5361\u7247\u5F62\u5F0F\u5C55\u5F00\uFF08\u70B9\u51FB\u79D2\u590D\u5E76\u9AD8\u4EAE\u53D8\u7EFF\uFF09";
+      pinboardBtn.setAttribute("aria-label", pinboardBtn.title);
+      pinboardBtn.addEventListener("click", () => {
+        openPinboardDialog({
+          t: this.deps.t,
+          copyText: (t) => this.deps.copyText(t),
+          notify: this.deps.notify
+        }, "\u6682\u5B58\u5E38\u7528\u8BED\u8FDE\u73AF\u62FC\u677F", this.pasteTrayItems);
+      });
+      btnWrap.append(insertBtn, copyBtn, pinboardBtn, clearBtn);
       this.pasteTrayEl.append(headRow, itemsRow, btnWrap);
     }
     async mergeInsertPasteTray() {
@@ -35536,7 +35745,7 @@ ${progress.progressBar}`);
   init_capture();
 
   // src/ui/discovery-dialog.ts
-  var import_siyuan11 = __toESM(require_stub_dom());
+  var import_siyuan12 = __toESM(require_stub_dom());
   init_constants();
   init_dialog_dom();
   init_item();
@@ -35814,7 +36023,7 @@ ${progress.progressBar}`);
       var _a, _b, _c;
       if (this.dialog) return;
       this.closed = false;
-      const dialog = new import_siyuan11.Dialog({
+      const dialog = new import_siyuan12.Dialog({
         title: (_a = this.options.title) != null ? _a : this.tx(this.titleKey()),
         content: "",
         width: "min(1040px, 94vw)",
@@ -35902,7 +36111,7 @@ ${progress.progressBar}`);
     openCloseConfirmation(onClosed) {
       var _a;
       if (this.closeConfirmationDialog || this.closed) return;
-      const dialog = new import_siyuan11.Dialog({
+      const dialog = new import_siyuan12.Dialog({
         title: this.tx("discoveryCloseTitle"),
         content: "",
         width: "min(440px, 92vw)",
@@ -37077,7 +37286,7 @@ ${progress.progressBar}`);
         pathLabel: ((_f = this.options.sourcePath) != null ? _f : "").slice(0, LIMITS.savedViewPathChars),
         defaultCategory: ((_h = (_g = this.defaultCategoryInput) == null ? void 0 : _g.value) != null ? _h : "").trim().slice(0, LIMITS.category)
       };
-      const dialog = new import_siyuan11.Dialog({
+      const dialog = new import_siyuan12.Dialog({
         title: this.tx("discoverySaveView"),
         content: "",
         width: "min(440px, 92vw)",
@@ -37576,7 +37785,7 @@ ${details.join("\n")}` : ""}`;
 
   // src/service/commands.ts
   var siyuan = __toESM(require_stub_dom());
-  var import_siyuan12 = __toESM(require_stub_dom());
+  var import_siyuan13 = __toESM(require_stub_dom());
   init_constants();
   init_actions();
   init_placeholders();

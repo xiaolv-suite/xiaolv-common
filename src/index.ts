@@ -2102,6 +2102,14 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.persistSoon();
             },
             getProfilePresets: () => this.state.profilePresets ?? {},
+            getDocumentContext: () => {
+                const info = this.host.currentDocInfo();
+                return {
+                    docId: info?.docId,
+                    title: info?.hPath?.split("/").pop() || info?.hPath || "",
+                    hPath: info?.hPath,
+                };
+            },
             notify: (kind, msg) => this.notify(kind, msg),
             search: async (query) => {
                 const loading = !this.library.getIndex();
