@@ -3779,18 +3779,24 @@
   }
 }
 
-// 常用语购物车暂存托盘栏（CAND-019 / TODO-FEAT-018）
+// 常用语购物车暂存托盘栏（CAND-019 / CAND-025）
 .xlc-paste-tray {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: var(--xlc-space-2);
   padding: var(--xlc-space-2) var(--xlc-space-3);
   margin-top: var(--xlc-space-2);
-  background: color-mix(in srgb, var(--b3-theme-primary) 10%, var(--b3-theme-surface));
+  background: color-mix(in srgb, var(--b3-theme-primary) 8%, var(--b3-theme-surface));
   border: 1px dashed var(--b3-theme-primary);
   border-radius: var(--xlc-radius);
   animation: xlc-pop var(--xlc-dur-fast) var(--xlc-ease);
+
+  .xlc-paste-tray-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xlc-space-2);
+  }
 
   .xlc-paste-tray-badge {
     font-size: 12px;
@@ -3798,9 +3804,86 @@
     color: var(--b3-theme-primary);
   }
 
+  .xlc-paste-tray-seps {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--b3-theme-surface);
+    padding: 1px;
+    border-radius: var(--b3-border-radius);
+    border: 1px solid var(--b3-border-color);
+
+    .xlc-paste-sep-chip {
+      font-size: 10px;
+      line-height: 1;
+      padding: 2px 6px;
+      border: none;
+      background: transparent;
+      color: var(--b3-theme-on-surface-light);
+      border-radius: var(--b3-border-radius);
+      cursor: pointer;
+
+      &:hover {
+        color: var(--b3-theme-primary);
+      }
+
+      &--active {
+        background: var(--b3-theme-primary);
+        color: var(--b3-theme-on-primary);
+        font-weight: var(--xlc-weight-semibold);
+      }
+    }
+  }
+
+  .xlc-paste-tray-items {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 2px 0;
+    max-height: 52px;
+
+    .xlc-paste-item-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1px 6px;
+      background: var(--b3-theme-surface);
+      border: 1px solid var(--b3-border-color);
+      border-radius: var(--xlc-radius-pill, 9999px);
+      font-size: 11px;
+      color: var(--b3-theme-on-surface);
+      white-space: nowrap;
+      flex-shrink: 0;
+
+      .xlc-paste-item-title {
+        max-width: 100px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .xlc-paste-item-del {
+        background: transparent;
+        border: none;
+        padding: 0;
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+        opacity: 0.6;
+        color: var(--b3-theme-on-surface-light);
+
+        &:hover {
+          opacity: 1;
+          color: var(--b3-theme-error);
+        }
+      }
+    }
+  }
+
   .xlc-paste-tray-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: var(--xlc-space-1);
 
     .b3-button {
@@ -3814,6 +3897,30 @@
 .xlc-row-action-tray {
   font-size: 11px;
   line-height: 1;
+}
+
+.xlc-dialog--snapped {
+  outline: 2px solid var(--b3-theme-primary) !important;
+  outline-offset: -2px;
+  transition: outline var(--xlc-dur-fast) ease-out;
+}
+
+.xlc-mini-row-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  font-size: 10px;
+  font-family: var(--b3-font-family-code);
+  font-weight: var(--xlc-weight-semibold);
+  color: var(--b3-theme-primary);
+  background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--b3-theme-primary) 30%, transparent);
+  border-radius: 3px;
+  margin-right: 4px;
+  flex-shrink: 0;
 }
 
 .b3-dialog__container.xlc-discovery-host {

@@ -28,14 +28,14 @@ import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
 import {formatPlatformShortcut, detectShortcutConflicts} from "../model/hotkeys";
 import {calculateVirtualScrollWindow} from "./performance-utils";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
-import {renderWechatArticleHtml, writeRichClipboard, formatItemContent, ItemCopyFormat, mergeTrayContents} from "../model/clipboard";
+import {renderWechatArticleHtml, writeRichClipboard, formatItemContent, ItemCopyFormat, mergeTrayContents, TraySeparatorKind} from "../model/clipboard";
 import {transformCase} from "../model/placeholders";
 import {evaluateMathExpression} from "../model/calculator";
 
 import {AdjacentBlocksContext} from "../service/omni-search";
 import {openStepByStepGuideDialog} from "./guide-dialog";
 import {openShareCardDialog} from "./share-card";
-import {getClipboardTimeGroup, MiniPosition} from "../model/storage";
+import {getClipboardTimeGroup, MiniPosition, calculateMagneticSnap} from "../model/storage";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -241,6 +241,7 @@ export class CommonSearchDialog {
     /** 常用语购物车暂存托盘（CAND-019 / TODO-FEAT-018） */
     private pasteTrayItems: Array<{id: string; title: string; content?: string}> = [];
     private pasteTrayEl: HTMLElement | null = null;
+    private traySeparator: TraySeparatorKind = "double-newline";
 
     constructor(private readonly deps: DialogDeps) {
         if (deps.density) this.density = deps.density;
@@ -360,8 +361,25 @@ export class CommonSearchDialog {
             const onMouseUp = () => {
                 document.removeEventListener("mousemove", onMouseMove);
                 document.removeEventListener("mouseup", onMouseUp);
-                if (this.miniPosition) {
-                    this.deps.onMiniPositionChange?.(this.miniPosition);
+                const containerRect = container.getBoundingClientRect();
+                const curLeft = parseFloat(container.style.left) || rect.left;
+                const curTop = parseFloat(container.style.top) || rect.top;
+                const snap = calculateMagneticSnap(
+                    curLeft,
+                    curTop,
+                    containerRect.width,
+                    containerRect.height,
+                    window.innerWidth,
+                    window.innerHeight,
+                    24
+                );
+                container.style.left = `${snap.x}px`;
+                container.style.top = `${snap.y}px`;
+                this.miniPosition = {x: snap.x, y: snap.y};
+                this.deps.onMiniPositionChange?.(this.miniPosition);
+                if (snap.snapped) {
+                    container.classList.add("xlc-dialog--snapped");
+                    setTimeout(() => container.classList.remove("xlc-dialog--snapped"), 250);
                 }
             };
 
@@ -2316,6 +2334,14 @@ export class CommonSearchDialog {
             scBadge.textContent = entry.shortcode;
             scBadge.title = `简码：输入 ${entry.shortcode} 触发`;
             title.appendChild(scBadge);
+        }
+        if (this.miniMode && index < 9) {
+            const miniNum = document.createElement("span");
+            miniNum.className = "xlc-mini-row-num";
+            miniNum.textContent = String(index + 1);
+            miniNum.title = `按键直达：${index + 1} 插入 / Shift+${index + 1} 复制`;
+            miniNum.setAttribute("aria-hidden", "true");
+            title.appendChild(miniNum);
         }
         const titleText = document.createElement("span");
         titleText.className = "xlc-row-titletext";
@@ -6553,6 +6579,35 @@ export class CommonSearchDialog {
             e.preventDefault();
             this.toggleQuickLook();
             return;
+        } else if (
+            this.miniMode && !e.ctrlKey && !e.metaKey && !e.altKey
+            && (!isInputFocused || input?.value.trim() === "")
+            && (/^[1-9]$/.test(e.key) || /^Digit[1-9]$/.test(e.code))
+        ) {
+            // 迷你常驻模式下前9项单数字键极速直达（CAND-026 / TODO-OPT-07）
+            let num: number | null = null;
+            if (/^[1-9]$/.test(e.key)) num = Number(e.key);
+            else if (/^Digit[1-9]$/.test(e.code)) num = Number(e.code.replace("Digit", ""));
+            if (num !== null && num >= 1 && num <= 9) {
+                if (e.repeat) return;
+                e.preventDefault();
+                const idx = num - 1;
+                const entry = this.results[idx];
+                if (entry) {
+                    if (e.shiftKey) {
+                        if (this.primaryBusy) return;
+                        this.primaryBusy = true;
+                        try {
+                            await this.deps.runAction(entry.id, "copy");
+                        } finally {
+                            this.primaryBusy = false;
+                        }
+                    } else {
+                        await this.runPrimary(entry);
+                    }
+                    return;
+                }
+            }
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (/^[1-9]$/.test(e.key) || /^Digit[1-9]$/.test(e.code))) {
             let num: number | null = null;
             if (/^[1-9]$/.test(e.key)) {
@@ -6866,6 +6921,15 @@ export class CommonSearchDialog {
         return [...this.pasteTrayItems];
     }
 
+    public removeFromPasteTray(id: string): void {
+        const idx = this.pasteTrayItems.findIndex((it) => it.id === id);
+        if (idx >= 0) {
+            this.pasteTrayItems.splice(idx, 1);
+            this.updatePasteTray();
+            if (this.listEl) this.renderList(this.listEl);
+        }
+    }
+
     public clearPasteTray(): void {
         this.pasteTrayItems = [];
         this.updatePasteTray();
@@ -6882,9 +6946,52 @@ export class CommonSearchDialog {
         this.pasteTrayEl.style.display = "flex";
         this.pasteTrayEl.replaceChildren();
 
+        const headRow = document.createElement("div");
+        headRow.className = "xlc-paste-tray-head";
+
         const badge = document.createElement("span");
         badge.className = "xlc-paste-tray-badge";
         badge.textContent = `🛒 暂存托盘 (${this.pasteTrayItems.length}项)`;
+
+        const sepGroup = document.createElement("div");
+        sepGroup.className = "xlc-paste-tray-seps";
+        const seps: Array<{kind: TraySeparatorKind; label: string}> = [
+            {kind: "double-newline", label: "换行"},
+            {kind: "hr", label: "---分割线"},
+            {kind: "compact", label: "紧凑"},
+        ];
+        for (const s of seps) {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = `xlc-paste-sep-chip ${this.traySeparator === s.kind ? "xlc-paste-sep-chip--active" : ""}`;
+            chip.dataset.xlcControl = `paste-tray.sep.${s.kind}`;
+            chip.textContent = s.label;
+            chip.addEventListener("click", () => {
+                this.traySeparator = s.kind;
+                this.updatePasteTray();
+            });
+            sepGroup.appendChild(chip);
+        }
+        headRow.append(badge, sepGroup);
+
+        const itemsRow = document.createElement("div");
+        itemsRow.className = "xlc-paste-tray-items";
+        for (const it of this.pasteTrayItems) {
+            const itChip = document.createElement("span");
+            itChip.className = "xlc-paste-item-chip";
+            const itTitle = document.createElement("span");
+            itTitle.className = "xlc-paste-item-title";
+            itTitle.textContent = it.title || it.id;
+            const delX = document.createElement("button");
+            delX.type = "button";
+            delX.className = "xlc-paste-item-del";
+            delX.textContent = "×";
+            delX.title = `移除「${it.title}」`;
+            delX.dataset.xlcControl = `paste-tray.item-remove.${it.id}`;
+            delX.addEventListener("click", () => this.removeFromPasteTray(it.id));
+            itChip.append(itTitle, delX);
+            itemsRow.appendChild(itChip);
+        }
 
         const btnWrap = document.createElement("div");
         btnWrap.className = "xlc-paste-tray-actions";
@@ -6915,7 +7022,7 @@ export class CommonSearchDialog {
         clearBtn.addEventListener("click", () => this.clearPasteTray());
 
         btnWrap.append(insertBtn, copyBtn, clearBtn);
-        this.pasteTrayEl.append(badge, btnWrap);
+        this.pasteTrayEl.append(headRow, itemsRow, btnWrap);
     }
 
     public async mergeInsertPasteTray(): Promise<void> {
@@ -6931,7 +7038,7 @@ export class CommonSearchDialog {
             }
             if (text.trim()) contents.push(text.trim());
         }
-        const merged = mergeTrayContents(contents.map((c) => ({content: c})));
+        const merged = mergeTrayContents(contents.map((c) => ({content: c})), this.traySeparator);
         const ok = await this.deps.insertRaw(merged, this.insertTarget ?? undefined);
         if (ok) {
             this.deps.notify?.("info", `已合并插入 ${this.pasteTrayItems.length} 项常用语`);
@@ -6955,7 +7062,7 @@ export class CommonSearchDialog {
             }
             if (text.trim()) contents.push(text.trim());
         }
-        const merged = mergeTrayContents(contents.map((c) => ({content: c})));
+        const merged = mergeTrayContents(contents.map((c) => ({content: c})), this.traySeparator);
         const ok = await this.deps.copyText(merged);
         if (ok) {
             this.deps.notify?.("info", `已合并复制 ${this.pasteTrayItems.length} 项常用语到剪贴板`);

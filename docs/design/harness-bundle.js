@@ -10079,12 +10079,15 @@ ${finalHtml}
     const cleanText = stripMarkdownFormatting(raw);
     return { text: cleanText || raw };
   }
-  function mergeTrayContents(items) {
+  function mergeTrayContents(items, separator = "double-newline") {
     if (!items || items.length === 0) return "";
-    return items.map((it) => {
+    const cleanList = items.map((it) => {
       var _a;
       return ((_a = it == null ? void 0 : it.content) != null ? _a : "").trim();
-    }).filter(Boolean).join("\n\n");
+    }).filter(Boolean);
+    if (cleanList.length === 0) return "";
+    const delimiter = separator === "hr" ? "\n\n---\n\n" : separator === "compact" ? "\n" : "\n\n";
+    return cleanList.join(delimiter);
   }
   var init_clipboard = __esm({
     "src/model/clipboard.ts"() {
@@ -10153,6 +10156,36 @@ ${finalHtml}
       }
     }
     return void 0;
+  }
+  function calculateMagneticSnap(x, y, width, height, viewportWidth, viewportHeight, threshold = 24) {
+    let finalX = Math.max(0, Math.min(viewportWidth - width, x));
+    let finalY = Math.max(0, Math.min(viewportHeight - height, y));
+    let snapped = false;
+    let edge;
+    if (finalX <= threshold) {
+      finalX = 0;
+      snapped = true;
+      edge = "left";
+    } else if (viewportWidth - (finalX + width) <= threshold) {
+      finalX = Math.max(0, viewportWidth - width);
+      snapped = true;
+      edge = "right";
+    }
+    if (finalY <= threshold) {
+      finalY = 0;
+      snapped = true;
+      edge = edge || "top";
+    } else if (viewportHeight - (finalY + height) <= threshold) {
+      finalY = Math.max(0, viewportHeight - height);
+      snapped = true;
+      edge = edge || "bottom";
+    }
+    return {
+      x: Math.round(finalX),
+      y: Math.round(finalY),
+      snapped,
+      edge
+    };
   }
   var CONFIG_VERSION, PROFILE_FIELD_ALIASES;
   var init_storage = __esm({
@@ -28199,6 +28232,7 @@ fi`;
       /** 常用语购物车暂存托盘（CAND-019 / TODO-FEAT-018） */
       this.pasteTrayItems = [];
       this.pasteTrayEl = null;
+      this.traySeparator = "double-newline";
       /** 普通点击 = 主动作（insert；blockref = 插入引用）。含变量时先弹填充卡片（F1）。
        *  执行期防重入（R138）：双击行/按住 Enter 不得重复插入同一块。 */
       /** AI 变换代次：连点两个变换时丢弃慢的旧结果（R138） */
@@ -28319,8 +28353,25 @@ fi`;
           var _a3, _b2;
           document.removeEventListener("mousemove", onMouseMove);
           document.removeEventListener("mouseup", onMouseUp);
-          if (this.miniPosition) {
-            (_b2 = (_a3 = this.deps).onMiniPositionChange) == null ? void 0 : _b2.call(_a3, this.miniPosition);
+          const containerRect = container.getBoundingClientRect();
+          const curLeft = parseFloat(container.style.left) || rect.left;
+          const curTop = parseFloat(container.style.top) || rect.top;
+          const snap = calculateMagneticSnap(
+            curLeft,
+            curTop,
+            containerRect.width,
+            containerRect.height,
+            window.innerWidth,
+            window.innerHeight,
+            24
+          );
+          container.style.left = `${snap.x}px`;
+          container.style.top = `${snap.y}px`;
+          this.miniPosition = { x: snap.x, y: snap.y };
+          (_b2 = (_a3 = this.deps).onMiniPositionChange) == null ? void 0 : _b2.call(_a3, this.miniPosition);
+          if (snap.snapped) {
+            container.classList.add("xlc-dialog--snapped");
+            setTimeout(() => container.classList.remove("xlc-dialog--snapped"), 250);
           }
         };
         document.addEventListener("mousemove", onMouseMove);
@@ -30134,6 +30185,14 @@ fi`;
         scBadge.textContent = entry.shortcode;
         scBadge.title = `\u7B80\u7801\uFF1A\u8F93\u5165 ${entry.shortcode} \u89E6\u53D1`;
         title.appendChild(scBadge);
+      }
+      if (this.miniMode && index < 9) {
+        const miniNum = document.createElement("span");
+        miniNum.className = "xlc-mini-row-num";
+        miniNum.textContent = String(index + 1);
+        miniNum.title = `\u6309\u952E\u76F4\u8FBE\uFF1A${index + 1} \u63D2\u5165 / Shift+${index + 1} \u590D\u5236`;
+        miniNum.setAttribute("aria-hidden", "true");
+        title.appendChild(miniNum);
       }
       const titleText = document.createElement("span");
       titleText.className = "xlc-row-titletext";
@@ -34383,6 +34442,30 @@ ${progress.progressBar}`);
         e.preventDefault();
         this.toggleQuickLook();
         return;
+      } else if (this.miniMode && !e.ctrlKey && !e.metaKey && !e.altKey && (!isInputFocused || (input == null ? void 0 : input.value.trim()) === "") && (/^[1-9]$/.test(e.key) || /^Digit[1-9]$/.test(e.code))) {
+        let num = null;
+        if (/^[1-9]$/.test(e.key)) num = Number(e.key);
+        else if (/^Digit[1-9]$/.test(e.code)) num = Number(e.code.replace("Digit", ""));
+        if (num !== null && num >= 1 && num <= 9) {
+          if (e.repeat) return;
+          e.preventDefault();
+          const idx = num - 1;
+          const entry = this.results[idx];
+          if (entry) {
+            if (e.shiftKey) {
+              if (this.primaryBusy) return;
+              this.primaryBusy = true;
+              try {
+                await this.deps.runAction(entry.id, "copy");
+              } finally {
+                this.primaryBusy = false;
+              }
+            } else {
+              await this.runPrimary(entry);
+            }
+            return;
+          }
+        }
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (/^[1-9]$/.test(e.key) || /^Digit[1-9]$/.test(e.code))) {
         let num = null;
         if (/^[1-9]$/.test(e.key)) {
@@ -34665,6 +34748,14 @@ ${progress.progressBar}`);
     getPasteTrayItems() {
       return [...this.pasteTrayItems];
     }
+    removeFromPasteTray(id) {
+      const idx = this.pasteTrayItems.findIndex((it) => it.id === id);
+      if (idx >= 0) {
+        this.pasteTrayItems.splice(idx, 1);
+        this.updatePasteTray();
+        if (this.listEl) this.renderList(this.listEl);
+      }
+    }
     clearPasteTray() {
       this.pasteTrayItems = [];
       this.updatePasteTray();
@@ -34678,9 +34769,49 @@ ${progress.progressBar}`);
       }
       this.pasteTrayEl.style.display = "flex";
       this.pasteTrayEl.replaceChildren();
+      const headRow = document.createElement("div");
+      headRow.className = "xlc-paste-tray-head";
       const badge = document.createElement("span");
       badge.className = "xlc-paste-tray-badge";
       badge.textContent = `\u{1F6D2} \u6682\u5B58\u6258\u76D8 (${this.pasteTrayItems.length}\u9879)`;
+      const sepGroup = document.createElement("div");
+      sepGroup.className = "xlc-paste-tray-seps";
+      const seps = [
+        { kind: "double-newline", label: "\u6362\u884C" },
+        { kind: "hr", label: "---\u5206\u5272\u7EBF" },
+        { kind: "compact", label: "\u7D27\u51D1" }
+      ];
+      for (const s of seps) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `xlc-paste-sep-chip ${this.traySeparator === s.kind ? "xlc-paste-sep-chip--active" : ""}`;
+        chip.dataset.xlcControl = `paste-tray.sep.${s.kind}`;
+        chip.textContent = s.label;
+        chip.addEventListener("click", () => {
+          this.traySeparator = s.kind;
+          this.updatePasteTray();
+        });
+        sepGroup.appendChild(chip);
+      }
+      headRow.append(badge, sepGroup);
+      const itemsRow = document.createElement("div");
+      itemsRow.className = "xlc-paste-tray-items";
+      for (const it of this.pasteTrayItems) {
+        const itChip = document.createElement("span");
+        itChip.className = "xlc-paste-item-chip";
+        const itTitle = document.createElement("span");
+        itTitle.className = "xlc-paste-item-title";
+        itTitle.textContent = it.title || it.id;
+        const delX = document.createElement("button");
+        delX.type = "button";
+        delX.className = "xlc-paste-item-del";
+        delX.textContent = "\xD7";
+        delX.title = `\u79FB\u9664\u300C${it.title}\u300D`;
+        delX.dataset.xlcControl = `paste-tray.item-remove.${it.id}`;
+        delX.addEventListener("click", () => this.removeFromPasteTray(it.id));
+        itChip.append(itTitle, delX);
+        itemsRow.appendChild(itChip);
+      }
       const btnWrap = document.createElement("div");
       btnWrap.className = "xlc-paste-tray-actions";
       const insertBtn = document.createElement("button");
@@ -34706,7 +34837,7 @@ ${progress.progressBar}`);
       clearBtn.textContent = "\u6E05\u7A7A";
       clearBtn.addEventListener("click", () => this.clearPasteTray());
       btnWrap.append(insertBtn, copyBtn, clearBtn);
-      this.pasteTrayEl.append(badge, btnWrap);
+      this.pasteTrayEl.append(headRow, itemsRow, btnWrap);
     }
     async mergeInsertPasteTray() {
       var _a, _b, _c, _d, _e;
@@ -34723,7 +34854,7 @@ ${progress.progressBar}`);
         }
         if (text.trim()) contents.push(text.trim());
       }
-      const merged = mergeTrayContents(contents.map((c) => ({ content: c })));
+      const merged = mergeTrayContents(contents.map((c) => ({ content: c })), this.traySeparator);
       const ok2 = await this.deps.insertRaw(merged, (_a = this.insertTarget) != null ? _a : void 0);
       if (ok2) {
         (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "info", `\u5DF2\u5408\u5E76\u63D2\u5165 ${this.pasteTrayItems.length} \u9879\u5E38\u7528\u8BED`);
@@ -34748,7 +34879,7 @@ ${progress.progressBar}`);
         }
         if (text.trim()) contents.push(text.trim());
       }
-      const merged = mergeTrayContents(contents.map((c) => ({ content: c })));
+      const merged = mergeTrayContents(contents.map((c) => ({ content: c })), this.traySeparator);
       const ok2 = await this.deps.copyText(merged);
       if (ok2) {
         (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", `\u5DF2\u5408\u5E76\u590D\u5236 ${this.pasteTrayItems.length} \u9879\u5E38\u7528\u8BED\u5230\u526A\u8D34\u677F`);

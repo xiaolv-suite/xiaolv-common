@@ -324,16 +324,27 @@ export function formatItemContent(
     return { text: cleanText || raw };
 }
 
+export type TraySeparatorKind = "double-newline" | "hr" | "compact";
+
 /**
- * 纯函数：将暂存托盘中的多条常用语按序拼接为合并长文本（CAND-019 / TODO-FEAT-018）
- * 自动以双换行隔开，过滤空项
+ * 纯函数：将暂存托盘中的多条常用语按序拼接为合并长文本（CAND-019 / CAND-025）
+ * - double-newline: 双换行隔开段落（默认）
+ * - hr: 水平分割线 --- 隔开段落
+ * - compact: 单换行紧凑连接
  */
-export function mergeTrayContents(items: readonly { content?: string }[]): string {
+export function mergeTrayContents(
+    items: readonly { content?: string }[],
+    separator: TraySeparatorKind = "double-newline"
+): string {
     if (!items || items.length === 0) return "";
-    return items
+    const cleanList = items
         .map((it) => (it?.content ?? "").trim())
-        .filter(Boolean)
-        .join("\n\n");
+        .filter(Boolean);
+    if (cleanList.length === 0) return "";
+
+    const delimiter = separator === "hr" ? "\n\n---\n\n" : separator === "compact" ? "\n" : "\n\n";
+    return cleanList.join(delimiter);
 }
+
 
 

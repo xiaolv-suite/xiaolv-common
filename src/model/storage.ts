@@ -653,5 +653,65 @@ export function normalizeMiniPosition(raw: unknown): MiniPosition | undefined {
     };
 }
 
+export interface SnapResult {
+    x: number;
+    y: number;
+    snapped: boolean;
+    edge?: "left" | "right" | "top" | "bottom";
+}
+
+/**
+ * 纯函数：计算迷你悬浮条拖拽贴边自动磁吸对齐（CAND-024 / TODO-OPT-05）
+ * 当距离屏幕四边 ≤ threshold 时自动平滑贴合，消除浮空缝隙
+ */
+export function calculateMagneticSnap(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    viewportWidth: number,
+    viewportHeight: number,
+    threshold = 24
+): SnapResult {
+    let finalX = Math.max(0, Math.min(viewportWidth - width, x));
+    let finalY = Math.max(0, Math.min(viewportHeight - height, y));
+    let snapped = false;
+    let edge: SnapResult["edge"] | undefined;
+
+    // 左边缘
+    if (finalX <= threshold) {
+        finalX = 0;
+        snapped = true;
+        edge = "left";
+    }
+    // 右边缘
+    else if (viewportWidth - (finalX + width) <= threshold) {
+        finalX = Math.max(0, viewportWidth - width);
+        snapped = true;
+        edge = "right";
+    }
+
+    // 顶边缘
+    if (finalY <= threshold) {
+        finalY = 0;
+        snapped = true;
+        edge = edge || "top";
+    }
+    // 底边缘
+    else if (viewportHeight - (finalY + height) <= threshold) {
+        finalY = Math.max(0, viewportHeight - height);
+        snapped = true;
+        edge = edge || "bottom";
+    }
+
+    return {
+        x: Math.round(finalX),
+        y: Math.round(finalY),
+        snapped,
+        edge,
+    };
+}
+
+
 
 
