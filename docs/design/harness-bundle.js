@@ -34777,6 +34777,7 @@ ${progress.progressBar}`);
       this.filterType = null;
       this.filterText = null;
       this.filterTag = null;
+      this.filterLength = null;
       this.tagFacets = null;
       this.saveViewButton = null;
       this.selectFilteredButton = null;
@@ -34802,7 +34803,8 @@ ${progress.progressBar}`);
         status: "all",
         type: "all",
         text: "",
-        tag: ""
+        tag: "",
+        lengthRange: "all"
       };
       this.scope = options.scope === "tree" && deps.service.discoverTree && deps.searchDocs ? "tree" : options.scope === "notebook" && (options.initialNotebookId !== void 0 || deps.service.discoverCurrentNotebook) ? "notebook" : "document";
       if (this.scope === "tree" && options.initialTreeRootId) {
@@ -35194,6 +35196,33 @@ ${progress.progressBar}`);
         this.renderList();
       });
       filters.appendChild(this.filterType);
+      this.filterLength = document.createElement("select");
+      this.filterLength.className = "b3-select";
+      this.filterLength.dataset.xlcControl = "discovery.filter.length";
+      this.filterLength.setAttribute("aria-label", "\u5B57\u6570\u957F\u5EA6\u533A\u95F4\u7B5B\u9009");
+      const lenAll = document.createElement("option");
+      lenAll.value = "all";
+      lenAll.textContent = "\u5168\u90E8\u5B57\u6570";
+      this.filterLength.appendChild(lenAll);
+      const lenShort = document.createElement("option");
+      lenShort.value = "short";
+      lenShort.textContent = "\u77ED\u8BED (<50\u5B57)";
+      this.filterLength.appendChild(lenShort);
+      const lenMed = document.createElement("option");
+      lenMed.value = "medium";
+      lenMed.textContent = "\u7CBE\u70BC\u6BB5 (50~200\u5B57)";
+      this.filterLength.appendChild(lenMed);
+      const lenLong = document.createElement("option");
+      lenLong.value = "long";
+      lenLong.textContent = "\u957F\u7BC7 (>200\u5B57)";
+      this.filterLength.appendChild(lenLong);
+      this.filterLength.addEventListener("change", () => {
+        var _a2;
+        this.filter.lengthRange = (_a2 = this.filterLength) == null ? void 0 : _a2.value;
+        this.page = 0;
+        this.renderList();
+      });
+      filters.appendChild(this.filterLength);
       this.filterText = document.createElement("input");
       this.filterText.className = "b3-text-field";
       this.filterText.dataset.xlcControl = "discovery.filter.text";
@@ -35798,6 +35827,12 @@ ${progress.progressBar}`);
       if (this.filter.status !== "all" && candidate.status !== this.filter.status) return false;
       if (this.filter.type !== "all" && candidate.itemType !== this.filter.type) return false;
       if (!matchesDiscoveryTag(candidate.tags, this.filter.tag)) return false;
+      if (this.filter.lengthRange && this.filter.lengthRange !== "all") {
+        const len = (candidate.summary || candidate.title || "").trim().length;
+        if (this.filter.lengthRange === "short" && len >= 50) return false;
+        if (this.filter.lengthRange === "medium" && (len < 50 || len > 200)) return false;
+        if (this.filter.lengthRange === "long" && len <= 200) return false;
+      }
       if (!this.filter.text) return true;
       const haystack = `${candidate.title} ${candidate.summary} ${candidate.sourcePath}`.toLocaleLowerCase();
       return haystack.includes(this.filter.text);
@@ -35835,7 +35870,7 @@ ${progress.progressBar}`);
         empty.className = "xlc-discovery-empty";
         empty.setAttribute("role", "listitem");
         const scanning = ((_a = this.root) == null ? void 0 : _a.getAttribute("aria-busy")) === "true";
-        const hasFilters = this.filter.status !== "all" || this.filter.type !== "all" || !!this.filter.text || !!this.filter.tag;
+        const hasFilters = this.filter.status !== "all" || this.filter.type !== "all" || !!this.filter.text || !!this.filter.tag || this.filter.lengthRange && this.filter.lengthRange !== "all";
         empty.textContent = scanning ? this.tx("discoveryScanningCandidates") : this.scanState === "failed" ? this.tx("discoveryScanIncompleteEmpty") : this.scanState === "cancelled" ? this.tx("discoveryScanStoppedEmpty") : this.candidates.size === 0 && this.scanState === "ready" ? this.tx("discoveryEmptyScope") : this.candidates.size === 0 ? this.tx("discoveryAwaitingScan") : this.tx("discoveryNoCandidates");
         results.appendChild(empty);
         if (!scanning && this.candidates.size > 0 && hasFilters) {
@@ -35845,9 +35880,10 @@ ${progress.progressBar}`);
           clear.textContent = this.tx("discoveryClearFilters");
           clear.dataset.xlcDiscoveryAction = "clear-filters";
           clear.addEventListener("click", () => {
-            this.filter = { status: "all", type: "all", text: "", tag: "" };
+            this.filter = { status: "all", type: "all", text: "", tag: "", lengthRange: "all" };
             if (this.filterStatus) this.filterStatus.value = "all";
             if (this.filterType) this.filterType.value = "all";
+            if (this.filterLength) this.filterLength.value = "all";
             if (this.filterText) this.filterText.value = "";
             if (this.filterTag) this.filterTag.value = "";
             this.page = 0;

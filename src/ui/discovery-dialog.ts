@@ -263,6 +263,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
     private filterType: HTMLSelectElement | null = null;
     private filterText: HTMLInputElement | null = null;
     private filterTag: HTMLInputElement | null = null;
+    private filterLength: HTMLSelectElement | null = null;
     private tagFacets: HTMLElement | null = null;
     private saveViewButton: HTMLButtonElement | null = null;
     private selectFilteredButton: HTMLButtonElement | null = null;
@@ -286,8 +287,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
     private scope: DiscoveryScope;
     private cancelRequested = false;
     private scanState: "idle" | "scanning" | "ready" | "failed" | "cancelled" = "idle";
-    private filter: {status: DiscoveryCandidateStatus | "all"; type: ItemType | "all"; text: string; tag: string} = {
-        status: "all", type: "all", text: "", tag: "",
+    private filter: {status: DiscoveryCandidateStatus | "all"; type: ItemType | "all"; text: string; tag: string; lengthRange?: "all" | "short" | "medium" | "long"} = {
+        status: "all", type: "all", text: "", tag: "", lengthRange: "all",
     };
 
     constructor(private readonly deps: DiscoveryDialogDeps, private readonly options: DiscoveryDialogOptions) {
@@ -683,6 +684,36 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             this.renderList();
         });
         filters.appendChild(this.filterType);
+
+        // 候选块字数长度区间筛选（全部/短语/精炼段/长篇 · CAND-006 / TODO-FEAT-005）
+        this.filterLength = document.createElement("select");
+        this.filterLength.className = "b3-select";
+        this.filterLength.dataset.xlcControl = "discovery.filter.length";
+        this.filterLength.setAttribute("aria-label", "字数长度区间筛选");
+        const lenAll = document.createElement("option");
+        lenAll.value = "all";
+        lenAll.textContent = "全部字数";
+        this.filterLength.appendChild(lenAll);
+        const lenShort = document.createElement("option");
+        lenShort.value = "short";
+        lenShort.textContent = "短语 (<50字)";
+        this.filterLength.appendChild(lenShort);
+        const lenMed = document.createElement("option");
+        lenMed.value = "medium";
+        lenMed.textContent = "精炼段 (50~200字)";
+        this.filterLength.appendChild(lenMed);
+        const lenLong = document.createElement("option");
+        lenLong.value = "long";
+        lenLong.textContent = "长篇 (>200字)";
+        this.filterLength.appendChild(lenLong);
+
+        this.filterLength.addEventListener("change", () => {
+            this.filter.lengthRange = this.filterLength?.value as "all" | "short" | "medium" | "long";
+            this.page = 0;
+            this.renderList();
+        });
+        filters.appendChild(this.filterLength);
+
         this.filterText = document.createElement("input");
         this.filterText.className = "b3-text-field";
         this.filterText.dataset.xlcControl = "discovery.filter.text";
@@ -1326,6 +1357,12 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         if (this.filter.status !== "all" && candidate.status !== this.filter.status) return false;
         if (this.filter.type !== "all" && candidate.itemType !== this.filter.type) return false;
         if (!matchesDiscoveryTag(candidate.tags, this.filter.tag)) return false;
+        if (this.filter.lengthRange && this.filter.lengthRange !== "all") {
+            const len = (candidate.summary || candidate.title || "").trim().length;
+            if (this.filter.lengthRange === "short" && len >= 50) return false;
+            if (this.filter.lengthRange === "medium" && (len < 50 || len > 200)) return false;
+            if (this.filter.lengthRange === "long" && len <= 200) return false;
+        }
         if (!this.filter.text) return true;
         const haystack = `${candidate.title} ${candidate.summary} ${candidate.sourcePath}`.toLocaleLowerCase();
         return haystack.includes(this.filter.text);
@@ -1364,7 +1401,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             empty.className = "xlc-discovery-empty";
             empty.setAttribute("role", "listitem");
             const scanning = this.root?.getAttribute("aria-busy") === "true";
-            const hasFilters = this.filter.status !== "all" || this.filter.type !== "all" || !!this.filter.text || !!this.filter.tag;
+            const hasFilters = this.filter.status !== "all" || this.filter.type !== "all" || !!this.filter.text || !!this.filter.tag || (this.filter.lengthRange && this.filter.lengthRange !== "all");
             empty.textContent = scanning ? this.tx("discoveryScanningCandidates")
                 : this.scanState === "failed" ? this.tx("discoveryScanIncompleteEmpty")
                     : this.scanState === "cancelled" ? this.tx("discoveryScanStoppedEmpty")
@@ -1378,9 +1415,10 @@ export class DiscoveryDialog implements DiscoveryDialogController {
                 clear.textContent = this.tx("discoveryClearFilters");
                 clear.dataset.xlcDiscoveryAction = "clear-filters";
                 clear.addEventListener("click", () => {
-                    this.filter = {status: "all", type: "all", text: "", tag: ""};
+                    this.filter = {status: "all", type: "all", text: "", tag: "", lengthRange: "all"};
                     if (this.filterStatus) this.filterStatus.value = "all";
                     if (this.filterType) this.filterType.value = "all";
+                    if (this.filterLength) this.filterLength.value = "all";
                     if (this.filterText) this.filterText.value = "";
                     if (this.filterTag) this.filterTag.value = "";
                     this.page = 0;

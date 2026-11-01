@@ -15,6 +15,7 @@ import {toErrorMessage} from "../model/errors";
 import {hasDynamicMacros, expandMacroPreview} from "../model/variables";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {parseSnippetAnnotations} from "../model/item";
+import {buildHierarchyTree, HierarchyNode} from "../model/hierarchy";
 
 function escapeDockHtml(raw: string): string {
     return String(raw ?? "")
@@ -64,6 +65,8 @@ export class DockView {
     private fullBodyCache = new Map<string, string>();
     private isInsertBusy = false;
     private isCopyBusy = false;
+    /** 大纲组织模式：分类树 (category) 或 标签聚合 (tag) · CAND-004 / TODO-FEAT-004 */
+    private groupBy: "category" | "tag" = "category";
 
     // DOM 引用
     private searchInput!: HTMLInputElement;
@@ -175,6 +178,21 @@ export class DockView {
             gearBtn.addEventListener("click", () => this.deps.openSettings?.());
             actions.appendChild(gearBtn);
         }
+
+        const groupToggleBtn = document.createElement("button");
+        groupToggleBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
+        groupToggleBtn.dataset.xlcDockAct = "toggle-group-mode";
+        groupToggleBtn.title = "切换组织模式：分类大纲 ↔ 标签聚合";
+        if (typeof groupToggleBtn.setAttribute === "function") {
+            groupToggleBtn.setAttribute("aria-label", "切换组织模式：分类大纲或标签聚合");
+        }
+        groupToggleBtn.textContent = this.groupBy === "category" ? "📁" : "🏷️";
+        groupToggleBtn.addEventListener("click", () => {
+            this.groupBy = this.groupBy === "category" ? "tag" : "category";
+            groupToggleBtn.textContent = this.groupBy === "category" ? "📁" : "🏷️";
+            this.renderList();
+        });
+        actions.appendChild(groupToggleBtn);
         head.appendChild(actions);
         this.container.appendChild(head);
 
@@ -415,55 +433,130 @@ export class DockView {
         const isBrowsingAll = this.currentScope === "all" && !this.searchInput.value.trim();
 
         if (isBrowsingAll) {
-            // 模式 A：分类树状折叠大纲模式 (F1)
-            const groups = new Map<string, SearchEntry[]>();
-            for (const e of this.results) {
-                const cat = e.category?.trim() || "未分类";
-                if (!groups.has(cat)) groups.set(cat, []);
-                groups.get(cat)!.push(e);
-            }
-
-            let globalIdx = 0;
-            for (const [catName, catEntries] of groups.entries()) {
-                const isCollapsed = this.collapsedCategories.has(catName);
-                const groupHead = document.createElement("div");
-                groupHead.className = "xlc-dock-group-head";
-                groupHead.tabIndex = 0;
-                if (typeof groupHead.setAttribute === "function") {
-                    groupHead.setAttribute("role", "button");
-                    groupHead.setAttribute("aria-expanded", !isCollapsed ? "true" : "false");
-                    groupHead.setAttribute("aria-label", `分类：${catName}，共 ${catEntries.length} 项，${isCollapsed ? "已折叠" : "已展开"}`);
+            if (this.groupBy === "tag") {
+                // 模式 A2：标签聚合折叠模式 (CAND-004 / TODO-FEAT-004)
+                const groups = new Map<string, SearchEntry[]>();
+                for (const e of this.results) {
+                    const tags = e.tags && e.tags.length > 0 ? e.tags : ["未加标签"];
+                    for (const t of tags) {
+                        const tagKey = `#${t.replace(/^#/, "")}`;
+                        if (!groups.has(tagKey)) groups.set(tagKey, []);
+                        groups.get(tagKey)!.push(e);
+                    }
                 }
-                const safeCatName = escapeDockHtml(catName);
-                groupHead.innerHTML = `
-                    <span class="xlc-dock-group-arrow" aria-hidden="true">${isCollapsed ? "▸" : "▾"}</span>
-                    <span class="xlc-dock-group-name">${safeCatName}</span>
-                    <span class="xlc-dock-group-count">${catEntries.length}</span>
-                `;
-                const toggleGroup = () => {
-                    if (this.collapsedCategories.has(catName)) {
-                        this.collapsedCategories.delete(catName);
-                    } else {
-                        this.collapsedCategories.add(catName);
+                let globalIdx = 0;
+                for (const [tagName, tagEntries] of groups.entries()) {
+                    const isCollapsed = this.collapsedCategories.has(tagName);
+                    const groupHead = document.createElement("div");
+                    groupHead.className = "xlc-dock-group-head";
+                    groupHead.tabIndex = 0;
+                    if (typeof groupHead.setAttribute === "function") {
+                        groupHead.setAttribute("role", "button");
+                        groupHead.setAttribute("aria-expanded", !isCollapsed ? "true" : "false");
+                        groupHead.setAttribute("aria-label", `标签：${tagName}，共 ${tagEntries.length} 项，${isCollapsed ? "已折叠" : "已展开"}`);
                     }
-                    this.renderList();
-                };
-                groupHead.addEventListener("click", toggleGroup);
-                groupHead.addEventListener("keydown", (e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        toggleGroup();
-                    }
-                });
-                this.listContainer.appendChild(groupHead);
+                    const safeTagName = escapeDockHtml(tagName);
+                    groupHead.innerHTML = `
+                        <span class="xlc-dock-group-arrow" aria-hidden="true">${isCollapsed ? "▸" : "▾"}</span>
+                        <span class="xlc-dock-group-name">${safeTagName}</span>
+                        <span class="xlc-dock-group-count">${tagEntries.length}</span>
+                    `;
+                    const toggleGroup = () => {
+                        if (this.collapsedCategories.has(tagName)) {
+                            this.collapsedCategories.delete(tagName);
+                        } else {
+                            this.collapsedCategories.add(tagName);
+                        }
+                        this.renderList();
+                    };
+                    groupHead.addEventListener("click", toggleGroup);
+                    groupHead.addEventListener("keydown", (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleGroup();
+                        }
+                    });
+                    this.listContainer.appendChild(groupHead);
 
-                if (!isCollapsed) {
-                    for (const entry of catEntries) {
-                        const row = this.renderItemRow(entry, globalIdx++);
-                        this.listContainer.appendChild(row);
+                    if (!isCollapsed) {
+                        for (const entry of tagEntries) {
+                            const row = this.renderItemRow(entry, globalIdx++);
+                            this.listContainer.appendChild(row);
+                        }
+                    } else {
+                        globalIdx += tagEntries.length;
                     }
-                } else {
-                    globalIdx += catEntries.length;
+                }
+            } else {
+                // 模式 A1：多层级分类树状折叠大纲模式 (CAND-004 / TODO-FEAT-004)
+                const groups = new Map<string, SearchEntry[]>();
+                const countsMap = new Map<string, number>();
+                for (const e of this.results) {
+                    const cat = e.category?.trim() || "未分类";
+                    if (!groups.has(cat)) groups.set(cat, []);
+                    groups.get(cat)!.push(e);
+                    countsMap.set(cat, (countsMap.get(cat) ?? 0) + 1);
+                }
+
+                const tree = buildHierarchyTree(Array.from(groups.keys()), countsMap);
+                let globalIdx = 0;
+
+                const renderNode = (node: HierarchyNode) => {
+                    const isCollapsed = this.collapsedCategories.has(node.path);
+                    const groupHead = document.createElement("div");
+                    groupHead.className = "xlc-dock-group-head";
+                    groupHead.tabIndex = 0;
+                    if (node.depth > 0) {
+                        groupHead.style.paddingLeft = `${8 + node.depth * 12}px`;
+                    }
+                    if (typeof groupHead.setAttribute === "function") {
+                        groupHead.setAttribute("role", "button");
+                        groupHead.setAttribute("aria-expanded", !isCollapsed ? "true" : "false");
+                        groupHead.setAttribute("aria-label", `分类：${node.path}，共 ${node.count} 项，${isCollapsed ? "已折叠" : "已展开"}`);
+                    }
+                    const catName = node.name;
+                    const safeCatName = escapeDockHtml(catName);
+                    groupHead.innerHTML = `
+                        <span class="xlc-dock-group-arrow" aria-hidden="true">${isCollapsed ? "▸" : "▾"}</span>
+                        <span class="xlc-dock-group-name">${safeCatName}</span>
+                        <span class="xlc-dock-group-count">${escapeDockHtml(String(node.count))}</span>
+                    `;
+                    const toggleGroup = () => {
+                        if (this.collapsedCategories.has(node.path)) {
+                            this.collapsedCategories.delete(node.path);
+                        } else {
+                            this.collapsedCategories.add(node.path);
+                        }
+                        this.renderList();
+                    };
+                    groupHead.addEventListener("click", toggleGroup);
+                    groupHead.addEventListener("keydown", (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleGroup();
+                        }
+                    });
+                    this.listContainer.appendChild(groupHead);
+
+                    if (!isCollapsed) {
+                        const directEntries = groups.get(node.path) || [];
+                        for (const entry of directEntries) {
+                            const row = this.renderItemRow(entry, globalIdx++);
+                            if (node.depth > 0) {
+                                row.style.marginLeft = `${node.depth * 12}px`;
+                            }
+                            this.listContainer.appendChild(row);
+                        }
+                        for (const child of node.children) {
+                            renderNode(child);
+                        }
+                    } else {
+                        globalIdx += node.count;
+                    }
+                };
+
+                for (const rootNode of tree) {
+                    renderNode(rootNode);
                 }
             }
         } else {
