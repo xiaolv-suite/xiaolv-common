@@ -298,8 +298,18 @@ export function expandMacroPreview(
     if (out.includes("{{xlc:checkin:today}}")) {
         out = out.replaceAll("{{xlc:checkin:today}}", "✓ 今日打卡已完成");
     }
-    if (out.includes("{{xlc:butler:today}}")) {
-        out = out.replaceAll("{{xlc:butler:today}}", "今日代办一览：\n1. 团队周会\n2. 代码评审");
+    if (out.includes("{{xlc:home:today}}") || out.includes("{{xlc:butler:today}}")) {
+        out = out.replaceAll("{{xlc:home:today}}", "今日备忘一览：\n1. 团队周会\n2. 代码评审")
+                 .replaceAll("{{xlc:butler:today}}", "今日备忘一览：\n1. 团队周会\n2. 代码评审");
+    }
+    if (out.includes("{{xlc:task:today}}")) {
+        out = out.replaceAll("{{xlc:task:today}}", "今日任务清单：\n- [ ] 完成产品发版\n- [ ] 同步需求进度");
+    }
+    if (out.includes("{{xlc:glean:recent}}")) {
+        out = out.replaceAll("{{xlc:glean:recent}}", "最近剪藏摘录：\n- [认知升级与笔记哲学](https://example.com) > 知识的本质是网络连接");
+    }
+    if (out.includes("{{xlc:contacts:recent}}")) {
+        out = out.replaceAll("{{xlc:contacts:recent}}", "最近联系人：\n· 张经理 (研发部) - 架构师");
     }
     return out;
 }

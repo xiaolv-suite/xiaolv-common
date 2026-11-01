@@ -89,6 +89,8 @@ export interface CommonItemRef {
     category?: string;
     varCount?: number;
     summary?: string;
+    /** 生态消费契约：雷切、快门等外部插件直接读取 content 字段进行复制或快速渲染 */
+    content?: string;
 }
 
 const LOGICAL_ID_RE = /^xlc-[0-9a-z]{10,40}$/;

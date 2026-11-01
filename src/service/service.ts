@@ -70,6 +70,8 @@ function toRef(item: Partial<CommonItem> & Pick<CommonItem, "id">): CommonItemRe
     if (item.category) ref.category = item.category;
     if (typeof item.varCount === "number") ref.varCount = item.varCount;
     if (item.summary) ref.summary = item.summary;
+    const content = item.summary || item.url || item.title || "";
+    if (content) ref.content = content;
     return ref;
 }
 
@@ -90,11 +92,32 @@ export class XiaolvCommonService {
         });
     }
 
-    /** 协议生命周期事件（README 承诺 item-created/updated/deleted/inserted 四件；R139 补齐前三件） */
+    /** 协议生命周期事件（标准 Epoch 6 信封 + 向后兼容平铺字段） */
     private emitEvent(eventName: string, itemId: string, itemType?: string): void {
         try {
+            const now = Date.now();
+            const at = new Date(now).toISOString();
+            const eventId = `evt-xlc-${now}-${Math.random().toString(36).slice(2, 8)}`;
+            const payload = {
+                protocolVersion: PROTOCOL_VERSION,
+                itemId,
+                ...(itemType ? {itemType} : {}),
+            };
             window.dispatchEvent(new CustomEvent(eventName, {
-                detail: {protocolVersion: PROTOCOL_VERSION, itemId, ...(itemType ? {itemType} : {})},
+                detail: {
+                    // 向后兼容平铺字段
+                    protocolVersion: PROTOCOL_VERSION,
+                    itemId,
+                    ...(itemType ? {itemType} : {}),
+                    // Epoch 6 生态统一事件总线信封
+                    v: 1,
+                    source: "xiaolv-common",
+                    type: eventName,
+                    eventId,
+                    at,
+                    payload,
+                    idempotencyKey: `${eventName}:${itemId}:${now}`,
+                },
             }));
         } catch {
             // 事件失败不影响主流程

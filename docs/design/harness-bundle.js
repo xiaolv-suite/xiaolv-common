@@ -9763,8 +9763,17 @@ ${codeText}`;
     if (out.includes("{{xlc:checkin:today}}")) {
       out = out.replaceAll("{{xlc:checkin:today}}", "\u2713 \u4ECA\u65E5\u6253\u5361\u5DF2\u5B8C\u6210");
     }
-    if (out.includes("{{xlc:butler:today}}")) {
-      out = out.replaceAll("{{xlc:butler:today}}", "\u4ECA\u65E5\u4EE3\u529E\u4E00\u89C8\uFF1A\n1. \u56E2\u961F\u5468\u4F1A\n2. \u4EE3\u7801\u8BC4\u5BA1");
+    if (out.includes("{{xlc:home:today}}") || out.includes("{{xlc:butler:today}}")) {
+      out = out.replaceAll("{{xlc:home:today}}", "\u4ECA\u65E5\u5907\u5FD8\u4E00\u89C8\uFF1A\n1. \u56E2\u961F\u5468\u4F1A\n2. \u4EE3\u7801\u8BC4\u5BA1").replaceAll("{{xlc:butler:today}}", "\u4ECA\u65E5\u5907\u5FD8\u4E00\u89C8\uFF1A\n1. \u56E2\u961F\u5468\u4F1A\n2. \u4EE3\u7801\u8BC4\u5BA1");
+    }
+    if (out.includes("{{xlc:task:today}}")) {
+      out = out.replaceAll("{{xlc:task:today}}", "\u4ECA\u65E5\u4EFB\u52A1\u6E05\u5355\uFF1A\n- [ ] \u5B8C\u6210\u4EA7\u54C1\u53D1\u7248\n- [ ] \u540C\u6B65\u9700\u6C42\u8FDB\u5EA6");
+    }
+    if (out.includes("{{xlc:glean:recent}}")) {
+      out = out.replaceAll("{{xlc:glean:recent}}", "\u6700\u8FD1\u526A\u85CF\u6458\u5F55\uFF1A\n- [\u8BA4\u77E5\u5347\u7EA7\u4E0E\u7B14\u8BB0\u54F2\u5B66](https://example.com) > \u77E5\u8BC6\u7684\u672C\u8D28\u662F\u7F51\u7EDC\u8FDE\u63A5");
+    }
+    if (out.includes("{{xlc:contacts:recent}}")) {
+      out = out.replaceAll("{{xlc:contacts:recent}}", "\u6700\u8FD1\u8054\u7CFB\u4EBA\uFF1A\n\xB7 \u5F20\u7ECF\u7406 (\u7814\u53D1\u90E8) - \u67B6\u6784\u5E08");
     }
     return out;
   }
@@ -20250,7 +20259,7 @@ ${res.progressBar}`;
         id: "siyuan-checkin",
         name: "\u5C0F\u9A74\u6253\u5361",
         bridgeKey: "window.siyuanCheckin",
-        installed: Boolean(host.siyuanCheckin && typeof host.siyuanCheckin.getItems === "function"),
+        installed: Boolean((host.siyuanCheckin || host.LvCheckin || host.lvCheckin || host.xiaolvCheckin) && typeof (host.siyuanCheckin || host.LvCheckin || host.lvCheckin || host.xiaolvCheckin).getItems === "function"),
         description: "\u4E60\u60EF\u6253\u5361\u3001\u65F6\u95F4\u8FFD\u8E2A\u4E0E\u8FDE\u51FB\u8BB0\u5F55",
         capability: "\u5FEB\u901F\u63D2\u5165\u4ECA\u65E5\u6253\u5361\u72B6\u6001\u4E0E\u8FDE\u51FB\u6587\u672C"
       },
@@ -20258,15 +20267,23 @@ ${res.progressBar}`;
         id: "siyuan-contacts",
         name: "\u5C0F\u9A74\u4EBA\u8109",
         bridgeKey: "window.LvContacts",
-        installed: Boolean((host.LvContacts || host.siyuanContacts) && typeof (host.LvContacts || host.siyuanContacts).searchPeople === "function"),
+        installed: Boolean((host.LvContacts || host.siyuanContacts || host.lvContacts || host.xiaolvContacts) && typeof (host.LvContacts || host.siyuanContacts || host.lvContacts || host.xiaolvContacts).searchPeople === "function"),
         description: "\u4EBA\u7269\u5173\u7CFB\u56FE\u8C31\u4E0E\u8054\u7CFB\u4EBA\u8109\u7EDC",
         capability: "\u68C0\u7D22\u8054\u7CFB\u4EBA\u5E76\u4E00\u952E\u63D2\u5165\u7ED3\u6784\u5316\u540D\u7247\u5757"
+      },
+      {
+        id: "siyuan-home",
+        name: "\u5C0F\u9A74\u7BA1\u5BB6",
+        bridgeKey: "window.LvHome",
+        installed: Boolean(host.LvHome || host.siyuanHome || host.xiaolvHome || host.lvHome),
+        description: "\u8D44\u4EA7\u3001\u8D26\u672C\u3001\u5F85\u529E\u63D0\u9192\u4E0E\u5BB6\u5EAD\u7BA1\u5BB6",
+        capability: "\u68C0\u7D22\u7BA1\u5BB6\u4E34\u671F\u63D0\u9192\u5E76\u4E00\u952E\u63A8\u5165\u5F85\u529E"
       },
       {
         id: "siyuan-glean",
         name: "\u5C0F\u9A74\u62FE\u9057",
         bridgeKey: "window.siyuanGlean",
-        installed: Boolean((host.siyuanGlean || host.xiaolvGlean) && typeof (host.siyuanGlean || host.xiaolvGlean).listClips === "function"),
+        installed: Boolean((host.siyuanGlean || host.xiaolvGlean || host.lvGlean || host.LvGlean) && typeof (host.siyuanGlean || host.xiaolvGlean || host.lvGlean || host.LvGlean).listClips === "function"),
         description: "\u7F51\u9875\u6587\u7AE0\u526A\u85CF\u4E0E\u9AD8\u4EAE\u6458\u5F55",
         capability: "\u5F15\u7528\u526A\u85CF\u6587\u7AE0\u7247\u6BB5\u4E0E\u91D1\u53E5\u9AD8\u4EAE"
       },
@@ -20274,9 +20291,17 @@ ${res.progressBar}`;
         id: "siyuan-speed-switch",
         name: "\u5C0F\u9A74\u96F7\u5207",
         bridgeKey: "window.siyuanSpeedSwitch",
-        installed: Boolean(host.siyuanSpeedSwitch || host.xiaolvSpeedSwitch),
+        installed: Boolean(host.siyuanSpeedSwitch || host.xiaolvSpeedSwitch || host.xiaolvRaikiri || host.lvRaikiri),
         description: "\u5168\u57DF\u5DE5\u4F5C\u53F0\u5FEB\u901F\u5207\u6362\u4E0E\u5927\u7EB2\u7A7F\u900F",
         capability: "\u901A\u8FC7\u516C\u5F00\u534F\u8BAE\u5728\u96F7\u5207\u4E2D\u79D2\u7EA7\u8C03\u7528\u5E38\u7528\u8BED"
+      },
+      {
+        id: "siyuan-task-horizon",
+        name: "\u4EFB\u52A1\u89C6\u754C",
+        bridgeKey: "window.TaskHorizon",
+        installed: Boolean(host.TaskHorizon || host.taskHorizon || host.siyuanTaskHorizon),
+        description: "\u65F6\u95F4\u8F74\u3001\u770B\u677F\u4E0E\u591A\u7EF4\u4EFB\u52A1\u7BA1\u7406",
+        capability: "\u68C0\u7D22\u4ECA\u65E5\u9AD8\u4F18\u4EFB\u52A1\u5E76\u63D2\u5165\u6267\u884C\u6E05\u5355"
       }
     ];
     return {
@@ -28954,6 +28979,87 @@ fi`;
     return results.slice(0, limit);
   }
 
+  // src/ecosystem-bridge-kit.ts
+  var ECOSYSTEM_EVENTS = Object.freeze({
+    // 打卡
+    CHECKIN_RECORDED: "checkin:event-recorded",
+    CHECKIN_DELETED: "checkin:event-deleted",
+    // 人脉
+    CONTACTS_INTERACTION: "lv-contacts:interaction-logged",
+    CONTACTS_PERSON_CREATED: "lv-contacts:person-created",
+    CONTACTS_DATA_CHANGED: "lv-contacts:data-changed",
+    // 管家
+    HOME_DATA_CHANGED: "lv-home:data-changed",
+    // 雷切
+    RAIKIRI_NAVIGATED: "lv-raikiri:navigated",
+    // 拾遗
+    GLEAN_DATA_CHANGED: "lv-glean:data-changed",
+    GLEAN_STATUS_CHANGED: "lv-glean:clip-status-changed",
+    // 考试
+    EXAM_SESSION_ENDED: "lv-exam:session-ended",
+    EXAM_WRONGBOOK_CHANGED: "lv-exam:wrongbook-changed",
+    EXAM_STATS: "lv-exam:stats",
+    // 闪卡
+    CARDS_REVIEWED: "lv-cards:reviewed",
+    // 常用
+    COMMON_CREATED: "xiaolv:common:item-created",
+    COMMON_UPDATED: "xiaolv:common:item-updated",
+    COMMON_DELETED: "xiaolv:common:item-deleted",
+    // 快门
+    QUICKGATE_COMMAND_EXECUTED: "lv-quickgate:command-executed",
+    QUICKGATE_DATA_CHANGED: "lv-quickgate:data-changed",
+    // 联盟伙伴：Task Horizon (任务视界)
+    TASK_COMPLETED: "tm:task-completed"
+  });
+  var BRIDGE_ALIASES = Object.freeze({
+    checkin: ["siyuanCheckin", "LvCheckin", "lvCheckin", "xiaolvCheckin"],
+    contacts: ["LvContacts", "lvContacts", "xiaolvContacts", "siyuanContacts"],
+    home: ["LvHome", "lvHome", "xiaolvHome", "siyuanHome"],
+    raikiri: ["siyuanSpeedSwitch", "xiaolvSpeedSwitch", "xiaolvRaikiri", "lvRaikiri"],
+    glean: ["siyuanGlean", "xiaolvGlean", "lvGlean", "LvGlean"],
+    exam: ["LvExam", "siyuanExam", "xiaolvExam", "lvExam"],
+    cards: ["xiaolvCards", "lvCards", "LvCards", "siyuanCards"],
+    common: ["xiaolvCommon", "LvCommon", "lvCommon", "siyuanCommon"],
+    quickgate: ["LvQuickgate", "lvQuickgate", "xiaolvQuickgate", "siyuanQuickgate"],
+    taskHorizon: ["TaskHorizon", "taskHorizon", "siyuanTaskHorizon"]
+  });
+  function getBridgeSafely(target) {
+    if (typeof window === "undefined") return void 0;
+    const aliases = BRIDGE_ALIASES[target] || [];
+    const w = window;
+    for (const alias of aliases) {
+      if (w[alias] && typeof w[alias] === "object") {
+        return w[alias];
+      }
+    }
+    return void 0;
+  }
+  async function callBridge(target, requiredCapability, caller, fallback, timeoutMs = 2500) {
+    const bridge = getBridgeSafely(target);
+    if (!bridge) return fallback();
+    const anyBridge = bridge;
+    if (typeof anyBridge.whenReady === "function") {
+      try {
+        const readyP = Promise.resolve(anyBridge.whenReady());
+        const timeoutP = new Promise((_, reject) => setTimeout(() => reject(new Error("ready-timeout")), timeoutMs));
+        await Promise.race([readyP, timeoutP]);
+      } catch {
+        return fallback();
+      }
+    }
+    if (typeof anyBridge.hasCapability === "function") {
+      if (!anyBridge.hasCapability(requiredCapability)) {
+        return fallback();
+      }
+    }
+    try {
+      return await caller(bridge);
+    } catch (err) {
+      console.warn(`[\u5C0F\u9A74\u751F\u6001\u8054\u90A6] \u8C03\u7528 ${target}.${requiredCapability} \u5931\u8D25\uFF0C\u5DF2\u4F18\u96C5\u964D\u7EA7:`, err);
+      return fallback();
+    }
+  }
+
   // src/ui/dialog.ts
   init_storage();
   init_prompt_pack();
@@ -31161,6 +31267,42 @@ fi`;
               (_b2 = (_a2 = this.deps).captureOmniWithForm) == null ? void 0 : _b2.call(_a2, entry);
             });
             actionsWrap.appendChild(editBtn);
+          }
+          const homeBridge = getBridgeSafely("home");
+          if (homeBridge && typeof homeBridge.addMemo === "function") {
+            const memoBtn = document.createElement("button");
+            memoBtn.className = "b3-button b3-button--small xlc-row-action";
+            memoBtn.dataset.xlcControl = "item.promote-to-home";
+            memoBtn.textContent = "\u{1F4CB}";
+            memoBtn.title = "\u63A8\u9001\u5230\u5C0F\u9A74\u7BA1\u5BB6\u5907\u5FD8";
+            memoBtn.setAttribute("aria-label", "\u63A8\u9001\u5230\u5C0F\u9A74\u7BA1\u5BB6\u5907\u5FD8");
+            memoBtn.addEventListener("click", async (e) => {
+              var _a2, _b2;
+              e.stopPropagation();
+              memoBtn.disabled = true;
+              memoBtn.textContent = "\u2026";
+              const content = entry.summary || entry.title || "";
+              const cleanTitle = content.replace(/\s+/g, " ").slice(0, 50).trim();
+              const todayStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+              const ok2 = await callBridge(
+                "home",
+                "addMemo",
+                async (b) => {
+                  await b.addMemo(cleanTitle, todayStr);
+                  return true;
+                },
+                () => false
+              );
+              if (ok2) {
+                memoBtn.textContent = "\u2713";
+                memoBtn.title = "\u5DF2\u63A8\u9001\u5230\u7BA1\u5BB6\u5907\u5FD8";
+                (_b2 = (_a2 = this.deps).notify) == null ? void 0 : _b2.call(_a2, "info", "\u5DF2\u63A8\u9001\u5230\u5C0F\u9A74\u7BA1\u5BB6\u5907\u5FD8");
+              } else {
+                memoBtn.disabled = false;
+                memoBtn.textContent = "\u{1F4CB}";
+              }
+            });
+            actionsWrap.appendChild(memoBtn);
           }
           row.appendChild(actionsWrap);
         } else {
@@ -38497,89 +38639,6 @@ ${details.join("\n")}` : ""}`;
   init_variables();
   init_item();
   init_clipboard();
-
-  // src/ecosystem-bridge-kit.ts
-  var ECOSYSTEM_EVENTS = Object.freeze({
-    // 打卡
-    CHECKIN_RECORDED: "checkin:event-recorded",
-    CHECKIN_DELETED: "checkin:event-deleted",
-    // 人脉
-    CONTACTS_INTERACTION: "lv-contacts:interaction-logged",
-    CONTACTS_PERSON_CREATED: "lv-contacts:person-created",
-    CONTACTS_DATA_CHANGED: "lv-contacts:data-changed",
-    // 管家
-    HOME_DATA_CHANGED: "lv-home:data-changed",
-    // 雷切
-    RAIKIRI_NAVIGATED: "lv-raikiri:navigated",
-    // 拾遗
-    GLEAN_DATA_CHANGED: "lv-glean:data-changed",
-    GLEAN_STATUS_CHANGED: "lv-glean:clip-status-changed",
-    // 考试
-    EXAM_SESSION_ENDED: "lv-exam:session-ended",
-    EXAM_WRONGBOOK_CHANGED: "lv-exam:wrongbook-changed",
-    EXAM_STATS: "lv-exam:stats",
-    // 闪卡
-    CARDS_REVIEWED: "lv-cards:reviewed",
-    // 常用
-    COMMON_CREATED: "xiaolv:common:item-created",
-    COMMON_UPDATED: "xiaolv:common:item-updated",
-    COMMON_DELETED: "xiaolv:common:item-deleted",
-    // 快门
-    QUICKGATE_COMMAND_EXECUTED: "lv-quickgate:command-executed",
-    QUICKGATE_DATA_CHANGED: "lv-quickgate:data-changed",
-    // 联盟伙伴：Task Horizon (任务视界)
-    TASK_COMPLETED: "tm:task-completed"
-  });
-  var BRIDGE_ALIASES = Object.freeze({
-    checkin: ["siyuanCheckin", "LvCheckin", "lvCheckin", "xiaolvCheckin"],
-    contacts: ["LvContacts", "lvContacts", "xiaolvContacts", "siyuanContacts"],
-    home: ["LvHome", "lvHome", "xiaolvHome", "siyuanHome"],
-    raikiri: ["siyuanSpeedSwitch", "xiaolvSpeedSwitch", "xiaolvRaikiri", "lvRaikiri"],
-    glean: ["siyuanGlean", "xiaolvGlean", "lvGlean", "LvGlean"],
-    exam: ["LvExam", "siyuanExam", "xiaolvExam", "lvExam"],
-    cards: ["xiaolvCards", "lvCards", "LvCards", "siyuanCards"],
-    common: ["xiaolvCommon", "LvCommon", "lvCommon", "siyuanCommon"],
-    quickgate: ["LvQuickgate", "lvQuickgate", "xiaolvQuickgate", "siyuanQuickgate"],
-    taskHorizon: ["TaskHorizon", "taskHorizon", "siyuanTaskHorizon"]
-  });
-  function getBridgeSafely(target) {
-    if (typeof window === "undefined") return void 0;
-    const aliases = BRIDGE_ALIASES[target] || [];
-    const w = window;
-    for (const alias of aliases) {
-      if (w[alias] && typeof w[alias] === "object") {
-        return w[alias];
-      }
-    }
-    return void 0;
-  }
-  async function callBridge(target, requiredCapability, caller, fallback, timeoutMs = 2500) {
-    const bridge = getBridgeSafely(target);
-    if (!bridge) return fallback();
-    const anyBridge = bridge;
-    if (typeof anyBridge.whenReady === "function") {
-      try {
-        const readyP = Promise.resolve(anyBridge.whenReady());
-        const timeoutP = new Promise((_, reject) => setTimeout(() => reject(new Error("ready-timeout")), timeoutMs));
-        await Promise.race([readyP, timeoutP]);
-      } catch {
-        return fallback();
-      }
-    }
-    if (typeof anyBridge.hasCapability === "function") {
-      if (!anyBridge.hasCapability(requiredCapability)) {
-        return fallback();
-      }
-    }
-    try {
-      return await caller(bridge);
-    } catch (err) {
-      console.warn(`[\u5C0F\u9A74\u751F\u6001\u8054\u90A6] \u8C03\u7528 ${target}.${requiredCapability} \u5931\u8D25\uFF0C\u5DF2\u4F18\u96C5\u964D\u7EA7:`, err);
-      return fallback();
-    }
-  }
-
-  // src/service/commands.ts
   var ActionExecutor = class {
     constructor(library, host, notify, onItemUsed, placeholders) {
       this.library = library;
@@ -38656,6 +38715,99 @@ ${details.join("\n")}` : ""}`;
           );
           output = output.replaceAll("{{xlc:checkin:today}}", checkinSummaryText);
         }
+        if (output.includes("{{xlc:home:today}}") || output.includes("{{xlc:butler:today}}")) {
+          const homeSummaryText = await callBridge(
+            "home",
+            "reminders.read",
+            (bridge) => {
+              var _a2, _b2, _c;
+              if (typeof bridge.getReminders === "function") {
+                const reminders = bridge.getReminders();
+                if (Array.isArray(reminders)) {
+                  if (reminders.length === 0) return "\u4ECA\u65E5\u5907\u5FD8\u63D0\u9192\uFF08\u65E0\u5F85\u529E\u4E8B\u9879\uFF09";
+                  return reminders.slice(0, 10).map((r) => {
+                    const tag = r.daysLeft <= 0 ? "\u5DF2\u903E\u671F" : `\u5269${r.daysLeft}\u5929`;
+                    return `- [ ] ${r.title} (${tag})`;
+                  }).join("\n");
+                }
+              }
+              if (typeof bridge.summary === "function") {
+                const s = bridge.summary();
+                return `\u3010\u7BA1\u5BB6\u63D0\u9192\u3011\u4ECA\u65E5: ${(_a2 = s.today) != null ? _a2 : 0} \u9879\uFF0C\u5373\u5C06\u5230\u671F: ${(_b2 = s.soon) != null ? _b2 : 0} \u9879\uFF0C\u903E\u671F: ${(_c = s.overdue) != null ? _c : 0} \u9879`;
+              }
+              return "\uFF08\u6682\u65E0\u7BA1\u5BB6\u5F85\u529E\u6570\u636E\uFF09";
+            },
+            () => "\uFF08\u672A\u68C0\u6D4B\u5230\u5C0F\u9A74\u7BA1\u5BB6\uFF09"
+          );
+          output = output.replaceAll("{{xlc:home:today}}", homeSummaryText).replaceAll("{{xlc:butler:today}}", homeSummaryText);
+        }
+        if (output.includes("{{xlc:task:today}}")) {
+          const taskSummaryText = await callBridge(
+            "taskHorizon",
+            "tasks.read",
+            async (bridge) => {
+              let tasks = [];
+              if (typeof bridge.getTodayTasks === "function") {
+                tasks = await bridge.getTodayTasks();
+              } else if (typeof bridge.queryTasks === "function") {
+                const res = await bridge.queryTasks({ date: "today", scope: "all", limit: 10, includeCompleted: false });
+                tasks = (res == null ? void 0 : res.tasks) || [];
+              }
+              if (Array.isArray(tasks)) {
+                const active2 = tasks.filter((t) => !t.done);
+                if (active2.length === 0) return "\u4ECA\u65E5\u4EFB\u52A1\uFF08\u5168\u6570\u5DF2\u5B8C\u6210\uFF09";
+                return active2.slice(0, 10).map((t) => `- [ ] ${t.title || "\u5F85\u529E\u4EFB\u52A1"}`).join("\n");
+              }
+              return "\uFF08\u6682\u65E0\u4ECA\u65E5\u4EFB\u52A1\uFF09";
+            },
+            () => "\uFF08\u672A\u68C0\u6D4B\u5230\u4EFB\u52A1\u89C6\u754C\uFF09"
+          );
+          output = output.replaceAll("{{xlc:task:today}}", taskSummaryText);
+        }
+        if (output.includes("{{xlc:glean:recent}}")) {
+          const gleanSummaryText = await callBridge(
+            "glean",
+            "clips.read",
+            async (bridge) => {
+              if (typeof bridge.listClips === "function") {
+                const clips = await bridge.listClips({ limit: 5 });
+                if (Array.isArray(clips)) {
+                  if (clips.length === 0) return "\u6700\u8FD1\u526A\u85CF\uFF08\u6682\u65E0\u6458\u5F55\uFF09";
+                  return clips.map((c) => {
+                    const link = c.url ? `[${c.title || "\u526A\u85CF"}](${c.url})` : `**${c.title || "\u526A\u85CF"}**`;
+                    return c.summary ? `- ${link}
+  > ${c.summary.slice(0, 100)}` : `- ${link}`;
+                  }).join("\n");
+                }
+              }
+              return "\uFF08\u6682\u65E0\u526A\u85CF\u6570\u636E\uFF09";
+            },
+            () => "\uFF08\u672A\u68C0\u6D4B\u5230\u5C0F\u9A74\u62FE\u9057\uFF09"
+          );
+          output = output.replaceAll("{{xlc:glean:recent}}", gleanSummaryText);
+        }
+        if (output.includes("{{xlc:contacts:recent}}")) {
+          const contactsSummaryText = await callBridge(
+            "contacts",
+            "people.read",
+            async (bridge) => {
+              if (typeof bridge.searchPeople === "function") {
+                const people = await bridge.searchPeople("");
+                if (Array.isArray(people)) {
+                  if (people.length === 0) return "\u4EBA\u8109\u540D\u5F55\uFF08\u6682\u65E0\u8054\u7CFB\u4EBA\uFF09";
+                  return people.slice(0, 5).map((p) => {
+                    const org = p.organization ? ` (${p.organization})` : "";
+                    const role = p.role ? ` \xB7 ${p.role}` : "";
+                    return `\xB7 **${p.name || "\u8054\u7CFB\u4EBA"}**${org}${role}`;
+                  }).join("\n");
+                }
+              }
+              return "\uFF08\u6682\u65E0\u8054\u7CFB\u4EBA\u6570\u636E\uFF09";
+            },
+            () => "\uFF08\u672A\u68C0\u6D4B\u5230\u5C0F\u9A74\u4EBA\u8109\uFF09"
+          );
+          output = output.replaceAll("{{xlc:contacts:recent}}", contactsSummaryText);
+        }
         return output;
       } catch {
         return text;
@@ -38680,8 +38832,31 @@ ${details.join("\n")}` : ""}`;
     }
     emitEvent(eventName, item, extra) {
       try {
+        const now = Date.now();
+        const at = new Date(now).toISOString();
+        const eventId = `evt-xlc-${now}-${Math.random().toString(36).slice(2, 8)}`;
+        const payload = {
+          protocolVersion: PROTOCOL_VERSION,
+          itemId: item.id,
+          itemType: item.itemType,
+          ...extra
+        };
         window.dispatchEvent(new CustomEvent(eventName, {
-          detail: { protocolVersion: PROTOCOL_VERSION, itemId: item.id, itemType: item.itemType, ...extra }
+          detail: {
+            // 向后兼容平铺字段
+            protocolVersion: PROTOCOL_VERSION,
+            itemId: item.id,
+            itemType: item.itemType,
+            ...extra,
+            // Epoch 6 生态统一事件总线信封
+            v: 1,
+            source: "xiaolv-common",
+            type: eventName,
+            eventId,
+            at,
+            payload,
+            idempotencyKey: `${eventName}:${item.id}:${now}`
+          }
         }));
       } catch {
       }

@@ -25,7 +25,7 @@ export function detectEcosystem(host: any = (typeof window !== "undefined" ? win
             id: "siyuan-checkin",
             name: "小驴打卡",
             bridgeKey: "window.siyuanCheckin",
-            installed: Boolean(host.siyuanCheckin && typeof host.siyuanCheckin.getItems === "function"),
+            installed: Boolean((host.siyuanCheckin || host.LvCheckin || host.lvCheckin || host.xiaolvCheckin) && typeof (host.siyuanCheckin || host.LvCheckin || host.lvCheckin || host.xiaolvCheckin).getItems === "function"),
             description: "习惯打卡、时间追踪与连击记录",
             capability: "快速插入今日打卡状态与连击文本",
         },
@@ -33,15 +33,23 @@ export function detectEcosystem(host: any = (typeof window !== "undefined" ? win
             id: "siyuan-contacts",
             name: "小驴人脉",
             bridgeKey: "window.LvContacts",
-            installed: Boolean((host.LvContacts || host.siyuanContacts) && typeof (host.LvContacts || host.siyuanContacts).searchPeople === "function"),
+            installed: Boolean((host.LvContacts || host.siyuanContacts || host.lvContacts || host.xiaolvContacts) && typeof (host.LvContacts || host.siyuanContacts || host.lvContacts || host.xiaolvContacts).searchPeople === "function"),
             description: "人物关系图谱与联系人脉络",
             capability: "检索联系人并一键插入结构化名片块",
+        },
+        {
+            id: "siyuan-home",
+            name: "小驴管家",
+            bridgeKey: "window.LvHome",
+            installed: Boolean(host.LvHome || host.siyuanHome || host.xiaolvHome || host.lvHome),
+            description: "资产、账本、待办提醒与家庭管家",
+            capability: "检索管家临期提醒并一键推入待办",
         },
         {
             id: "siyuan-glean",
             name: "小驴拾遗",
             bridgeKey: "window.siyuanGlean",
-            installed: Boolean((host.siyuanGlean || host.xiaolvGlean) && typeof (host.siyuanGlean || host.xiaolvGlean).listClips === "function"),
+            installed: Boolean((host.siyuanGlean || host.xiaolvGlean || host.lvGlean || host.LvGlean) && typeof (host.siyuanGlean || host.xiaolvGlean || host.lvGlean || host.LvGlean).listClips === "function"),
             description: "网页文章剪藏与高亮摘录",
             capability: "引用剪藏文章片段与金句高亮",
         },
@@ -49,9 +57,17 @@ export function detectEcosystem(host: any = (typeof window !== "undefined" ? win
             id: "siyuan-speed-switch",
             name: "小驴雷切",
             bridgeKey: "window.siyuanSpeedSwitch",
-            installed: Boolean(host.siyuanSpeedSwitch || host.xiaolvSpeedSwitch),
+            installed: Boolean(host.siyuanSpeedSwitch || host.xiaolvSpeedSwitch || host.xiaolvRaikiri || host.lvRaikiri),
             description: "全域工作台快速切换与大纲穿透",
             capability: "通过公开协议在雷切中秒级调用常用语",
+        },
+        {
+            id: "siyuan-task-horizon",
+            name: "任务视界",
+            bridgeKey: "window.TaskHorizon",
+            installed: Boolean(host.TaskHorizon || host.taskHorizon || host.siyuanTaskHorizon),
+            description: "时间轴、看板与多维任务管理",
+            capability: "检索今日高优任务并插入执行清单",
         },
     ];
 
@@ -63,7 +79,7 @@ export function detectEcosystem(host: any = (typeof window !== "undefined" ? win
 }
 
 /**
- * 安全查询小驴生态兄弟插件的只读条目（打卡概览、人脉名片等）
+ * 安全查询小驴生态兄弟插件的只读条目（打卡概览、人脉名片、管家提醒、拾遗剪藏、任务视界等）
  * 包含异常隔离，任何单一插件调用失败绝不阻塞主流程。
  */
 export async function queryEcosystemItems(
@@ -75,16 +91,23 @@ export async function queryEcosystemItems(
 
     // 1. 小驴打卡联动
     try {
-        const checkin = host.siyuanCheckin;
-        if (checkin && typeof checkin.getItems === "function") {
-            const rawItems = checkin.getItems();
+        const checkin = host.siyuanCheckin || host.LvCheckin || host.lvCheckin || host.xiaolvCheckin;
+        if (checkin) {
+            const rawItems = typeof checkin.getItems === "function"
+                ? checkin.getItems()
+                : (typeof checkin.queryItems === "function" ? checkin.queryItems({ includeArchived: false }) : []);
             if (Array.isArray(rawItems) && rawItems.length > 0) {
                 const isCheckinIntent = !q || q.includes("打卡") || q.includes("checkin") || q.includes("今日") || q.includes("习惯");
-                if (isCheckinIntent) {
-                    const activeItems = rawItems.filter((it: any) => !it.archived);
+                const matchedItems = rawItems.filter((it: any) => {
+                    if (it.archived) return false;
+                    if (isCheckinIntent) return true;
+                    const name = (it.name || it.title || "").toLowerCase();
+                    return name.includes(q);
+                });
+                if (matchedItems.length > 0) {
                     items.push({
-                        title: `小驴打卡 · 今日打卡清单 (${activeItems.length}项)`,
-                        payload: `【今日打卡】共 ${activeItems.length} 项打卡项目：\n${activeItems.map((it: any) => `- [ ] ${it.name || it.title}`).join("\n")}`,
+                        title: `小驴打卡 · 今日打卡清单 (${matchedItems.length}项)`,
+                        payload: `【今日打卡】共 ${matchedItems.length} 项打卡项目：\n${matchedItems.map((it: any) => `- [ ] ${it.name || it.title}`).join("\n")}`,
                         providerName: "小驴打卡",
                     });
                 }
@@ -96,7 +119,7 @@ export async function queryEcosystemItems(
 
     // 2. 小驴人脉联动
     try {
-        const contacts = host.LvContacts || host.siyuanContacts;
+        const contacts = host.LvContacts || host.siyuanContacts || host.lvContacts || host.xiaolvContacts;
         if (contacts && typeof contacts.searchPeople === "function" && q.length >= 1) {
             const people = await contacts.searchPeople(q);
             if (Array.isArray(people)) {
@@ -115,6 +138,85 @@ export async function queryEcosystemItems(
                         title: `小驴人脉 · ${name}${p.role ? ` (${p.role})` : ""}`,
                         payload: infoLines.join("\n"),
                         providerName: "小驴人脉",
+                    });
+                }
+            }
+        }
+    } catch {
+        // 静默隔离
+    }
+
+    // 3. 小驴管家联动 (LvHome)
+    try {
+        const home = host.LvHome || host.siyuanHome || host.xiaolvHome || host.lvHome;
+        if (home && typeof home.getReminders === "function") {
+            const reminders = home.getReminders();
+            if (Array.isArray(reminders) && reminders.length > 0) {
+                const isHomeIntent = !q || q.includes("待办") || q.includes("备忘") || q.includes("管家") || q.includes("提醒") || q.includes("逾期");
+                const matched = reminders.filter((r: any) => {
+                    if (isHomeIntent) return true;
+                    return (r.title || "").toLowerCase().includes(q);
+                });
+                for (const r of matched.slice(0, 3)) {
+                    const statusTag = (r.daysLeft ?? 0) <= 0 ? "已逾期" : `剩 ${r.daysLeft} 天`;
+                    items.push({
+                        title: `小驴管家 · ${r.title} (${statusTag})`,
+                        payload: `- [ ] ${r.title} (到期日: ${r.dueDate || "今日"} · ${statusTag})`,
+                        providerName: "小驴管家",
+                    });
+                }
+            }
+        }
+    } catch {
+        // 静默隔离
+    }
+
+    // 4. 小驴拾遗联动 (siyuanGlean)
+    try {
+        const glean = host.siyuanGlean || host.xiaolvGlean || host.lvGlean || host.LvGlean;
+        if (glean && typeof glean.listClips === "function" && q.length >= 1) {
+            const clips = await glean.listClips({ keyword: q, limit: 3 });
+            if (Array.isArray(clips)) {
+                for (const c of clips.slice(0, 3)) {
+                    const title = c.title || "剪藏摘录";
+                    const summaryPart = c.summary ? `> ${c.summary}\n\n` : "";
+                    const linkPart = c.url ? `来源：[${title}](${c.url})` : `**${title}**`;
+                    items.push({
+                        title: `小驴拾遗 · ${title}`,
+                        payload: `${summaryPart}${linkPart}`,
+                        providerName: "小驴拾遗",
+                    });
+                }
+            }
+        }
+    } catch {
+        // 静默隔离
+    }
+
+    // 5. 任务视界联动 (Task Horizon)
+    try {
+        const taskHorizon = host.TaskHorizon || host.taskHorizon || host.siyuanTaskHorizon;
+        if (taskHorizon) {
+            let tasks: any[] = [];
+            if (typeof taskHorizon.getTodayTasks === "function") {
+                tasks = await taskHorizon.getTodayTasks();
+            } else if (typeof taskHorizon.queryTasks === "function") {
+                const res = await taskHorizon.queryTasks({ date: "today", scope: "all", limit: 5, includeCompleted: false });
+                tasks = res?.tasks || [];
+            }
+            if (Array.isArray(tasks) && tasks.length > 0) {
+                const isTaskIntent = !q || q.includes("任务") || q.includes("task") || q.includes("todo") || q.includes("今日");
+                const matched = tasks.filter((t: any) => {
+                    if (t.done) return false;
+                    if (isTaskIntent) return true;
+                    return (t.title || "").toLowerCase().includes(q);
+                });
+                for (const t of matched.slice(0, 3)) {
+                    const p = t.priority && t.priority !== "none" ? ` [${t.priority}]` : "";
+                    items.push({
+                        title: `任务视界 · ${t.title}${p}`,
+                        payload: `- [ ] ${t.title}${p}`,
+                        providerName: "任务视界",
                     });
                 }
             }

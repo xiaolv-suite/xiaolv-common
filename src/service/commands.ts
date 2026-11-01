@@ -414,6 +414,98 @@ export class ActionExecutor {
                 );
                 output = output.replaceAll("{{xlc:checkin:today}}", checkinSummaryText);
             }
+            if (output.includes("{{xlc:home:today}}") || output.includes("{{xlc:butler:today}}")) {
+                const homeSummaryText = await callBridge<any, string>(
+                    "home",
+                    "reminders.read",
+                    (bridge) => {
+                        if (typeof bridge.getReminders === "function") {
+                            const reminders = bridge.getReminders();
+                            if (Array.isArray(reminders)) {
+                                if (reminders.length === 0) return "今日备忘提醒（无待办事项）";
+                                return reminders.slice(0, 10).map((r: any) => {
+                                    const tag = r.daysLeft <= 0 ? "已逾期" : `剩${r.daysLeft}天`;
+                                    return `- [ ] ${r.title} (${tag})`;
+                                }).join("\n");
+                            }
+                        }
+                        if (typeof bridge.summary === "function") {
+                            const s = bridge.summary();
+                            return `【管家提醒】今日: ${s.today ?? 0} 项，即将到期: ${s.soon ?? 0} 项，逾期: ${s.overdue ?? 0} 项`;
+                        }
+                        return "（暂无管家待办数据）";
+                    },
+                    () => "（未检测到小驴管家）"
+                );
+                output = output.replaceAll("{{xlc:home:today}}", homeSummaryText)
+                               .replaceAll("{{xlc:butler:today}}", homeSummaryText);
+            }
+            if (output.includes("{{xlc:task:today}}")) {
+                const taskSummaryText = await callBridge<any, string>(
+                    "taskHorizon",
+                    "tasks.read",
+                    async (bridge) => {
+                        let tasks: any[] = [];
+                        if (typeof bridge.getTodayTasks === "function") {
+                            tasks = await bridge.getTodayTasks();
+                        } else if (typeof bridge.queryTasks === "function") {
+                            const res = await bridge.queryTasks({ date: "today", scope: "all", limit: 10, includeCompleted: false });
+                            tasks = res?.tasks || [];
+                        }
+                        if (Array.isArray(tasks)) {
+                            const active = tasks.filter((t: any) => !t.done);
+                            if (active.length === 0) return "今日任务（全数已完成）";
+                            return active.slice(0, 10).map((t: any) => `- [ ] ${t.title || "待办任务"}`).join("\n");
+                        }
+                        return "（暂无今日任务）";
+                    },
+                    () => "（未检测到任务视界）"
+                );
+                output = output.replaceAll("{{xlc:task:today}}", taskSummaryText);
+            }
+            if (output.includes("{{xlc:glean:recent}}")) {
+                const gleanSummaryText = await callBridge<any, string>(
+                    "glean",
+                    "clips.read",
+                    async (bridge) => {
+                        if (typeof bridge.listClips === "function") {
+                            const clips = await bridge.listClips({ limit: 5 });
+                            if (Array.isArray(clips)) {
+                                if (clips.length === 0) return "最近剪藏（暂无摘录）";
+                                return clips.map((c: any) => {
+                                    const link = c.url ? `[${c.title || "剪藏"}](${c.url})` : `**${c.title || "剪藏"}**`;
+                                    return c.summary ? `- ${link}\n  > ${c.summary.slice(0, 100)}` : `- ${link}`;
+                                }).join("\n");
+                            }
+                        }
+                        return "（暂无剪藏数据）";
+                    },
+                    () => "（未检测到小驴拾遗）"
+                );
+                output = output.replaceAll("{{xlc:glean:recent}}", gleanSummaryText);
+            }
+            if (output.includes("{{xlc:contacts:recent}}")) {
+                const contactsSummaryText = await callBridge<any, string>(
+                    "contacts",
+                    "people.read",
+                    async (bridge) => {
+                        if (typeof bridge.searchPeople === "function") {
+                            const people = await bridge.searchPeople("");
+                            if (Array.isArray(people)) {
+                                if (people.length === 0) return "人脉名录（暂无联系人）";
+                                return people.slice(0, 5).map((p: any) => {
+                                    const org = p.organization ? ` (${p.organization})` : "";
+                                    const role = p.role ? ` · ${p.role}` : "";
+                                    return `· **${p.name || "联系人"}**${org}${role}`;
+                                }).join("\n");
+                            }
+                        }
+                        return "（暂无联系人数据）";
+                    },
+                    () => "（未检测到小驴人脉）"
+                );
+                output = output.replaceAll("{{xlc:contacts:recent}}", contactsSummaryText);
+            }
             return output;
         } catch {
             return text;
@@ -440,8 +532,31 @@ export class ActionExecutor {
 
     private emitEvent(eventName: string, item: CommonItem, extra?: Record<string, unknown>): void {
         try {
+            const now = Date.now();
+            const at = new Date(now).toISOString();
+            const eventId = `evt-xlc-${now}-${Math.random().toString(36).slice(2, 8)}`;
+            const payload = {
+                protocolVersion: PROTOCOL_VERSION,
+                itemId: item.id,
+                itemType: item.itemType,
+                ...extra,
+            };
             window.dispatchEvent(new CustomEvent(eventName, {
-                detail: {protocolVersion: PROTOCOL_VERSION, itemId: item.id, itemType: item.itemType, ...extra},
+                detail: {
+                    // 向后兼容平铺字段
+                    protocolVersion: PROTOCOL_VERSION,
+                    itemId: item.id,
+                    itemType: item.itemType,
+                    ...extra,
+                    // Epoch 6 生态统一事件总线信封
+                    v: 1,
+                    source: "xiaolv-common",
+                    type: eventName,
+                    eventId,
+                    at,
+                    payload,
+                    idempotencyKey: `${eventName}:${item.id}:${now}`,
+                },
             }));
         } catch {
             // 事件失败不影响主流程

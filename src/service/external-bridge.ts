@@ -82,8 +82,17 @@ export function buildXlcBridge(service: XiaolvCommonService): XlcBridgeApi {
             return service.search(normalizeSearchInput(query));
         },
 
-        get(itemId) {
-            return service.get(String(itemId ?? ""));
+        async get(itemId) {
+            const res = await service.get(String(itemId ?? ""));
+            if (res.ok && res.data) {
+                const item = res.data;
+                const snippet = {
+                    ...item,
+                    content: item.summary || item.url || item.title || "",
+                };
+                return {...res, data: snippet as CommonItem};
+            }
+            return res;
         },
 
         getBatch(itemIds) {

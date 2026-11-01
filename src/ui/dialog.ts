@@ -38,6 +38,7 @@ import {openShareCardDialog} from "./share-card";
 import {openPinboardDialog} from "./pinboard";
 import {openStarterPacksHubDialog} from "./starter-packs-dialog";
 import {getRecommendedEntries, DocumentContext} from "../model/contextual-recommend";
+import {callBridge, getBridgeSafely} from "../ecosystem-bridge-kit";
 import {getClipboardTimeGroup, MiniPosition, calculateMagneticSnap} from "../model/storage";
 import {STARTER_PACKS, StarterPackMeta} from "../service/prompt-pack";
 
@@ -2534,6 +2535,42 @@ export class CommonSearchDialog {
                         this.deps.captureOmniWithForm?.(entry);
                     });
                     actionsWrap.appendChild(editBtn);
+                }
+
+                const homeBridge = getBridgeSafely<any>("home");
+                if (homeBridge && typeof homeBridge.addMemo === "function") {
+                    const memoBtn = document.createElement("button");
+                    memoBtn.className = "b3-button b3-button--small xlc-row-action";
+                    memoBtn.dataset.xlcControl = "item.promote-to-home";
+                    memoBtn.textContent = "📋";
+                    memoBtn.title = "推送到小驴管家备忘";
+                    memoBtn.setAttribute("aria-label", "推送到小驴管家备忘");
+                    memoBtn.addEventListener("click", async (e) => {
+                        e.stopPropagation();
+                        memoBtn.disabled = true;
+                        memoBtn.textContent = "…";
+                        const content = entry.summary || entry.title || "";
+                        const cleanTitle = content.replace(/\s+/g, " ").slice(0, 50).trim();
+                        const todayStr = new Date().toISOString().slice(0, 10);
+                        const ok = await callBridge<any, boolean>(
+                            "home",
+                            "addMemo",
+                            async (b) => {
+                                await b.addMemo(cleanTitle, todayStr);
+                                return true;
+                            },
+                            () => false
+                        );
+                        if (ok) {
+                            memoBtn.textContent = "✓";
+                            memoBtn.title = "已推送到管家备忘";
+                            this.deps.notify?.("info", "已推送到小驴管家备忘");
+                        } else {
+                            memoBtn.disabled = false;
+                            memoBtn.textContent = "📋";
+                        }
+                    });
+                    actionsWrap.appendChild(memoBtn);
                 }
 
                 row.appendChild(actionsWrap);
