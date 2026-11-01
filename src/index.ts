@@ -15,7 +15,7 @@ import {CommonItem, cleanShortcode, isBlockId, isItemType, isSafeHttpUrl, kramdo
 import {toErrorMessage} from "./model/errors";
 import {getSingleDocTreeDiscoveryTarget} from "./model/discovery-target";
 import {InsertMode, buildBlockRef, buildEmbedBlock} from "./model/actions";
-import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown} from "./model/clipboard";
+import {escapeHtml, isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown} from "./model/clipboard";
 import {collectDefaults, rememberValues} from "./model/variable-memory";
 import {ExportedItem, buildBundle, validateImport, ConflictPolicy, ImportReceipt} from "./model/transfer";
 import {importBundle as importBundleCore} from "./service/importer";
@@ -121,6 +121,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     private clipboardListenerCleanup: (() => void) | null = null;
     private discoveryDialog: DiscoveryDialogController | null = null;
     private dockView: DockView | null = null;
+    private quickAccessPopoverDismiss: (() => void) | null = null;
     private unloading = false;
 
     async onload(): Promise<void> {
@@ -1103,12 +1104,19 @@ export default class XiaolvCommonPlugin extends Plugin {
             // 旧宿主降级保护
         }
         try {
-            this.addTopBar({
+            const topBarEl = this.addTopBar({
                 icon: "iconXlcCommon",
                 title: `${this.i18nFn()("openSearch")} (Alt+Shift+N / Alt+Shift+V)`,
                 callback: () => this.openSearch(),
                 position: "right",
             });
+            if (topBarEl && typeof topBarEl.addEventListener === "function") {
+                topBarEl.addEventListener("contextmenu", (e: MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void this.openQuickAccessPopover(e);
+                });
+            }
         } catch {
             // 旧宿主无此 API：命令面板仍可用
         }
@@ -1831,6 +1839,146 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.previewCache.delete(itemId);
             this.previewTasks.delete(itemId);
         }
+    }
+
+    private closeQuickAccessPopover(): void {
+        this.quickAccessPopoverDismiss?.();
+        this.quickAccessPopoverDismiss = null;
+    }
+
+    /** 顶栏图标右键极速气泡卡片（Top 5 收藏与高频项秒取 · CAND-008 / TODO-FEAT-007） */
+    private async openQuickAccessPopover(e: MouseEvent): Promise<void> {
+        this.closeQuickAccessPopover();
+        const existing = typeof document !== "undefined" ? document.querySelector(".xlc-quick-popover") : null;
+        if (existing) existing.remove();
+
+        let entries: SearchEntry[] = [];
+        try {
+            const idx = await this.library.ensureIndex(0);
+            const allEntries = idx.entries;
+            const favSet = new Set(this.state?.favorites ?? []);
+            const usage = this.state?.usage ?? {};
+
+            const sorted = [...allEntries].sort((a, b) => {
+                const aFav = favSet.has(a.id) ? 1 : 0;
+                const bFav = favSet.has(b.id) ? 1 : 0;
+                if (aFav !== bFav) return bFav - aFav;
+                const aCount = usage[a.id]?.count ?? 0;
+                const bCount = usage[b.id]?.count ?? 0;
+                return bCount - aCount;
+            });
+            entries = sorted.slice(0, 5);
+        } catch {
+            entries = [];
+        }
+
+        if (typeof document === "undefined") return;
+
+        const popover = document.createElement("div");
+        popover.className = "xlc-quick-popover";
+        popover.dataset.xlcControl = "host.quick-popover";
+        if (typeof popover.setAttribute === "function") {
+            popover.setAttribute("role", "dialog");
+            popover.setAttribute("aria-label", "小驴常用极速气泡卡片");
+        }
+
+        const rect = (e.currentTarget as HTMLElement | null)?.getBoundingClientRect?.() ?? {
+            left: e.clientX,
+            bottom: e.clientY + 8,
+            right: e.clientX + 220,
+        };
+        const posX = typeof window !== "undefined" ? Math.max(12, Math.min(rect.right - 240, window.innerWidth - 260)) : 100;
+        const posY = typeof window !== "undefined" ? Math.min(rect.bottom + 6, window.innerHeight - 280) : 100;
+
+        popover.style.position = "fixed";
+        popover.style.left = `${posX}px`;
+        popover.style.top = `${posY}px`;
+        popover.style.zIndex = "9999";
+
+        const head = document.createElement("div");
+        head.className = "xlc-quick-popover-head";
+        const safeHeadTitle = escapeHtml("🐴 极速常用 (Top 5)");
+        head.innerHTML = `<strong>${safeHeadTitle}</strong><button type="button" class="xlc-quick-popover-close" aria-label="关闭">×</button>`;
+        head.querySelector(".xlc-quick-popover-close")?.addEventListener("click", () => this.closeQuickAccessPopover());
+        popover.appendChild(head);
+
+        const list = document.createElement("div");
+        list.className = "xlc-quick-popover-list";
+
+        if (entries.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "xlc-quick-popover-empty";
+            empty.textContent = "暂无常用条目，点击下方打开常用库";
+            list.appendChild(empty);
+        } else {
+            for (const entry of entries) {
+                const itemEl = document.createElement("button");
+                itemEl.type = "button";
+                itemEl.className = "xlc-quick-popover-item";
+                itemEl.dataset.xlcControl = `host.quick-popover.item.${entry.id}`;
+                if (typeof itemEl.setAttribute === "function") {
+                    itemEl.setAttribute("aria-label", `${entry.title || "条目"} (点击复用)`);
+                }
+                const isFav = (this.state?.favorites ?? []).includes(entry.id);
+                const safeFavBadge = isFav ? "★ " : "";
+                const safeTitle = escapeHtml(entry.title || "未命名条目");
+                const safeType = escapeHtml(entry.itemType.slice(0, 3).toUpperCase());
+                const safeItemType = escapeHtml(entry.itemType);
+                itemEl.innerHTML = `<span class="xlc-badge xlc-badge--${safeItemType}">${safeType}</span><span class="xlc-popover-title">${safeFavBadge}${safeTitle}</span>`;
+                itemEl.addEventListener("click", async () => {
+                    this.closeQuickAccessPopover();
+                    const got = await this.library.getItem(entry.id);
+                    if (!got.ok) {
+                        this.notify("error", "未找到该条目");
+                        return;
+                    }
+                    const hasActive = this.host.hasActiveEditor();
+                    const mode = hasActive ? "insert" : "copy";
+                    const receipt = await this.executor.run(got.data, mode);
+                    if (receipt.message) {
+                        this.notify("info", receipt.message);
+                    }
+                });
+                list.appendChild(itemEl);
+            }
+        }
+        popover.appendChild(list);
+
+        const foot = document.createElement("div");
+        foot.className = "xlc-quick-popover-foot";
+        const allBtn = document.createElement("button");
+        allBtn.type = "button";
+        allBtn.className = "b3-button b3-button--text xlc-quick-popover-all-btn";
+        allBtn.dataset.xlcControl = "host.quick-popover.open-all";
+        allBtn.textContent = "🔍 打开全部常用语 (Alt+Space)";
+        allBtn.addEventListener("click", () => {
+            this.closeQuickAccessPopover();
+            this.openSearch();
+        });
+        foot.appendChild(allBtn);
+        popover.appendChild(foot);
+
+        const onDismiss = (evt: MouseEvent | KeyboardEvent) => {
+            if (evt instanceof KeyboardEvent && evt.key === "Escape") {
+                this.closeQuickAccessPopover();
+            } else if (evt instanceof MouseEvent && !popover.contains(evt.target as Node)) {
+                this.closeQuickAccessPopover();
+            }
+        };
+
+        const cleanup = () => {
+            document.removeEventListener("mousedown", onDismiss);
+            document.removeEventListener("keydown", onDismiss);
+            popover.remove();
+        };
+
+        setTimeout(() => {
+            document.addEventListener("mousedown", onDismiss);
+            document.addEventListener("keydown", onDismiss);
+        }, 50);
+
+        document.body.appendChild(popover);
+        this.quickAccessPopoverDismiss = cleanup;
     }
 
     /** 打开搜索弹窗；insertTarget 提供时进入定向插入模式，initialQuery 传入时自动预填搜索输入框，surroundText 传入时进入选区包裹模式，defaultAction 预设主操作模式，initialScope 预设初始检索范围 */
@@ -2997,6 +3145,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             // ignore
         }
         this.clipboardListenerCleanup = null;
+        this.closeQuickAccessPopover();
         this.discoveryDialog?.close(true);
         this.discoveryDialog = null;
         // 事件总线/监听全部随 dialog destroy 释放；侧车已节流持久化

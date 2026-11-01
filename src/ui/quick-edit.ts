@@ -6,6 +6,7 @@ import {Dialog} from "siyuan";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {validateOmniBlockUpdate} from "../service/omni-search";
 import {toErrorMessage} from "../model/errors";
+import {renderSafePreview} from "./preview-renderer";
 
 export interface QuickEditDeps {
     t: (key: string, ...args: string[]) => string;
@@ -21,6 +22,8 @@ export function openQuickEditDialog(
 ): Dialog {
     let closed = false;
     let saving = false;
+    let isPreviewOpen = false;
+    let previewDebounce: ReturnType<typeof setTimeout> | null = null;
     const prevActive = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
     const dialog = new Dialog({
         title: `${deps.t("quickEditBlock")} (${blockId})`,
@@ -28,6 +31,10 @@ export function openQuickEditDialog(
         width: "min(620px, 92vw)",
         destroyCallback: () => {
             closed = true;
+            if (previewDebounce) {
+                clearTimeout(previewDebounce);
+                previewDebounce = null;
+            }
             if (typeof window !== "undefined" && window.visualViewport) {
                 window.visualViewport.removeEventListener("resize", handleViewport);
                 window.visualViewport.removeEventListener("scroll", handleViewport);
@@ -73,6 +80,40 @@ export function openQuickEditDialog(
         textarea.setAttribute("aria-describedby", "xlc-quick-edit-hint xlc-quick-edit-counter xlc-quick-edit-error");
     }
 
+    const previewBox = document.createElement("div");
+    previewBox.id = "xlc-quick-edit-preview";
+    previewBox.className = "xlc-quick-edit-preview";
+    previewBox.dataset.xlcControl = "quick-edit.preview";
+    previewBox.style.display = "none";
+    if (typeof previewBox.setAttribute === "function") {
+        previewBox.setAttribute("role", "region");
+        previewBox.setAttribute("aria-label", "Markdown 实时语法色彩预览");
+    }
+
+    const previewToggleBtn = document.createElement("button");
+    previewToggleBtn.type = "button";
+    previewToggleBtn.className = "b3-button b3-button--text xlc-quick-edit-preview-btn";
+    previewToggleBtn.dataset.xlcControl = "quick-edit.toggle-preview";
+    previewToggleBtn.textContent = "👁 语法色彩";
+    previewToggleBtn.title = "展开/折叠 Markdown 轻量语法色彩实时预览";
+    if (typeof previewToggleBtn.setAttribute === "function") {
+        previewToggleBtn.setAttribute("aria-label", previewToggleBtn.title);
+        previewToggleBtn.setAttribute("aria-expanded", "false");
+    }
+
+    const updatePreview = () => {
+        if (!isPreviewOpen) return;
+        renderSafePreview(previewBox, textarea.value, "markdown");
+    };
+
+    previewToggleBtn.addEventListener("click", () => {
+        isPreviewOpen = !isPreviewOpen;
+        previewBox.style.display = isPreviewOpen ? "block" : "none";
+        previewToggleBtn.setAttribute("aria-expanded", String(isPreviewOpen));
+        previewToggleBtn.textContent = isPreviewOpen ? "✕ 隐藏色彩" : "👁 语法色彩";
+        if (isPreviewOpen) updatePreview();
+    });
+
     const footer = document.createElement("div");
     footer.className = "xlc-quick-edit-footer";
 
@@ -107,11 +148,16 @@ export function openQuickEditDialog(
             errHint.style.display = "none";
             errHint.textContent = "";
         }
+        if (isPreviewOpen) {
+            if (previewDebounce) clearTimeout(previewDebounce);
+            previewDebounce = setTimeout(updatePreview, 60);
+        }
     };
     updateCount();
     textarea.addEventListener("input", updateCount);
 
     footer.appendChild(hint);
+    footer.appendChild(previewToggleBtn);
     footer.appendChild(counter);
 
     const btnRow = document.createElement("div");
@@ -254,6 +300,7 @@ export function openQuickEditDialog(
 
     container.appendChild(textarea);
     container.appendChild(footer);
+    container.appendChild(previewBox);
     container.appendChild(errHint);
     container.appendChild(btnRow);
 

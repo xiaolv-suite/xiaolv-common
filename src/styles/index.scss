@@ -5843,5 +5843,127 @@
   }
 }
 
+// ---------- 全域快编轻量 Markdown 语法色彩实时预览 (CAND-007 / TODO-FEAT-006) ----------
+.xlc-quick-edit-preview {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: var(--xlc-space-3);
+  border: 1px solid var(--b3-border-color);
+  border-radius: var(--xlc-radius-sm);
+  background: var(--xlc-soft);
+  font-family: var(--xlc-font-family);
+  font-size: 13px;
+  line-height: 1.6;
+  box-sizing: border-box;
+}
+
+.xlc-quick-edit-preview-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  min-height: 22px;
+  color: var(--b3-theme-primary);
+  border-radius: var(--xlc-radius-pill, 9999px);
+  cursor: pointer;
+}
+
+// ---------- 顶栏图标右键极速常用气泡卡片 (CAND-008 / TODO-FEAT-007) ----------
+.xlc-quick-popover {
+  width: 250px;
+  background: var(--b3-theme-surface);
+  border: 1px solid var(--b3-border-color);
+  border-radius: var(--xlc-radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--xlc-font-family);
+
+  .xlc-quick-popover-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    background: var(--xlc-soft);
+    border-bottom: 1px solid var(--xlc-line);
+    font-size: 12px;
+    font-weight: var(--xlc-weight-semibold);
+    color: var(--xlc-ink);
+
+    .xlc-quick-popover-close {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--xlc-muted);
+      padding: 0 4px;
+      line-height: 1;
+
+      &:hover { color: var(--xlc-ink); }
+    }
+  }
+
+  .xlc-quick-popover-list {
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    gap: 2px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .xlc-quick-popover-item {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-2);
+    padding: 6px 8px;
+    border: none;
+    border-radius: var(--xlc-radius-sm);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    box-sizing: border-box;
+    transition: background-color var(--xlc-dur-fast) var(--xlc-ease);
+
+    &:hover,
+    &:focus-visible {
+      background: var(--xlc-soft);
+      outline: none;
+    }
+
+    .xlc-popover-title {
+      font-size: 12px;
+      color: var(--xlc-ink);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .xlc-quick-popover-empty {
+    padding: 12px 8px;
+    font-size: 12px;
+    color: var(--xlc-muted);
+    text-align: center;
+  }
+
+  .xlc-quick-popover-foot {
+    border-top: 1px solid var(--xlc-line);
+    padding: 4px 6px;
+    background: var(--b3-theme-background);
+
+    .xlc-quick-popover-all-btn {
+      width: 100%;
+      font-size: 11px;
+      padding: 4px;
+      text-align: center;
+      color: var(--b3-theme-primary);
+    }
+  }
+}
+
+
 
 
