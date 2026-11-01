@@ -27,6 +27,7 @@
 ✔ pnpm run check: 0 errors (TypeScript strict typecheck)
 ✔ pnpm run check:ui: 0 violations (UI contracts, i18n alignment, 0 unescaped innerHTML)
 ✔ pnpm test: 1182/1182 全部通过
+✔ pnpm test:scale: 500/500 条真实块压测通过（精确/前缀/子串搜索延迟 4/2/1 ms，缓存命中 0ms）
 ✔ pnpm run test:ui: 50/50 界面快照全数渲染通过
 ✔ pnpm run test:ix: 79/79 交互链路审计全数通过
 ✔ pnpm run check:viewport: 12/12 视口可见性全数通过
