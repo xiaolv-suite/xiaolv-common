@@ -268,7 +268,7 @@ function check(name, ok, detail = "") {
             return status && (status.dataset.state === "success" || status.dataset.state === "error");
         }, null, {timeout: 45000});
         let packStats = {count: 0, errors: 0};
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 14; i++) {
             await sleep(650);
             packStats = await page.evaluate(async () => {
                 const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
@@ -277,6 +277,18 @@ function check(name, ok, detail = "") {
                 return {count: idx.entries.length, errors: idx.errors.length};
             });
             if (packStats.count >= 25) break;
+        }
+        if (packStats.count < 25) {
+            const missingInfo = await page.evaluate(async () => {
+                const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+                const idx = await p.library.ensureIndex(0);
+                return {
+                    titles: idx.entries.map((e) => e.title),
+                    ids: idx.entries.map((e) => e.id),
+                };
+            });
+            console.log("[DEBUG 步骤 2 丢失条目诊断]: 现存条目数 =", missingInfo.titles.length);
+            console.log("[DEBUG 现存条目标题]:", missingInfo.titles);
         }
         const docChildrenAfterPack = (await api(token, "/api/block/getChildBlocks", {id: libDocId})).data ?? [];
         const superblockCount = docChildrenAfterPack.filter((c) => c.type === "s").length;
