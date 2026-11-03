@@ -525,24 +525,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
 
         // 小驴罗盘 · 注册插件入口与二级行动直达 (Epoch 7 Phase 5)
-        try {
-            this.launchpadCleaner = lvLaunchpad.register({
-                id: "xiaolv-common",
-                name: "常用",
-                fullName: "小驴常用",
-                svgIcon: "icon-lv-common",
-                color: "#14b8a6",
-                desc: "常用片段 · 宏模版",
-                digit: 8,
-                badge: "常用 18 项",
-                badgeType: "primary",
-                actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录", "生成常用智能变体"],
-                onClick: () => this.openCommonPanel(),
-                onAction: (action) => this.handleQuickAction(action),
-            });
-        } catch {
-            // 环境防御
-        }
+        this.syncLaunchpadRegistry();
 
         // 小驴穿透搜索 · 注册常用代码片段与模版检索切面 (Epoch 7 Phase 7)
         try {
@@ -1695,6 +1678,31 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.searchDialog?.refreshAfterExternalChange();
         void this.dockView?.refresh();
         void this.updateProtyleSlash();
+        this.syncLaunchpadRegistry();
+    }
+
+    /** 同步向小驴罗盘注册的插件状态与动态条目数徽标 (Epoch 7 Phase 5) */
+    public syncLaunchpadRegistry(): void {
+        try {
+            const count = this.library?.getIndex()?.items?.size;
+            const badge = count !== undefined ? `常用 ${count} 项` : "常用";
+            this.launchpadCleaner = lvLaunchpad.register({
+                id: "xiaolv-common",
+                name: "常用",
+                fullName: "小驴常用",
+                svgIcon: "icon-lv-common",
+                color: "#14b8a6",
+                desc: "常用片段 · 宏模版",
+                digit: 8,
+                badge,
+                badgeType: "primary",
+                actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录", "生成常用智能变体"],
+                onClick: () => this.openCommonPanel(),
+                onAction: (action) => this.handleQuickAction(action),
+            });
+        } catch {
+            // 环境防御
+        }
     }
 
     /** 动态更新思源编辑器斜杠菜单（protyleSlash）：自动将包含简码、别名、常用或高频的条目注册为行内斜杠项 */
@@ -3546,7 +3554,9 @@ export default class XiaolvCommonPlugin extends Plugin {
                 const titleMatch = item.title.toLowerCase().includes(kw);
                 const summaryMatch = (item.summary || "").toLowerCase().includes(kw);
                 const tagMatch = item.tags.some(t => t.toLowerCase().includes(kw));
-                if (!kw || titleMatch || summaryMatch || tagMatch) {
+                const aliasMatch = (item.alias || "").toLowerCase().includes(kw);
+                const shortcodeMatch = (item.shortcode || "").toLowerCase().includes(kw);
+                if (!kw || titleMatch || summaryMatch || tagMatch || aliasMatch || shortcodeMatch) {
                     hits.push({
                         id: item.id,
                         title: item.title,

@@ -1741,13 +1741,13 @@ export class LibraryService {
                     id: sourceBlockId,
                     dataType: "markdown",
                     data: toItemStorageMarkdown(kd.data),
-                }, {maxRetries: 0});
+                });
                 const restorable = restorableAttrs(oldSourceAttrs);
                 if (Object.keys(restorable).length > 0) {
                     await this.kernel.request("setBlockAttrs", {
                         id: sourceBlockId,
                         attrs: restorable,
-                    }, {maxRetries: 0});
+                    });
                 }
                 this.notifyItemsChanged([itemId]);
                 return ok({sourceBlockId});

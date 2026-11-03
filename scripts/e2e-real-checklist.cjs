@@ -1032,11 +1032,11 @@ function check(name, ok, detail = "") {
 
             const firstDockRow = host.querySelector(".xlc-dock-row");
             firstDockRow?.click();
-            await new Promise((r) => setTimeout(r, 150));
+            await new Promise((r) => setTimeout(r, 250));
             host.querySelector("[data-xlc-dock-act='insert-ref']")?.click();
-            await new Promise((r) => setTimeout(r, 150));
+            await new Promise((r) => setTimeout(r, 350));
             host.querySelector("[data-xlc-dock-act='insert-embed']")?.click();
-            await new Promise((r) => setTimeout(r, 150));
+            await new Promise((r) => setTimeout(r, 350));
 
             const dockRefOk = insertedPayloads.some((m) => /^\(\(\d{14}-[0-9a-z]{7}\s+'/.test(m));
             const dockEmbedOk = insertedPayloads.some((m) => /^\{\{select \* from blocks where id='\d{14}-[0-9a-z]{7}'\}\}$/.test(m));
@@ -1188,12 +1188,16 @@ function check(name, ok, detail = "") {
                 cmd: "transactions",
                 data: [{doOperations: [{id: prep.blockId, parentID: prep.libraryDocId}]}],
             });
-            await new Promise((r) => setTimeout(r, 650));
-
-            const dockSynced = Array.from(host.querySelectorAll(".xlc-dock-row-title"))
-                .some((el) => (el.textContent ?? "").includes("思源编辑器直改后同步标题"));
-            const dialogSynced = (p.searchDialog?.results ?? [])
-                .some((e) => e.title === "思源编辑器直改后同步标题");
+            let dockSynced = false;
+            let dialogSynced = false;
+            for (let i = 0; i < 25; i++) {
+                await new Promise((r) => setTimeout(r, 120));
+                dockSynced = Array.from(host.querySelectorAll(".xlc-dock-row-title"))
+                    .some((el) => (el.textContent ?? "").includes("思源编辑器直改后同步标题"));
+                dialogSynced = (p.searchDialog?.results ?? [])
+                    .some((e) => e.title === "思源编辑器直改后同步标题");
+                if (dockSynced && dialogSynced) break;
+            }
 
             // 切换到「📄 当前文档」范围并输入检索词 LIVE_SYNC：先切到库文档（0 命中），再通过 switch-protyle 切换到 /测试笔记文档，验证自动刷新出命中块
             delete p.host.currentDocId;
@@ -1303,8 +1307,9 @@ function check(name, ok, detail = "") {
 
             // 在常用库中润色修改该条目正文，然后触发 pushToSource 回写至思源笔记源块
             await p.library.updateItem(itemId, {markdown: "在小驴常用中润色后回写回思源笔记的正文_PUSHED_OK"});
+            await new Promise((r) => setTimeout(r, 250));
             const pushRes = await p.protocolCommands["xiaolv.common.pushToSource"]({itemId});
-            return {pullOk, pushOk: Boolean(pushRes?.ok)};
+            return {pullOk, pushOk: Boolean(pushRes?.ok), pushMsg: pushRes?.message};
         }, step19.bidiItemId);
 
         const pushedSrcKd = (await api(token, "/api/block/getBlockKramdown", {id: bidiSrcBlockId}))?.data?.kramdown ?? "";
@@ -1598,7 +1603,13 @@ function check(name, ok, detail = "") {
 
         // 1. 开启极窄迷你模式
         await page.locator("[data-xlc-control='search.mini.toggle']").click();
-        await sleep(250);
+        await page.waitForFunction(() => {
+            const dlg = document.querySelector(".b3-dialog__container.xlc-dialog--mini, .xlc-dialog--mini");
+            const btn = document.querySelector(".xlc-search-mini-btn--active");
+            const num = document.querySelector(".xlc-mini-row-num");
+            const dragBar = document.querySelector("[data-xlc-control='search.mini.drag-bar']");
+            return Boolean(dlg && btn && num && dragBar);
+        }, null, {timeout: 6000});
         const miniModeActive = await page.evaluate(() => {
             const dlg = document.querySelector(".b3-dialog__container.xlc-dialog--mini, .xlc-dialog--mini");
             const btn = document.querySelector(".xlc-search-mini-btn--active");
