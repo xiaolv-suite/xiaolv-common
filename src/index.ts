@@ -6,7 +6,7 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvNotify, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
+import {lvActivity, lvNotify, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {LIMITS, PLUGIN_VERSION, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -2608,6 +2608,16 @@ export default class XiaolvCommonPlugin extends Plugin {
                         const ok = await this.host.writeClipboard(kramdownToPlainText(content));
                         const msg = ok ? this.i18nFn()("copied", shortTitle(active?.title || "条目")) : this.i18nFn()("copyFailed");
                         if (!ok) this.notify("error", msg);
+                        else {
+                            try {
+                                lvActivity.record({
+                                    source: "常用",
+                                    category: "note",
+                                    title: `应用常用模版「${shortTitle(active?.title || "条目")}」`,
+                                    linkBlockId: active?.id,
+                                });
+                            } catch {}
+                        }
                         return {ok, message: msg};
                     } else {
                         const targetDocId = editorTarget?.docId || this.host.currentDocId() || "";
@@ -2616,6 +2626,16 @@ export default class XiaolvCommonPlugin extends Plugin {
                         });
                         const msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
                         this.notify(ok ? "info" : "error", msg);
+                        if (ok) {
+                            try {
+                                lvActivity.record({
+                                    source: "常用",
+                                    category: "note",
+                                    title: `应用常用模版「${shortTitle(active?.title || "条目")}」`,
+                                    linkBlockId: active?.id,
+                                });
+                            } catch {}
+                        }
                         return {ok, message: msg};
                     }
                 }
@@ -2643,6 +2663,16 @@ export default class XiaolvCommonPlugin extends Plugin {
                         const ok = await this.host.writeClipboard(kramdownToPlainText(content));
                         const msg = ok ? this.i18nFn()("copied", shortTitle(active?.title || "条目")) : this.i18nFn()("copyFailed");
                         if (!ok) this.notify("error", msg);
+                        else {
+                            try {
+                                lvActivity.record({
+                                    source: "常用",
+                                    category: "note",
+                                    title: `应用常用模版「${shortTitle(active?.title || "条目")}」`,
+                                    linkBlockId: active?.id,
+                                });
+                            } catch {}
+                        }
                         return {ok, message: msg};
                     } else {
                         const targetDocId = editorTarget?.docId || this.host.currentDocId() || "";
@@ -2651,6 +2681,16 @@ export default class XiaolvCommonPlugin extends Plugin {
                         });
                         const msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
                         this.notify(ok ? "info" : "error", msg);
+                        if (ok) {
+                            try {
+                                lvActivity.record({
+                                    source: "常用",
+                                    category: "note",
+                                    title: `应用常用模版「${shortTitle(active?.title || "条目")}」`,
+                                    linkBlockId: active?.id,
+                                });
+                            } catch {}
+                        }
                         return {ok, message: msg};
                     }
                 }

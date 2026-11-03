@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {lvNoticeKit} = require("./.build/entry.cjs");
-const {lvNotify, lvSurfaceStack, withDocLock, lvTicker} = lvNoticeKit;
+const {lvNotify, lvSurfaceStack, withDocLock, lvTicker, lvActivity, lvAi} = lvNoticeKit;
 
 // Setup a mock DOM environment for node:test
 function setupMockDom() {
@@ -141,6 +141,8 @@ function setupMockDom() {
             delete global.window.__LV_SURFACE_STACK__;
             delete global.window.__LV_DOC_LOCKS__;
             delete global.window.__LV_TICKER__;
+            delete global.window.__LV_AI_GATEWAY__;
+            delete global.window.__LV_ACTIVITY_STREAM__;
             delete global.document;
             delete global.window;
             delete global.localStorage;
@@ -322,5 +324,52 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 2 标准�
 
         popA();
         popB();
+    });
+
+    await t.test("lvActivity · 今日全生态活动主干流：广播记录、升序获取与一键 Markdown 汇编", () => {
+        let broadcastReceived = null;
+        const unlisten = lvActivity.onActivity((item) => {
+            broadcastReceived = item;
+        });
+
+        // 模拟广播应用重要常用片段
+        lvActivity.record({
+            source: "常用",
+            category: "note",
+            title: "应用常用模版「工作周报」",
+            linkBlockId: "20261103120000-block123",
+            detail: "含 3 个动态宏",
+        });
+
+        assert.notEqual(broadcastReceived, null, "应实时收到活动广播事件");
+        assert.equal(broadcastReceived.source, "常用");
+        assert.equal(broadcastReceived.category, "note");
+        assert.equal(broadcastReceived.title, "应用常用模版「工作周报」");
+
+        const todayRecords = lvActivity.getTodayRecords();
+        assert.ok(todayRecords.length >= 1, "今日记录列表中应包含刚才记录的项");
+        const lastRecord = todayRecords[todayRecords.length - 1];
+        assert.equal(lastRecord.title, "应用常用模版「工作周报」");
+        assert.ok(/^\d{2}:\d{2}$/.test(lastRecord.timeStr), "应包含格式为 HH:mm 的时间戳字符串");
+
+        const md = lvActivity.formatAsMarkdown();
+        assert.ok(md.includes("### 🐴 小驴全家桶 · 今日活动汇编"), "Markdown 汇编应包含全家桶头部");
+        assert.ok(md.includes("[常用] 💡 应用常用模版「工作周报」"), "Markdown 应正确识别 note 类型的 💡 图标与来源前缀");
+        assert.ok(md.includes("siyuan://blocks/20261103120000-block123"), "Markdown 应包含思源块引用超链接");
+
+        unlisten();
+    });
+
+    await t.test("lvAi · 统一凭据配置与读取", () => {
+        lvAi.setConfig({
+            apiKey: "sk-test-shared-key-123456",
+            endpoint: "https://api.deepseek.com/v1",
+            model: "deepseek-chat",
+        });
+
+        const cfg = lvAi.getConfig();
+        assert.notEqual(cfg, null);
+        assert.equal(cfg.apiKey, "sk-test-shared-key-123456");
+        assert.equal(cfg.model, "deepseek-chat");
     });
 });

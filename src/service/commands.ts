@@ -11,7 +11,7 @@ import {CommonItem, extractCleanPayload} from "../model/item";
 import {LibraryService, SourceHealth} from "./library";
 import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown, writeRichClipboard} from "../model/clipboard";
 import {callBridge} from "../ecosystem-bridge-kit";
-import {withDocLock} from "../libs/lv-notice-kit";
+import {lvActivity, withDocLock} from "../libs/lv-notice-kit";
 
 /** 占位符应用钩子：由入口注入（读设置 + 当前时间 + 当前文档 + 剪贴板）；未注入则原样保留 */
 export interface IPlaceholderHook {
@@ -571,6 +571,17 @@ export class ActionExecutor {
             this.onItemUsed?.(item);
         } catch {
             // 忽略
+        }
+        try {
+            const snippetTitle = item.title || item.summary || "常用模版";
+            lvActivity.record({
+                source: "常用",
+                category: "note",
+                title: `应用常用模版「${snippetTitle}」`,
+                linkBlockId: item.blockId || item.id,
+            });
+        } catch {
+            // 活动广播失败不影响主流程
         }
     }
 
