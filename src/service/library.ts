@@ -319,6 +319,7 @@ export class LibraryService {
     /** 索引（可丢弃缓存）。为空或超过 maxAgeMs 时重建（SWR）。
      *  并发去重：重建进行中时共用同一 Promise（双开弹窗/预热竞争只建一次）。 */
     private buildingPromise: Promise<IndexBuildResult> | null = null;
+    private buildingGen = -1;
     /** 索引代数：任一失效（index=null）自增；重建完成时代数已变则丢弃陈旧结果（R139） */
     private indexGen = 0;
 
@@ -334,13 +335,17 @@ export class LibraryService {
             const fresh = typeof maxAgeMs !== "number" || Date.now() - this.index.builtAt <= maxAgeMs;
             if (fresh) return this.index;
         }
-        if (!this.buildingPromise) {
+        if (!this.buildingPromise || this.buildingGen !== gen) {
+            const currentGen = gen;
+            this.buildingGen = currentGen;
             this.buildingPromise = this.buildIndex().finally(() => {
-                this.buildingPromise = null;
+                if (this.buildingGen === currentGen) {
+                    this.buildingPromise = null;
+                }
             });
         }
         const result = await this.buildingPromise;
-        if (gen === this.indexGen) {
+        if (gen === this.indexGen && this.buildingGen === gen) {
             this.index = result;
             return result;
         }

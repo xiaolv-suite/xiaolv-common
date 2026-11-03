@@ -1,5 +1,6 @@
 import {Dialog} from "siyuan";
 import {LIMITS} from "../constants";
+import {lvSurfaceStack} from "../libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {isBlockId, ITEM_TYPES, ItemType} from "../model/item";
 import {toErrorMessage} from "../model/errors";
@@ -284,6 +285,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
     private previewSeq = 0;
     private actionBusy = false;
     private closed = false;
+    private surfaceUnregister?: (() => void);
     private scope: DiscoveryScope;
     private cancelRequested = false;
     private scanState: "idle" | "scanning" | "ready" | "failed" | "cancelled" = "idle";
@@ -319,6 +321,14 @@ export class DiscoveryDialog implements DiscoveryDialogController {
     open(): void {
         if (this.dialog) return;
         this.closed = false;
+        this.surfaceUnregister = lvSurfaceStack.push({
+            id: `xlc-discovery-dialog`,
+            type: "dialog",
+            dismiss: () => {
+                this.close();
+                return true;
+            }
+        });
         const dialog = new Dialog({
             title: this.options.title ?? this.tx(this.titleKey()),
             content: "",
@@ -326,6 +336,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             height: "min(840px, 92vh)",
             disableClose: true,
             destroyCallback: () => {
+                this.surfaceUnregister?.();
+                this.surfaceUnregister = undefined;
                 if (this.closed) return;
                 this.closed = true;
                 this.saveViewDialog?.destroy();
@@ -391,6 +403,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             }
         }
         this.closed = true;
+        this.surfaceUnregister?.();
+        this.surfaceUnregister = undefined;
         this.saveViewDialog?.destroy();
         this.saveViewDialog = null;
         this.closeConfirmationDialog?.destroy();
@@ -407,15 +421,26 @@ export class DiscoveryDialog implements DiscoveryDialogController {
 
     private openCloseConfirmation(onClosed?: () => void): void {
         if (this.closeConfirmationDialog || this.closed) return;
+        let surfaceUnreg: (() => void) | null = null;
         const dialog = new Dialog({
             title: this.tx("discoveryCloseTitle"),
             content: "",
             width: "min(440px, 92vw)",
             disableClose: true,
             destroyCallback: () => {
+                surfaceUnreg?.();
+                surfaceUnreg = null;
                 if (this.closeConfirmationDialog === dialog) this.closeConfirmationDialog = null;
                 if (!this.closed) this.closeButton?.focus();
             },
+        });
+        surfaceUnreg = lvSurfaceStack.push({
+            id: `xlc-discovery-close-confirmation`,
+            type: "dialog",
+            dismiss: () => {
+                cancelClose();
+                return true;
+            }
         });
         this.closeConfirmationDialog = dialog;
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
@@ -462,6 +487,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         let settled = false;
         const cancelClose = () => {
             settled = true;
+            surfaceUnreg?.();
+            surfaceUnreg = null;
             dialog.destroy();
         };
         const cancel = document.createElement("button");
@@ -1632,15 +1659,26 @@ export class DiscoveryDialog implements DiscoveryDialogController {
             pathLabel: (this.options.sourcePath ?? "").slice(0, LIMITS.savedViewPathChars),
             defaultCategory: (this.defaultCategoryInput?.value ?? "").trim().slice(0, LIMITS.category),
         };
+        let saveSurfaceUnreg: (() => void) | null = null;
         const dialog = new Dialog({
             title: this.tx("discoverySaveView"),
             content: "",
             width: "min(440px, 92vw)",
             disableClose: true,
             destroyCallback: () => {
+                saveSurfaceUnreg?.();
+                saveSurfaceUnreg = null;
                 this.saveViewDialog = null;
                 if (!this.closed) this.saveViewButton?.focus();
             },
+        });
+        saveSurfaceUnreg = lvSurfaceStack.push({
+            id: `xlc-discovery-save-view`,
+            type: "dialog",
+            dismiss: () => {
+                cancelNaming();
+                return true;
+            }
         });
         this.saveViewDialog = dialog;
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
@@ -1675,6 +1713,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         let settled = false;
         const cancelNaming = () => {
             settled = true;
+            saveSurfaceUnreg?.();
+            saveSurfaceUnreg = null;
             dialog.destroy();
         };
         const cancel = document.createElement("button");

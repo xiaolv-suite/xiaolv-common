@@ -286,16 +286,16 @@ export class CommonSearchDialog {
             dismiss: () => {
                 if (this.quickLookOpen) {
                     this.closeQuickLook();
-                    return true;
+                    return "keep";
                 }
                 if (this.menuDismiss) {
                     this.menuDismiss();
                     this.menuDismiss = null;
-                    return true;
+                    return "keep";
                 }
                 if (this.multiSelectMode) {
                     this.exitMultiSelectMode();
-                    return true;
+                    return "keep";
                 }
                 this.destroy();
                 return true;

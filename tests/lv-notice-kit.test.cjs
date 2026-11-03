@@ -287,6 +287,12 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 7 标准�
         // docB 的 task3 应在 task1 结束之前就启动
         const task3StartIdx = logs.indexOf("task3-start");
         assert.ok(task3StartIdx < task1EndIdx, "不同 docId 的 task3 应该并行启动，不被 docA 阻塞");
+
+        // 验证执行完毕后 map 键已被完全删除，杜绝内存泄漏
+        const lockMap = global.window?.__LV_DOC_LOCKS__;
+        assert.ok(lockMap, "lockMap 必须存在");
+        assert.equal(lockMap.has(docA), false, "docA 锁执行完毕后应从 Map 移除");
+        assert.equal(lockMap.has(docB), false, "docB 锁执行完毕后应从 Map 移除");
     });
 
     await t.test("lvSurfaceStack：浮层压栈、Esc 捕获阶段秒关顶层且阻止冒泡", () => {
@@ -329,6 +335,45 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 7 标准�
 
         popA();
         popB();
+    });
+
+    await t.test("lvSurfaceStack：支持 keep 语义与穿透分发（栈顶返回 false 时继续向下寻找）", () => {
+        let parentClosed = false;
+        let subModeDismissed = false;
+
+        const popParent = lvSurfaceStack.push({
+            id: "surface-parent",
+            type: "dialog",
+            dismiss: () => {
+                if (!subModeDismissed) {
+                    subModeDismissed = true;
+                    return "keep"; // 内部消费子状态，保留在栈顶
+                }
+                parentClosed = true;
+                return true;
+            }
+        });
+
+        // 此时在栈顶压入一个暂不处理任何事情的 dummy surface（返回 false）
+        const popDummy = lvSurfaceStack.push({
+            id: "surface-dummy-inactive",
+            type: "card",
+            dismiss: () => false, // 不处理
+        });
+
+        // 第一次按 Escape：dummy 返回 false，应穿透到 parent 执行子模式关闭，且 keep 保留 parent 在栈中
+        const evt1 = domScope.dispatchKeydown("Escape");
+        assert.equal(subModeDismissed, true, "parent 的子模式应被消费关闭");
+        assert.equal(parentClosed, false, "parent 自身绝不应该被关闭");
+        assert.equal(evt1.defaultPrevented, true);
+
+        // 第二次按 Escape：dummy 依然返回 false，穿透到 parent 执行真正关闭
+        const evt2 = domScope.dispatchKeydown("Escape");
+        assert.equal(parentClosed, true, "parent 自身应被关闭出栈");
+        assert.equal(evt2.defaultPrevented, true);
+
+        popDummy();
+        popParent();
     });
 
     await t.test("lvActivity · 今日全生态活动主干流：广播记录、升序获取与一键 Markdown 汇编", () => {

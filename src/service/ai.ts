@@ -331,15 +331,20 @@ export async function aiSmartExpandTemplate(templateText: string, context?: Temp
         `请直接返回填充后的完整模板内容，不要包含多余的分析或说明。`
     ].filter(Boolean).join("\n");
 
-    const res = await lvAi.chat({
-        source: "小驴常用",
-        messages: [
-            { role: "system", content: "你是一个专业的高效写作与排版助手。严格按照用户的上下文对模板进行变量填充与展开，保持原有 Markdown 排版格式，直接输出结果。" },
-            { role: "user", content: prompt }
-        ],
-        temperature: 0.3
-    });
-    return res.content.trim() || templateText;
+    try {
+        const res = await lvAi.chat({
+            source: "小驴常用",
+            messages: [
+                { role: "system", content: "你是一个专业的高效写作与排版助手。严格按照用户的上下文对模板进行变量填充与展开，保持原有 Markdown 排版格式，直接输出结果。" },
+                { role: "user", content: prompt }
+            ],
+            temperature: 0.3
+        });
+        return res.content.trim() || templateText;
+    } catch (err) {
+        console.warn("[lvAi] 智能展开模板失败:", err);
+        return templateText;
+    }
 }
 
 /**

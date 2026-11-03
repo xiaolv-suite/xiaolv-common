@@ -113,15 +113,998 @@
     }
   });
 
+  // src/libs/lv-notice-kit.ts
+  function ensureStyles() {
+    if (typeof document === "undefined") return;
+    const styleId = "lv-notice-styles";
+    if (document.getElementById(styleId)) return;
+    const styleEl = document.createElement("style");
+    styleEl.id = styleId;
+    styleEl.textContent = STYLES;
+    document.head.appendChild(styleEl);
+  }
+  function getTodayKey(d = /* @__PURE__ */ new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  function createCoordinator(initialPlugin) {
+    ensureStyles();
+    let hostEl = document.getElementById("lv-notice-host");
+    if (!hostEl) {
+      hostEl = document.createElement("div");
+      hostEl.id = "lv-notice-host";
+      hostEl.setAttribute("role", "region");
+      hostEl.setAttribute("aria-label", "\u5C0F\u9A74\u901A\u77E5\u4E2D\u5FC3");
+      document.body.appendChild(hostEl);
+    }
+    const activePackets = [];
+    const historyList = [];
+    const timers = /* @__PURE__ */ new Map();
+    const pluginRegistry = /* @__PURE__ */ new Map();
+    let unregisterSurface = null;
+    function syncSurfaceStack() {
+      const hasCard = activePackets.some((p) => p.mode === "card");
+      if (hasCard && !unregisterSurface) {
+        unregisterSurface = lvSurfaceStack.push({
+          id: "lv-notice-active-card",
+          type: "card",
+          dismiss: () => {
+            const top = activePackets.slice().reverse().find((p) => p.mode === "card");
+            if (top) {
+              hub.dismiss(top.id);
+              return true;
+            }
+            return false;
+          }
+        });
+      } else if (!hasCard && unregisterSurface) {
+        unregisterSurface();
+        unregisterSurface = null;
+      }
+    }
+    function render() {
+      syncSurfaceStack();
+      if (!hostEl) return;
+      hostEl.innerHTML = "";
+      const visible = activePackets.slice(-3);
+      visible.forEach((packet) => {
+        var _a, _b;
+        const card = document.createElement("div");
+        card.className = packet.mode === "capsule" ? "lv-notice-capsule" : "lv-notice-card";
+        card.dataset.id = packet.id;
+        card.dataset.level = packet.level || "info";
+        if (packet.mode === "capsule") {
+          card.innerHTML = `
+                    <span class="lv-notice-source-badge">${escapeHtml(packet.source || "\u63D0\u793A")}</span>
+                    <span>${escapeHtml(packet.message)}</span>
+                `;
+        } else {
+          const actionsHtml = (packet.actions || []).map((act, idx) => `
+                    <button type="button" class="lv-notice-btn ${act.primary ? "lv-notice-btn--primary" : ""}" data-action-idx="${idx}">
+                        ${escapeHtml(act.label)}
+                    </button>
+                `).join("");
+          const snoozeHtml = (((_a = packet.snooze) == null ? void 0 : _a.options) || []).map((opt, sIdx) => `
+                    <button type="button" class="lv-notice-btn" data-snooze-idx="${sIdx}">
+                        ${escapeHtml(opt.label)}
+                    </button>
+                `).join("");
+          card.innerHTML = `
+                    <div class="lv-notice-header">
+                        <span class="lv-notice-source-badge">${escapeHtml(packet.source || "\u5C0F\u9A74")}</span>
+                        <span class="lv-notice-title">${escapeHtml(packet.title || "")}</span>
+                        ${packet.repeatCount > 1 ? `<span class="lv-notice-repeat">\xD7${packet.repeatCount}</span>` : ""}
+                        <button type="button" class="lv-notice-close-btn" data-role="close" aria-label="\u5173\u95ED">\u2715</button>
+                    </div>
+                    <div class="lv-notice-body">${escapeHtml(packet.message)}</div>
+                    ${actionsHtml || snoozeHtml ? `<div class="lv-notice-actions">${actionsHtml}${snoozeHtml}</div>` : ""}
+                `;
+          (_b = card.querySelector('[data-role="close"]')) == null ? void 0 : _b.addEventListener("click", () => {
+            hub.dismiss(packet.id);
+          });
+          card.querySelectorAll("[data-action-idx]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              var _a2;
+              const idx = parseInt(btn.getAttribute("data-action-idx") || "0", 10);
+              const act = (_a2 = packet.actions) == null ? void 0 : _a2[idx];
+              if (act == null ? void 0 : act.onClick) {
+                try {
+                  await act.onClick();
+                } catch (err) {
+                  console.error("[LvNotice] action error", err);
+                }
+              }
+              if ((act == null ? void 0 : act.dismissAfterClick) !== false) {
+                hub.dismiss(packet.id);
+              }
+            });
+          });
+          card.querySelectorAll("[data-snooze-idx]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              var _a2, _b2;
+              const sIdx = parseInt(btn.getAttribute("data-snooze-idx") || "0", 10);
+              const opt = (_b2 = (_a2 = packet.snooze) == null ? void 0 : _a2.options) == null ? void 0 : _b2[sIdx];
+              if ((opt == null ? void 0 : opt.muteToday) && packet.category) {
+                hub.muteToday(packet.category);
+                hub.dismiss(packet.id);
+              } else if (opt == null ? void 0 : opt.durationMs) {
+                hub.snooze(packet.id, opt.durationMs);
+              } else {
+                hub.dismiss(packet.id);
+              }
+            });
+          });
+        }
+        let touchStartY = 0;
+        card.addEventListener("touchstart", (e) => {
+          var _a2, _b2;
+          touchStartY = (_b2 = (_a2 = e.touches[0]) == null ? void 0 : _a2.clientY) != null ? _b2 : 0;
+        }, { passive: true });
+        card.addEventListener("touchend", (e) => {
+          var _a2, _b2;
+          const diffY = ((_b2 = (_a2 = e.changedTouches[0]) == null ? void 0 : _a2.clientY) != null ? _b2 : 0) - touchStartY;
+          if (diffY < -40) {
+            hub.dismiss(packet.id);
+          }
+        }, { passive: true });
+        hostEl == null ? void 0 : hostEl.appendChild(card);
+      });
+    }
+    const hub = {
+      version: PROTOCOL_VERSION,
+      hostPlugin: initialPlugin,
+      post(packet) {
+        var _a;
+        if (packet.category && this.isMutedToday(packet.category)) {
+          return;
+        }
+        if (packet.mode === "silent") {
+          historyList.unshift(packet);
+          if (historyList.length > 100) historyList.pop();
+          return;
+        }
+        const existing = activePackets.find(
+          (p) => packet.category && p.category === packet.category || p.message === packet.message && p.source === packet.source
+        );
+        if (existing) {
+          existing.repeatCount += 1;
+          existing.message = packet.message;
+          existing.createdAt = Date.now();
+          render();
+          return;
+        }
+        activePackets.push(packet);
+        historyList.unshift(packet);
+        if (historyList.length > 100) historyList.pop();
+        render();
+        const duration = (_a = packet.duration) != null ? _a : packet.level === "error" ? 0 : 8e3;
+        if (duration > 0) {
+          const t = window.setTimeout(() => {
+            this.dismiss(packet.id);
+          }, duration);
+          timers.set(packet.id, t);
+        }
+      },
+      dismiss(id) {
+        var _a;
+        const idx = activePackets.findIndex((p) => p.id === id);
+        if (idx >= 0) {
+          const [removed] = activePackets.splice(idx, 1);
+          if (timers.has(id)) {
+            clearTimeout(timers.get(id));
+            timers.delete(id);
+          }
+          (_a = removed == null ? void 0 : removed.onDismiss) == null ? void 0 : _a.call(removed);
+          render();
+        }
+      },
+      snooze(id, durationMs) {
+        const item = activePackets.find((p) => p.id === id);
+        if (!item) return;
+        this.dismiss(id);
+        setTimeout(() => {
+          this.post({
+            ...item,
+            id: `snoozed_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            createdAt: Date.now(),
+            title: item.title ? `[\u7A0D\u540E\u63D0\u9192] ${item.title}` : void 0
+          });
+        }, durationMs);
+      },
+      muteToday(category) {
+        if (!category || typeof localStorage === "undefined") return;
+        try {
+          const key = `${STORAGE_PREFIX}${getTodayKey()}`;
+          const raw = localStorage.getItem(key) || "[]";
+          const list = JSON.parse(raw);
+          if (!list.includes(category)) {
+            list.push(category);
+            localStorage.setItem(key, JSON.stringify(list));
+          }
+        } catch {
+        }
+      },
+      isMutedToday(category) {
+        if (!category || typeof localStorage === "undefined") return false;
+        try {
+          const key = `${STORAGE_PREFIX}${getTodayKey()}`;
+          const raw = localStorage.getItem(key);
+          if (!raw) return false;
+          const list = JSON.parse(raw);
+          return Array.isArray(list) && list.includes(category);
+        } catch {
+          return false;
+        }
+      },
+      getHistory() {
+        return [...historyList];
+      },
+      registerPlugin(name, onRelinquish) {
+        pluginRegistry.set(name, onRelinquish);
+        return () => {
+          pluginRegistry.delete(name);
+          if (this.hostPlugin === name) {
+            this.relinquish(name);
+          }
+        };
+      },
+      relinquish(name) {
+        if (this.hostPlugin !== name) return;
+        pluginRegistry.delete(name);
+        const remaining = Array.from(pluginRegistry.keys());
+        const nextHost = remaining[0];
+        if (nextHost) {
+          this.hostPlugin = nextHost;
+          const takeoverFn = pluginRegistry.get(nextHost);
+          takeoverFn == null ? void 0 : takeoverFn();
+        } else {
+          this.destroy();
+        }
+      },
+      destroy() {
+        unregisterSurface == null ? void 0 : unregisterSurface();
+        unregisterSurface = null;
+        timers.forEach((t) => clearTimeout(t));
+        timers.clear();
+        hostEl == null ? void 0 : hostEl.remove();
+        hostEl = null;
+        if (window.__LV_NOTICE_HUB__ === this) {
+          delete window.__LV_NOTICE_HUB__;
+        }
+      }
+    };
+    return hub;
+  }
+  function escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+  function getNodeHub(callerPlugin) {
+    if (!nodeHubInstance) {
+      nodeHubInstance = {
+        version: PROTOCOL_VERSION,
+        hostPlugin: callerPlugin,
+        post(packet) {
+          nodeHistoryList.unshift(packet);
+          if (nodeHistoryList.length > 100) nodeHistoryList.pop();
+        },
+        dismiss() {
+        },
+        snooze() {
+        },
+        muteToday() {
+        },
+        isMutedToday() {
+          return false;
+        },
+        getHistory() {
+          return [...nodeHistoryList];
+        },
+        registerPlugin() {
+          return () => {
+          };
+        },
+        relinquish() {
+        },
+        destroy() {
+          nodeHistoryList.length = 0;
+          nodeHubInstance = void 0;
+        }
+      };
+    }
+    return nodeHubInstance;
+  }
+  function getHub(callerPlugin = "\u5C0F\u9A74") {
+    if (typeof window === "undefined") {
+      return getNodeHub(callerPlugin);
+    }
+    if (window.__LV_NOTICE_HUB__) {
+      if (window.__LV_NOTICE_HUB__.version < PROTOCOL_VERSION) {
+        try {
+          window.__LV_NOTICE_HUB__.destroy();
+        } catch {
+        }
+        const newHub = createCoordinator(callerPlugin);
+        window.__LV_NOTICE_HUB__ = newHub;
+        return newHub;
+      }
+      return window.__LV_NOTICE_HUB__;
+    }
+    const hub = createCoordinator(callerPlugin);
+    window.__LV_NOTICE_HUB__ = hub;
+    return hub;
+  }
+  function getSurfaceStack() {
+    if (typeof window === "undefined") return nodeSurfaceStack;
+    if (!window.__LV_SURFACE_STACK__) {
+      window.__LV_SURFACE_STACK__ = [];
+      window.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        const stack = window.__LV_SURFACE_STACK__;
+        if (!stack || stack.length === 0) return;
+        for (let i = stack.length - 1; i >= 0; i--) {
+          const item = stack[i];
+          if (!item) continue;
+          const handled = item.dismiss();
+          if (handled !== false) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (handled !== "keep") {
+              const idx = stack.indexOf(item);
+              if (idx >= 0) stack.splice(idx, 1);
+            }
+            break;
+          }
+        }
+      }, true);
+    }
+    return window.__LV_SURFACE_STACK__;
+  }
+  function getDocLockMap() {
+    if (typeof window === "undefined") return nodeDocLockMap;
+    if (!window.__LV_DOC_LOCKS__) {
+      window.__LV_DOC_LOCKS__ = /* @__PURE__ */ new Map();
+    }
+    return window.__LV_DOC_LOCKS__;
+  }
+  async function withDocLock(docId, task) {
+    if (!docId) return task();
+    const map = getDocLockMap();
+    const prev = map.get(docId) || Promise.resolve();
+    let release;
+    const waiter = new Promise((resolve) => {
+      release = resolve;
+    });
+    const chain = prev.then(() => waiter, () => waiter);
+    map.set(docId, chain);
+    try {
+      await prev;
+      return await task();
+    } finally {
+      release();
+      if (map.get(docId) === chain) {
+        map.delete(docId);
+      }
+    }
+  }
+  function getAiHub() {
+    if (typeof window === "undefined") {
+      return {
+        version: PROTOCOL_VERSION,
+        setConfig: (cfg) => {
+          fallbackAiConfig = cfg;
+        },
+        getConfig: () => fallbackAiConfig,
+        chat: async (opts) => executeChatRequest(fallbackAiConfig, opts)
+      };
+    }
+    if (window.__LV_AI_GATEWAY__ && window.__LV_AI_GATEWAY__.version >= PROTOCOL_VERSION) {
+      return window.__LV_AI_GATEWAY__;
+    }
+    const MAX_CONCURRENT = 2;
+    let activeCount = 0;
+    const requestQueue = [];
+    function processQueue() {
+      if (activeCount >= MAX_CONCURRENT || requestQueue.length === 0) return;
+      requestQueue.sort((a, b) => a.priority === "high" ? -1 : b.priority === "high" ? 1 : 0);
+      const next = requestQueue.shift();
+      if (!next) return;
+      activeCount++;
+      next.execute().finally(() => {
+        activeCount--;
+        processQueue();
+      });
+    }
+    async function executeChatRequest(cfg, opts) {
+      var _a, _b, _c, _d, _e, _f, _g;
+      if (!cfg || !cfg.apiKey) {
+        throw new Error("[LvAiGateway] \u672A\u914D\u7F6E\u5171\u4EAB API Key\uFF08\u8BF7\u5728\u4EFB\u610F\u5C0F\u9A74\u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u914D\u7F6E\uFF09");
+      }
+      const endpoint = (cfg.endpoint || "https://api.deepseek.com/v1").replace(/\/+$/, "");
+      const targetUrl = endpoint.endsWith("/chat/completions") ? endpoint : `${endpoint}/chat/completions`;
+      const model = opts.model || cfg.model || "deepseek-chat";
+      let retries = 0;
+      const maxRetries = 3;
+      while (true) {
+        try {
+          const response = await fetch(targetUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${cfg.apiKey}`
+            },
+            body: JSON.stringify({
+              model,
+              messages: opts.messages,
+              temperature: (_b = (_a = opts.temperature) != null ? _a : cfg.temperature) != null ? _b : 0.7,
+              max_tokens: cfg.maxTokens
+            }),
+            signal: opts.signal
+          });
+          if (response.status === 429 && retries < maxRetries) {
+            retries++;
+            const backoffMs = Math.pow(2, retries) * 1e3;
+            console.warn(`[LvAiGateway] \u9047\u5230 429 \u9650\u6D41\uFF0C\u5C06\u5728 ${backoffMs}ms \u540E\u9000\u907F\u91CD\u8BD5 (\u7B2C ${retries} \u6B21)...`);
+            await new Promise((r) => setTimeout(r, backoffMs));
+            continue;
+          }
+          if (!response.ok) {
+            const errBody = await response.text().catch(() => "");
+            throw new Error(`[LvAiGateway] HTTP ${response.status}: ${errBody}`);
+          }
+          const data = await response.json();
+          const content = (_f = (_e = (_d = (_c = data.choices) == null ? void 0 : _c[0]) == null ? void 0 : _d.message) == null ? void 0 : _e.content) != null ? _f : "";
+          const totalTokens = (_g = data.usage) == null ? void 0 : _g.total_tokens;
+          return {
+            content,
+            model: data.model || model,
+            totalTokens
+          };
+        } catch (err) {
+          if (retries < maxRetries && err instanceof Error && !err.name.includes("Abort")) {
+            retries++;
+            const backoffMs = Math.pow(2, retries) * 1e3;
+            await new Promise((r) => setTimeout(r, backoffMs));
+            continue;
+          }
+          throw err;
+        }
+      }
+    }
+    const aiHub = {
+      version: PROTOCOL_VERSION,
+      setConfig(cfg) {
+        try {
+          if (typeof localStorage !== "undefined") {
+            localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(cfg));
+          }
+        } catch {
+        }
+      },
+      getConfig() {
+        try {
+          if (typeof localStorage !== "undefined") {
+            const raw = localStorage.getItem(AI_STORAGE_KEY);
+            if (raw) return JSON.parse(raw);
+          }
+        } catch {
+        }
+        return null;
+      },
+      chat(opts) {
+        return new Promise((resolve, reject) => {
+          var _a;
+          const cfg = this.getConfig();
+          const task = async () => {
+            try {
+              const res = await executeChatRequest(cfg, opts);
+              resolve(res);
+            } catch (e) {
+              reject(e);
+            }
+          };
+          requestQueue.push({
+            execute: task,
+            priority: (_a = opts.priority) != null ? _a : "high"
+          });
+          processQueue();
+        });
+      }
+    };
+    window.__LV_AI_GATEWAY__ = aiHub;
+    return aiHub;
+  }
+  function getActivityHub() {
+    if (typeof window === "undefined") {
+      return {
+        version: PROTOCOL_VERSION,
+        record: (item) => {
+          const now = /* @__PURE__ */ new Date();
+          fallbackActivities.push({
+            ...item,
+            id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+            timestamp: now.getTime(),
+            timeStr: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+          });
+        },
+        getTodayRecords: () => [...fallbackActivities],
+        onActivity: () => () => {
+        },
+        formatAsMarkdown: () => formatActivityMarkdown(fallbackActivities),
+        getDailyStats: () => ({ total: fallbackActivities.length })
+      };
+    }
+    if (window.__LV_ACTIVITY_STREAM__ && window.__LV_ACTIVITY_STREAM__.version >= PROTOCOL_VERSION) {
+      return window.__LV_ACTIVITY_STREAM__;
+    }
+    const todayActivities = [];
+    const listeners = /* @__PURE__ */ new Set();
+    let lastDateKey = getTodayKey();
+    const activityHub = {
+      version: PROTOCOL_VERSION,
+      record(item) {
+        const now = /* @__PURE__ */ new Date();
+        const today = getTodayKey(now);
+        if (today !== lastDateKey) {
+          lastDateKey = today;
+          todayActivities.length = 0;
+        }
+        const record = {
+          ...item,
+          id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+          timestamp: now.getTime(),
+          timeStr: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+        };
+        todayActivities.push(record);
+        listeners.forEach((cb) => {
+          try {
+            cb(record);
+          } catch (e) {
+            console.error("[LvActivityStream] error:", e);
+          }
+        });
+      },
+      getTodayRecords() {
+        return [...todayActivities];
+      },
+      onActivity(cb) {
+        listeners.add(cb);
+        return () => listeners.delete(cb);
+      },
+      formatAsMarkdown() {
+        return formatActivityMarkdown(todayActivities);
+      },
+      getDailyStats() {
+        const stats = { total: todayActivities.length };
+        todayActivities.forEach((r) => {
+          stats[r.category] = (stats[r.category] || 0) + 1;
+          stats[r.source] = (stats[r.source] || 0) + 1;
+        });
+        return stats;
+      }
+    };
+    window.__LV_ACTIVITY_STREAM__ = activityHub;
+    return activityHub;
+  }
+  function formatActivityMarkdown(records) {
+    if (!records || records.length === 0) {
+      return "*\u4ECA\u65E5\u6682\u65E0\u5C0F\u9A74\u751F\u6001\u6D3B\u52A8\u8BB0\u5F55*";
+    }
+    const categoryIcons = {
+      habit: "\u2705",
+      clip: "\u{1F516}",
+      exam: "\u{1F4DD}",
+      card: "\u{1F3B4}",
+      task: "\u{1F4CC}",
+      contact: "\u{1F465}",
+      note: "\u{1F4A1}"
+    };
+    const lines = ["### \u{1F434} \u5C0F\u9A74\u5168\u5BB6\u6876 \xB7 \u4ECA\u65E5\u6D3B\u52A8\u6C47\u7F16", ""];
+    records.forEach((r) => {
+      const icon = categoryIcons[r.category] || "\u{1F539}";
+      const link = r.linkBlockId ? ` (([\u94FE\u63A5](siyuan://blocks/${r.linkBlockId})))` : "";
+      const detail = r.detail ? ` \u2014 *${r.detail}*` : "";
+      lines.push(`- **${r.timeStr}** [${r.source}] ${icon} ${r.title}${detail}${link}`);
+    });
+    return lines.join("\n");
+  }
+  var PROTOCOL_VERSION, STORAGE_PREFIX, AI_STORAGE_KEY, STYLES, nodeHistoryList, nodeHubInstance, nodeSurfaceStack, lvSurfaceStack, nodeDocLockMap, lvNotify, fallbackAiConfig, lvAi, fallbackActivities, lvActivity, backupRegistry, lvEcosystem;
+  var init_lv_notice_kit = __esm({
+    "src/libs/lv-notice-kit.ts"() {
+      "use strict";
+      PROTOCOL_VERSION = 160;
+      STORAGE_PREFIX = "lv_notice_mute_";
+      AI_STORAGE_KEY = "lv_ai_shared_config";
+      STYLES = `
+#lv-notice-host {
+    position: fixed;
+    right: 20px;
+    bottom: 24px;
+    z-index: 220;
+    pointer-events: none;
+    font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.lv-notice-card {
+    pointer-events: auto;
+    width: min(380px, calc(100vw - 32px));
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--b3-theme-surface, rgba(255, 255, 255, 0.92));
+    border: 1px solid var(--b3-theme-surface-lighter, rgba(128, 128, 128, 0.18));
+    box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.14), 0 2px 8px -1px rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    color: var(--b3-theme-on-surface, #202124);
+    font-size: 13px;
+    line-height: 1.45;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.lv-notice-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 3.5px;
+    background: var(--b3-theme-primary, #4285f4);
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+}
+.lv-notice-card[data-level="error"]::before { background: var(--b3-theme-error, #d93025); }
+.lv-notice-card[data-level="warn"]::before { background: #f2994a; }
+.lv-notice-card[data-level="success"]::before { background: #27ae60; }
+
+.lv-notice-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.lv-notice-source-badge {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
+    color: var(--b3-theme-primary, #4285f4);
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.lv-notice-title {
+    font-weight: 600;
+    font-size: 13px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--b3-theme-on-surface, #202124);
+}
+
+.lv-notice-repeat {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 10px;
+    background: var(--b3-theme-primary, #4285f4);
+    color: #fff;
+}
+
+.lv-notice-close-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    margin: -2px -2px 0 0;
+    color: var(--b3-theme-on-surface-light, #5f6368);
+    font-size: 14px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+}
+.lv-notice-close-btn:hover {
+    background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.08));
+    color: var(--b3-theme-on-surface, #202124);
+}
+
+.lv-notice-body {
+    font-size: 12.5px;
+    color: var(--b3-theme-on-surface, #3c4043);
+    margin-bottom: 8px;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.lv-notice-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.lv-notice-btn {
+    border: none;
+    cursor: pointer;
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
+    color: var(--b3-theme-on-surface, #202124);
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+.lv-notice-btn:hover {
+    background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.12));
+}
+.lv-notice-btn:active {
+    transform: scale(0.97);
+}
+.lv-notice-btn--primary {
+    background: var(--b3-theme-primary, #4285f4);
+    color: #ffffff;
+}
+.lv-notice-btn--primary:hover {
+    filter: brightness(1.08);
+}
+
+.lv-notice-capsule {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: var(--b3-theme-surface, rgba(255, 255, 255, 0.95));
+    border: 1px solid var(--b3-theme-surface-lighter, rgba(128, 128, 128, 0.18));
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    backdrop-filter: blur(16px);
+    font-size: 12px;
+    color: var(--b3-theme-on-surface, #202124);
+    animation: lvNoticeFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lvInlinePop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.12); }
+    100% { transform: scale(1); }
+}
+.lv-inline-feedback-active {
+    animation: lvInlinePop 0.3s ease-out !important;
+}
+.lv-inline-feedback--success {
+    color: #10b981 !important;
+}
+.lv-inline-feedback--error {
+    color: #ef4444 !important;
+}
+
+@media (max-width: 640px) {
+    #lv-notice-host {
+        right: 0;
+        left: 0;
+        top: max(10px, env(safe-area-inset-top, 10px));
+        bottom: auto;
+        align-items: center;
+        padding: 0 12px;
+    }
+    .lv-notice-card {
+        width: 100%;
+        max-width: 380px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.16);
+    }
+}
+
+@keyframes lvNoticeFadeIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+`;
+      nodeHistoryList = [];
+      nodeSurfaceStack = [];
+      lvSurfaceStack = {
+        /** 将当前浮层压入栈顶，返回销毁/移出栈函数 */
+        push(handle) {
+          const stack = getSurfaceStack();
+          const existingIdx = stack.findIndex((s) => s.id === handle.id);
+          if (existingIdx >= 0) stack.splice(existingIdx, 1);
+          stack.push(handle);
+          return () => this.pop(handle.id);
+        },
+        pop(id) {
+          const stack = getSurfaceStack();
+          const idx = stack.findIndex((s) => s.id === id);
+          if (idx >= 0) stack.splice(idx, 1);
+        },
+        top() {
+          const stack = getSurfaceStack();
+          return stack[stack.length - 1];
+        }
+      };
+      nodeDocLockMap = /* @__PURE__ */ new Map();
+      lvNotify = {
+        card(options) {
+          const id = `card_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const hub = getHub(options.source);
+          hub.post({
+            ...options,
+            id,
+            mode: "card",
+            createdAt: Date.now(),
+            repeatCount: 1
+          });
+          return id;
+        },
+        capsule(options) {
+          var _a;
+          const id = `cap_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const hub = getHub(options.source);
+          hub.post({
+            id,
+            mode: "capsule",
+            source: options.source,
+            message: options.message,
+            level: options.level || "info",
+            duration: (_a = options.duration) != null ? _a : 2500,
+            createdAt: Date.now(),
+            repeatCount: 1
+          });
+          return id;
+        },
+        inline(target, tipText, isSuccess = true) {
+          if (!target || typeof target !== "object") return;
+          const stateClass = isSuccess ? "lv-inline-feedback--success" : "lv-inline-feedback--error";
+          if (target.classList && typeof target.classList.add === "function") {
+            target.classList.add("lv-inline-feedback-active", stateClass);
+          }
+          const originalTitle = typeof target.getAttribute === "function" ? target.getAttribute("title") : null;
+          if (tipText && typeof target.setAttribute === "function") target.setAttribute("title", tipText);
+          setTimeout(() => {
+            if (target.classList && typeof target.classList.remove === "function") {
+              target.classList.remove("lv-inline-feedback-active", stateClass);
+            }
+            if (originalTitle !== null && typeof target.setAttribute === "function") {
+              target.setAttribute("title", originalTitle);
+            } else if (typeof target.removeAttribute === "function") {
+              target.removeAttribute("title");
+            }
+          }, 1e3);
+        },
+        silent(options) {
+          const hub = getHub(options.source);
+          hub.post({
+            id: `sil_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            mode: "silent",
+            source: options.source,
+            category: options.category,
+            message: options.message,
+            level: options.level || "info",
+            createdAt: Date.now(),
+            repeatCount: 1
+          });
+        },
+        dismiss(id) {
+          var _a;
+          if (typeof window !== "undefined") {
+            (_a = window.__LV_NOTICE_HUB__) == null ? void 0 : _a.dismiss(id);
+          }
+        },
+        snooze(id, durationMs) {
+          var _a;
+          if (typeof window !== "undefined") {
+            (_a = window.__LV_NOTICE_HUB__) == null ? void 0 : _a.snooze(id, durationMs);
+          }
+        },
+        muteToday(category) {
+          const hub = getHub();
+          hub.muteToday(category);
+        },
+        isMutedToday(category) {
+          if (!category || typeof localStorage === "undefined") return false;
+          try {
+            const key = `${STORAGE_PREFIX}${getTodayKey()}`;
+            const raw = localStorage.getItem(key);
+            if (!raw) return false;
+            const list = JSON.parse(raw);
+            return Array.isArray(list) && list.includes(category);
+          } catch {
+            return false;
+          }
+        },
+        registerPlugin(pluginName, onRelinquish = () => {
+        }) {
+          const hub = getHub(pluginName);
+          return hub.registerPlugin(pluginName, onRelinquish);
+        }
+      };
+      fallbackAiConfig = null;
+      lvAi = {
+        /** 配置全局共享 AI 凭据（在任一插件配置，全家桶免填共享） */
+        setConfig(config) {
+          getAiHub().setConfig(config);
+        },
+        /** 读取当前共享 AI 凭据 */
+        getConfig() {
+          return getAiHub().getConfig();
+        },
+        /**
+         * 发送 AI 对话请求（自动并发整形、429 指数退避）
+         */
+        chat(options) {
+          return getAiHub().chat(options);
+        }
+      };
+      fallbackActivities = [];
+      lvActivity = {
+        /** 广播记录一项生态活动 */
+        record(item) {
+          getActivityHub().record(item);
+        },
+        /** 获取今日所有插件产生的时间线记录（升序） */
+        getTodayRecords() {
+          return getActivityHub().getTodayRecords();
+        },
+        /** 订阅活动流 */
+        onActivity(callback) {
+          return getActivityHub().onActivity(callback);
+        },
+        /** 格式化生成结构化 Markdown 字符串，可直接追加到 Daily Note */
+        formatAsMarkdown() {
+          return getActivityHub().formatAsMarkdown();
+        },
+        /** 获取今日生态活动量化指标 (如打卡数、剪藏数、复习数) */
+        getDailyStats() {
+          return getActivityHub().getDailyStats();
+        }
+      };
+      backupRegistry = /* @__PURE__ */ new Map();
+      lvEcosystem = {
+        /** 获取全生态运行态健康诊断信息 */
+        getDiagnostics() {
+          var _a, _b, _c;
+          const noticeHub = typeof window !== "undefined" ? window.__LV_NOTICE_HUB__ : void 0;
+          const aiHub = typeof window !== "undefined" ? window.__LV_AI_GATEWAY__ : void 0;
+          const aiCfg = aiHub == null ? void 0 : aiHub.getConfig();
+          const activities = typeof window !== "undefined" ? (_b = (_a = window.__LV_ACTIVITY_STREAM__) == null ? void 0 : _a.getTodayRecords()) != null ? _b : [] : [];
+          const registered = Array.from(backupRegistry.keys());
+          return {
+            version: PROTOCOL_VERSION,
+            coordinatorHost: (_c = noticeHub == null ? void 0 : noticeHub.hostPlugin) != null ? _c : "none",
+            registeredPlugins: registered,
+            todayActivitiesCount: activities.length,
+            hasSharedAiConfig: Boolean(aiCfg == null ? void 0 : aiCfg.apiKey),
+            sharedAiModel: aiCfg == null ? void 0 : aiCfg.model
+          };
+        },
+        /** 生成一行极简且精致的胶囊状态文字，如：“🐴 小驴全家桶协同正常 · 7 个插件已联结 · 今日活动 8 项” */
+        getStatusBadgeText() {
+          const diag = this.getDiagnostics();
+          const count = diag.registeredPlugins.length;
+          const pluginText = count > 0 ? `${count} \u63D2\u4EF6\u5DF2\u8054\u7ED3` : "\u5355\u673A\u6A21\u5F0F";
+          return `\u{1F434} \u5C0F\u9A74\u5168\u5BB6\u6876\u534F\u540C\u6B63\u5E38 \xB7 ${pluginText} \xB7 \u4ECA\u65E5\u6D3B\u52A8 ${diag.todayActivitiesCount} \u9879`;
+        }
+      };
+    }
+  });
+
   // src/constants.ts
-  var PLUGIN_VERSION, PLUGIN_DISPLAY_VERSION, PROTOCOL_NAME, PROTOCOL_VERSION, ATTR_PREFIX, ATTR, LIMITS, EXPORT_SCHEMA_VERSION, EVENTS;
+  var PLUGIN_VERSION, PLUGIN_DISPLAY_VERSION, PROTOCOL_NAME, PROTOCOL_VERSION2, ATTR_PREFIX, ATTR, LIMITS, EXPORT_SCHEMA_VERSION, EVENTS;
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
       PLUGIN_VERSION = "0.10.82";
       PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
       PROTOCOL_NAME = "xiaolv-common";
-      PROTOCOL_VERSION = 1;
+      PROTOCOL_VERSION2 = 1;
       ATTR_PREFIX = "custom-xlc-";
       ATTR = {
         id: "custom-xlc-id",
@@ -9783,7 +10766,7 @@ ${codeText}`;
       "use strict";
       init_constants();
       init_placeholders();
-      ASK_PATTERN = /\{\{(?:xlc:ask:|input:|select:|choice:)([^:|}]+)(?:[:|]([^}]*))?\}\}/g;
+      ASK_PATTERN = /\{\{(?:(?:xlc:)?ask:|input:|select:|choice:)([^:|}]+)(?:[:|]([^}]*))?\}\}/g;
       CURSOR_TOKENS = ["{{cursor}}", "{{xlc:cursor}}", "$|$"];
       SNIPPET_PATTERN = /\{\{xlc:snippet:([^}]+)\}\}/g;
     }
@@ -9853,7 +10836,7 @@ ${codeText}`;
   });
 
   // src/model/clipboard.ts
-  function escapeHtml(text) {
+  function escapeHtml2(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function isMarkdownFormattingPresent(text) {
@@ -9875,8 +10858,8 @@ ${codeText}`;
     const inlineCodes = [];
     let raw = markdown.replace(/\r\n/g, "\n").replace(/\{:[^}]*\}/g, "");
     raw = raw.replace(/(?:^|\n)```([a-zA-Z0-9_-]*)\n([\s\S]*?)\n```(?:\n|$)/g, (_match, lang, code) => {
-      const escapedCode = escapeHtml(code);
-      const langAttr = lang ? ` data-language="${escapeHtml(lang)}"` : "";
+      const escapedCode = escapeHtml2(code);
+      const langAttr = lang ? ` data-language="${escapeHtml2(lang)}"` : "";
       const html = `<pre${langAttr} style="background-color: #f6f8fa; padding: 12px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.5; overflow-x: auto; margin: 0.8em 0;"><code>${escapedCode}</code></pre>`;
       const placeholder = `XLCCODEBLOCK${codeBlocks.length}XLC`;
       codeBlocks.push(html);
@@ -9886,7 +10869,7 @@ ${placeholder}
 
 `;
     });
-    let safe = escapeHtml(raw);
+    let safe = escapeHtml2(raw);
     safe = safe.replace(/`([^`\n]+)`/g, (_match, code) => {
       const html = `<code style="background-color: rgba(175, 184, 193, 0.2); padding: 0.2em 0.4em; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 85%;">${code}</code>`;
       const placeholder = `XLCINLINECODE${inlineCodes.length}XLC`;
@@ -10357,7 +11340,7 @@ ${finalHtml}
           recentChip.setAttribute("aria-label", `\u4E0A\u6B21\u4F7F\u7528\u503C: ${memoryValue}`);
         }
         const displayVal = memoryValue.length > 12 ? `${memoryValue.slice(0, 12)}\u2026` : memoryValue;
-        const safeRecentVal = escapeHtml(displayVal);
+        const safeRecentVal = escapeHtml2(displayVal);
         recentChip.innerHTML = `<span class="xlc-recent-prefix" aria-hidden="true">\u23F1 \u4E0A\u6B21:</span> <span class="xlc-recent-val">${safeRecentVal}</span>`;
         recentChip.addEventListener("click", (e) => {
           e.preventDefault();
@@ -20359,7 +21342,7 @@ ${res.progressBar}`;
             </label>
             <div class="b3-label xlc-sanitizer-custom-block">
                 <span class="xlc-form-label">\u81EA\u5B9A\u4E49\u5B57\u9762\u66FF\u6362\u8BCD\u5178\uFF08\u6BCF\u884C \u539F\u59CB\u8BCD=\u66FF\u6362\u8BCD\uFF09</span>
-                <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" aria-label="\u81EA\u5B9A\u4E49\u5B57\u9762\u66FF\u6362\u8BCD\u5178" placeholder="\u5185\u90E8IP=10.0.0.x&#10;\u6838\u5FC3\u5BA2\u6237=\u4FDD\u5BC6\u5BA2\u6237">${escapeHtml(customText)}</textarea>
+                <textarea class="b3-text-field fn__block xlc-export-sanitizer-custom" rows="3" aria-label="\u81EA\u5B9A\u4E49\u5B57\u9762\u66FF\u6362\u8BCD\u5178" placeholder="\u5185\u90E8IP=10.0.0.x&#10;\u6838\u5FC3\u5BA2\u6237=\u4FDD\u5BC6\u5BA2\u6237">${escapeHtml2(customText)}</textarea>
             </div>
         </div>
         <div class="b3-dialog__action xlc-form-actions xlc-export-sanitizer-actions" role="toolbar" aria-label="\u8131\u654F\u9009\u9879\u64CD\u4F5C\u680F">
@@ -21176,10 +22159,10 @@ ${res.progressBar}`;
                         <input type="checkbox" class="b3-switch xlc-mirror-checkbox" aria-label="\u955C\u50CF\u5220\u9664\u672C\u5730\u591A\u4F59\u9879" ${mirrorDelete ? "checked" : ""} />
                         \u955C\u50CF\u5220\u9664\u672C\u5730\u591A\u4F59\u9879
                     </label>
-                    <input type="text" class="b3-text-field xlc-diff-search-input" aria-label="\u5FEB\u901F\u8FC7\u6EE4\u6807\u9898\u6216 ID" placeholder="\u{1F50D} \u5FEB\u901F\u8FC7\u6EE4\u6807\u9898\u6216 ID..." value="${escapeHtml(searchKeyword)}" style="flex:1; min-width:140px; height:28px; font-size:12px;" />
+                    <input type="text" class="b3-text-field xlc-diff-search-input" aria-label="\u5FEB\u901F\u8FC7\u6EE4\u6807\u9898\u6216 ID" placeholder="\u{1F50D} \u5FEB\u901F\u8FC7\u6EE4\u6807\u9898\u6216 ID..." value="${escapeHtml2(searchKeyword)}" style="flex:1; min-width:140px; height:28px; font-size:12px;" />
                 </div>
                 <div class="b3-label__text xlc-strategy-hint">
-                    ${escapeHtml(STRATEGY_DESCRIPTIONS[currentStrategy])}
+                    ${escapeHtml2(STRATEGY_DESCRIPTIONS[currentStrategy])}
                 </div>
             </div>
         `;
@@ -21204,18 +22187,18 @@ ${res.progressBar}`;
       }
       return candidateDiffs.map((diff) => {
         const target = diff.remote || diff.local;
-        const title = escapeHtml((target == null ? void 0 : target.title) || "\u672A\u547D\u540D\u6761\u76EE");
-        const itemType = escapeHtml((target == null ? void 0 : target.itemType) || "text");
+        const title = escapeHtml2((target == null ? void 0 : target.title) || "\u672A\u547D\u540D\u6761\u76EE");
+        const itemType = escapeHtml2((target == null ? void 0 : target.itemType) || "text");
         const statusMeta = getStatusMeta(diff.status);
         const planned = actionMap.get(diff.id);
         const actionMeta = getActionMeta((planned == null ? void 0 : planned.action) || "noop");
-        const fields = diff.changedFields.length > 0 ? diff.changedFields.map((f) => `<span class="xlc-field-badge">${escapeHtml(f)}</span>`).join(" ") : "-";
+        const fields = diff.changedFields.length > 0 ? diff.changedFields.map((f) => `<span class="xlc-field-badge">${escapeHtml2(f)}</span>`).join(" ") : "-";
         return `
-                    <tr class="xlc-diff-row" data-id="${escapeHtml(diff.id)}" data-status="${diff.status}">
+                    <tr class="xlc-diff-row" data-id="${escapeHtml2(diff.id)}" data-status="${diff.status}">
                         <td class="xlc-col-type"><span class="xlc-type-badge">${itemType}</span></td>
                         <td class="xlc-col-title">
                             <div class="xlc-item-title" title="${title}">${title}</div>
-                            <div class="xlc-item-id">${escapeHtml(diff.id)}</div>
+                            <div class="xlc-item-id">${escapeHtml2(diff.id)}</div>
                         </td>
                         <td class="xlc-col-status">
                             <span class="xlc-status-badge ${statusMeta.cls}">${statusMeta.text}</span>
@@ -21266,7 +22249,7 @@ ${res.progressBar}`;
     const titleText = props.title || "\u591A\u6E90\u5185\u5BB9\u5E93\u540C\u6B65\u4E0E\u51B2\u7A81\u5408\u5E76\u6BD4\u5BF9";
     const fullHtml = `
         <div class="b3-dialog__header">
-            <div class="b3-dialog__title">${escapeHtml(titleText)}</div>
+            <div class="b3-dialog__title">${escapeHtml2(titleText)}</div>
         </div>
         ${renderSummaryHeaderHtml(props.report)}
         ${renderStrategySelectorHtml()}
@@ -24462,6 +25445,10 @@ ${exception.mark.snippet}`;
     buildExternalIntegrationSection(ctx, root);
     buildProviderSection(ctx, root);
     buildDataSection(ctx, root);
+    const ecoOverviewBadge = document.createElement("div");
+    ecoOverviewBadge.className = "xlc-settings-eco-badge";
+    ecoOverviewBadge.textContent = lvEcosystem.getStatusBadgeText();
+    root.appendChild(ecoOverviewBadge);
     body.appendChild(root);
   }
   async function openPackExportDialog(ctx) {
@@ -26566,6 +27553,10 @@ fi`;
       ecoList.appendChild(row);
     }
     sec.appendChild(ecoList);
+    const ecoBadge = document.createElement("div");
+    ecoBadge.className = "xlc-eco-status-badge";
+    ecoBadge.textContent = lvEcosystem.getStatusBadgeText();
+    sec.appendChild(ecoBadge);
     root.appendChild(sec);
   }
   function buildDataSection(ctx, root) {
@@ -27673,6 +28664,7 @@ fi`;
       init_health_doctor();
       init_usage_insights();
       init_ecosystem();
+      init_lv_notice_kit();
       init_export_sanitizer_modal();
       init_sync_diff_modal();
       init_sync_diff();
@@ -27688,6 +28680,7 @@ fi`;
 
   // src/ui/dialog.ts
   var import_siyuan8 = __toESM(require_stub_dom());
+  init_lv_notice_kit();
   init_dialog_dom();
   init_item();
   init_clipboard_cleaner();
@@ -28702,6 +29695,7 @@ fi`;
 
   // src/ui/share-card.ts
   var import_siyuan5 = __toESM(require_stub_dom());
+  init_lv_notice_kit();
   init_dialog_dom();
   function openShareCardDialog(deps, item, shareCode) {
     const dialog = new import_siyuan5.Dialog({
@@ -28790,12 +29784,12 @@ fi`;
     copyBtn.dataset.xlcControl = "share-card.copy";
     copyBtn.addEventListener("click", async () => {
       var _a;
-      await deps.copyText(shareCode);
-      copyBtn.textContent = deps.t("shareCardCopied") || "\u2713 \u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F";
-      (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", deps.t("copyCompactBundleSuccess") || "\u5DF2\u590D\u5236\u5206\u4EAB\u7801\u5230\u526A\u8D34\u677F");
-      setTimeout(() => {
-        copyBtn.textContent = deps.t("shareCardCopy") || "\u29C9 \u590D\u5236\u5206\u4EAB\u7801";
-      }, 1500);
+      const ok2 = await deps.copyText(shareCode);
+      if (ok2) {
+        lvNotify.inline(copyBtn, "\u5DF2\u590D\u5236");
+      } else {
+        (_a = deps.notify) == null ? void 0 : _a.call(deps, "error", deps.t("copyFailed") || "\u590D\u5236\u5931\u8D25");
+      }
     });
     foot.append(closeBtn, copyBtn);
     container.append(metaBox, codeSec, tip, foot);
@@ -28805,6 +29799,7 @@ fi`;
 
   // src/ui/pinboard.ts
   var import_siyuan6 = __toESM(require_stub_dom());
+  init_lv_notice_kit();
   init_dialog_dom();
   function openPinboardDialog(deps, title, items) {
     const dialog = new import_siyuan6.Dialog({
@@ -28874,7 +29869,7 @@ fi`;
       cardBody.textContent = (it.content || it.summary || "").slice(0, 120);
       card.append(cardTop, cardBody);
       const doCopy = async () => {
-        var _a, _b;
+        var _a;
         const textToCopy = it.content || it.summary || "";
         const ok2 = await deps.copyText(textToCopy);
         if (ok2) {
@@ -28882,9 +29877,9 @@ fi`;
           card.classList.add("xlc-pinboard-card--copied");
           statusBadge.textContent = "\u2713 \u5DF2\u590D\u5236";
           updateProgress();
-          (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", `\u5DF2\u590D\u5236\u300C${it.title}\u300D`);
+          lvNotify.inline(card, "\u5DF2\u590D\u5236");
         } else {
-          (_b = deps.notify) == null ? void 0 : _b.call(deps, "error", deps.t("copyFailed") || "\u590D\u5236\u5931\u8D25");
+          (_a = deps.notify) == null ? void 0 : _a.call(deps, "error", deps.t("copyFailed") || "\u590D\u5236\u5931\u8D25");
         }
       };
       card.addEventListener("click", doCopy);
@@ -29168,6 +30163,27 @@ fi`;
       }
       this.clipboardFormatFilter = "all";
       this.prevActiveElement = document.activeElement;
+      this.surfaceUnregister = lvSurfaceStack.push({
+        id: `xlc-search-dialog-${Date.now()}`,
+        type: "dialog",
+        dismiss: () => {
+          if (this.quickLookOpen) {
+            this.closeQuickLook();
+            return "keep";
+          }
+          if (this.menuDismiss) {
+            this.menuDismiss();
+            this.menuDismiss = null;
+            return "keep";
+          }
+          if (this.multiSelectMode) {
+            this.exitMultiSelectMode();
+            return "keep";
+          }
+          this.destroy();
+          return true;
+        }
+      });
       const dialog = new import_siyuan8.Dialog({
         title: this.deps.t("pluginName"),
         content: "",
@@ -29988,6 +31004,11 @@ fi`;
         claim.setAttribute("role", "note");
         claim.setAttribute("aria-label", this.deps.t("dataTruthHint"));
         footer.appendChild(claim);
+        const ecoBadge = document.createElement("span");
+        ecoBadge.className = "xlc-footer-eco-badge";
+        ecoBadge.textContent = lvEcosystem.getStatusBadgeText();
+        ecoBadge.title = "\u5C0F\u9A74\u5168\u751F\u6001\u534F\u540C\u5065\u5EB7\u6307\u793A\u5668";
+        footer.appendChild(ecoBadge);
       }
       const guide = document.createElement("button");
       guide.type = "button";
@@ -30239,8 +31260,14 @@ fi`;
       copy.addEventListener("click", () => {
         if (this.activeProvider >= 0) {
           const row = this.providerRows[this.activeProvider];
-          if (row) void this.deps.copyProviderPayload(row.payload);
-          if (!this.pinWindow) this.destroy();
+          if (row) {
+            void this.deps.copyProviderPayload(row.payload).then((ok2) => {
+              var _a, _b;
+              if (ok2) lvNotify.inline(copy, "\u5DF2\u590D\u5236");
+              else (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "error", this.deps.t("copyFailed"));
+            });
+          }
+          if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
           return;
         }
         const entry = this.results[this.activeIndex];
@@ -30248,14 +31275,21 @@ fi`;
           if (entry.isOmni) {
             const textToCopy = kramdownToPlainText(entry.content || entry.summary || "");
             void this.deps.copyText(textToCopy).then((ok2) => {
-              var _a, _b, _c, _d;
-              if (ok2) (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", this.deps.t("copied", entry.title || "\u6761\u76EE"));
-              else (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "error", this.deps.t("copyFailed"));
+              var _a, _b;
+              if (ok2) {
+                lvNotify.inline(copy, "\u5DF2\u590D\u5236");
+              } else {
+                (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "error", this.deps.t("copyFailed"));
+              }
             });
           } else {
-            void this.deps.runAction(entry.id, "copy");
+            void this.deps.runAction(entry.id, "copy").then((res) => {
+              if (res.ok) {
+                lvNotify.inline(copy, "\u5DF2\u590D\u5236");
+              }
+            });
           }
-          if (!this.pinWindow) this.destroy();
+          if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
         }
       });
       copy.addEventListener("contextmenu", (e) => {
@@ -31370,7 +32404,9 @@ fi`;
         star.addEventListener("click", (e) => {
           e.stopPropagation();
           this.deps.toggleFavorite(entry.id);
-          star.textContent = this.deps.isFavorite(entry.id) ? "\u2605" : "\u2606";
+          const isFav = this.deps.isFavorite(entry.id);
+          star.textContent = isFav ? "\u2605" : "\u2606";
+          lvNotify.inline(star, isFav ? "\u5DF2\u6536\u85CF" : "\u5DF2\u53D6\u6D88\u6536\u85CF");
           void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
         });
         row.appendChild(star);
@@ -31385,7 +32421,9 @@ fi`;
         trayBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           this.togglePasteTrayItem(entry);
-          trayBtn.textContent = this.pasteTrayItems.some((it) => it.id === entry.id) ? "\u2713" : "\u{1F6D2}";
+          const nowIn = this.pasteTrayItems.some((it) => it.id === entry.id);
+          trayBtn.textContent = nowIn ? "\u2713" : "\u{1F6D2}";
+          lvNotify.inline(trayBtn, nowIn ? "\u5DF2\u6682\u5B58" : "\u5DF2\u79FB\u51FA");
         });
         row.appendChild(trayBtn);
       }
@@ -32897,7 +33935,7 @@ fi`;
         subEl.textContent = fmt.desc;
         btn.append(ic, titleEl, subEl);
         btn.addEventListener("click", async () => {
-          var _a2, _b, _c, _d, _e;
+          var _a2, _b, _c;
           (_a2 = this.menuDismiss) == null ? void 0 : _a2.call(this);
           let fullContent = entry.content || entry.summary || "";
           if (typeof this.deps.preview === "function") {
@@ -32918,10 +33956,10 @@ fi`;
             success = await this.deps.copyText(formatted.text);
           }
           if (success) {
-            (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "info", `\u5DF2\u590D\u5236\u300C${fmt.title}\u300D\u5230\u526A\u8D34\u677F`);
-            if (!this.pinWindow) this.destroy();
+            lvNotify.inline(anchor, "\u5DF2\u590D\u5236");
+            if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
           } else {
-            (_e = (_d = this.deps).notify) == null ? void 0 : _e.call(_d, "error", this.deps.t("copyFailed"));
+            (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "error", this.deps.t("copyFailed"));
           }
         });
         menu.appendChild(btn);
@@ -33006,20 +34044,35 @@ fi`;
           sec1.setAttribute("aria-label", "\u4E3B\u8981\u64CD\u4F5C");
         }
         const addAction = (icon, label, run, cls = "xlc-menu-item", destroyBeforeRun = true) => {
-          sec1.appendChild(this.menuButton(icon, label, cls, async () => {
-            var _a3, _b3, _c3;
-            const execution = run();
-            if (destroyBeforeRun) this.destroy();
-            else {
-              (_a3 = this.menuDismiss) == null ? void 0 : _a3.call(this);
-              this.menuDismiss = null;
+          let btn;
+          btn = this.menuButton(icon, label, cls, async () => {
+            var _a3, _b3, _c3, _d2, _e2;
+            const isCopyAction = icon === "\u29C9" || label.includes("\u590D\u5236") || label.includes("Copy");
+            if (isCopyAction) {
+              try {
+                await run();
+                lvNotify.inline(btn, "\u5DF2\u590D\u5236");
+                if (destroyBeforeRun && !this.pinWindow) {
+                  setTimeout(() => this.destroy(), 350);
+                }
+              } catch (err) {
+                (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "error", toErrorMessage(err));
+              }
+            } else {
+              const execution = run();
+              if (destroyBeforeRun) this.destroy();
+              else {
+                (_c3 = this.menuDismiss) == null ? void 0 : _c3.call(this);
+                this.menuDismiss = null;
+              }
+              try {
+                await execution;
+              } catch (err) {
+                (_e2 = (_d2 = this.deps).notify) == null ? void 0 : _e2.call(_d2, "error", toErrorMessage(err));
+              }
             }
-            try {
-              await execution;
-            } catch (err) {
-              (_c3 = (_b3 = this.deps).notify) == null ? void 0 : _c3.call(_b3, "error", toErrorMessage(err));
-            }
-          }));
+          });
+          sec1.appendChild(btn);
         };
         if (entry.itemType === "blockref") {
           addAction("\uFF0B", this.deps.t("insertRef"), () => this.insertTarget ? this.deps.insertToDoc(entry.id, this.insertTarget.docId, this.insertTarget.hPath, void 0, "insert-ref") : this.deps.runAction(entry.id, "insert-ref"));
@@ -33031,10 +34084,8 @@ fi`;
           addAction("\u29C9", this.deps.t("copy"), () => this.deps.runAction(entry.id, "copy"));
           if (((_a2 = entry.varCount) != null ? _a2 : 0) > 0) {
             addAction("\u{1F4C4}", this.deps.t("copyRawTemplate"), async () => {
-              var _a3, _b3;
               const raw = await this.deps.preview(entry.id);
               await this.deps.copyProviderPayload(raw || entry.content || "");
-              (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", this.deps.t("copyRawTemplateDone"));
             });
           }
         }
@@ -33045,19 +34096,15 @@ fi`;
             addAction("{{\u2022}}", (this.deps.t("insertEmbed") || "\u63D2\u5165\u4E3A\u601D\u6E90\u540C\u6B65\u5D4C\u5165\u5757") + " (Alt+E)", () => this.insertEntryEmbedOrRef(entry, "embed"), "xlc-menu-item", false);
           }
           addAction("((\u2022))", "\u590D\u5236\u5757\u5F15\u7528\u8BED\u6CD5 (Alt+R)", async () => {
-            var _a3, _b3;
             const anchor = (entry.title || entry.summary || "\u5F15\u7528").slice(0, 50).replace(/[\r\n]+/g, " ");
             const refCode = buildBlockRef(targetBlockId, anchor);
             await this.deps.copyProviderPayload(refCode);
-            (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", `\u5DF2\u590D\u5236\u5757\u5F15\u7528: ${refCode}`);
           }, "xlc-menu-item", !this.pinWindow);
         }
         addAction("\u{1F4C4}", "\u590D\u5236\u7EAF\u6587\u672C (Alt+Shift+C)", async () => {
-          var _a3, _b3;
           const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
           const plain = kramdownToPlainText(raw || entry.summary || "");
           await this.deps.copyProviderPayload(plain);
-          (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\u5230\u526A\u8D34\u677F (\u9002\u7528\u4E8E\u5FAE\u4FE1/QQ)");
         }, "xlc-menu-item", !this.pinWindow);
         menu.appendChild(sec1);
         if (this.deps.aiEnabled()) {
@@ -35190,7 +36237,7 @@ ${progress.progressBar}`);
       (_f = menu.querySelector(".xlc-menu-item")) == null ? void 0 : _f.focus();
     }
     async onKeydown(e) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R;
       if (e.isComposing || e.keyCode === 229) return;
       const list = (_a = this.dialog) == null ? void 0 : _a.element.querySelector(".xlc-list");
       const input = (_b = this.dialog) == null ? void 0 : _b.element.querySelector(".xlc-search-input");
@@ -35346,8 +36393,10 @@ ${progress.progressBar}`);
             const raw = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
             const plain = kramdownToPlainText(raw || entry.summary || "");
             await this.deps.copyProviderPayload(plain);
-            if (!this.pinWindow) this.destroy();
-            (_q = (_p = this.deps).notify) == null ? void 0 : _q.call(_p, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u6E05\u6D17\u7EAF\u6587\u672C\u5230\u526A\u8D34\u677F (\u9002\u7528\u4E8E\u5FAE\u4FE1/QQ)");
+            const copyBtn = (_p = this.dialog) == null ? void 0 : _p.element.querySelector('[data-xlc-control="preview.copy"]');
+            const targetEl = copyBtn || ((_q = this.listEl) == null ? void 0 : _q.querySelector(".xlc-row--active"));
+            lvNotify.inline(targetEl, "\u5DF2\u590D\u5236");
+            if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
           }
         } finally {
           this.primaryBusy = false;
@@ -35363,8 +36412,9 @@ ${progress.progressBar}`);
             const row = this.providerRows[this.activeProvider];
             if (row) {
               await this.deps.copyProviderPayload(row.payload);
-              if (!this.pinWindow) this.destroy();
-              (_s = (_r = this.deps).notify) == null ? void 0 : _s.call(_r, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+              const copyBtn = (_r = this.dialog) == null ? void 0 : _r.element.querySelector('[data-xlc-control="preview.copy"]');
+              lvNotify.inline(copyBtn, "\u5DF2\u590D\u5236");
+              if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
             }
             return;
           }
@@ -35375,8 +36425,10 @@ ${progress.progressBar}`);
             } else {
               await this.deps.runAction(entry.id, "copy");
             }
-            if (!this.pinWindow) this.destroy();
-            (_u = (_t = this.deps).notify) == null ? void 0 : _u.call(_t, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u76F4\u63A5\u5728\u5916\u90E8\u7A97\u53E3\u7C98\u8D34 (Ctrl+V)");
+            const copyBtn = (_s = this.dialog) == null ? void 0 : _s.element.querySelector('[data-xlc-control="preview.copy"]');
+            const targetEl = copyBtn || ((_t = this.listEl) == null ? void 0 : _t.querySelector(".xlc-row--active"));
+            lvNotify.inline(targetEl, "\u5DF2\u590D\u5236");
+            if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
           }
         } finally {
           this.primaryBusy = false;
@@ -35393,13 +36445,15 @@ ${progress.progressBar}`);
             try {
               const refCode = buildBlockRef(targetBlockId, anchor);
               await this.deps.copyProviderPayload(refCode);
-              if (!this.pinWindow) this.destroy();
-              (_w = (_v = this.deps).notify) == null ? void 0 : _w.call(_v, "info", `\u5DF2\u590D\u5236\u5757\u5F15\u7528: ${refCode}`);
+              const copyBtn = (_u = this.dialog) == null ? void 0 : _u.element.querySelector('[data-xlc-control="preview.copy"]');
+              const targetEl = copyBtn || ((_v = this.listEl) == null ? void 0 : _v.querySelector(".xlc-row--active"));
+              lvNotify.inline(targetEl, "\u5DF2\u590D\u5236");
+              if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
             } catch {
-              (_y = (_x = this.deps).notify) == null ? void 0 : _y.call(_x, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u76EE\u6807\u5757 ID \u65E0\u6548");
+              (_x = (_w = this.deps).notify) == null ? void 0 : _x.call(_w, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u76EE\u6807\u5757 ID \u65E0\u6548");
             }
           } else {
-            (_A = (_z = this.deps).notify) == null ? void 0 : _A.call(_z, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
+            (_z = (_y = this.deps).notify) == null ? void 0 : _z.call(_y, "error", "\u65E0\u6CD5\u751F\u6210\u5757\u5F15\u7528\uFF1A\u672A\u5173\u8054\u6709\u6548\u5757 ID");
           }
         }
         return;
@@ -35432,7 +36486,7 @@ ${progress.progressBar}`);
           const text = entry.isOmni ? entry.content || entry.summary || "" : await this.deps.preview(entry.id);
           await this.deps.copyProviderPayload(text || entry.summary || "");
           if (!this.pinWindow) this.destroy();
-          (_C = (_B = this.deps).notify) == null ? void 0 : _C.call(_B, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u539F\u59CB Markdown\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u539F\u59CB Markdown \u8BED\u6CD5\u5230\u526A\u8D34\u677F");
+          (_B = (_A = this.deps).notify) == null ? void 0 : _B.call(_A, "info", this.pinWindow ? "\u5DF2\u590D\u5236\u539F\u59CB Markdown\uFF08\u7A97\u53E3\u5DF2\u56FA\u5B9A\uFF0C\u53EF\u8FDE\u7EED\u53D6\u7528\uFF09" : "\u5DF2\u590D\u5236\u539F\u59CB Markdown \u8BED\u6CD5\u5230\u526A\u8D34\u677F");
         }
         return;
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "j" || e.key === "J")) {
@@ -35445,11 +36499,11 @@ ${progress.progressBar}`);
         if (entry) {
           const targetBlockId = resolveEntryBlockId(entry);
           if (entry.sourceDocPath) {
-            (_E = (_D = this.deps).notify) == null ? void 0 : _E.call(_D, "info", `\u{1F4CD} \u6240\u5C5E\u6587\u6863\u8DEF\u5F84: ${entry.sourceDocPath}${targetBlockId ? ` \xB7 [${targetBlockId}]` : ""}`);
+            (_D = (_C = this.deps).notify) == null ? void 0 : _D.call(_C, "info", `\u{1F4CD} \u6240\u5C5E\u6587\u6863\u8DEF\u5F84: ${entry.sourceDocPath}${targetBlockId ? ` \xB7 [${targetBlockId}]` : ""}`);
           } else if (entry.sourceDocId || entry.libraryDocId) {
-            (_G = (_F = this.deps).notify) == null ? void 0 : _G.call(_F, "info", `\u{1F4CD} \u5173\u8054\u6587\u6863 ID: ${entry.sourceDocId || entry.libraryDocId}${targetBlockId ? ` \xB7 \u5757 [${targetBlockId}]` : ""}\uFF08\u6309 Alt+D \u53EF\u6253\u5F00\u6765\u6E90\u5B9A\u4F4D\uFF09`);
+            (_F = (_E = this.deps).notify) == null ? void 0 : _F.call(_E, "info", `\u{1F4CD} \u5173\u8054\u6587\u6863 ID: ${entry.sourceDocId || entry.libraryDocId}${targetBlockId ? ` \xB7 \u5757 [${targetBlockId}]` : ""}\uFF08\u6309 Alt+D \u53EF\u6253\u5F00\u6765\u6E90\u5B9A\u4F4D\uFF09`);
           } else {
-            (_I = (_H = this.deps).notify) == null ? void 0 : _I.call(_H, "info", "\u5F53\u524D\u6761\u76EE\u672A\u5173\u8054\u601D\u6E90\u6E90\u6587\u6863\u8DEF\u5F84");
+            (_H = (_G = this.deps).notify) == null ? void 0 : _H.call(_G, "info", "\u5F53\u524D\u6761\u76EE\u672A\u5173\u8054\u601D\u6E90\u6E90\u6587\u6863\u8DEF\u5F84");
           }
         }
         return;
@@ -35484,7 +36538,7 @@ ${progress.progressBar}`);
           return;
         }
         this.destroy();
-      } else if (e.key === " " && !isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !((_K = (_J = e.target) == null ? void 0 : _J.closest) == null ? void 0 : _K.call(_J, "input, textarea, select, button"))) {
+      } else if (e.key === " " && !isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !((_J = (_I = e.target) == null ? void 0 : _I.closest) == null ? void 0 : _J.call(_I, "input, textarea, select, button"))) {
         if (e.repeat) return;
         e.preventDefault();
         this.toggleQuickLook();
@@ -35503,7 +36557,12 @@ ${progress.progressBar}`);
               if (this.primaryBusy) return;
               this.primaryBusy = true;
               try {
-                await this.deps.runAction(entry.id, "copy");
+                const res = await this.deps.runAction(entry.id, "copy");
+                if (res.ok) {
+                  const copyBtn = (_K = this.dialog) == null ? void 0 : _K.element.querySelector('[data-xlc-control="preview.copy"]');
+                  const targetEl = copyBtn || ((_L = this.listEl) == null ? void 0 : _L.querySelector(`[data-xlc-index="${idx}"]`));
+                  lvNotify.inline(targetEl, "\u5DF2\u590D\u5236");
+                }
               } finally {
                 this.primaryBusy = false;
               }
@@ -35530,7 +36589,12 @@ ${progress.progressBar}`);
               if (this.primaryBusy) return;
               this.primaryBusy = true;
               try {
-                await this.deps.runAction(entry.id, "copy");
+                const res = await this.deps.runAction(entry.id, "copy");
+                if (res.ok) {
+                  const copyBtn = (_M = this.dialog) == null ? void 0 : _M.element.querySelector('[data-xlc-control="preview.copy"]');
+                  const targetEl = copyBtn || ((_N = this.listEl) == null ? void 0 : _N.querySelector(`[data-xlc-index="${idx}"]`));
+                  lvNotify.inline(targetEl, "\u5DF2\u590D\u5236");
+                }
               } finally {
                 this.primaryBusy = false;
               }
@@ -35540,7 +36604,7 @@ ${progress.progressBar}`);
           }
         }
       } else if (e.key === "Tab") {
-        const root = (_L = this.dialog) == null ? void 0 : _L.element;
+        const root = (_O = this.dialog) == null ? void 0 : _O.element;
         if (!root) return;
         const focusables = Array.from(root.querySelectorAll(
           'input:not([disabled]):not([type="hidden"]), select:not([disabled]), button:not([disabled]), [tabindex="0"]:not([disabled])'
@@ -35588,7 +36652,7 @@ ${progress.progressBar}`);
             const ok2 = await this.deps.createFromOmni(entry);
             if (ok2) {
               this.syncPaneActions();
-              const activeRow = (_M = this.dialog) == null ? void 0 : _M.element.querySelector(`[data-xlc-item-id="${entry.id}"]`);
+              const activeRow = (_P = this.dialog) == null ? void 0 : _P.element.querySelector(`[data-xlc-item-id="${entry.id}"]`);
               const rowSaveBtn = activeRow == null ? void 0 : activeRow.querySelector('[data-xlc-control="item.save-to-common"]');
               if (rowSaveBtn) {
                 rowSaveBtn.textContent = "\u2713";
@@ -35633,7 +36697,7 @@ ${progress.progressBar}`);
         const scopeOrder = ["all", "favorites", "recent", "clipboard", "current-doc", "all-notes"];
         const currentIdx = scopeOrder.indexOf(this.currentScope);
         const nextIdx = (currentIdx + 1) % scopeOrder.length;
-        this.currentScope = (_N = scopeOrder[nextIdx]) != null ? _N : "all";
+        this.currentScope = (_Q = scopeOrder[nextIdx]) != null ? _Q : "all";
         this.syncScopeChips();
         void this.refresh().then(() => this.restoreFocusToSearch());
         return;
@@ -35644,7 +36708,7 @@ ${progress.progressBar}`);
         this.syncScopeChips();
         void this.refresh().then(() => this.restoreFocusToSearch());
         return;
-      } else if (e.altKey && (e.key === "Delete" || e.key === "Backspace") || !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Delete" && !((_O = document.activeElement) == null ? void 0 : _O.matches("input, textarea"))) {
+      } else if (e.altKey && (e.key === "Delete" || e.key === "Backspace") || !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Delete" && !((_R = document.activeElement) == null ? void 0 : _R.matches("input, textarea"))) {
         if (e.repeat) return;
         if (this.activeProvider >= 0) return;
         const entry = this.results[this.activeIndex];
@@ -35926,7 +36990,7 @@ ${progress.progressBar}`);
       }
     }
     async mergeCopyPasteTray() {
-      var _a, _b, _c, _d;
+      var _a, _b, _c;
       if (this.pasteTrayItems.length === 0) return;
       const contents = [];
       for (const it of this.pasteTrayItems) {
@@ -35943,10 +37007,11 @@ ${progress.progressBar}`);
       const merged = mergeTrayContents(contents.map((c) => ({ content: c })), this.traySeparator);
       const ok2 = await this.deps.copyText(merged);
       if (ok2) {
-        (_b = (_a = this.deps).notify) == null ? void 0 : _b.call(_a, "info", `\u5DF2\u5408\u5E76\u590D\u5236 ${this.pasteTrayItems.length} \u9879\u5E38\u7528\u8BED\u5230\u526A\u8D34\u677F`);
-        if (!this.pinWindow) this.destroy();
+        const copyBtn = (_a = this.pasteTrayEl) == null ? void 0 : _a.querySelector("[data-xlc-control='paste-tray.merge-copy']");
+        if (copyBtn) lvNotify.inline(copyBtn, "\u5DF2\u5408\u5E76\u590D\u5236");
+        if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
       } else {
-        (_d = (_c = this.deps).notify) == null ? void 0 : _d.call(_c, "error", this.deps.t("copyFailed"));
+        (_c = (_b = this.deps).notify) == null ? void 0 : _c.call(_b, "error", this.deps.t("copyFailed"));
       }
     }
     isPinWindow() {
@@ -36380,7 +37445,7 @@ ${progress.progressBar}`);
       }
     }
     destroy() {
-      var _a, _b, _c, _d, _e, _f;
+      var _a, _b, _c, _d, _e, _f, _g;
       if (this.isDestroying) return;
       this.isDestroying = true;
       if (this.inputDebounce) {
@@ -36402,14 +37467,16 @@ ${progress.progressBar}`);
         this.menuDismiss();
         this.menuDismiss = null;
       }
+      (_d = this.surfaceUnregister) == null ? void 0 : _d.call(this);
+      this.surfaceUnregister = void 0;
       const dlg = this.dialog;
       this.dialog = null;
       dlg == null ? void 0 : dlg.destroy();
       if (this.deps.autoMinimizeOnDone) {
-        (_e = (_d = this.deps).onReturnToBackground) == null ? void 0 : _e.call(_d);
+        (_f = (_e = this.deps).onReturnToBackground) == null ? void 0 : _f.call(_e);
       }
       try {
-        (_f = this.prevActiveElement) == null ? void 0 : _f.focus();
+        (_g = this.prevActiveElement) == null ? void 0 : _g.focus();
       } catch {
       }
       this.prevActiveElement = null;
@@ -36594,6 +37661,7 @@ ${progress.progressBar}`);
   // src/ui/discovery-dialog.ts
   var import_siyuan13 = __toESM(require_stub_dom());
   init_constants();
+  init_lv_notice_kit();
   init_dialog_dom();
   init_item();
   init_errors();
@@ -36870,6 +37938,14 @@ ${progress.progressBar}`);
       var _a, _b, _c;
       if (this.dialog) return;
       this.closed = false;
+      this.surfaceUnregister = lvSurfaceStack.push({
+        id: `xlc-discovery-dialog`,
+        type: "dialog",
+        dismiss: () => {
+          this.close();
+          return true;
+        }
+      });
       const dialog = new import_siyuan13.Dialog({
         title: (_a = this.options.title) != null ? _a : this.tx(this.titleKey()),
         content: "",
@@ -36877,22 +37953,24 @@ ${progress.progressBar}`);
         height: "min(840px, 92vh)",
         disableClose: true,
         destroyCallback: () => {
-          var _a2, _b2, _c2, _d, _e, _f, _g;
+          var _a2, _b2, _c2, _d, _e, _f, _g, _h;
+          (_a2 = this.surfaceUnregister) == null ? void 0 : _a2.call(this);
+          this.surfaceUnregister = void 0;
           if (this.closed) return;
           this.closed = true;
-          (_a2 = this.saveViewDialog) == null ? void 0 : _a2.destroy();
+          (_b2 = this.saveViewDialog) == null ? void 0 : _b2.destroy();
           this.saveViewDialog = null;
-          (_b2 = this.closeConfirmationDialog) == null ? void 0 : _b2.destroy();
+          (_c2 = this.closeConfirmationDialog) == null ? void 0 : _c2.destroy();
           this.closeConfirmationDialog = null;
-          const closed = this.deps.service.closeSession((_c2 = this.sessionId) != null ? _c2 : void 0);
+          const closed = this.deps.service.closeSession((_d = this.sessionId) != null ? _d : void 0);
           if (!closed.ok) {
-            (_e = (_d = this.deps).notify) == null ? void 0 : _e.call(_d, "error", closed.reason === "conflict" ? this.tx("discoveryClosePendingWrites") : this.failureMessage(closed));
+            (_f = (_e = this.deps).notify) == null ? void 0 : _f.call(_e, "error", closed.reason === "conflict" ? this.tx("discoveryClosePendingWrites") : this.failureMessage(closed));
           }
           this.session = null;
           this.sessionId = null;
           this.dialog = null;
           this.root = null;
-          (_g = (_f = this.deps).notify) == null ? void 0 : _g.call(_f, "info", this.tx("discoveryClose"));
+          (_h = (_g = this.deps).notify) == null ? void 0 : _h.call(_g, "info", this.tx("discoveryClose"));
         }
       });
       this.dialog = dialog;
@@ -36923,7 +38001,7 @@ ${progress.progressBar}`);
       return closed;
     }
     finishClose(force = false, onRejected) {
-      var _a, _b, _c, _d, _e;
+      var _a, _b, _c, _d, _e, _f;
       if (!this.dialog) return true;
       if (!force) {
         if (this.actionBusy) {
@@ -36942,9 +38020,11 @@ ${progress.progressBar}`);
         }
       }
       this.closed = true;
-      (_d = this.saveViewDialog) == null ? void 0 : _d.destroy();
+      (_d = this.surfaceUnregister) == null ? void 0 : _d.call(this);
+      this.surfaceUnregister = void 0;
+      (_e = this.saveViewDialog) == null ? void 0 : _e.destroy();
       this.saveViewDialog = null;
-      (_e = this.closeConfirmationDialog) == null ? void 0 : _e.destroy();
+      (_f = this.closeConfirmationDialog) == null ? void 0 : _f.destroy();
       this.closeConfirmationDialog = null;
       this.scanSeq++;
       this.previewSeq++;
@@ -36958,6 +38038,7 @@ ${progress.progressBar}`);
     openCloseConfirmation(onClosed) {
       var _a;
       if (this.closeConfirmationDialog || this.closed) return;
+      let surfaceUnreg = null;
       const dialog = new import_siyuan13.Dialog({
         title: this.tx("discoveryCloseTitle"),
         content: "",
@@ -36965,8 +38046,18 @@ ${progress.progressBar}`);
         disableClose: true,
         destroyCallback: () => {
           var _a2;
+          surfaceUnreg == null ? void 0 : surfaceUnreg();
+          surfaceUnreg = null;
           if (this.closeConfirmationDialog === dialog) this.closeConfirmationDialog = null;
           if (!this.closed) (_a2 = this.closeButton) == null ? void 0 : _a2.focus();
+        }
+      });
+      surfaceUnreg = lvSurfaceStack.push({
+        id: `xlc-discovery-close-confirmation`,
+        type: "dialog",
+        dismiss: () => {
+          cancelClose();
+          return true;
         }
       });
       this.closeConfirmationDialog = dialog;
@@ -37015,6 +38106,8 @@ ${progress.progressBar}`);
       let settled = false;
       const cancelClose = () => {
         settled = true;
+        surfaceUnreg == null ? void 0 : surfaceUnreg();
+        surfaceUnreg = null;
         dialog.destroy();
       };
       const cancel = document.createElement("button");
@@ -38133,6 +39226,7 @@ ${progress.progressBar}`);
         pathLabel: ((_f = this.options.sourcePath) != null ? _f : "").slice(0, LIMITS.savedViewPathChars),
         defaultCategory: ((_h = (_g = this.defaultCategoryInput) == null ? void 0 : _g.value) != null ? _h : "").trim().slice(0, LIMITS.category)
       };
+      let saveSurfaceUnreg = null;
       const dialog = new import_siyuan13.Dialog({
         title: this.tx("discoverySaveView"),
         content: "",
@@ -38140,8 +39234,18 @@ ${progress.progressBar}`);
         disableClose: true,
         destroyCallback: () => {
           var _a2;
+          saveSurfaceUnreg == null ? void 0 : saveSurfaceUnreg();
+          saveSurfaceUnreg = null;
           this.saveViewDialog = null;
           if (!this.closed) (_a2 = this.saveViewButton) == null ? void 0 : _a2.focus();
+        }
+      });
+      saveSurfaceUnreg = lvSurfaceStack.push({
+        id: `xlc-discovery-save-view`,
+        type: "dialog",
+        dismiss: () => {
+          cancelNaming();
+          return true;
         }
       });
       this.saveViewDialog = dialog;
@@ -38177,6 +39281,8 @@ ${progress.progressBar}`);
       let settled = false;
       const cancelNaming = () => {
         settled = true;
+        saveSurfaceUnreg == null ? void 0 : saveSurfaceUnreg();
+        saveSurfaceUnreg = null;
         dialog.destroy();
       };
       const cancel = document.createElement("button");
@@ -38639,6 +39745,42 @@ ${details.join("\n")}` : ""}`;
   init_variables();
   init_item();
   init_clipboard();
+  init_lv_notice_kit();
+
+  // src/service/ai.ts
+  init_constants();
+  init_errors();
+  init_variables();
+  init_lv_notice_kit();
+  async function aiSmartExpandTemplate(templateText, context) {
+    const fields = listAskFields(templateText);
+    const prompt = [
+      `\u4F60\u662F\u6587\u6863\u667A\u80FD\u52A9\u624B\u3002\u7528\u6237\u6B63\u5728\u7B14\u8BB0\u4E2D\u5E94\u7528\u4E00\u4E2A\u6A21\u677F\uFF0C\u8BF7\u6839\u636E\u5F53\u524D\u6587\u6863\u7684\u4E0A\u4E0B\u6587\uFF0C\u63A8\u65AD\u5E76\u751F\u6210\u6700\u5408\u9002\u7684\u53D8\u91CF\u586B\u5145\u503C\u3002`,
+      (context == null ? void 0 : context.docTitle) ? `\u5F53\u524D\u6587\u6863\u6807\u9898: ${context.docTitle}` : "",
+      (context == null ? void 0 : context.before) ? `\u5149\u6807\u524D\u6587: ${context.before.slice(-400)}` : "",
+      (context == null ? void 0 : context.after) ? `\u5149\u6807\u540E\u6587: ${context.after.slice(0, 400)}` : "",
+      `\u5F85\u586B\u5145\u6A21\u677F\u6B63\u6587:`,
+      templateText,
+      fields.length > 0 ? `\u5F85\u586B\u5145\u53D8\u91CF\u6E05\u5355: ${fields.map((f) => f.name).join(", ")}` : "",
+      `\u8BF7\u76F4\u63A5\u8FD4\u56DE\u586B\u5145\u540E\u7684\u5B8C\u6574\u6A21\u677F\u5185\u5BB9\uFF0C\u4E0D\u8981\u5305\u542B\u591A\u4F59\u7684\u5206\u6790\u6216\u8BF4\u660E\u3002`
+    ].filter(Boolean).join("\n");
+    try {
+      const res = await lvAi.chat({
+        source: "\u5C0F\u9A74\u5E38\u7528",
+        messages: [
+          { role: "system", content: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u9AD8\u6548\u5199\u4F5C\u4E0E\u6392\u7248\u52A9\u624B\u3002\u4E25\u683C\u6309\u7167\u7528\u6237\u7684\u4E0A\u4E0B\u6587\u5BF9\u6A21\u677F\u8FDB\u884C\u53D8\u91CF\u586B\u5145\u4E0E\u5C55\u5F00\uFF0C\u4FDD\u6301\u539F\u6709 Markdown \u6392\u7248\u683C\u5F0F\uFF0C\u76F4\u63A5\u8F93\u51FA\u7ED3\u679C\u3002" },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.3
+      });
+      return res.content.trim() || templateText;
+    } catch (err) {
+      console.warn("[lvAi] \u667A\u80FD\u5C55\u5F00\u6A21\u677F\u5931\u8D25:", err);
+      return templateText;
+    }
+  }
+
+  // src/service/commands.ts
   var ActionExecutor = class {
     constructor(library, host, notify, onItemUsed, placeholders) {
       this.library = library;
@@ -38836,7 +39978,7 @@ ${details.join("\n")}` : ""}`;
         const at = new Date(now).toISOString();
         const eventId = `evt-xlc-${now}-${Math.random().toString(36).slice(2, 8)}`;
         const payload = {
-          protocolVersion: PROTOCOL_VERSION,
+          protocolVersion: PROTOCOL_VERSION2,
           itemId: item.id,
           itemType: item.itemType,
           ...extra
@@ -38844,7 +39986,7 @@ ${details.join("\n")}` : ""}`;
         window.dispatchEvent(new CustomEvent(eventName, {
           detail: {
             // 向后兼容平铺字段
-            protocolVersion: PROTOCOL_VERSION,
+            protocolVersion: PROTOCOL_VERSION2,
             itemId: item.id,
             itemType: item.itemType,
             ...extra,
@@ -38869,14 +40011,29 @@ ${details.join("\n")}` : ""}`;
         (_a = this.onItemUsed) == null ? void 0 : _a.call(this, item);
       } catch {
       }
+      try {
+        const snippetTitle = item.title || item.summary || "\u5E38\u7528\u6A21\u7248";
+        lvActivity.record({
+          source: "\u5E38\u7528",
+          category: "note",
+          title: `\u5E94\u7528\u5E38\u7528\u6A21\u7248\u300C${snippetTitle}\u300D`,
+          linkBlockId: item.blockId || item.id
+        });
+      } catch {
+      }
     }
-    async resolveWithFills(item, fills) {
+    async resolveWithFills(item, fills, context) {
       const content = await this.resolveContent(item);
       if (!content) return null;
       if (item.itemType !== "code") {
         let kramdown = await this.library.expandSnippetRefs(content.kramdown);
         if (fills) {
           kramdown = expandAsks(kramdown, fills);
+        } else if (context == null ? void 0 : context.smartExpand) {
+          try {
+            kramdown = await aiSmartExpandTemplate(kramdown, context);
+          } catch {
+          }
         }
         content.kramdown = kramdown;
       }
@@ -38893,11 +40050,12 @@ ${details.join("\n")}` : ""}`;
       }
     }
     run(item, mode, opts) {
-      if ((opts == null ? void 0 : opts.editorTarget) !== void 0) return this.runAtTarget(item, mode, opts.fills, opts.editorTarget);
-      return this.withInsertTargetScope(mode, (target) => this.runAtTarget(item, mode, opts == null ? void 0 : opts.fills, target));
+      const ctxOptions = (opts == null ? void 0 : opts.smartExpand) ? { ...opts.context, smartExpand: true } : opts == null ? void 0 : opts.context;
+      if ((opts == null ? void 0 : opts.editorTarget) !== void 0) return this.runAtTarget(item, mode, opts.fills, opts.editorTarget, ctxOptions);
+      return this.withInsertTargetScope(mode, (target) => this.runAtTarget(item, mode, opts == null ? void 0 : opts.fills, target, ctxOptions));
     }
-    async runAtTarget(item, mode, fills, editorTarget) {
-      const content = await this.resolveWithFills(item, fills);
+    async runAtTarget(item, mode, fills, editorTarget, context) {
+      const content = await this.resolveWithFills(item, fills, context);
       if (!content) {
         return { ok: false, mode, message: "kernel-error:content", downgraded: false, pendingVerification: [] };
       }
@@ -38919,7 +40077,7 @@ ${details.join("\n")}` : ""}`;
       return this.execute(item, plan, editorTarget);
     }
     async execute(item, plan, editorTarget) {
-      var _a, _b, _c;
+      var _a, _b;
       const insertRenderWithCursor = async (text) => {
         var _a2;
         if (text === void 0) return { text: void 0, cursorOffset: null };
@@ -38950,49 +40108,53 @@ ${details.join("\n")}` : ""}`;
         };
       }
       if (plan.mode === "insert" || plan.mode === "insert-content" || plan.mode === "insert-ref" || plan.mode === "insert-embed") {
-        const rendered = await insertRenderWithCursor(plan.markdown);
-        const md = (_b = rendered.text) != null ? _b : "";
-        if (!md) {
-          return { ok: false, mode: plan.mode, message: "empty-plan", downgraded: plan.downgraded, pendingVerification: plan.pendingVerification };
-        }
-        const targetAvailable = editorTarget !== void 0 ? this.host.canInsertAtTarget(editorTarget) : this.host.hasActiveEditor();
-        if (!targetAvailable) {
-          let html;
-          if (item.itemType === "markdown" || item.itemType === "text" && isMarkdownFormattingPresent(md)) {
-            html = renderSafeHtmlFromMarkdown(md);
+        const currentDocId = (editorTarget == null ? void 0 : editorTarget.docId) || this.host.currentDocId() || "";
+        return withDocLock(currentDocId, async () => {
+          var _a2;
+          const rendered = await insertRenderWithCursor(plan.markdown);
+          const md = (_a2 = rendered.text) != null ? _a2 : "";
+          if (!md) {
+            return { ok: false, mode: plan.mode, message: "empty-plan", downgraded: plan.downgraded, pendingVerification: plan.pendingVerification };
           }
-          const copied = await this.host.writeClipboard(md, html);
-          if (copied) {
+          const targetAvailable = editorTarget !== void 0 ? this.host.canInsertAtTarget(editorTarget) : this.host.hasActiveEditor();
+          if (!targetAvailable) {
+            let html;
+            if (item.itemType === "markdown" || item.itemType === "text" && isMarkdownFormattingPresent(md)) {
+              html = renderSafeHtmlFromMarkdown(md);
+            }
+            const copied = await this.host.writeClipboard(md, html);
+            if (copied) {
+              this.noteUsed(item);
+            }
+            return {
+              ok: copied,
+              mode: plan.mode,
+              message: copied ? (editorTarget == null ? void 0 : editorTarget.editor) ? "target-unavailable-copied" : "no-editor-copied" : "no-editor-copy-failed",
+              downgraded: true,
+              pendingVerification: plan.pendingVerification,
+              ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
+            };
+          }
+          const inserted = this.host.insertMarkdown(md, editorTarget);
+          if (inserted) {
+            this.emitEvent(EVENTS.itemInserted, item, {
+              insertMode: plan.mode,
+              ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
+            });
             this.noteUsed(item);
           }
           return {
-            ok: copied,
+            ok: inserted,
             mode: plan.mode,
-            message: copied ? (editorTarget == null ? void 0 : editorTarget.editor) ? "target-unavailable-copied" : "no-editor-copied" : "no-editor-copy-failed",
-            downgraded: true,
+            message: inserted ? "inserted" : "insert-failed",
+            downgraded: false,
             pendingVerification: plan.pendingVerification,
             ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
           };
-        }
-        const inserted = this.host.insertMarkdown(md, editorTarget);
-        if (inserted) {
-          this.emitEvent(EVENTS.itemInserted, item, {
-            insertMode: plan.mode,
-            ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
-          });
-          this.noteUsed(item);
-        }
-        return {
-          ok: inserted,
-          mode: plan.mode,
-          message: inserted ? "inserted" : "insert-failed",
-          downgraded: false,
-          pendingVerification: plan.pendingVerification,
-          ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
-        };
+        });
       }
       if (plan.mode === "copy" || plan.mode === "copy-content") {
-        const text = (_c = await this.applyOutput(plan.clipboardText, item)) != null ? _c : "";
+        const text = (_b = await this.applyOutput(plan.clipboardText, item)) != null ? _b : "";
         let html;
         if (item.itemType === "markdown" || item.itemType === "text" && isMarkdownFormattingPresent(text)) {
           html = renderSafeHtmlFromMarkdown(text);
@@ -39145,6 +40307,7 @@ ${details.join("\n")}` : ""}`;
       /** 索引（可丢弃缓存）。为空或超过 maxAgeMs 时重建（SWR）。
        *  并发去重：重建进行中时共用同一 Promise（双开弹窗/预热竞争只建一次）。 */
       this.buildingPromise = null;
+      this.buildingGen = -1;
       /** 索引代数：任一失效（index=null）自增；重建完成时代数已变则丢弃陈旧结果（R139） */
       this.indexGen = 0;
       /** doc/tree 直接使用容器根；notebook 模式选择笔记本根下第一个文档作为写入父块。 */
@@ -39203,13 +40366,17 @@ ${details.join("\n")}` : ""}`;
         const fresh = typeof maxAgeMs !== "number" || Date.now() - this.index.builtAt <= maxAgeMs;
         if (fresh) return this.index;
       }
-      if (!this.buildingPromise) {
+      if (!this.buildingPromise || this.buildingGen !== gen) {
+        const currentGen = gen;
+        this.buildingGen = currentGen;
         this.buildingPromise = this.buildIndex().finally(() => {
-          this.buildingPromise = null;
+          if (this.buildingGen === currentGen) {
+            this.buildingPromise = null;
+          }
         });
       }
       const result = await this.buildingPromise;
-      if (gen === this.indexGen) {
+      if (gen === this.indexGen && this.buildingGen === gen) {
         this.index = result;
         return result;
       }

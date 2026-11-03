@@ -12,7 +12,7 @@
 import {SearchEntry, SearchQuery, findExactAliasMatch, findExactShortcodeMatch} from "../model/search";
 import {InsertMode} from "../model/actions";
 import {toErrorMessage} from "../model/errors";
-import {lvNotify} from "../libs/lv-notice-kit";
+import {lvNotify, lvSurfaceStack} from "../libs/lv-notice-kit";
 import {hasDynamicMacros, expandMacroPreview} from "../model/variables";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {parseSnippetAnnotations} from "../model/item";
@@ -828,6 +828,15 @@ export class DockView {
             document.body.appendChild(menu);
             this.activeMenuEl = menu;
 
+            const surfaceUnreg = lvSurfaceStack.push({
+                id: "xlc-dock-menu",
+                type: "menu",
+                dismiss: () => {
+                    this.closeContextMenu();
+                    return true;
+                }
+            });
+
             const dismiss = (ev: MouseEvent) => {
                 if (!menu.contains(ev.target as Node)) {
                     this.closeContextMenu();
@@ -853,6 +862,7 @@ export class DockView {
                 }
             };
             this.menuCleanup = () => {
+                surfaceUnreg();
                 if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
                     document.removeEventListener("pointerdown", dismiss);
                     document.removeEventListener("keydown", onKeydown, true);

@@ -91,8 +91,8 @@ export interface LvNoticePacket extends CardNoticeOptions {
 export interface LvSurfaceHandle {
     id: string;
     type?: "card" | "dialog" | "menu" | "drawer";
-    /** 当用户按下 Esc 时调用；返回 false 可阻止关闭 */
-    dismiss: () => boolean | void;
+    /** 当用户按下 Esc 时调用；返回 false 可阻止关闭且继续向下分发；返回 "keep" 拦截 Esc 但保留在栈中；返回 true 或 void 拦截 Esc 并移出栈 */
+    dismiss: () => boolean | void | "keep";
 }
 
 /* ========================================================================= */
@@ -532,21 +532,31 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
     const timers = new Map<string, number>();
     const pluginRegistry = new Map<string, () => void>();
 
-    // 接入统一浮层栈 Esc 秒关
-    const unregisterSurface = lvSurfaceStack.push({
-        id: "lv-notice-active-card",
-        type: "card",
-        dismiss: () => {
-            const top = activePackets[activePackets.length - 1];
-            if (top) {
-                hub.dismiss(top.id);
-                return true;
-            }
-            return false;
+    // 接入统一浮层栈 Esc 秒关（仅在有活跃交互卡片时入栈，无卡片时自动出栈）
+    let unregisterSurface: (() => void) | null = null;
+    function syncSurfaceStack() {
+        const hasCard = activePackets.some((p) => p.mode === "card");
+        if (hasCard && !unregisterSurface) {
+            unregisterSurface = lvSurfaceStack.push({
+                id: "lv-notice-active-card",
+                type: "card",
+                dismiss: () => {
+                    const top = activePackets.slice().reverse().find((p) => p.mode === "card");
+                    if (top) {
+                        hub.dismiss(top.id);
+                        return true;
+                    }
+                    return false;
+                }
+            });
+        } else if (!hasCard && unregisterSurface) {
+            unregisterSurface();
+            unregisterSurface = null;
         }
-    });
+    }
 
     function render() {
+        syncSurfaceStack();
         if (!hostEl) return;
         hostEl.innerHTML = "";
 
@@ -759,7 +769,8 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         },
 
         destroy() {
-            unregisterSurface();
+            unregisterSurface?.();
+            unregisterSurface = null;
             timers.forEach((t) => clearTimeout(t));
             timers.clear();
             hostEl?.remove();
@@ -847,14 +858,18 @@ function getSurfaceStack(): LvSurfaceHandle[] {
             if (e.key !== "Escape") return;
             const stack = window.__LV_SURFACE_STACK__;
             if (!stack || stack.length === 0) return;
-            const top = stack[stack.length - 1];
-            if (top) {
-                const handled = top.dismiss();
+            for (let i = stack.length - 1; i >= 0; i--) {
+                const item = stack[i];
+                if (!item) continue;
+                const handled = item.dismiss();
                 if (handled !== false) {
                     e.preventDefault();
                     e.stopPropagation();
-                    const idx = stack.indexOf(top);
-                    if (idx >= 0) stack.splice(idx, 1);
+                    if (handled !== "keep") {
+                        const idx = stack.indexOf(item);
+                        if (idx >= 0) stack.splice(idx, 1);
+                    }
+                    break;
                 }
             }
         }, true);
@@ -1063,15 +1078,16 @@ export async function withDocLock<T>(docId: string, task: () => Promise<T>): Pro
     const prev = map.get(docId) || Promise.resolve();
 
     let release!: () => void;
-    const current = new Promise<void>((resolve) => { release = resolve; });
-    map.set(docId, prev.then(() => current, () => current));
+    const waiter = new Promise<void>((resolve) => { release = resolve; });
+    const chain = prev.then(() => waiter, () => waiter);
+    map.set(docId, chain);
 
     try {
         await prev;
         return await task();
     } finally {
         release();
-        if (map.get(docId) === current) {
+        if (map.get(docId) === chain) {
             map.delete(docId);
         }
     }
