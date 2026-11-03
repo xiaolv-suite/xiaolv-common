@@ -11,6 +11,7 @@ import {CommonItem, extractCleanPayload} from "../model/item";
 import {LibraryService, SourceHealth} from "./library";
 import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown, writeRichClipboard} from "../model/clipboard";
 import {callBridge} from "../ecosystem-bridge-kit";
+import {withDocLock} from "../libs/lv-notice-kit";
 
 /** 占位符应用钩子：由入口注入（读设置 + 当前时间 + 当前文档 + 剪贴板）；未注入则原样保留 */
 export interface IPlaceholderHook {
@@ -661,50 +662,53 @@ export class ActionExecutor {
             };
         }
         if (plan.mode === "insert" || plan.mode === "insert-content" || plan.mode === "insert-ref" || plan.mode === "insert-embed") {
-            const rendered = await insertRenderWithCursor(plan.markdown);
-            const md = rendered.text ?? "";
-            if (!md) {
-                return {ok: false, mode: plan.mode, message: "empty-plan", downgraded: plan.downgraded, pendingVerification: plan.pendingVerification};
-            }
-            const targetAvailable = editorTarget !== undefined
-                ? this.host.canInsertAtTarget(editorTarget)
-                : this.host.hasActiveEditor();
-            if (!targetAvailable) {
-                let html: string | undefined;
-                if (item.itemType === "markdown" || (item.itemType === "text" && isMarkdownFormattingPresent(md))) {
-                    html = renderSafeHtmlFromMarkdown(md);
+            const currentDocId = editorTarget?.docId || this.host.currentDocId() || "";
+            return withDocLock(currentDocId, async () => {
+                const rendered = await insertRenderWithCursor(plan.markdown);
+                const md = rendered.text ?? "";
+                if (!md) {
+                    return {ok: false, mode: plan.mode, message: "empty-plan", downgraded: plan.downgraded, pendingVerification: plan.pendingVerification};
                 }
-                const copied = await this.host.writeClipboard(md, html);
-                if (copied) {
+                const targetAvailable = editorTarget !== undefined
+                    ? this.host.canInsertAtTarget(editorTarget)
+                    : this.host.hasActiveEditor();
+                if (!targetAvailable) {
+                    let html: string | undefined;
+                    if (item.itemType === "markdown" || (item.itemType === "text" && isMarkdownFormattingPresent(md))) {
+                        html = renderSafeHtmlFromMarkdown(md);
+                    }
+                    const copied = await this.host.writeClipboard(md, html);
+                    if (copied) {
+                        this.noteUsed(item);
+                    }
+                    return {
+                        ok: copied,
+                        mode: plan.mode,
+                        message: copied
+                            ? editorTarget?.editor ? "target-unavailable-copied" : "no-editor-copied"
+                            : "no-editor-copy-failed",
+                        downgraded: true,
+                        pendingVerification: plan.pendingVerification,
+                        ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
+                    };
+                }
+                const inserted = this.host.insertMarkdown(md, editorTarget);
+                if (inserted) {
+                    this.emitEvent(EVENTS.itemInserted, item, {
+                        insertMode: plan.mode,
+                        ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
+                    });
                     this.noteUsed(item);
                 }
                 return {
-                    ok: copied,
+                    ok: inserted,
                     mode: plan.mode,
-                    message: copied
-                        ? editorTarget?.editor ? "target-unavailable-copied" : "no-editor-copied"
-                        : "no-editor-copy-failed",
-                    downgraded: true,
+                    message: inserted ? "inserted" : "insert-failed",
+                    downgraded: false,
                     pendingVerification: plan.pendingVerification,
                     ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
                 };
-            }
-            const inserted = this.host.insertMarkdown(md, editorTarget);
-            if (inserted) {
-                this.emitEvent(EVENTS.itemInserted, item, {
-                    insertMode: plan.mode,
-                    ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
-                });
-                this.noteUsed(item);
-            }
-            return {
-                ok: inserted,
-                mode: plan.mode,
-                message: inserted ? "inserted" : "insert-failed",
-                downgraded: false,
-                pendingVerification: plan.pendingVerification,
-                ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
-            };
+            });
         }
         if (plan.mode === "copy" || plan.mode === "copy-content") {
             const text = (await this.applyOutput(plan.clipboardText, item)) ?? "";

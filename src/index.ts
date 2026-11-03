@@ -6,7 +6,7 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvNotify} from "./libs/lv-notice-kit";
+import {lvNotify, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {LIMITS, PLUGIN_VERSION, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -438,7 +438,10 @@ export default class XiaolvCommonPlugin extends Plugin {
             const item = queue.pop();
             if (!item) return {ok: false, reason: "empty"};
             if (this.host.hasActiveEditor()) {
-                await this.host.insertMarkdown(item.content);
+                const docId = this.host.currentDocId() || "";
+                await withDocLock(docId, async () => {
+                    await this.host.insertMarkdown(item.content);
+                });
             } else {
                 await this.host.writeClipboard(item.content);
             }
@@ -947,7 +950,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
                 const hasEditor = this.host.hasActiveEditor();
                 if (hasEditor) {
-                    void this.host.insertMarkdown(item.content);
+                    const docId = this.host.currentDocId() || "";
+                    void withDocLock(docId, async () => {
+                        this.host.insertMarkdown(item.content);
+                    });
                 } else {
                     void this.host.writeClipboard(item.content);
                 }
@@ -2005,7 +2011,17 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         };
 
+        const surfaceUnreg = lvSurfaceStack.push({
+            id: "xlc-quick-access-popover",
+            type: "menu",
+            dismiss: () => {
+                this.closeQuickAccessPopover();
+                return true;
+            }
+        });
+
         const cleanup = () => {
+            surfaceUnreg();
             document.removeEventListener("mousedown", onDismiss);
             document.removeEventListener("keydown", onDismiss);
             popover.remove();
@@ -2453,7 +2469,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                     ? this.host.canInsertAtTarget(editorTarget)
                     : this.host.hasActiveEditor();
                 if (insertTargetAvailable && !this.host.isMobile()) {
-                    const inserted = this.host.insertMarkdown(rendered, editorTarget ?? undefined);
+                    const targetDocId = editorTarget?.docId || this.host.currentDocId() || "";
+                    const inserted = await withDocLock(targetDocId, async () => {
+                        return this.host.insertMarkdown(rendered, editorTarget ?? undefined);
+                    });
                     if (inserted) this.notify("info", this.i18nFn()("providerInserted"));
                     else this.notify("error", this.i18nFn()("insertFailed"));
                     return inserted;
@@ -2591,7 +2610,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                         if (!ok) this.notify("error", msg);
                         return {ok, message: msg};
                     } else {
-                        const ok = this.host.insertMarkdown(content, editorTarget ?? undefined);
+                        const targetDocId = editorTarget?.docId || this.host.currentDocId() || "";
+                        const ok = await withDocLock(targetDocId, async () => {
+                            return this.host.insertMarkdown(content, editorTarget ?? undefined);
+                        });
                         const msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
                         this.notify(ok ? "info" : "error", msg);
                         return {ok, message: msg};
@@ -2623,7 +2645,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                         if (!ok) this.notify("error", msg);
                         return {ok, message: msg};
                     } else {
-                        const ok = this.host.insertMarkdown(content, editorTarget ?? undefined);
+                        const targetDocId = editorTarget?.docId || this.host.currentDocId() || "";
+                        const ok = await withDocLock(targetDocId, async () => {
+                            return this.host.insertMarkdown(content, editorTarget ?? undefined);
+                        });
                         const msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
                         this.notify(ok ? "info" : "error", msg);
                         return {ok, message: msg};
@@ -2717,7 +2742,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                     ? this.host.canInsertAtTarget(editorTarget)
                     : this.host.hasActiveEditor();
                 if (insertTargetAvailable && !this.host.isMobile()) {
-                    const inserted = this.host.insertMarkdown(trimmed, editorTarget ?? undefined);
+                    const targetDocId = editorTarget?.docId || this.host.currentDocId() || "";
+                    const inserted = await withDocLock(targetDocId, async () => {
+                        return this.host.insertMarkdown(trimmed, editorTarget ?? undefined);
+                    });
                     this.notify(inserted ? "info" : "error", inserted ? this.i18nFn()("aiOriginalPreserved") : this.i18nFn()("insertFailed"));
                     return inserted;
                 }
