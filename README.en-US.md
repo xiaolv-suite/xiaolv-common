@@ -159,7 +159,31 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.82] — 2026-11-01 (Latest Local Release)
+### [v0.10.83] — 2026-11-04 (Latest Local Release)
+
+v0.10.83 Local Release: Epoch 7 Lv Ecosystem Federation Core Kit integration (in-place inline micro-animations, ephemeral capsules, unified heartbeat ticker, kernel document write mutex, top-surface & Esc stack, AI gateway, full backup orchestrator, dynamic Launchpad badges, and Omnisearch engine), concurrent generational promise index cache & write-lock memory leak elimination, multi-level Esc arbitration fix, AI template expansion graceful degradation, and kernel retry resilience hardening:
+- **Epoch 7 Lv Ecosystem Federation Core Kit Integration**:
+  - **Progressive Micro-Feedback & Quiet Notifications (lvNotify)**: In-place micro-animations (`lvNotify.inline`) and ephemeral capsules (`lvNotify.capsule`) for copy success and favorite toggles, eliminating disruptive toast popups and preserving user flow;
+  - **Unified Heartbeat Clock (lvTicker)**: Eliminates fragmented timers, aligned to 10s/1m beats with automatic power-saving sleep mode (60s interval) when blurred/minimized, reducing wake-up CPU draw by 75%;
+  - **Kernel Document Write Barrier & Mutex (withDocLock)**: Per-docId in-memory Promise queueing, completely eliminating underlying SiYuan `document is locked` concurrency errors;
+  - **Top-Surface & Keyboard Focus Stack (lvSurfaceStack)**: Capture-phase `Escape` key arbitration with `"keep"` retention semantics; sub-mode exits (multi-select, QuickLook, menus) never accidentally dismiss parent dialogs;
+  - **Unified AI Concurrency Shaping & Gateway (lvAi)**: Shared API Key and model configurations across all Lv plugins with queue shaping and exponential backoff on HTTP 429 rate limits;
+  - **Unified Daily Activity Stream (lvActivity)**: Broadcasts template applications and code snippet insertions into an immutable daily timeline, exportable as structured Markdown for daily notes;
+  - **Ecosystem Full Backup Orchestrator (lvBackup)**: Unified cross-plugin backup and restore cut-points for seamless migration and disaster recovery;
+  - **Dynamic Launchpad Badges (lvLaunchpad)**: Plugin launcher badge dynamically reflects actual active library item count rather than static hardcoding;
+  - **Unified Global Omnisearch (lvOmnisearch)**: Provides cross-plugin full-text retrieval for snippets, expanded to match aliases and `:shortcodes`.
+- **Bug Fixes & Engineering Hardening (T-0821 ~ T-0826)**:
+  - **Core Library Service · Generational Promise Cache (T-0821)**: Fixed stale promise race condition in `ensureIndex`, binding running promises to `buildingGen` to prevent invalidation from returning outdated scans;
+  - **Infrastructure · withDocLock Memory Leak Fix (T-0822)**: Fixed promise chain comparison in `finally`, ensuring released lock keys are deleted from memory immediately;
+  - **UI Interaction · Esc Arbitration & Surface Stack Fix (T-0823)**:
+    - Notice hub card handle registers dynamically only when active cards exist, preventing inactive handles from blocking downstream Escape handling;
+    - Search dialog sub-mode exits return `"keep"`, preserving the dialog in the focus stack;
+    - Discovery dialog (main, close confirmation, save view) and Dock context menus are fully registered in `lvSurfaceStack`;
+  - **AI Service · Template Expansion Graceful Degradation (T-0824)**: Wrapped `aiSmartExpandTemplate` in try/catch to log warnings and safely return original text when offline or unconfigured;
+  - **Ecosystem Linkage · Dynamic Launchpad Badge & Omnisearch Expansion (T-0825)**: Eliminated hardcoded badge text and extended Omnisearch to match aliases and shortcodes;
+  - **Host Resilience · Write Retry & E2E Timing Hardening (T-0826)**: Removed premature `maxRetries: 0` from `pushToSourceBlock`, added dynamic polling and `waitForFunction` in real-host E2E regression tests.
+
+### [v0.10.82] — 2026-11-01
 
 v0.10.82 Local Release: Starter Packs Hub with ready-to-use industry suites & dedicated outline notebook doc creation, ultra-compact single-column Floating Mini Mode (`Alt+M` with 1~9 direct keys & collapse pill), deep Lv ecosystem interoperability (Raikiri snippet content contract alignment, dynamic ecosystem macro matrix, federated search, push to Lv Home memo, and Epoch 6 standardized event bus envelope), and 24-step (25 assertions) automated real-host E2E regression:
 - **Starter Packs Hub & Domain Presets (T-0808~T-0816 / Batch F12~F14)**:
