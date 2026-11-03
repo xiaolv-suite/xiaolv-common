@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {lvNoticeKit} = require("./.build/entry.cjs");
-const {lvNotify, lvSurfaceStack, withDocLock, lvTicker, lvActivity, lvAi, lvBackup, lvEcosystem} = lvNoticeKit;
+const {lvNotify, lvSurfaceStack, withDocLock, lvTicker, lvActivity, lvAi, lvBackup, lvEcosystem, lvLaunchpad} = lvNoticeKit;
 
 // Setup a mock DOM environment for node:test
 function setupMockDom() {
@@ -144,6 +144,7 @@ function setupMockDom() {
             delete global.window.__LV_AI_GATEWAY__;
             delete global.window.__LV_ACTIVITY_STREAM__;
             delete global.window.__LV_BACKUP_HUB__;
+            delete global.window.__LV_LAUNCHPAD__;
             delete global.document;
             delete global.window;
             delete global.localStorage;
@@ -151,7 +152,7 @@ function setupMockDom() {
     };
 }
 
-test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 4 标准验收)", async (t) => {
+test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 5 标准验收)", async (t) => {
     let domScope;
 
     t.beforeEach(() => {
@@ -432,7 +433,7 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 4 标准�
         );
 
         const diag = lvEcosystem.getDiagnostics();
-        assert.equal(diag.version, 130);
+        assert.equal(diag.version, 140);
         assert.ok(diag.registeredPlugins.includes("xiaolv-common"));
         assert.equal(typeof diag.todayActivitiesCount, "number");
 
@@ -442,5 +443,51 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 4 标准�
         assert.ok(badgeText.includes("今日活动"));
 
         unreg();
+    });
+
+    await t.test("lvLaunchpad · 小驴罗盘顶栏收敛与极速二级行动", () => {
+        let clicked = false;
+        let actionExecuted = "";
+
+        const unreg = lvLaunchpad.register({
+            id: "xiaolv-common",
+            name: "常用",
+            fullName: "小驴常用",
+            svgIcon: "icon-lv-common",
+            color: "#14b8a6",
+            desc: "常用片段 · 宏模版",
+            digit: 8,
+            badge: "常用 18 项",
+            badgeType: "primary",
+            actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录"],
+            onClick: () => { clicked = true; },
+            onAction: (act) => { actionExecuted = act; },
+        });
+
+        const items = lvLaunchpad.getItems();
+        const commonItem = items.find(i => i.id === "xiaolv-common");
+        assert.ok(commonItem, "罗盘内应成功注册 xiaolv-common");
+        assert.equal(commonItem.name, "常用");
+        assert.equal(commonItem.digit, 8);
+        assert.equal(commonItem.state, "docked", "默认状态应为收敛入坞 docked");
+        assert.deepEqual(commonItem.actions, ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录"]);
+
+        // 测试点击主入口
+        commonItem.onClick();
+        assert.equal(clicked, true, "onClick 应被正常触发");
+
+        // 测试二级快捷行动
+        commonItem.onAction?.("新建常用富文本宏模版");
+        assert.equal(actionExecuted, "新建常用富文本宏模版", "onAction 应接收到正确的二级动作名");
+
+        // 测试用户设定三态呈现属性 (pinned / docked / hidden)
+        lvLaunchpad.setPluginState("xiaolv-common", "pinned");
+        const pinnedItems = lvLaunchpad.getItems();
+        assert.equal(pinnedItems.find(i => i.id === "xiaolv-common")?.state, "pinned", "状态应更新为 pinned 置顶在外");
+
+        // 测试注销清理
+        unreg();
+        const afterUnreg = lvLaunchpad.getItems();
+        assert.equal(afterUnreg.find(i => i.id === "xiaolv-common"), undefined, "注销后应从罗盘列表移除");
     });
 });

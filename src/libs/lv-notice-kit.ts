@@ -93,9 +93,25 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 130; // 1.3.0 (Phase 4: Full Ecosystem Orchestration & Backup)
+const PROTOCOL_VERSION = 140; // 1.4.0 (Phase 5: Launchpad & Native Vector Icons)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
+const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
+
+export interface LvLaunchpadItem {
+    id: string;
+    name: string;
+    fullName: string;
+    svgIcon: string;
+    color?: string;
+    desc?: string;
+    digit?: number;
+    badge?: string;
+    badgeType?: "primary" | "warn" | "error" | "success";
+    actions?: string[];
+    onClick: () => void;
+    onAction?: (actionName: string) => void;
+}
 
 export interface LvPluginBackupPayload {
     plugin: string;
@@ -206,6 +222,15 @@ interface LvBackupHub {
     restoreFull: (bundle: LvEcosystemFullBackup) => Promise<{ success: string[]; failed: string[] }>;
 }
 
+interface LvLaunchpadHub {
+    version: number;
+    register: (item: LvLaunchpadItem) => () => void;
+    getItems: () => Array<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }>;
+    setPluginState: (id: string, state: "pinned" | "docked" | "hidden") => void;
+    open: (mode?: "popover" | "center") => void;
+    close: () => void;
+}
+
 declare global {
     interface Window {
         __LV_NOTICE_HUB__?: LvNoticeHub;
@@ -215,6 +240,7 @@ declare global {
         __LV_AI_GATEWAY__?: LvAiGatewayHub;
         __LV_ACTIVITY_STREAM__?: LvActivityStreamHub;
         __LV_BACKUP_HUB__?: LvBackupHub;
+        __LV_LAUNCHPAD__?: LvLaunchpadHub;
     }
 }
 
@@ -1535,5 +1561,121 @@ export const lvEcosystem = {
         const count = diag.registeredPlugins.length;
         const pluginText = count > 0 ? `${count} 插件已联结` : "单机模式";
         return `🐴 小驴全家桶协同正常 · ${pluginText} · 今日活动 ${diag.todayActivitiesCount} 项`;
+    }
+};
+
+/* ========================================================================= */
+/* 14. 小驴罗盘 · 家族极速弹射坞引擎 (Lv Launchpad Engine)                   */
+/* ========================================================================= */
+
+const launchpadRegistry = new Map<string, LvLaunchpadItem>();
+
+function getLaunchpadStates(): Record<string, "pinned" | "docked" | "hidden"> {
+    if (typeof localStorage === "undefined") return {};
+    try {
+        const raw = localStorage.getItem(LAUNCHPAD_STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return {};
+}
+
+function saveLaunchpadStates(states: Record<string, "pinned" | "docked" | "hidden">): void {
+    if (typeof localStorage === "undefined") return;
+    try {
+        localStorage.setItem(LAUNCHPAD_STORAGE_KEY, JSON.stringify(states));
+    } catch { /* ignore */ }
+}
+
+function getLaunchpadHub(): LvLaunchpadHub {
+    if (typeof window === "undefined") {
+        return {
+            version: PROTOCOL_VERSION,
+            register: (item) => {
+                launchpadRegistry.set(item.id, item);
+                return () => launchpadRegistry.delete(item.id);
+            },
+            getItems: () => {
+                const states = getLaunchpadStates();
+                return Array.from(launchpadRegistry.values()).map(item => ({
+                    ...item,
+                    state: states[item.id] || "docked",
+                }));
+            },
+            setPluginState: (id, state) => {
+                const states = getLaunchpadStates();
+                states[id] = state;
+                saveLaunchpadStates(states);
+            },
+            open: () => {},
+            close: () => {},
+        };
+    }
+
+    if (window.__LV_LAUNCHPAD__ && window.__LV_LAUNCHPAD__.version >= PROTOCOL_VERSION) {
+        return window.__LV_LAUNCHPAD__;
+    }
+
+    const hub: LvLaunchpadHub = {
+        version: PROTOCOL_VERSION,
+
+        register(item: LvLaunchpadItem): () => void {
+            launchpadRegistry.set(item.id, item);
+            return () => {
+                launchpadRegistry.delete(item.id);
+            };
+        },
+
+        getItems(): Array<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }> {
+            const states = getLaunchpadStates();
+            return Array.from(launchpadRegistry.values()).map(item => ({
+                ...item,
+                state: states[item.id] || "docked",
+            }));
+        },
+
+        setPluginState(id: string, state: "pinned" | "docked" | "hidden"): void {
+            const states = getLaunchpadStates();
+            states[id] = state;
+            saveLaunchpadStates(states);
+        },
+
+        open(_mode?: "popover" | "center"): void {
+            // 通过 DOM 或 CustomEvent 派发打开弹射坞
+            window.dispatchEvent(new CustomEvent("lv:launchpad:open", { detail: { mode: _mode || "popover" } }));
+        },
+
+        close(): void {
+            window.dispatchEvent(new CustomEvent("lv:launchpad:close"));
+        }
+    };
+
+    window.__LV_LAUNCHPAD__ = hub;
+    return hub;
+}
+
+export const lvLaunchpad = {
+    /** 向小驴罗盘注册插件入口（替代传统的 addTopBar，支持置顶/收敛/隐藏与二级行动） */
+    register(item: LvLaunchpadItem): () => void {
+        return getLaunchpadHub().register(item);
+    },
+
+    /** 获取当前已注册的插件列表及其三态呈现属性 */
+    getItems(): Array<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }> {
+        return getLaunchpadHub().getItems();
+    },
+
+    /** 用户动态设定插件状态：pinned（置顶在外） | docked（仅在坞内） | hidden（彻底隐藏） */
+    setPluginState(pluginId: string, state: "pinned" | "docked" | "hidden"): void {
+        getLaunchpadHub().setPluginState(pluginId, state);
+    },
+
+    /** 唤醒弹射坞（支持 popover 顶栏吸附或 center 屏幕居中） */
+    open(mode?: "popover" | "center"): void {
+        getLaunchpadHub().open(mode);
+    },
+
+    /** 关闭弹射坞 */
+    close(): void {
+        getLaunchpadHub().close();
     }
 };

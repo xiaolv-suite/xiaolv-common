@@ -6,7 +6,7 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvActivity, lvBackup, lvNotify, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
+import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {EXPORT_SCHEMA_VERSION, LIMITS, PLUGIN_VERSION, PROTOCOL_NAME, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -127,6 +127,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     private noticeHubCleaner?: (() => void);
     /** 小驴全生态统一灾备总线 · 卸载注销清理器 (Epoch 7 Phase 4) */
     private backupCleaner?: (() => void);
+    /** 小驴罗盘 · 弹射坞卸载注销清理器 (Epoch 7 Phase 5) */
+    private launchpadCleaner?: (() => void);
     private unloading = false;
 
     async onload(): Promise<void> {
@@ -516,6 +518,26 @@ export default class XiaolvCommonPlugin extends Plugin {
                 async () => this.dumpData(),
                 async (data) => this.restoreData(data)
             );
+        } catch {
+            // 环境防御
+        }
+
+        // 小驴罗盘 · 注册插件入口与二级行动直达 (Epoch 7 Phase 5)
+        try {
+            this.launchpadCleaner = lvLaunchpad.register({
+                id: "xiaolv-common",
+                name: "常用",
+                fullName: "小驴常用",
+                svgIcon: "icon-lv-common",
+                color: "#14b8a6",
+                desc: "常用片段 · 宏模版",
+                digit: 8,
+                badge: "常用 18 项",
+                badgeType: "primary",
+                actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录"],
+                onClick: () => this.openCommonPanel(),
+                onAction: (action) => this.handleQuickAction(action),
+            });
         } catch {
             // 环境防御
         }
@@ -3427,6 +3449,25 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     }
 
+    // ---- 小驴罗盘快捷行动入口 (Epoch 7 Phase 5) ----
+
+    openCommonPanel(): void {
+        this.openSearch();
+    }
+
+    handleQuickAction(action: string): void {
+        if (action.includes("搜索")) {
+            this.openSearch();
+        } else if (action.includes("新建")) {
+            void this.capture?.newManual();
+        } else if (action.includes("历史") || action.includes("高频")) {
+            this.state.sort = "recent";
+            this.openSearch();
+        } else {
+            this.openSearch();
+        }
+    }
+
     // ---- 协议能力（雷切等消费）----
 
     getCapabilities(): CapabilityDescriptor[] {
@@ -3468,6 +3509,13 @@ export default class XiaolvCommonPlugin extends Plugin {
             // 宿主已销毁：忽略
         }
         this.backupCleaner = undefined;
+        // 小驴罗盘 · 注销入口 (Epoch 7 Phase 5)
+        try {
+            this.launchpadCleaner?.();
+        } catch {
+            // 宿主已销毁：忽略
+        }
+        this.launchpadCleaner = undefined;
         // 对外窗口桥先行注销（兄弟插件在桥消失后应得到 unsupported，而非悬挂调用）
         try {
             this.bridgeDisposer?.();
