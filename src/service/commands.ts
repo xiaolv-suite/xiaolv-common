@@ -12,6 +12,7 @@ import {LibraryService, SourceHealth} from "./library";
 import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown, writeRichClipboard} from "../model/clipboard";
 import {callBridge} from "../ecosystem-bridge-kit";
 import {lvActivity, withDocLock} from "../libs/lv-notice-kit";
+import {aiSmartExpandTemplate} from "./ai";
 
 /** 占位符应用钩子：由入口注入（读设置 + 当前时间 + 当前文档 + 剪贴板）；未注入则原样保留 */
 export interface IPlaceholderHook {
@@ -585,13 +586,19 @@ export class ActionExecutor {
         }
     }
 
-    private async resolveWithFills(item: CommonItem, fills?: Record<string, string>) {
+    private async resolveWithFills(item: CommonItem, fills?: Record<string, string>, context?: {before?: string; after?: string; docTitle?: string; smartExpand?: boolean}) {
         const content = await this.resolveContent(item);
         if (!content) return null;
         if (item.itemType !== "code") {
             let kramdown = await this.library.expandSnippetRefs(content.kramdown);
             if (fills) {
                 kramdown = expandAsks(kramdown, fills);
+            } else if (context?.smartExpand) {
+                try {
+                    kramdown = await aiSmartExpandTemplate(kramdown, context);
+                } catch {
+                    // 降级使用普通展开
+                }
             }
             content.kramdown = kramdown;
         }
@@ -610,14 +617,15 @@ export class ActionExecutor {
         }
     }
 
-    run(item: CommonItem, mode: InsertMode, opts?: {fills?: Record<string, string>; editorTarget?: EditorInsertTargetSnapshot | null}): Promise<ExecutionReceipt> {
+    run(item: CommonItem, mode: InsertMode, opts?: {fills?: Record<string, string>; editorTarget?: EditorInsertTargetSnapshot | null; smartExpand?: boolean; context?: {before?: string; after?: string; docTitle?: string}}): Promise<ExecutionReceipt> {
         // Supplied targets belong to a search dialog or an outer service scope.
-        if (opts?.editorTarget !== undefined) return this.runAtTarget(item, mode, opts.fills, opts.editorTarget);
-        return this.withInsertTargetScope(mode, (target) => this.runAtTarget(item, mode, opts?.fills, target));
+        const ctxOptions = opts?.smartExpand ? { ...opts.context, smartExpand: true } : opts?.context;
+        if (opts?.editorTarget !== undefined) return this.runAtTarget(item, mode, opts.fills, opts.editorTarget, ctxOptions);
+        return this.withInsertTargetScope(mode, (target) => this.runAtTarget(item, mode, opts?.fills, target, ctxOptions));
     }
 
-    private async runAtTarget(item: CommonItem, mode: InsertMode, fills: Record<string, string> | undefined, editorTarget: EditorInsertTargetSnapshot | null | undefined): Promise<ExecutionReceipt> {
-        const content = await this.resolveWithFills(item, fills);
+    private async runAtTarget(item: CommonItem, mode: InsertMode, fills: Record<string, string> | undefined, editorTarget: EditorInsertTargetSnapshot | null | undefined, context?: {before?: string; after?: string; docTitle?: string; smartExpand?: boolean}): Promise<ExecutionReceipt> {
+        const content = await this.resolveWithFills(item, fills, context);
         if (!content) {
             return {ok: false, mode, message: "kernel-error:content", downgraded: false, pendingVerification: []};
         }

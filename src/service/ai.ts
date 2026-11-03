@@ -8,6 +8,8 @@
 //  - AI 结果永不回写来源块
 import {LIMITS} from "../constants";
 import {getErrorProperty} from "../model/errors";
+import {listAskFields} from "../model/variables";
+import {lvAi} from "../libs/lv-notice-kit";
 
 export interface IKernelTransport {
     request<T = unknown>(endpoint: AiEndpointName, payload?: Record<string, unknown>): Promise<T>;
@@ -288,4 +290,130 @@ export class AiAssistant {
         const raw = await this.complete(buildTagAuditPrompt(tags), false);
         return parseTagAudit(raw);
     }
+
+    /** AI 智能模板根据上下文展开 (Epoch 7 Phase 6) */
+    async smartExpandTemplate(templateText: string, context?: TemplateExpansionContext): Promise<string> {
+        return aiSmartExpandTemplate(templateText, context);
+    }
+
+    /** AI 智能变体生成（中英双语、礼貌商务、极简要点） (Epoch 7 Phase 6) */
+    async generateSnippetVariants(title: string, content: string): Promise<SnippetVariant[]> {
+        return aiGenerateSnippetVariants(title, content);
+    }
+}
+
+export interface TemplateExpansionContext {
+    before?: string;
+    after?: string;
+    docTitle?: string;
+}
+
+export interface SnippetVariant {
+    type: "bilingual" | "business" | "concise";
+    label: string;
+    titleSuffix: string;
+    content: string;
+}
+
+/**
+ * 模版根据上下文智能展开与补全：展开复杂宏模版时，AI 根据当前光标前后文自动生成填充内容。
+ */
+export async function aiSmartExpandTemplate(templateText: string, context?: TemplateExpansionContext): Promise<string> {
+    const fields = listAskFields(templateText);
+    const prompt = [
+        `你是文档智能助手。用户正在笔记中应用一个模板，请根据当前文档的上下文，推断并生成最合适的变量填充值。`,
+        context?.docTitle ? `当前文档标题: ${context.docTitle}` : "",
+        context?.before ? `光标前文: ${context.before.slice(-400)}` : "",
+        context?.after ? `光标后文: ${context.after.slice(0, 400)}` : "",
+        `待填充模板正文:`,
+        templateText,
+        fields.length > 0 ? `待填充变量清单: ${fields.map(f => f.name).join(", ")}` : "",
+        `请直接返回填充后的完整模板内容，不要包含多余的分析或说明。`
+    ].filter(Boolean).join("\n");
+
+    const res = await lvAi.chat({
+        source: "小驴常用",
+        messages: [
+            { role: "system", content: "你是一个专业的高效写作与排版助手。严格按照用户的上下文对模板进行变量填充与展开，保持原有 Markdown 排版格式，直接输出结果。" },
+            { role: "user", content: prompt }
+        ],
+        temperature: 0.3
+    });
+    return res.content.trim() || templateText;
+}
+
+/**
+ * 模版变量根据上下文智能推断键值对映射。
+ */
+export async function aiSmartFillVariables(templateText: string, context?: TemplateExpansionContext): Promise<Record<string, string>> {
+    const fields = listAskFields(templateText);
+    if (fields.length === 0) return {};
+    const prompt = [
+        `根据文档上下文，为以下模板中的变量生成合理的填充值。以严格的 JSON 键值对格式输出，不要有额外文本。`,
+        context?.docTitle ? `文档标题: ${context.docTitle}` : "",
+        context?.before ? `光标前文: ${context.before.slice(-400)}` : "",
+        `模板变量: ${fields.map(f => f.name).join(", ")}`,
+        `模板正文:`,
+        templateText
+    ].filter(Boolean).join("\n");
+
+    try {
+        const res = await lvAi.chat({
+            source: "小驴常用",
+            messages: [
+                { role: "system", content: "你是一个智能表单变量分析助手。分析上下文并只输出形如 {\"varName\": \"value\"} 的 JSON 键值对。" },
+                { role: "user", content: prompt }
+            ],
+            temperature: 0.2
+        });
+        const jsonStr = res.content.match(/\{[\s\S]*\}/)?.[0];
+        if (jsonStr) {
+            return JSON.parse(jsonStr);
+        }
+    } catch (err) {
+        console.warn("[lvAi] 智能填充变量失败:", err);
+    }
+    return {};
+}
+
+/**
+ * 常用片段智能变体生成：对某个常用片段，一键由 AI 生成中英双语版、礼貌商务版、极简要点版。
+ */
+export async function aiGenerateSnippetVariants(title: string, content: string): Promise<SnippetVariant[]> {
+    const prompt = [
+        `请为常用文本片段「${title}」生成 3 个不同语气的变体版本：`,
+        `1. bilingual: 中英双语对照版（保留中文并在每段后附上优雅英文对照）`,
+        `2. business: 礼貌商务版（适合工作邮件、商务沟通，得体委婉专业）`,
+        `3. concise: 极简要点版（提炼关键信息为简练要点或无序列表）`,
+        ``,
+        `原文内容：`,
+        content,
+        ``,
+        `请严格输出 JSON 格式（不要包含任何其他文字或标记）：`,
+        `{`,
+        `  "bilingual": "中英双语版正文内容",`,
+        `  "business": "礼貌商务版正文内容",`,
+        `  "concise": "极简要点版正文内容"`,
+        `}`
+    ].join("\n");
+
+    const res = await lvAi.chat({
+        source: "小驴常用",
+        messages: [
+            { role: "system", content: "你是一个专业的文本重构与文案润色大师。严格按要求的格式输出三个语气的变体 JSON。" },
+            { role: "user", content: prompt }
+        ],
+        temperature: 0.4
+    });
+
+    const jsonMatch = res.content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+        throw new Error("AI 变体响应格式解析失败");
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    return [
+        { type: "bilingual", label: "中英双语版", titleSuffix: " (中英双语版)", content: String(parsed.bilingual || "") },
+        { type: "business", label: "礼貌商务版", titleSuffix: " (礼貌商务版)", content: String(parsed.business || "") },
+        { type: "concise", label: "极简要点版", titleSuffix: " (极简要点版)", content: String(parsed.concise || "") },
+    ];
 }

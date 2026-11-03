@@ -32,7 +32,7 @@ import {CapabilityDescriptor, ProviderDescriptor} from "./model/protocol";
 import {LibraryService} from "./service/library";
 import {ExportIntegrityError} from "./service/export-markdown";
 import {ActionExecutor, HostBridge} from "./service/commands";
-import {AiAssistant, AiUnavailableError, SearchMetaEntry, type AiEndpointName} from "./service/ai";
+import {AiAssistant, AiUnavailableError, SearchMetaEntry, type AiEndpointName, aiSmartExpandTemplate, aiGenerateSnippetVariants, type TemplateExpansionContext} from "./service/ai";
 import {ProviderRegistry} from "./service/providers";
 import {XiaolvCommonService} from "./service/service";
 import {DiscoveryService, type DiscoveryReceipt, type DiscoverySessionView} from "./service/discovery";
@@ -534,7 +534,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 digit: 8,
                 badge: "常用 18 项",
                 badgeType: "primary",
-                actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录"],
+                actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录", "生成常用智能变体"],
                 onClick: () => this.openCommonPanel(),
                 onAction: (action) => this.handleQuickAction(action),
             });
@@ -3455,7 +3455,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.openSearch();
     }
 
-    handleQuickAction(action: string): void {
+    async handleQuickAction(action: string): Promise<void> {
         if (action.includes("搜索")) {
             this.openSearch();
         } else if (action.includes("新建")) {
@@ -3463,9 +3463,55 @@ export default class XiaolvCommonPlugin extends Plugin {
         } else if (action.includes("历史") || action.includes("高频")) {
             this.state.sort = "recent";
             this.openSearch();
+        } else if (action.includes("变体") || action.includes("智能生成")) {
+            const targetId = this.state.favorites[0] || this.state.recents[0]?.id;
+            if (targetId) {
+                try {
+                    await this.generateVariantsForItem(targetId);
+                } catch (err) {
+                    this.notify("error", `生成变体失败: ${toErrorMessage(err)}`);
+                }
+            } else {
+                this.notify("info", "暂无可生成变体的常用片段");
+            }
         } else {
             this.openSearch();
         }
+    }
+
+    /**
+     * 为指定常用片段一键由 AI 生成中英双语版、礼貌商务版、极简要点版，存为子模版 (Epoch 7 Phase 6)
+     */
+    async generateVariantsForItem(itemId: string): Promise<CommonItem[]> {
+        if (!this.library) return [];
+        const idx = await this.library.ensureIndex();
+        const item = idx.items.get(itemId);
+        if (!item) throw new Error("条目不存在");
+        const kdRes = await this.library.getStoredItemKramdown(item);
+        if (!kdRes.ok || !kdRes.data) throw new Error("无法读取条目内容");
+        const variants = await aiGenerateSnippetVariants(item.title, kdRes.data);
+        const createdItems: CommonItem[] = [];
+        for (const variant of variants) {
+            const receipt = await this.library.createItem({
+                itemType: item.itemType === "code" ? "code" : "text",
+                title: `${item.title}${variant.titleSuffix}`,
+                markdown: variant.content,
+                category: item.category || "常用",
+                tags: [...(item.tags || []), "AI变体", variant.label],
+            });
+            if (receipt.ok && receipt.data?.item) {
+                createdItems.push(receipt.data.item);
+            }
+        }
+        this.notify("info", `已为「${item.title}」生成 ${createdItems.length} 个 AI 智能变体`);
+        return createdItems;
+    }
+
+    /**
+     * 模版根据上下文智能展开与补全 (Epoch 7 Phase 6)
+     */
+    async smartExpandTemplate(templateText: string, context?: TemplateExpansionContext): Promise<string> {
+        return aiSmartExpandTemplate(templateText, context);
     }
 
     // ---- 协议能力（雷切等消费）----

@@ -23,7 +23,7 @@ export interface AskField {
 }
 
 // 名称禁 | 与 }；选项段不含 }。支持 {{xlc:ask:...}} 及 Espanso / Templater 风格 {{input:...}}、{{select:...}}、{{choice:...}}。
-export const ASK_PATTERN = /\{\{(?:xlc:ask:|input:|select:|choice:)([^:|}]+)(?:[:|]([^}]*))?\}\}/g;
+export const ASK_PATTERN = /\{\{(?:(?:xlc:)?ask:|input:|select:|choice:)([^:|}]+)(?:[:|]([^}]*))?\}\}/g;
 
 export function parseAskField(rawName: string, rawOptions: string | undefined): AskField | null {
     let name = rawName.trim().slice(0, LIMITS.tag);

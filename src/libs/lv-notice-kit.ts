@@ -93,7 +93,7 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 140; // 1.4.0 (Phase 5: Launchpad & Native Vector Icons)
+const PROTOCOL_VERSION = 150; // 1.5.0 (Phase 6: Ecosystem AI Fabric & Command Center)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
 const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
@@ -213,6 +213,7 @@ interface LvActivityStreamHub {
     getTodayRecords: () => LvActivityRecord[];
     onActivity: (cb: (item: LvActivityRecord) => void) => () => void;
     formatAsMarkdown: () => string;
+    getDailyStats: () => Record<string, number>;
 }
 
 interface LvBackupHub {
@@ -227,6 +228,7 @@ interface LvLaunchpadHub {
     register: (item: LvLaunchpadItem) => () => void;
     getItems: () => Array<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }>;
     setPluginState: (id: string, state: "pinned" | "docked" | "hidden") => void;
+    executeAction: (id: string, actionName: string) => boolean;
     open: (mode?: "popover" | "center") => void;
     close: () => void;
 }
@@ -1317,6 +1319,7 @@ function getActivityHub(): LvActivityStreamHub {
             getTodayRecords: () => [...fallbackActivities],
             onActivity: () => () => {},
             formatAsMarkdown: () => formatActivityMarkdown(fallbackActivities),
+            getDailyStats: () => ({ total: fallbackActivities.length }),
         };
     }
 
@@ -1363,6 +1366,15 @@ function getActivityHub(): LvActivityStreamHub {
 
         formatAsMarkdown(): string {
             return formatActivityMarkdown(todayActivities);
+        },
+
+        getDailyStats(): Record<string, number> {
+            const stats: Record<string, number> = { total: todayActivities.length };
+            todayActivities.forEach(r => {
+                stats[r.category] = (stats[r.category] || 0) + 1;
+                stats[r.source] = (stats[r.source] || 0) + 1;
+            });
+            return stats;
         }
     };
 
@@ -1412,6 +1424,10 @@ export const lvActivity = {
     /** 格式化生成结构化 Markdown 字符串，可直接追加到 Daily Note */
     formatAsMarkdown(): string {
         return getActivityHub().formatAsMarkdown();
+    },
+    /** 获取今日生态活动量化指标 (如打卡数、剪藏数、复习数) */
+    getDailyStats(): Record<string, number> {
+        return getActivityHub().getDailyStats();
     }
 };
 
@@ -1606,6 +1622,16 @@ function getLaunchpadHub(): LvLaunchpadHub {
                 states[id] = state;
                 saveLaunchpadStates(states);
             },
+            executeAction: (id, actionName) => {
+                const item = launchpadRegistry.get(id);
+                if (!item) return false;
+                if (item.onAction) {
+                    item.onAction(actionName);
+                    return true;
+                }
+                item.onClick();
+                return true;
+            },
             open: () => {},
             close: () => {},
         };
@@ -1639,6 +1665,17 @@ function getLaunchpadHub(): LvLaunchpadHub {
             saveLaunchpadStates(states);
         },
 
+        executeAction(id: string, actionName: string): boolean {
+            const item = launchpadRegistry.get(id);
+            if (!item) return false;
+            if (item.onAction) {
+                item.onAction(actionName);
+                return true;
+            }
+            item.onClick();
+            return true;
+        },
+
         open(_mode?: "popover" | "center"): void {
             // 通过 DOM 或 CustomEvent 派发打开弹射坞
             window.dispatchEvent(new CustomEvent("lv:launchpad:open", { detail: { mode: _mode || "popover" } }));
@@ -1667,6 +1704,11 @@ export const lvLaunchpad = {
     /** 用户动态设定插件状态：pinned（置顶在外） | docked（仅在坞内） | hidden（彻底隐藏） */
     setPluginState(pluginId: string, state: "pinned" | "docked" | "hidden"): void {
         getLaunchpadHub().setPluginState(pluginId, state);
+    },
+
+    /** 直接触发指定插件的二级快捷行动（供 Quicker 动作或外部快捷键毫秒级直达） */
+    executeAction(pluginId: string, actionName: string): boolean {
+        return getLaunchpadHub().executeAction(pluginId, actionName);
     },
 
     /** 唤醒弹射坞（支持 popover 顶栏吸附或 center 屏幕居中） */

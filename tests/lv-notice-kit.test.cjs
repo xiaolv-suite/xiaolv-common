@@ -2,8 +2,9 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {lvNoticeKit} = require("./.build/entry.cjs");
+const {lvNoticeKit, ai} = require("./.build/entry.cjs");
 const {lvNotify, lvSurfaceStack, withDocLock, lvTicker, lvActivity, lvAi, lvBackup, lvEcosystem, lvLaunchpad} = lvNoticeKit;
+const {aiSmartExpandTemplate, aiSmartFillVariables, aiGenerateSnippetVariants} = ai;
 
 // Setup a mock DOM environment for node:test
 function setupMockDom() {
@@ -152,7 +153,7 @@ function setupMockDom() {
     };
 }
 
-test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 5 标准验收)", async (t) => {
+test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 6 标准验收)", async (t) => {
     let domScope;
 
     t.beforeEach(() => {
@@ -433,7 +434,7 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 5 标准�
         );
 
         const diag = lvEcosystem.getDiagnostics();
-        assert.equal(diag.version, 140);
+        assert.equal(diag.version, 150);
         assert.ok(diag.registeredPlugins.includes("xiaolv-common"));
         assert.equal(typeof diag.todayActivitiesCount, "number");
 
@@ -489,5 +490,154 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 5 标准�
         unreg();
         const afterUnreg = lvLaunchpad.getItems();
         assert.equal(afterUnreg.find(i => i.id === "xiaolv-common"), undefined, "注销后应从罗盘列表移除");
+    });
+
+    await t.test("lvActivity · 获取今日生态活动量化指标 (getDailyStats)", () => {
+        lvActivity.record({
+            source: "常用",
+            category: "note",
+            title: "应用常用模版「工作周报」",
+        });
+        const stats = lvActivity.getDailyStats();
+        assert.ok(stats.total >= 1, "total 指标应至少为 1");
+        assert.ok(stats.note >= 1, "note category 指标应至少为 1");
+        assert.ok(stats["常用"] >= 1, "常用 source 指标应至少为 1");
+    });
+
+    await t.test("lvLaunchpad · 二级快捷行动 executeAction 穿透直达", () => {
+        let executedAction = "";
+        const unreg = lvLaunchpad.register({
+            id: "xiaolv-common",
+            name: "常用",
+            fullName: "小驴常用",
+            svgIcon: "icon-lv-common",
+            color: "#14b8a6",
+            actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录", "生成常用智能变体"],
+            onClick: () => {},
+            onAction: (act) => { executedAction = act; },
+        });
+
+        const ok = lvLaunchpad.executeAction("xiaolv-common", "生成常用智能变体");
+        assert.equal(ok, true, "executeAction 应返回 true");
+        assert.equal(executedAction, "生成常用智能变体", "应成功执行指定的二级动作");
+
+        unreg();
+    });
+
+    await t.test("aiSmartExpandTemplate · 模版根据上下文智能展开与补全", async () => {
+        const originalFetch = global.fetch;
+        try {
+            lvAi.setConfig({
+                apiKey: "sk-test-ai-key",
+                endpoint: "https://api.deepseek.com/v1",
+                model: "deepseek-chat",
+            });
+
+            global.fetch = async (url, opts) => {
+                const reqBody = JSON.parse(opts.body);
+                assert.ok(reqBody.messages);
+                return {
+                    ok: true,
+                    status: 200,
+                    async json() {
+                        return {
+                            choices: [{
+                                message: {
+                                    content: "尊敬的项目组：请于 2026-11-05 前提交 核心功能开发周报，谢谢！"
+                                }
+                            }],
+                            model: "deepseek-chat"
+                        };
+                    }
+                };
+            };
+
+            const template = "尊敬的{{xlc:ask:team}}：请于 {{xlc:ask:deadline}} 前提交 {{xlc:ask:reportName}}，谢谢！";
+            const expanded = await aiSmartExpandTemplate(template, {
+                docTitle: "项目进度管理",
+                before: "当前进入核心功能冲刺阶段",
+            });
+
+            assert.ok(expanded.includes("核心功能开发周报"));
+            assert.ok(expanded.includes("2026-11-05"));
+
+            // 智能变量推断键值对测试
+            global.fetch = async () => ({
+                ok: true,
+                status: 200,
+                async json() {
+                    return {
+                        choices: [{
+                            message: {
+                                content: JSON.stringify({
+                                    team: "前端研发组",
+                                    deadline: "周五下班前",
+                                    reportName: "Sprint 42 进展"
+                                })
+                            }
+                        }],
+                        model: "deepseek-chat"
+                    };
+                }
+            });
+
+            const fills = await aiSmartFillVariables(template, { docTitle: "研发周例会" });
+            assert.equal(fills.team, "前端研发组");
+            assert.equal(fills.deadline, "周五下班前");
+            assert.equal(fills.reportName, "Sprint 42 进展");
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    await t.test("aiGenerateSnippetVariants · 常用片段生成中英双语版、礼貌商务版、极简要点版子模版", async () => {
+        const originalFetch = global.fetch;
+        try {
+            lvAi.setConfig({
+                apiKey: "sk-test-ai-key",
+                endpoint: "https://api.deepseek.com/v1",
+                model: "deepseek-chat",
+            });
+
+            global.fetch = async () => ({
+                ok: true,
+                status: 200,
+                async json() {
+                    return {
+                        choices: [{
+                            message: {
+                                content: JSON.stringify({
+                                    bilingual: "请尽快确认需求 / Please confirm the requirements ASAP.",
+                                    business: "烦请各位领导与同事在百忙之中协助确认需求，感谢您的支持与配合！",
+                                    concise: "- 需求确认：请尽快完成"
+                                })
+                            }
+                        }],
+                        model: "deepseek-chat"
+                    };
+                }
+            });
+
+            const variants = await aiGenerateSnippetVariants("需求确认通知", "请确认需求");
+            assert.equal(variants.length, 3);
+            const [bilingual, business, concise] = variants;
+
+            assert.equal(bilingual.type, "bilingual");
+            assert.equal(bilingual.label, "中英双语版");
+            assert.equal(bilingual.titleSuffix, " (中英双语版)");
+            assert.ok(bilingual.content.includes("Please confirm"));
+
+            assert.equal(business.type, "business");
+            assert.equal(business.label, "礼貌商务版");
+            assert.equal(business.titleSuffix, " (礼貌商务版)");
+            assert.ok(business.content.includes("协助确认需求"));
+
+            assert.equal(concise.type, "concise");
+            assert.equal(concise.label, "极简要点版");
+            assert.equal(concise.titleSuffix, " (极简要点版)");
+            assert.ok(concise.content.includes("- 需求确认"));
+        } finally {
+            global.fetch = originalFetch;
+        }
     });
 });
