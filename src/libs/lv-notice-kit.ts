@@ -93,9 +93,32 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 120; // 1.2.0 (Phase 3: AI Gateway & Activity Stream)
+const PROTOCOL_VERSION = 130; // 1.3.0 (Phase 4: Full Ecosystem Orchestration & Backup)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
+
+export interface LvPluginBackupPayload {
+    plugin: string;
+    version: string;
+    exportedAt: string;
+    data: Record<string, unknown>;
+}
+
+export interface LvEcosystemFullBackup {
+    v: 1;
+    ecosystem: "xiaolv";
+    exportedAt: string;
+    plugins: Record<string, LvPluginBackupPayload>;
+}
+
+export interface LvEcosystemDiagnostics {
+    version: number;
+    coordinatorHost: string;
+    registeredPlugins: string[];
+    todayActivitiesCount: number;
+    hasSharedAiConfig: boolean;
+    sharedAiModel?: string;
+}
 
 export interface LvAiConfig {
     endpoint: string;    // e.g. "https://api.deepseek.com/v1" or "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -176,6 +199,13 @@ interface LvActivityStreamHub {
     formatAsMarkdown: () => string;
 }
 
+interface LvBackupHub {
+    version: number;
+    register: (plugin: string, backupFn: () => Promise<Record<string, unknown>>, restoreFn: (data: Record<string, unknown>) => Promise<boolean>) => () => void;
+    exportFull: () => Promise<LvEcosystemFullBackup>;
+    restoreFull: (bundle: LvEcosystemFullBackup) => Promise<{ success: string[]; failed: string[] }>;
+}
+
 declare global {
     interface Window {
         __LV_NOTICE_HUB__?: LvNoticeHub;
@@ -184,6 +214,7 @@ declare global {
         __LV_DOC_LOCKS__?: Map<string, Promise<unknown>>;
         __LV_AI_GATEWAY__?: LvAiGatewayHub;
         __LV_ACTIVITY_STREAM__?: LvActivityStreamHub;
+        __LV_BACKUP_HUB__?: LvBackupHub;
     }
 }
 
@@ -1355,5 +1386,154 @@ export const lvActivity = {
     /** 格式化生成结构化 Markdown 字符串，可直接追加到 Daily Note */
     formatAsMarkdown(): string {
         return getActivityHub().formatAsMarkdown();
+    }
+};
+
+/* ========================================================================= */
+/* 12. 全家桶一键联合灾备包 (Lv Ecosystem Full Backup Orchestrator)           */
+/* ========================================================================= */
+
+interface BackupProvider {
+    plugin: string;
+    backup: () => Promise<Record<string, unknown>>;
+    restore: (data: Record<string, unknown>) => Promise<boolean>;
+}
+
+const backupRegistry = new Map<string, BackupProvider>();
+
+function createBackupCoordinator(): LvBackupHub {
+    return {
+        version: PROTOCOL_VERSION,
+        register(plugin: string, backup: () => Promise<Record<string, unknown>>, restore: (data: Record<string, unknown>) => Promise<boolean>): () => void {
+            backupRegistry.set(plugin, { plugin, backup, restore });
+            return () => backupRegistry.delete(plugin);
+        },
+
+        async exportFull(): Promise<LvEcosystemFullBackup> {
+            const bundle: LvEcosystemFullBackup = {
+                v: 1,
+                ecosystem: "xiaolv",
+                exportedAt: new Date().toISOString(),
+                plugins: {},
+            };
+
+            const entries = Array.from(backupRegistry.entries());
+            await Promise.all(
+                entries.map(async ([plugin, provider]) => {
+                    try {
+                        const data = await provider.backup();
+                        bundle.plugins[plugin] = {
+                            plugin,
+                            version: "latest",
+                            exportedAt: new Date().toISOString(),
+                            data,
+                        };
+                    } catch (err) {
+                        console.error(`[LvBackup] 备份插件 ${plugin} 失败:`, err);
+                    }
+                })
+            );
+
+            return bundle;
+        },
+
+        async restoreFull(bundle: LvEcosystemFullBackup): Promise<{ success: string[]; failed: string[] }> {
+            if (!bundle || bundle.ecosystem !== "xiaolv" || !bundle.plugins) {
+                throw new Error("[LvBackup] 非合法的小驴全生态灾备包格式");
+            }
+
+            const success: string[] = [];
+            const failed: string[] = [];
+
+            for (const [plugin, payload] of Object.entries(bundle.plugins)) {
+                const provider = backupRegistry.get(plugin);
+                if (!provider) {
+                    failed.push(`${plugin}(未安装或未注册恢复切面)`);
+                    continue;
+                }
+                try {
+                    const ok = await provider.restore(payload.data);
+                    if (ok) success.push(plugin);
+                    else failed.push(plugin);
+                } catch (e) {
+                    console.error(`[LvBackup] 恢复插件 ${plugin} 异常:`, e);
+                    failed.push(plugin);
+                }
+            }
+
+            return { success, failed };
+        }
+    };
+}
+
+let nodeBackupHubInstance: LvBackupHub | undefined;
+
+function getBackupHub(): LvBackupHub {
+    if (typeof window === "undefined") {
+        if (!nodeBackupHubInstance) {
+            nodeBackupHubInstance = createBackupCoordinator();
+        }
+        return nodeBackupHubInstance;
+    }
+
+    if (window.__LV_BACKUP_HUB__ && window.__LV_BACKUP_HUB__.version >= PROTOCOL_VERSION) {
+        return window.__LV_BACKUP_HUB__;
+    }
+
+    const hub = createBackupCoordinator();
+    window.__LV_BACKUP_HUB__ = hub;
+    return hub;
+}
+
+export const lvBackup = {
+    /** 插件向生态灾备总线注册备份/恢复切面 */
+    register(
+        pluginName: string,
+        backupFn: () => Promise<Record<string, unknown>>,
+        restoreFn: (data: Record<string, unknown>) => Promise<boolean>
+    ): () => void {
+        return getBackupHub().register(pluginName, backupFn, restoreFn);
+    },
+
+    /** 导出当前已安装并启用的所有小驴插件全量联合备份包 */
+    exportFull(): Promise<LvEcosystemFullBackup> {
+        return getBackupHub().exportFull();
+    },
+
+    /** 将联合备份包一键恢复到各个插件 */
+    restoreFull(bundle: LvEcosystemFullBackup): Promise<{ success: string[]; failed: string[] }> {
+        return getBackupHub().restoreFull(bundle);
+    }
+};
+
+/* ========================================================================= */
+/* 13. 全生态健康自省与指示器 (Lv Ecosystem Diagnostics)                       */
+/* ========================================================================= */
+
+export const lvEcosystem = {
+    /** 获取全生态运行态健康诊断信息 */
+    getDiagnostics(): LvEcosystemDiagnostics {
+        const noticeHub = typeof window !== "undefined" ? window.__LV_NOTICE_HUB__ : undefined;
+        const aiHub = typeof window !== "undefined" ? window.__LV_AI_GATEWAY__ : undefined;
+        const aiCfg = aiHub?.getConfig();
+        const activities = typeof window !== "undefined" ? window.__LV_ACTIVITY_STREAM__?.getTodayRecords() ?? [] : [];
+        const registered = Array.from(backupRegistry.keys());
+
+        return {
+            version: PROTOCOL_VERSION,
+            coordinatorHost: noticeHub?.hostPlugin ?? "none",
+            registeredPlugins: registered,
+            todayActivitiesCount: activities.length,
+            hasSharedAiConfig: Boolean(aiCfg?.apiKey),
+            sharedAiModel: aiCfg?.model,
+        };
+    },
+
+    /** 生成一行极简且精致的胶囊状态文字，如：“🐴 小驴全家桶协同正常 · 7 个插件已联结 · 今日活动 8 项” */
+    getStatusBadgeText(): string {
+        const diag = this.getDiagnostics();
+        const count = diag.registeredPlugins.length;
+        const pluginText = count > 0 ? `${count} 插件已联结` : "单机模式";
+        return `🐴 小驴全家桶协同正常 · ${pluginText} · 今日活动 ${diag.todayActivitiesCount} 项`;
     }
 };

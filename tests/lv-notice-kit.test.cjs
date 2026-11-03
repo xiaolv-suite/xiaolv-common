@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {lvNoticeKit} = require("./.build/entry.cjs");
-const {lvNotify, lvSurfaceStack, withDocLock, lvTicker, lvActivity, lvAi} = lvNoticeKit;
+const {lvNotify, lvSurfaceStack, withDocLock, lvTicker, lvActivity, lvAi, lvBackup, lvEcosystem} = lvNoticeKit;
 
 // Setup a mock DOM environment for node:test
 function setupMockDom() {
@@ -143,6 +143,7 @@ function setupMockDom() {
             delete global.window.__LV_TICKER__;
             delete global.window.__LV_AI_GATEWAY__;
             delete global.window.__LV_ACTIVITY_STREAM__;
+            delete global.window.__LV_BACKUP_HUB__;
             delete global.document;
             delete global.window;
             delete global.localStorage;
@@ -150,7 +151,7 @@ function setupMockDom() {
     };
 }
 
-test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 2 标准验收)", async (t) => {
+test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 4 标准验收)", async (t) => {
     let domScope;
 
     t.beforeEach(() => {
@@ -371,5 +372,75 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 2 标准�
         assert.notEqual(cfg, null);
         assert.equal(cfg.apiKey, "sk-test-shared-key-123456");
         assert.equal(cfg.model, "deepseek-chat");
+    });
+
+    await t.test("lvBackup · 全家桶一键联合灾备切面：注册、全量导出与一键联合恢复", async () => {
+        let restoredDataCommon = null;
+        let restoredDataGate = null;
+
+        const unregCommon = lvBackup.register(
+            "xiaolv-common",
+            async () => ({
+                config: { mode: "doc" },
+                itemsCount: 42,
+            }),
+            async (data) => {
+                restoredDataCommon = data;
+                return true;
+            }
+        );
+
+        const unregGate = lvBackup.register(
+            "siyuan-quickgate",
+            async () => ({
+                settings: { theme: "dark" },
+            }),
+            async (data) => {
+                restoredDataGate = data;
+                return true;
+            }
+        );
+
+        // 全量联合导出
+        const bundle = await lvBackup.exportFull();
+        assert.equal(bundle.v, 1);
+        assert.equal(bundle.ecosystem, "xiaolv");
+        assert.ok(bundle.exportedAt);
+        assert.ok(bundle.plugins["xiaolv-common"]);
+        assert.equal(bundle.plugins["xiaolv-common"].data.itemsCount, 42);
+        assert.ok(bundle.plugins["siyuan-quickgate"]);
+        assert.deepEqual(bundle.plugins["siyuan-quickgate"].data.settings, { theme: "dark" });
+
+        // 全量联合恢复
+        const result = await lvBackup.restoreFull(bundle);
+        assert.deepEqual(result.failed, []);
+        assert.ok(result.success.includes("xiaolv-common"));
+        assert.ok(result.success.includes("siyuan-quickgate"));
+        assert.equal(restoredDataCommon.itemsCount, 42);
+        assert.deepEqual(restoredDataGate.settings, { theme: "dark" });
+
+        // 注销清理
+        unregCommon();
+        unregGate();
+    });
+
+    await t.test("lvEcosystem · 全生态健康自省与指示徽章", () => {
+        const unreg = lvBackup.register(
+            "xiaolv-common",
+            async () => ({}),
+            async () => true
+        );
+
+        const diag = lvEcosystem.getDiagnostics();
+        assert.equal(diag.version, 130);
+        assert.ok(diag.registeredPlugins.includes("xiaolv-common"));
+        assert.equal(typeof diag.todayActivitiesCount, "number");
+
+        const badgeText = lvEcosystem.getStatusBadgeText();
+        assert.ok(badgeText.startsWith("🐴 小驴全家桶协同正常"));
+        assert.ok(badgeText.includes("插件已联结"));
+        assert.ok(badgeText.includes("今日活动"));
+
+        unreg();
     });
 });

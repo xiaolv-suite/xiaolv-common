@@ -6,10 +6,10 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvActivity, lvNotify, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
+import {lvActivity, lvBackup, lvNotify, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
-import {LIMITS, PLUGIN_VERSION, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
+import {EXPORT_SCHEMA_VERSION, LIMITS, PLUGIN_VERSION, PROTOCOL_NAME, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
 import {createKernelClient, parseExistingMap, type IKernelClient, type SyncPost, type SyncPostContext} from "./kernel/client";
 import {CommonItem, cleanShortcode, isBlockId, isItemType, isSafeHttpUrl, kramdownToPlainText, parseSnippetAnnotations, resolveBlockRefTarget} from "./model/item";
 import {toErrorMessage} from "./model/errors";
@@ -17,7 +17,7 @@ import {getSingleDocTreeDiscoveryTarget} from "./model/discovery-target";
 import {InsertMode, buildBlockRef, buildEmbedBlock} from "./model/actions";
 import {escapeHtml, isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown} from "./model/clipboard";
 import {collectDefaults, rememberValues} from "./model/variable-memory";
-import {ExportedItem, buildBundle, validateImport, ConflictPolicy, ImportReceipt} from "./model/transfer";
+import {ExportBundle, ExportedItem, buildBundle, validateImport, ConflictPolicy, ImportReceipt} from "./model/transfer";
 import {importBundle as importBundleCore} from "./service/importer";
 import {importMarkdownBundle, parseMarkdownPack} from "./service/import-markdown";
 import {LibraryConfig, CONFIG_VERSION, migrateState, normalizeLibraryConfig, normalizeSavedDiscoveryViews, normalizeState, PluginState, pushRecentQuery, removeRecentQuery, type SavedDiscoveryView, pushClipboardHistory} from "./model/storage";
@@ -125,6 +125,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     private quickAccessPopoverDismiss: (() => void) | null = null;
     /** 小驴全生态统一通知套件 · 卸载注销清理器 (Epoch 7) */
     private noticeHubCleaner?: (() => void);
+    /** 小驴全生态统一灾备总线 · 卸载注销清理器 (Epoch 7 Phase 4) */
+    private backupCleaner?: (() => void);
     private unloading = false;
 
     async onload(): Promise<void> {
@@ -505,6 +507,17 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.noticeHubCleaner = lvNotify.registerPlugin("xiaolv-common");
         } catch {
             // 环境无 DOM / SSR 防御
+        }
+
+        // 小驴全生态统一灾备总线 · 注册常用片段与宏模版备份恢复切面 (Epoch 7 Phase 4)
+        try {
+            this.backupCleaner = lvBackup.register(
+                "xiaolv-common",
+                async () => this.dumpData(),
+                async (data) => this.restoreData(data)
+            );
+        } catch {
+            // 环境防御
         }
     }
 
@@ -3332,6 +3345,88 @@ export default class XiaolvCommonPlugin extends Plugin {
         return importMarkdownBundle(this.library, items, policy);
     }
 
+    // ---- 全家桶一键联合灾备切面 (Epoch 7 Phase 4) ----
+
+    async dumpData(): Promise<Record<string, unknown>> {
+        let itemsBundle: ExportBundle | null = null;
+        try {
+            if (this.library) {
+                const idx = await this.library.ensureIndex();
+                if (idx && idx.items) {
+                    const items: CommonItem[] = [];
+                    const kramdownById = new Map<string, string>();
+                    for (const item of idx.items.values()) {
+                        try {
+                            const kd = await this.library.getStoredItemKramdown(item);
+                            if (kd.ok && kd.data) {
+                                items.push(item);
+                                kramdownById.set(item.id, kd.data);
+                            }
+                        } catch {
+                            // 单条读取异常不阻断全量导出
+                        }
+                    }
+                    itemsBundle = buildBundle(items, kramdownById, Date.now());
+                }
+            }
+        } catch (e) {
+            console.warn("[xiaolv-common] dumpData items error:", e);
+        }
+
+        return {
+            version: 1,
+            plugin: "xiaolv-common",
+            exportedAt: new Date().toISOString(),
+            config: this.config ?? null,
+            state: this.state ?? null,
+            itemsBundle: itemsBundle ?? null,
+        };
+    }
+
+    async restoreData(data: Record<string, unknown>): Promise<boolean> {
+        if (!data || typeof data !== "object") return false;
+        try {
+            if (data.config && typeof data.config === "object") {
+                const normalizedConfig = normalizeLibraryConfig(data.config);
+                if (normalizedConfig) {
+                    this.config = normalizedConfig;
+                    this.persistSidecar(STORAGE_KEYS.config, this.config);
+                    this.library?.setConfig(normalizedConfig);
+                }
+            }
+            if (data.state && typeof data.state === "object") {
+                const normalizedState = normalizeState(data.state);
+                if (normalizedState) {
+                    this.state = normalizedState;
+                    this.persistSidecar(STORAGE_KEYS.state, this.state);
+                }
+            }
+            if (data.itemsBundle && typeof data.itemsBundle === "object") {
+                try {
+                    await this.importBundleText(JSON.stringify(data.itemsBundle), "overwrite");
+                } catch (err) {
+                    console.warn("[xiaolv-common] restoreData importBundle error:", err);
+                }
+            } else if (Array.isArray(data.items)) {
+                try {
+                    const fallbackBundle = {
+                        protocol: PROTOCOL_NAME,
+                        schemaVersion: EXPORT_SCHEMA_VERSION,
+                        exportedAt: Date.now(),
+                        items: data.items,
+                    };
+                    await this.importBundleText(JSON.stringify(fallbackBundle), "overwrite");
+                } catch (err) {
+                    console.warn("[xiaolv-common] restoreData items array error:", err);
+                }
+            }
+            return true;
+        } catch (err) {
+            console.error("[xiaolv-common] restoreData failed:", err);
+            return false;
+        }
+    }
+
     // ---- 协议能力（雷切等消费）----
 
     getCapabilities(): CapabilityDescriptor[] {
@@ -3366,6 +3461,13 @@ export default class XiaolvCommonPlugin extends Plugin {
             // 宿主已销毁：忽略
         }
         this.noticeHubCleaner = undefined;
+        // 小驴全生态统一灾备总线 · 注销切面 (Epoch 7 Phase 4)
+        try {
+            this.backupCleaner?.();
+        } catch {
+            // 宿主已销毁：忽略
+        }
+        this.backupCleaner = undefined;
         // 对外窗口桥先行注销（兄弟插件在桥消失后应得到 unsupported，而非悬挂调用）
         try {
             this.bridgeDisposer?.();

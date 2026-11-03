@@ -7103,3 +7103,33 @@
   color: var(--xlc-danger) !important;
   border-color: var(--xlc-danger) !important;
 }
+
+// ---------- 小驴全生态健康自省与指示徽章 (Epoch 7 Phase 4) ----------
+.xlc-eco-status-badge,
+.xlc-settings-eco-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--xlc-space-1);
+  padding: 4px 12px;
+  margin-top: 10px;
+  border-radius: var(--xlc-radius-pill, 9999px);
+  font-size: 11px;
+  font-weight: var(--xlc-weight-medium);
+  color: var(--b3-theme-primary);
+  background: var(--xlc-badge-md-bg);
+  border: 1px solid color-mix(in srgb, var(--b3-theme-primary) 22%, transparent);
+  user-select: none;
+}
+
+.xlc-footer-eco-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: var(--xlc-radius-pill, 9999px);
+  font-size: 11px;
+  color: var(--b3-theme-on-surface);
+  background: var(--xlc-badge-md-bg);
+  opacity: 0.88;
+  margin-left: 6px;
+  user-select: none;
+}

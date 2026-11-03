@@ -20,6 +20,7 @@ import {openCsvTsvImportWizard} from "./csv-tsv-wizard";
 import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doctor";
 import {calculateUsageInsights, calculateHeatmap, buildDailyUsageMap, type UsageItemMeta} from "../model/usage-insights";
 import {detectEcosystem} from "../service/ecosystem";
+import {lvEcosystem} from "../libs/lv-notice-kit";
 import {openSanitizerOptionsDialog} from "./export-sanitizer-modal";
 import type {SanitizerOptions} from "../model/export-sanitizer";
 import {openSyncDiffModal} from "./sync-diff-modal";
@@ -328,6 +329,10 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     buildExternalIntegrationSection(ctx, root);
     buildProviderSection(ctx, root);
     buildDataSection(ctx, root);
+    const ecoOverviewBadge = document.createElement("div");
+    ecoOverviewBadge.className = "xlc-settings-eco-badge";
+    ecoOverviewBadge.textContent = lvEcosystem.getStatusBadgeText();
+    root.appendChild(ecoOverviewBadge);
     body.appendChild(root);
 }
 
@@ -2614,6 +2619,11 @@ fi`;
         ecoList.appendChild(row);
     }
     sec.appendChild(ecoList);
+
+    const ecoBadge = document.createElement("div");
+    ecoBadge.className = "xlc-eco-status-badge";
+    ecoBadge.textContent = lvEcosystem.getStatusBadgeText();
+    sec.appendChild(ecoBadge);
 
     root.appendChild(sec);
 }

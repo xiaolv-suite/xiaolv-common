@@ -5,7 +5,7 @@
 // 触控：44px 命中区、长按 550ms（移动 <10px 判定）弹动作菜单；不依赖 hover、不做坐标猜测。
 // AI：? 前缀语义找条目（默认仅元数据出域）；动作菜单 AI 变换（预览后选插入，原文永不被改写）。
 import {Dialog} from "siyuan";
-import {lvNotify, lvSurfaceStack} from "../libs/lv-notice-kit";
+import {lvEcosystem, lvNotify, lvSurfaceStack} from "../libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations, extractCleanPayload} from "../model/item";
 import {ItemSortMode} from "../model/storage";
@@ -1198,6 +1198,12 @@ export class CommonSearchDialog {
             claim.setAttribute("role", "note");
             claim.setAttribute("aria-label", this.deps.t("dataTruthHint"));
             footer.appendChild(claim);
+
+            const ecoBadge = document.createElement("span");
+            ecoBadge.className = "xlc-footer-eco-badge";
+            ecoBadge.textContent = lvEcosystem.getStatusBadgeText();
+            ecoBadge.title = "小驴全生态协同健康指示器";
+            footer.appendChild(ecoBadge);
         }
         // 使用说明双端可达：把常见的捕获、搜索、插入与整理路径放在弹窗内，降低首次上手成本。
         const guide = document.createElement("button");
