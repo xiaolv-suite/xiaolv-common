@@ -6,7 +6,7 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
+import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {EXPORT_SCHEMA_VERSION, LIMITS, PLUGIN_VERSION, PROTOCOL_NAME, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -129,6 +129,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     private backupCleaner?: (() => void);
     /** 小驴罗盘 · 弹射坞卸载注销清理器 (Epoch 7 Phase 5) */
     private launchpadCleaner?: (() => void);
+    /** 小驴穿透搜索 · 卸载注销清理器 (Epoch 7 Phase 7) */
+    private searchCleaner?: (() => void);
     private unloading = false;
 
     async onload(): Promise<void> {
@@ -537,6 +539,23 @@ export default class XiaolvCommonPlugin extends Plugin {
                 actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录", "生成常用智能变体"],
                 onClick: () => this.openCommonPanel(),
                 onAction: (action) => this.handleQuickAction(action),
+            });
+        } catch {
+            // 环境防御
+        }
+
+        // 小驴穿透搜索 · 注册常用代码片段与模版检索切面 (Epoch 7 Phase 7)
+        try {
+            this.searchCleaner = lvOmnisearch.registerProvider("xiaolv-common", async (keyword) => {
+                const hits = await this.searchSnippets(keyword);
+                return hits.slice(0, 5).map(s => ({
+                    id: s.id,
+                    source: "常用",
+                    category: "note",
+                    title: s.title,
+                    snippet: s.content.slice(0, 60),
+                    onClick: () => { void this.insertSnippet(s.id); },
+                }));
             });
         } catch {
             // 环境防御
@@ -3514,6 +3533,43 @@ export default class XiaolvCommonPlugin extends Plugin {
         return aiSmartExpandTemplate(templateText, context);
     }
 
+    // ---- 小驴穿透搜索辅助接口 (Epoch 7 Phase 7) ----
+
+    async searchSnippets(keyword: string): Promise<Array<{ id: string; title: string; content: string }>> {
+        if (!this.library) return [];
+        try {
+            const idx = await this.library.ensureIndex();
+            if (!idx) return [];
+            const kw = (keyword || "").trim().toLowerCase();
+            const hits: Array<{ id: string; title: string; content: string }> = [];
+            for (const item of idx.items.values()) {
+                const titleMatch = item.title.toLowerCase().includes(kw);
+                const summaryMatch = (item.summary || "").toLowerCase().includes(kw);
+                const tagMatch = item.tags.some(t => t.toLowerCase().includes(kw));
+                if (!kw || titleMatch || summaryMatch || tagMatch) {
+                    hits.push({
+                        id: item.id,
+                        title: item.title,
+                        content: item.summary || item.title,
+                    });
+                }
+            }
+            return hits;
+        } catch {
+            return [];
+        }
+    }
+
+    async insertSnippet(itemId: string): Promise<boolean> {
+        if (!this.service) return false;
+        try {
+            const res = await this.service.insert(itemId, {mode: "insert"});
+            return res.ok;
+        } catch {
+            return false;
+        }
+    }
+
     // ---- 协议能力（雷切等消费）----
 
     getCapabilities(): CapabilityDescriptor[] {
@@ -3562,6 +3618,13 @@ export default class XiaolvCommonPlugin extends Plugin {
             // 宿主已销毁：忽略
         }
         this.launchpadCleaner = undefined;
+        // 小驴穿透搜索 · 注销检索切面 (Epoch 7 Phase 7)
+        try {
+            this.searchCleaner?.();
+        } catch {
+            // 宿主已销毁：忽略
+        }
+        this.searchCleaner = undefined;
         // 对外窗口桥先行注销（兄弟插件在桥消失后应得到 unsupported，而非悬挂调用）
         try {
             this.bridgeDisposer?.();

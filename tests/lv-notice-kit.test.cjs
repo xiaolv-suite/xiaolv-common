@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {lvNoticeKit, ai} = require("./.build/entry.cjs");
-const {lvNotify, lvSurfaceStack, withDocLock, lvTicker, lvActivity, lvAi, lvBackup, lvEcosystem, lvLaunchpad} = lvNoticeKit;
+const {lvNotify, lvSurfaceStack, withDocLock, lvTicker, lvActivity, lvAi, lvBackup, lvEcosystem, lvLaunchpad, lvOmnisearch, lvAutomation} = lvNoticeKit;
 const {aiSmartExpandTemplate, aiSmartFillVariables, aiGenerateSnippetVariants} = ai;
 
 // Setup a mock DOM environment for node:test
@@ -146,6 +146,8 @@ function setupMockDom() {
             delete global.window.__LV_ACTIVITY_STREAM__;
             delete global.window.__LV_BACKUP_HUB__;
             delete global.window.__LV_LAUNCHPAD__;
+            delete global.window.__LV_OMNISEARCH__;
+            delete global.window.__LV_AUTOMATION__;
             delete global.document;
             delete global.window;
             delete global.localStorage;
@@ -153,7 +155,7 @@ function setupMockDom() {
     };
 }
 
-test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 6 标准验收)", async (t) => {
+test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 7 标准验收)", async (t) => {
     let domScope;
 
     t.beforeEach(() => {
@@ -434,7 +436,7 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 6 标准�
         );
 
         const diag = lvEcosystem.getDiagnostics();
-        assert.equal(diag.version, 150);
+        assert.equal(diag.version, 160);
         assert.ok(diag.registeredPlugins.includes("xiaolv-common"));
         assert.equal(typeof diag.todayActivitiesCount, "number");
 
@@ -639,5 +641,55 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 6 标准�
         } finally {
             global.fetch = originalFetch;
         }
+    });
+
+    await t.test("lvOmnisearch · 统一全局穿透搜索与跨插件全文检索", async () => {
+        let insertedId = "";
+
+        const unregCommon = lvOmnisearch.registerProvider("xiaolv-common", async (keyword) => {
+            if (keyword.includes("周报") || keyword.includes("工作")) {
+                return [{
+                    id: "snippet-weekly-001",
+                    source: "常用",
+                    category: "note",
+                    title: "工作周报模板",
+                    snippet: "本周工作总结与下周计划...",
+                    onClick: () => { insertedId = "snippet-weekly-001"; },
+                }];
+            }
+            return [];
+        });
+
+        const unregGate = lvOmnisearch.registerProvider("siyuan-quickgate", async (keyword) => {
+            if (keyword.includes("周报") || keyword.includes("文档")) {
+                return [{
+                    id: "doc-weekly-999",
+                    source: "快门",
+                    category: "note",
+                    title: "2026年第44周工作周报",
+                    snippet: "项目研发进度记录",
+                    onClick: () => {},
+                }];
+            }
+            return [];
+        });
+
+        // 检索命中多插件
+        const results = await lvOmnisearch.search("周报");
+        assert.equal(results.length, 2, "应检索出来自不同插件的 2 条结果");
+        assert.ok(results.some(r => r.source === "常用" && r.title === "工作周报模板"));
+        assert.ok(results.some(r => r.source === "快门" && r.title === "2026年第44周工作周报"));
+
+        // 点击动作执行
+        const hit = results.find(r => r.id === "snippet-weekly-001");
+        assert.ok(hit);
+        hit.onClick();
+        assert.equal(insertedId, "snippet-weekly-001");
+
+        // 注销清理
+        unregCommon();
+        unregGate();
+        const afterUnreg = await lvOmnisearch.search("周报");
+        assert.equal(afterUnreg.length, 0, "注销后检索结果应为空");
     });
 });

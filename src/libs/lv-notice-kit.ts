@@ -58,10 +58,16 @@ export interface CardNoticeOptions {
 
 export interface CapsuleNoticeOptions {
     source?: string;
+    category?: string;
     message: string;
     level?: LvNoticeLevel;
     /** 停留时长，默认 2500ms */
     duration?: number;
+    /** 可选轻量撤销/跳转操作 */
+    action?: {
+        label: string;
+        onClick?: () => void | Promise<void>;
+    };
 }
 
 export interface SilentNoticeOptions {
@@ -93,10 +99,36 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 150; // 1.5.0 (Phase 6: Ecosystem AI Fabric & Command Center)
+const PROTOCOL_VERSION = 160; // 1.6.0 (Phase 7: Omnisearch & IFTTT Automation)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
 const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
+const AUTOMATION_RULES_KEY = "lv_automation_rules_config";
+
+export interface LvSearchResultItem {
+    id: string;
+    source: string;              // "打卡" | "拾遗" | "考试" | "闪卡" | "人脉" | "管家" | "常用" | "快门"
+    category: string;
+    title: string;
+    snippet?: string;
+    badge?: string;
+    linkBlockId?: string;
+    onClick: () => void | Promise<void>;
+}
+
+export type LvSearchProvider = (keyword: string) => Promise<LvSearchResultItem[]> | LvSearchResultItem[];
+
+export interface LvAutomationRule {
+    id: string;
+    name: string;
+    desc: string;
+    enabled: boolean;
+    triggerSource: string;       // 如 "siyuan-exam"
+    triggerType: string;         // 如 "wrong-question"
+    actionPlugin: string;        // 如 "siyuan-lv-cards"
+    actionName: string;          // 如 "create-card"
+    execute: (payload: unknown) => Promise<boolean> | boolean;
+}
 
 export interface LvLaunchpadItem {
     id: string;
@@ -147,6 +179,8 @@ export interface LvAiConfig {
 export interface LvAiRequestOptions {
     source: string;              // 调用插件名，如 "闪卡"、"考试"、"拾遗"
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+    endpoint?: string;           // 可选，单次请求独立覆写端点
+    apiKey?: string;             // 可选，单次请求独立覆写 Key
     model?: string;              // 可选，覆盖模型
     temperature?: number;
     priority?: "high" | "low";   // 默认 high (前台交互即时响应)；low 为后台批量
@@ -233,6 +267,20 @@ interface LvLaunchpadHub {
     close: () => void;
 }
 
+interface LvOmnisearchHub {
+    version: number;
+    registerProvider: (plugin: string, provider: LvSearchProvider) => () => void;
+    search: (keyword: string) => Promise<LvSearchResultItem[]>;
+}
+
+interface LvAutomationHub {
+    version: number;
+    registerRule: (rule: LvAutomationRule) => () => void;
+    trigger: (source: string, type: string, payload: unknown) => Promise<{ triggered: number; success: number }>;
+    getRules: () => LvAutomationRule[];
+    toggleRule: (ruleId: string, enabled: boolean) => void;
+}
+
 declare global {
     interface Window {
         __LV_NOTICE_HUB__?: LvNoticeHub;
@@ -243,6 +291,8 @@ declare global {
         __LV_ACTIVITY_STREAM__?: LvActivityStreamHub;
         __LV_BACKUP_HUB__?: LvBackupHub;
         __LV_LAUNCHPAD__?: LvLaunchpadHub;
+        __LV_OMNISEARCH__?: LvOmnisearchHub;
+        __LV_AUTOMATION__?: LvAutomationHub;
     }
 }
 
@@ -487,9 +537,9 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         id: "lv-notice-active-card",
         type: "card",
         dismiss: () => {
-            if (activePackets.length > 0) {
-                const topPacket = activePackets[activePackets.length - 1];
-                if (topPacket) hub.dismiss(topPacket.id);
+            const top = activePackets[activePackets.length - 1];
+            if (top) {
+                hub.dismiss(top.id);
                 return true;
             }
             return false;
@@ -575,8 +625,7 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                 touchStartY = e.touches[0]?.clientY ?? 0;
             }, { passive: true });
             card.addEventListener("touchend", (e) => {
-                const clientY = e.changedTouches[0]?.clientY ?? touchStartY;
-                const diffY = clientY - touchStartY;
+                const diffY = (e.changedTouches[0]?.clientY ?? 0) - touchStartY;
                 if (diffY < -40) {
                     hub.dismiss(packet.id);
                 }
@@ -699,15 +748,11 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
             if (this.hostPlugin !== name) return;
             pluginRegistry.delete(name);
             const remaining = Array.from(pluginRegistry.keys());
-            if (remaining.length > 0) {
-                const nextHost = remaining[0];
-                if (nextHost) {
-                    this.hostPlugin = nextHost;
-                    const takeoverFn = pluginRegistry.get(nextHost);
-                    takeoverFn?.();
-                } else {
-                    this.destroy();
-                }
+            const nextHost = remaining[0];
+            if (nextHost) {
+                this.hostPlugin = nextHost;
+                const takeoverFn = pluginRegistry.get(nextHost);
+                takeoverFn?.();
             } else {
                 this.destroy();
             }
@@ -1719,5 +1764,210 @@ export const lvLaunchpad = {
     /** 关闭弹射坞 */
     close(): void {
         getLaunchpadHub().close();
+    }
+};
+
+/** 兼容原生思源 showMessage 调用的快捷导出（自动分流为现代微胶囊与卡片） */
+export function showMessage(message: string, timeout = 3000, type: "info" | "error" = "info"): void {
+    if (type === "error") {
+        lvNotify.card({ message, level: "error", duration: timeout });
+    } else {
+        lvNotify.capsule({ message, duration: timeout });
+    }
+}
+
+/* ========================================================================= */
+/* 15. 统一全局万物穿透搜索引擎 (Lv Omnisearch Engine)                         */
+/* ========================================================================= */
+
+const searchProviders = new Map<string, LvSearchProvider>();
+
+function createOmnisearchCoordinator(): LvOmnisearchHub {
+    return {
+        version: PROTOCOL_VERSION,
+
+        registerProvider(plugin: string, provider: LvSearchProvider): () => void {
+            searchProviders.set(plugin, provider);
+            return () => searchProviders.delete(plugin);
+        },
+
+        async search(keyword: string): Promise<LvSearchResultItem[]> {
+            const kw = keyword.trim().toLowerCase();
+            if (!kw) return [];
+
+            const results: LvSearchResultItem[] = [];
+            const providers = Array.from(searchProviders.entries());
+
+            // 并发向所有已注册插件发起穿透检索，带 1000ms 超时熔断保护
+            await Promise.all(
+                providers.map(async ([plugin, provider]) => {
+                    try {
+                        const timeoutPromise = new Promise<LvSearchResultItem[]>((_, reject) => {
+                            setTimeout(() => reject(new Error("Timeout")), 1000);
+                        });
+                        const providerPromise = Promise.resolve(provider(kw));
+                        const items = await Promise.race([providerPromise, timeoutPromise]);
+                        if (Array.isArray(items)) {
+                            results.push(...items);
+                        }
+                    } catch (err) {
+                        console.warn(`[LvOmnisearch] 插件 ${plugin} 检索异常或超时:`, err);
+                    }
+                })
+            );
+
+            // 相关度排序：标题完全匹配/前缀匹配优先
+            return results.sort((a, b) => {
+                const aTitle = a.title.toLowerCase();
+                const bTitle = b.title.toLowerCase();
+                const aExact = aTitle === kw ? 2 : aTitle.includes(kw) ? 1 : 0;
+                const bExact = bTitle === kw ? 2 : bTitle.includes(kw) ? 1 : 0;
+                return bExact - aExact;
+            });
+        }
+    };
+}
+
+let nodeOmnisearchHubInstance: LvOmnisearchHub | undefined;
+
+function getOmnisearchHub(): LvOmnisearchHub {
+    if (typeof window === "undefined") {
+        if (!nodeOmnisearchHubInstance) {
+            nodeOmnisearchHubInstance = createOmnisearchCoordinator();
+        }
+        return nodeOmnisearchHubInstance;
+    }
+
+    if (window.__LV_OMNISEARCH__ && window.__LV_OMNISEARCH__.version >= PROTOCOL_VERSION) {
+        return window.__LV_OMNISEARCH__;
+    }
+
+    const hub = createOmnisearchCoordinator();
+    window.__LV_OMNISEARCH__ = hub;
+    return hub;
+}
+
+export const lvOmnisearch = {
+    /** 插件向生态穿透搜索总线注册数据提供者 */
+    registerProvider(pluginName: string, provider: LvSearchProvider): () => void {
+        return getOmnisearchHub().registerProvider(pluginName, provider);
+    },
+
+    /** 跨插件穿透全文检索 */
+    search(keyword: string): Promise<LvSearchResultItem[]> {
+        return getOmnisearchHub().search(keyword);
+    }
+};
+
+/* ========================================================================= */
+/* 16. 跨插件智能自动化联动引擎 (Lv Automation IFTTT Rules Engine)             */
+/* ========================================================================= */
+
+const automationRules = new Map<string, LvAutomationRule>();
+
+function getStoredRuleStates(): Record<string, boolean> {
+    if (typeof localStorage === "undefined") return {};
+    try {
+        const raw = localStorage.getItem(AUTOMATION_RULES_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return {};
+}
+
+function saveStoredRuleStates(states: Record<string, boolean>): void {
+    if (typeof localStorage === "undefined") return;
+    try {
+        localStorage.setItem(AUTOMATION_RULES_KEY, JSON.stringify(states));
+    } catch { /* ignore */ }
+}
+
+function getAutomationHub(): LvAutomationHub {
+    if (typeof window === "undefined") {
+        return {
+            version: PROTOCOL_VERSION,
+            registerRule: (rule) => {
+                automationRules.set(rule.id, rule);
+                return () => automationRules.delete(rule.id);
+            },
+            trigger: async () => ({ triggered: 0, success: 0 }),
+            getRules: () => Array.from(automationRules.values()),
+            toggleRule: () => {},
+        };
+    }
+
+    if (window.__LV_AUTOMATION__ && window.__LV_AUTOMATION__.version >= PROTOCOL_VERSION) {
+        return window.__LV_AUTOMATION__;
+    }
+
+    const hub: LvAutomationHub = {
+        version: PROTOCOL_VERSION,
+
+        registerRule(rule: LvAutomationRule): () => void {
+            const states = getStoredRuleStates();
+            const isEnabled = states[rule.id] !== undefined ? Boolean(states[rule.id]) : rule.enabled;
+            automationRules.set(rule.id, { ...rule, enabled: isEnabled });
+            return () => automationRules.delete(rule.id);
+        },
+
+        async trigger(source: string, type: string, payload: unknown): Promise<{ triggered: number; success: number }> {
+            const matched = Array.from(automationRules.values()).filter(
+                r => r.enabled && r.triggerSource === source && r.triggerType === type
+            );
+
+            let success = 0;
+            await Promise.all(
+                matched.map(async (r) => {
+                    try {
+                        const ok = await r.execute(payload);
+                        if (ok !== false) success++;
+                    } catch (e) {
+                        console.error(`[LvAutomation] 规则 ${r.id} (${r.name}) 执行异常:`, e);
+                    }
+                })
+            );
+
+            return { triggered: matched.length, success };
+        },
+
+        getRules(): LvAutomationRule[] {
+            const states = getStoredRuleStates();
+            return Array.from(automationRules.values()).map(r => ({
+                ...r,
+                enabled: states[r.id] !== undefined ? Boolean(states[r.id]) : r.enabled,
+            }));
+        },
+
+        toggleRule(ruleId: string, enabled: boolean): void {
+            const states = getStoredRuleStates();
+            states[ruleId] = enabled;
+            saveStoredRuleStates(states);
+            const r = automationRules.get(ruleId);
+            if (r) r.enabled = enabled;
+        }
+    };
+
+    window.__LV_AUTOMATION__ = hub;
+    return hub;
+}
+
+export const lvAutomation = {
+    /** 注册一条跨插件联动规则 (IFTTT) */
+    registerRule(rule: LvAutomationRule): () => void {
+        return getAutomationHub().registerRule(rule);
+    },
+
+    /** 触发联动事件 */
+    trigger(sourcePlugin: string, eventType: string, payload: unknown): Promise<{ triggered: number; success: number }> {
+        return getAutomationHub().trigger(sourcePlugin, eventType, payload);
+    },
+
+    /** 获取当前所有联动规则 */
+    getRules(): LvAutomationRule[] {
+        return getAutomationHub().getRules();
+    },
+
+    /** 用户切换某条自动化规则的开启/关闭状态 */
+    toggleRule(ruleId: string, enabled: boolean): void {
+        getAutomationHub().toggleRule(ruleId, enabled);
     }
 };
