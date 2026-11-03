@@ -4412,19 +4412,34 @@ export class CommonSearchDialog {
                 sec1.setAttribute("aria-label", "主要操作");
             }
             const addAction = (icon: string, label: string, run: () => Promise<unknown>, cls = "xlc-menu-item", destroyBeforeRun = true): void => {
-                sec1.appendChild(this.menuButton(icon, label, cls, async () => {
-                    const execution = run();
-                    if (destroyBeforeRun) this.destroy();
-                    else {
-                        this.menuDismiss?.();
-                        this.menuDismiss = null;
+                let btn: HTMLElement;
+                btn = this.menuButton(icon, label, cls, async () => {
+                    const isCopyAction = icon === "⧉" || label.includes("复制") || label.includes("Copy");
+                    if (isCopyAction) {
+                        try {
+                            await run();
+                            lvNotify.inline(btn, "已复制");
+                            if (destroyBeforeRun && !this.pinWindow) {
+                                setTimeout(() => this.destroy(), 350);
+                            }
+                        } catch (err) {
+                            this.deps.notify?.("error", toErrorMessage(err));
+                        }
+                    } else {
+                        const execution = run();
+                        if (destroyBeforeRun) this.destroy();
+                        else {
+                            this.menuDismiss?.();
+                            this.menuDismiss = null;
+                        }
+                        try {
+                            await execution;
+                        } catch (err) {
+                            this.deps.notify?.("error", toErrorMessage(err));
+                        }
                     }
-                    try {
-                        await execution;
-                    } catch (err) {
-                        this.deps.notify?.("error", toErrorMessage(err));
-                    }
-                }));
+                });
+                sec1.appendChild(btn);
             };
             if (entry.itemType === "blockref") {
                 addAction("＋", this.deps.t("insertRef"), () => this.insertTarget
@@ -4447,7 +4462,6 @@ export class CommonSearchDialog {
                     addAction("📄", this.deps.t("copyRawTemplate"), async () => {
                         const raw = await this.deps.preview(entry.id);
                         await this.deps.copyProviderPayload(raw || entry.content || "");
-                        this.deps.notify?.("info", this.deps.t("copyRawTemplateDone"));
                     });
                 }
             }
@@ -4463,7 +4477,6 @@ export class CommonSearchDialog {
                     const anchor = (entry.title || entry.summary || "引用").slice(0, 50).replace(/[\r\n]+/g, " ");
                     const refCode = buildBlockRef(targetBlockId, anchor);
                     await this.deps.copyProviderPayload(refCode);
-                    this.deps.notify?.("info", `已复制块引用: ${refCode}`);
                 }, "xlc-menu-item", !this.pinWindow);
             }
 
@@ -4472,7 +4485,6 @@ export class CommonSearchDialog {
                 const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
                 const plain = kramdownToPlainText(raw || entry.summary || "");
                 await this.deps.copyProviderPayload(plain);
-                this.deps.notify?.("info", "已复制清洗纯文本到剪贴板 (适用于微信/QQ)");
             }, "xlc-menu-item", !this.pinWindow);
             menu.appendChild(sec1);
 
