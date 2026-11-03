@@ -5,6 +5,7 @@
 // 触控：44px 命中区、长按 550ms（移动 <10px 判定）弹动作菜单；不依赖 hover、不做坐标猜测。
 // AI：? 前缀语义找条目（默认仅元数据出域）；动作菜单 AI 变换（预览后选插入，原文永不被改写）。
 import {Dialog} from "siyuan";
+import {lvNotify} from "../libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations, extractCleanPayload} from "../model/item";
 import {ItemSortMode} from "../model/storage";
@@ -1439,8 +1440,13 @@ export class CommonSearchDialog {
         copy.addEventListener("click", () => {
             if (this.activeProvider >= 0) {
                 const row = this.providerRows[this.activeProvider];
-                if (row) void this.deps.copyProviderPayload(row.payload);
-                if (!this.pinWindow) this.destroy();
+                if (row) {
+                    void this.deps.copyProviderPayload(row.payload).then((ok) => {
+                        if (ok) lvNotify.inline(copy, "已复制");
+                        else this.deps.notify?.("error", this.deps.t("copyFailed"));
+                    });
+                }
+                if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
                 return;
             }
             const entry = this.results[this.activeIndex];
@@ -1448,13 +1454,20 @@ export class CommonSearchDialog {
                 if (entry.isOmni) {
                     const textToCopy = kramdownToPlainText(entry.content || entry.summary || "");
                     void this.deps.copyText(textToCopy).then((ok) => {
-                        if (ok) this.deps.notify?.("info", this.deps.t("copied", entry.title || "条目"));
-                        else this.deps.notify?.("error", this.deps.t("copyFailed"));
+                        if (ok) {
+                            lvNotify.inline(copy, "已复制");
+                        } else {
+                            this.deps.notify?.("error", this.deps.t("copyFailed"));
+                        }
                     });
                 } else {
-                    void this.deps.runAction(entry.id, "copy");
+                    void this.deps.runAction(entry.id, "copy").then((res) => {
+                        if (res.ok) {
+                            lvNotify.inline(copy, "已复制");
+                        }
+                    });
                 }
-                if (!this.pinWindow) this.destroy();
+                if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
             }
         });
 
@@ -2640,7 +2653,9 @@ export class CommonSearchDialog {
             star.addEventListener("click", (e) => {
                 e.stopPropagation();
                 this.deps.toggleFavorite(entry.id);
-                star.textContent = this.deps.isFavorite(entry.id) ? "★" : "☆";
+                const isFav = this.deps.isFavorite(entry.id);
+                star.textContent = isFav ? "★" : "☆";
+                lvNotify.inline(star, isFav ? "已收藏" : "已取消收藏");
                 void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
             });
             row.appendChild(star);
@@ -2657,7 +2672,9 @@ export class CommonSearchDialog {
             trayBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 this.togglePasteTrayItem(entry);
-                trayBtn.textContent = this.pasteTrayItems.some((it) => it.id === entry.id) ? "✓" : "🛒";
+                const nowIn = this.pasteTrayItems.some((it) => it.id === entry.id);
+                trayBtn.textContent = nowIn ? "✓" : "🛒";
+                lvNotify.inline(trayBtn, nowIn ? "已暂存" : "已移出");
             });
             row.appendChild(trayBtn);
         }
@@ -4303,8 +4320,8 @@ export class CommonSearchDialog {
                     success = await this.deps.copyText(formatted.text);
                 }
                 if (success) {
-                    this.deps.notify?.("info", `已复制「${fmt.title}」到剪贴板`);
-                    if (!this.pinWindow) this.destroy();
+                    lvNotify.inline(anchor, "已复制");
+                    if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
                 } else {
                     this.deps.notify?.("error", this.deps.t("copyFailed"));
                 }
@@ -6594,8 +6611,10 @@ export class CommonSearchDialog {
                     const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
                     const plain = kramdownToPlainText(raw || entry.summary || "");
                     await this.deps.copyProviderPayload(plain);
-                    if (!this.pinWindow) this.destroy();
-                    this.deps.notify?.("info", this.pinWindow ? "已复制清洗纯文本（窗口已固定，可连续取用）" : "已复制清洗纯文本到剪贴板 (适用于微信/QQ)");
+                    const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
+                    const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(".xlc-row--active");
+                    lvNotify.inline(targetEl, "已复制");
+                    if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
                 }
             } finally {
                 this.primaryBusy = false;
@@ -6612,8 +6631,9 @@ export class CommonSearchDialog {
                     const row = this.providerRows[this.activeProvider];
                     if (row) {
                         await this.deps.copyProviderPayload(row.payload);
-                        if (!this.pinWindow) this.destroy();
-                        this.deps.notify?.("info", this.pinWindow ? "已复制到剪贴板（窗口已固定，可连续取用）" : "已复制到剪贴板，可直接在外部窗口粘贴 (Ctrl+V)");
+                        const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
+                        lvNotify.inline(copyBtn, "已复制");
+                        if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
                     }
                     return;
                 }
@@ -6624,8 +6644,10 @@ export class CommonSearchDialog {
                     } else {
                         await this.deps.runAction(entry.id, "copy");
                     }
-                    if (!this.pinWindow) this.destroy();
-                    this.deps.notify?.("info", this.pinWindow ? "已复制到剪贴板（窗口已固定，可连续取用）" : "已复制到剪贴板，可直接在外部窗口粘贴 (Ctrl+V)");
+                    const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
+                    const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(".xlc-row--active");
+                    lvNotify.inline(targetEl, "已复制");
+                    if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
                 }
             } finally {
                 this.primaryBusy = false;
@@ -6643,8 +6665,10 @@ export class CommonSearchDialog {
                     try {
                         const refCode = buildBlockRef(targetBlockId, anchor);
                         await this.deps.copyProviderPayload(refCode);
-                        if (!this.pinWindow) this.destroy();
-                        this.deps.notify?.("info", `已复制块引用: ${refCode}`);
+                        const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
+                        const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(".xlc-row--active");
+                        lvNotify.inline(targetEl, "已复制");
+                        if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
                     } catch {
                         this.deps.notify?.("error", "无法生成块引用：目标块 ID 无效");
                     }
@@ -6770,7 +6794,12 @@ export class CommonSearchDialog {
                         if (this.primaryBusy) return;
                         this.primaryBusy = true;
                         try {
-                            await this.deps.runAction(entry.id, "copy");
+                            const res = await this.deps.runAction(entry.id, "copy");
+                            if (res.ok) {
+                                const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
+                                const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(`[data-xlc-index="${idx}"]`);
+                                lvNotify.inline(targetEl, "已复制");
+                            }
                         } finally {
                             this.primaryBusy = false;
                         }
@@ -6798,7 +6827,12 @@ export class CommonSearchDialog {
                         if (this.primaryBusy) return;
                         this.primaryBusy = true;
                         try {
-                            await this.deps.runAction(entry.id, "copy");
+                            const res = await this.deps.runAction(entry.id, "copy");
+                            if (res.ok) {
+                                const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
+                                const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(`[data-xlc-index="${idx}"]`);
+                                lvNotify.inline(targetEl, "已复制");
+                            }
                         } finally {
                             this.primaryBusy = false;
                         }
@@ -7252,8 +7286,9 @@ export class CommonSearchDialog {
         const merged = mergeTrayContents(contents.map((c) => ({content: c})), this.traySeparator);
         const ok = await this.deps.copyText(merged);
         if (ok) {
-            this.deps.notify?.("info", `已合并复制 ${this.pasteTrayItems.length} 项常用语到剪贴板`);
-            if (!this.pinWindow) this.destroy();
+            const copyBtn = this.pasteTrayEl?.querySelector<HTMLButtonElement>("[data-xlc-control='paste-tray.merge-copy']");
+            if (copyBtn) lvNotify.inline(copyBtn, "已合并复制");
+            if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
         } else {
             this.deps.notify?.("error", this.deps.t("copyFailed"));
         }

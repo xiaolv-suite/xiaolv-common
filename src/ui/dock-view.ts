@@ -12,6 +12,7 @@
 import {SearchEntry, SearchQuery, findExactAliasMatch, findExactShortcodeMatch} from "../model/search";
 import {InsertMode} from "../model/actions";
 import {toErrorMessage} from "../model/errors";
+import {lvNotify} from "../libs/lv-notice-kit";
 import {hasDynamicMacros, expandMacroPreview} from "../model/variables";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {parseSnippetAnnotations} from "../model/item";
@@ -683,7 +684,7 @@ export class DockView {
         copyBtn.textContent = "⧉";
         copyBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            void this.copyEntry(entry);
+            void this.copyEntry(entry, copyBtn);
         });
         hoverActs.appendChild(copyBtn);
 
@@ -700,6 +701,7 @@ export class DockView {
             this.deps.toggleFavorite(entry.id);
             const isFav = this.deps.isFavorite(entry.id);
             favBtn.textContent = isFav ? "★" : "☆";
+            lvNotify.inline(favBtn, isFav ? "已收藏" : "已取消收藏");
             const updatedTitle = isFav ? "取消收藏" : "加入收藏";
             favBtn.title = updatedTitle;
             if (typeof favBtn.setAttribute === "function") favBtn.setAttribute("aria-label", updatedTitle);
@@ -923,16 +925,15 @@ export class DockView {
         }
     }
 
-    private async copyEntry(entry: SearchEntry): Promise<void> {
+    private async copyEntry(entry: SearchEntry, btnEl?: HTMLElement): Promise<void> {
         if (this.isCopyBusy) return;
         this.isCopyBusy = true;
         try {
             const res = await this.deps.runAction(entry.id, "copy");
             if (res.ok) {
-                const msg = res.message && res.message !== "ok"
-                    ? res.message
-                    : (this.deps.t("copied", entry.title || entry.id) || "已复制到剪贴板");
-                this.deps.notify?.("info", msg);
+                if (btnEl) {
+                    lvNotify.inline(btnEl, "已复制");
+                }
             } else {
                 this.deps.notify?.("error", res.message || this.deps.t("copyFailed") || "复制失败");
             }
@@ -1043,7 +1044,7 @@ export class DockView {
         if (typeof copyBtn.setAttribute === "function") {
             copyBtn.setAttribute("aria-label", this.deps.t("copy") || "复制");
         }
-        copyBtn.addEventListener("click", () => void this.copyEntry(entry));
+        copyBtn.addEventListener("click", () => void this.copyEntry(entry, copyBtn));
         foot.appendChild(copyBtn);
 
         const refBtn = document.createElement("button");

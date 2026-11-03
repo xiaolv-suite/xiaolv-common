@@ -2,6 +2,7 @@
 // 纯 DOM、零 innerHTML、无 XSS 风险：将单条资产编码为 xlc-bundle 紧凑字符串并提供可视化卡片与一键复制
 
 import {Dialog} from "siyuan";
+import {lvNotify} from "../libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface ShareCardDeps {
@@ -132,12 +133,12 @@ export function openShareCardDialog(
     copyBtn.textContent = deps.t("shareCardCopy") || "⧉ 复制分享码";
     copyBtn.dataset.xlcControl = "share-card.copy";
     copyBtn.addEventListener("click", async () => {
-        await deps.copyText(shareCode);
-        copyBtn.textContent = deps.t("shareCardCopied") || "✓ 已复制到剪贴板";
-        deps.notify?.("info", deps.t("copyCompactBundleSuccess") || "已复制分享码到剪贴板");
-        setTimeout(() => {
-            copyBtn.textContent = deps.t("shareCardCopy") || "⧉ 复制分享码";
-        }, 1500);
+        const ok = await deps.copyText(shareCode);
+        if (ok) {
+            lvNotify.inline(copyBtn, "已复制");
+        } else {
+            deps.notify?.("error", deps.t("copyFailed") || "复制失败");
+        }
     });
 
     foot.append(closeBtn, copyBtn);

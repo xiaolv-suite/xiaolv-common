@@ -7083,7 +7083,23 @@
   }
 }
 
+// ---------- 小驴全生态统一通知套件 · 原位微动效增强 (Epoch 7) ----------
+@keyframes lvInlinePop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
 
+.lv-inline-feedback-active {
+  animation: lvInlinePop 0.3s ease-out !important;
+}
 
+.lv-inline-feedback--success {
+  color: var(--xlc-success) !important;
+  border-color: var(--xlc-success) !important;
+}
 
-
+.lv-inline-feedback--error {
+  color: var(--xlc-danger) !important;
+  border-color: var(--xlc-danger) !important;
+}

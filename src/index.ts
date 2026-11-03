@@ -2,11 +2,11 @@
 import {
     Dialog,
     Plugin,
-    showMessage,
     confirm,
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
+import {lvNotify} from "./libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {LIMITS, PLUGIN_VERSION, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -123,6 +123,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     private discoveryDialog: DiscoveryDialogController | null = null;
     private dockView: DockView | null = null;
     private quickAccessPopoverDismiss: (() => void) | null = null;
+    /** 小驴全生态统一通知套件 · 卸载注销清理器 (Epoch 7) */
+    private noticeHubCleaner?: (() => void);
     private unloading = false;
 
     async onload(): Promise<void> {
@@ -133,7 +135,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.addIcons(ICONS);
         } catch (err) {
             const detail = toErrorMessage(err);
-            showMessage(this.i18nFn()("startupFailed", detail || "icon registration failed"), 7000, "error");
+            this.notify("error", this.i18nFn()("startupFailed", detail || "icon registration failed"));
         }
         // 先装配安全默认值并注册入口。宿主 loadData 在存储损坏/网络异常时可能悬挂，
         // 入口不能依赖侧车读取成功才出现；读取完成后再原位更新共享状态对象。
@@ -146,7 +148,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.bootServices();
         } catch (err) {
             const detail = toErrorMessage(err);
-            showMessage(this.i18nFn()("startupFailed", detail || "unknown error"), 7000, "error");
+            this.notify("error", this.i18nFn()("startupFailed", detail || "unknown error"));
             return;
         }
 
@@ -169,13 +171,13 @@ export default class XiaolvCommonPlugin extends Plugin {
         const rawConfig = configRead.ok ? configRead.value : null;
         const rawState = stateRead.ok ? stateRead.value : null;
         if (!configRead.ok || !stateRead.ok) {
-            showMessage(this.i18nFn()("sidecarLoadFailed"), 7000, "error");
+            this.notify("error", this.i18nFn()("sidecarLoadFailed"));
         }
         this.config = normalizeLibraryConfig(rawConfig);
         const migrated = migrateState(rawState);
         if ("rejected" in migrated) {
             // 未来版本数据：保留原样不降级改写，仅提示（诚实降级，不破坏）
-            showMessage(this.i18nFn()("libInvalid"), 5000, "error");
+            this.notify("error", this.i18nFn()("libInvalid"));
             Object.assign(this.state, normalizeState(null));
         } else {
             Object.assign(this.state, migrated.state);
@@ -494,6 +496,13 @@ export default class XiaolvCommonPlugin extends Plugin {
             const itemId = (payload as {itemId?: string} | undefined)?.itemId ?? "";
             return this.library.pushToSourceBlock(itemId);
         };
+
+        // 小驴全生态统一通知套件 · 注册本插件并自举自协商 (Epoch 7)
+        try {
+            this.noticeHubCleaner = lvNotify.registerPlugin("xiaolv-common");
+        } catch {
+            // 环境无 DOM / SSR 防御
+        }
     }
 
     /** 当前文档发现的统一入口，供命令面板、右键菜单和协议调用复用。 */
@@ -776,7 +785,21 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     private notify = (kind: "info" | "error", message: string): void => {
-        showMessage(message, 4000, kind === "error" ? "error" : "info");
+        if (kind === "error") {
+            lvNotify.card({
+                source: "小驴常用",
+                title: "小驴常用提示",
+                message,
+                level: "error",
+                duration: 6000,
+            });
+        } else {
+            lvNotify.capsule({
+                source: "小驴常用",
+                message,
+                duration: 2500,
+            });
+        }
     };
 
     /** AI 错误 → 诚实文案（区分未启用/未配置/权限/超时/解析失败/内容超长） */
@@ -2080,11 +2103,11 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
     ): void {
         if (!this.library || !this.capture || !this.service) {
-            showMessage(this.i18nFn()("startupFailed", "services unavailable"), 7000, "error");
+            this.notify("error", this.i18nFn()("startupFailed", "services unavailable"));
             return;
         }
         if (!this.sidecarReady) {
-            showMessage(this.i18nFn()("sidecarLoading"), 2000, "info");
+            this.notify("info", this.i18nFn()("sidecarLoading"));
             return;
         }
         if (!this.config) {
@@ -2565,7 +2588,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     if (mode.startsWith("copy")) {
                         const ok = await this.host.writeClipboard(kramdownToPlainText(content));
                         const msg = ok ? this.i18nFn()("copied", shortTitle(active?.title || "条目")) : this.i18nFn()("copyFailed");
-                        this.notify(ok ? "info" : "error", msg);
+                        if (!ok) this.notify("error", msg);
                         return {ok, message: msg};
                     } else {
                         const ok = this.host.insertMarkdown(content, editorTarget ?? undefined);
@@ -2583,7 +2606,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                 const msg = receipt.ok
                     ? this.receiptText(receipt.message, got.data.title, receipt.pendingVerification)
                     : this.receiptText(receipt.message, got.data.title, receipt.pendingVerification) || this.i18nFn()("kernelError", receipt.message);
-                this.notify(receipt.ok ? "info" : "error", msg);
+                if (!receipt.ok) {
+                    this.notify("error", msg);
+                } else if (!mode.startsWith("copy")) {
+                    this.notify("info", msg);
+                }
                 return {ok: receipt.ok, message: msg};
             }),
             runActionWithFills: (itemId, mode, fills) => withEditorTarget(mode, async () => {
@@ -2593,7 +2620,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     if (mode.startsWith("copy")) {
                         const ok = await this.host.writeClipboard(kramdownToPlainText(content));
                         const msg = ok ? this.i18nFn()("copied", shortTitle(active?.title || "条目")) : this.i18nFn()("copyFailed");
-                        this.notify(ok ? "info" : "error", msg);
+                        if (!ok) this.notify("error", msg);
                         return {ok, message: msg};
                     } else {
                         const ok = this.host.insertMarkdown(content, editorTarget ?? undefined);
@@ -2611,7 +2638,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                 const msg = receipt.ok
                     ? this.receiptText(receipt.message, got.data.title, receipt.pendingVerification)
                     : this.receiptText(receipt.message, got.data.title, receipt.pendingVerification) || this.i18nFn()("kernelError", receipt.message);
-                this.notify(receipt.ok ? "info" : "error", msg);
+                if (!receipt.ok) {
+                    this.notify("error", msg);
+                } else if (!mode.startsWith("copy")) {
+                    this.notify("info", msg);
+                }
                 return {ok: receipt.ok, message: msg};
             }),
             promptVariables: () => this.state.insert.promptVariables,
@@ -3260,6 +3291,13 @@ export default class XiaolvCommonPlugin extends Plugin {
         const discoveryWaitBudgetMs = 4000;
         this.unloading = true;
         const discoveryShutdown = this.discovery?.shutdown(discoveryWaitBudgetMs);
+        // 小驴全生态统一通知套件 · 注销与平滑交棒 (Epoch 7)
+        try {
+            this.noticeHubCleaner?.();
+        } catch {
+            // 宿主已销毁：忽略
+        }
+        this.noticeHubCleaner = undefined;
         // 对外窗口桥先行注销（兄弟插件在桥消失后应得到 unsupported，而非悬挂调用）
         try {
             this.bridgeDisposer?.();

@@ -5,6 +5,7 @@
 // 纯 DOM 装配、零 innerHTML、强 XSS 免疫。
 
 import {Dialog} from "siyuan";
+import {lvNotify} from "../libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface PinboardItem {
@@ -121,7 +122,7 @@ export function openPinboardDialog(
                 card.classList.add("xlc-pinboard-card--copied");
                 statusBadge.textContent = "✓ 已复制";
                 updateProgress();
-                deps.notify?.("info", `已复制「${it.title}」`);
+                lvNotify.inline(card, "已复制");
             } else {
                 deps.notify?.("error", deps.t("copyFailed") || "复制失败");
             }
