@@ -274,6 +274,10 @@ export interface PluginState {
     customItemOrder?: Record<string, number>;
     /** 全局常用名片池 / 身份档案（CAND-016 / TODO-FEAT-015）：变量名匹配时自动预填 */
     profilePresets?: Record<string, string>;
+    /** 剪贴板智能匹配开关（默认 false 关闭，设置内 opt-in · Mobile Spec v2） */
+    clipboardSmartMatchEnabled?: boolean;
+    /** 手机端高频直达行固定条目 ID 列表 (Mobile Spec v2) */
+    pinnedTopChips?: string[];
 }
 
 export function normalizeState(raw: unknown): PluginState {
@@ -390,6 +394,10 @@ export function normalizeState(raw: unknown): PluginState {
         dailyUsage: normalizeDailyUsage(obj.dailyUsage),
         customItemOrder: normalizeCustomItemOrder(obj.customItemOrder),
         profilePresets: normalizeProfilePresets(obj.profilePresets),
+        clipboardSmartMatchEnabled: obj.clipboardSmartMatchEnabled === true,
+        pinnedTopChips: Array.isArray(obj.pinnedTopChips)
+            ? obj.pinnedTopChips.filter((x): x is string => typeof x === "string" && x.startsWith("xlc-") && x.length <= 48).slice(0, 5)
+            : [],
     };
 }
 

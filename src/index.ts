@@ -1715,7 +1715,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 id: "xiaolv-common",
                 name: "常用",
                 fullName: "小驴常用",
-                svgIcon: "icon-lv-common",
+                svgIcon: "iconLvCommon",
                 color: "#14b8a6",
                 desc: "常用片段 · 宏模版",
                 digit: 8,
@@ -2997,6 +2997,12 @@ export default class XiaolvCommonPlugin extends Plugin {
                 releaseTargetIfIdle();
             },
             isMobile: () => this.host.isMobile(),
+            isClipboardSmartMatchEnabled: () => this.state.clipboardSmartMatchEnabled === true,
+            getPinnedTopChips: () => this.state.pinnedTopChips ?? [],
+            setPinnedTopChips: (ids: string[]) => {
+                this.state.pinnedTopChips = ids.slice(0, 5);
+                this.persistSoon();
+            },
         });
         this.searchDialog = dialogInstance;
         this.searchDialog.insertTarget = insertTarget ? {docId: insertTarget.docId, hPath: insertTarget.hPath} : null;

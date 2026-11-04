@@ -718,5 +718,11 @@
   "globalQuickMini": "全局呼出常用语迷你条 (跨应用/后台可用)",
   "globalQuickMiniDone": "已复制到剪贴板并重新退回后台，可在外部软件中直接 Ctrl+V 粘贴",
   "starterPacksTitle": "开箱即用套件市场 (Starter Packs Hub)",
-  "starterPacksBtn": "开箱套件"
+  "starterPacksBtn": "开箱套件",
+  "clipboardSmartMatchToggle": "剪贴板智能匹配（实验性）",
+  "clipboardSmartMatchSub": "打开搜索面板时若系统剪贴板文本与某片段名或内容前缀匹配（≥4 字符），顶部显示一键替换横幅。此功能需读取剪贴板权限，默认关闭。",
+  "clipboardSmartMatchBanner": "检测到剪贴板可能匹配：「%s」→ 点击一键替换",
+  "clipboardSmartMatchDone": "✓ 已复制替换结果",
+  "copyComboCount": "已连续复制 %s 次，需要批量导出吗？",
+  "enterMultiSelect": "进入多选"
 }

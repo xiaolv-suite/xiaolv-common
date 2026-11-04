@@ -185,6 +185,9 @@ export interface DialogDeps {
     isSourceMissing: (entry: SearchEntry) => boolean;
     close: () => void;
     isMobile: () => boolean;
+    isClipboardSmartMatchEnabled?: () => boolean;
+    getPinnedTopChips?: () => string[];
+    setPinnedTopChips?: (ids: string[]) => void;
 }
 
 const TYPE_BADGES: Record<ItemType, string> = {
@@ -223,6 +226,14 @@ export class CommonSearchDialog {
     private batchBarEl: HTMLElement | null = null;
     /** 移动端置顶高频片段直达行容器 (Mobile Spec v1) */
     private topChipsContainer: HTMLElement | null = null;
+    /** 剪贴板智能匹配横幅元素 (Mobile Spec v2) */
+    private smartMatchBannerEl: HTMLElement | null = null;
+    /** 移动端多级分类面包屑导航元素 (Mobile Spec v2) */
+    private mobileBreadcrumbsEl: HTMLElement | null = null;
+    /** 连续复制连击追踪器 (Mobile Spec v2: 30秒内≥2次触发提示) */
+    private copyCombo = { itemId: "", count: 0, lastTime: 0 };
+    /** 连击批量提示栏元素 */
+    private copyComboBannerEl: HTMLElement | null = null;
     /** 动作菜单 document 监听兜底清理（destroy 时调用；防键盘关弹窗残留监听） */
     private menuDismiss: (() => void) | null = null;
     private inputDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -550,6 +561,22 @@ export class CommonSearchDialog {
         search.appendChild(input);
         search.appendChild(clearBtn);
 
+        if (isMobile) {
+            // 审计 1: 消除 Esc-only 隐患，手机端提供可见 ✕ 关闭按钮
+            const mobileCloseBtn = document.createElement("button");
+            mobileCloseBtn.type = "button";
+            mobileCloseBtn.className = "xlc-mobile-close-btn";
+            mobileCloseBtn.dataset.xlcControl = "search.mobile.close";
+            mobileCloseBtn.textContent = "✕";
+            mobileCloseBtn.title = this.deps.t("close") || "关闭";
+            mobileCloseBtn.setAttribute("aria-label", this.deps.t("close") || "关闭搜索弹窗");
+            mobileCloseBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.destroy();
+            });
+            search.appendChild(mobileCloseBtn);
+        }
+
         if (!isMobile) {
             // 窗口固定按钮（连续取用时不自动关闭窗口，支持 Alt+P 快捷切换 · G50）
             const pinBtn = document.createElement("button");
@@ -598,6 +625,22 @@ export class CommonSearchDialog {
 
         searchBlock.appendChild(search);
 
+        // 剪贴板智能匹配横幅 (Mobile Spec v2: 默认关闭，设置内 opt-in)
+        const smartBanner = document.createElement("div");
+        smartBanner.className = "xlc-smart-match-banner";
+        smartBanner.dataset.xlcControl = "search.smart-match-banner";
+        smartBanner.style.display = "none";
+        this.smartMatchBannerEl = smartBanner;
+        searchBlock.appendChild(smartBanner);
+
+        // 连续复制连击批量导出提示栏 (Mobile Spec v2)
+        const comboBanner = document.createElement("div");
+        comboBanner.className = "xlc-combo-copy-banner";
+        comboBanner.dataset.xlcControl = "search.combo-banner";
+        comboBanner.style.display = "none";
+        this.copyComboBannerEl = comboBanner;
+        searchBlock.appendChild(comboBanner);
+
         // 移动端置顶高频片段直达行 (Mobile Spec v1: 位于搜索框正下方，frecency 前 5 个 chips)
         if (isMobile) {
             const chipsRow = document.createElement("div");
@@ -605,6 +648,14 @@ export class CommonSearchDialog {
             chipsRow.dataset.xlcControl = "search.mobile.top-chips";
             this.topChipsContainer = chipsRow;
             searchBlock.appendChild(chipsRow);
+
+            // 移动端多级分类面包屑导航 (Mobile Spec v2: 面包屑 + 左滑返回上级)
+            const breadcrumbs = document.createElement("div");
+            breadcrumbs.className = "xlc-mobile-breadcrumbs";
+            breadcrumbs.dataset.xlcControl = "search.mobile.breadcrumbs";
+            breadcrumbs.style.display = "none";
+            this.mobileBreadcrumbsEl = breadcrumbs;
+            searchBlock.appendChild(breadcrumbs);
         }
 
         const searchHint = document.createElement("div");
@@ -1059,7 +1110,10 @@ export class CommonSearchDialog {
                 lvLaunchpad.haptic(12);
                 const text = entry.content || entry.summary || entry.title;
                 void this.deps.copyText(text).then((ok) => {
-                    if (ok) lvNotify.inline(row, "已复制");
+                    if (ok) {
+                        lvNotify.inline(row, "已复制");
+                        this.trackCopyCombo(entry);
+                    }
                 });
                 return;
             }
@@ -1079,6 +1133,38 @@ export class CommonSearchDialog {
             }
         });
         this.attachLongPress(list, isMobile);
+
+        // 移动端片段多级分类左滑返回上级分类手势 (Mobile Spec v2 专项深化 2)
+        if (isMobile) {
+            let touchStartX = 0;
+            let touchStartY = 0;
+            list.addEventListener("touchstart", (e) => {
+                touchStartX = e.touches[0]?.clientX ?? 0;
+                touchStartY = e.touches[0]?.clientY ?? 0;
+            }, {passive: true});
+
+            list.addEventListener("touchend", (e) => {
+                const endX = e.changedTouches[0]?.clientX ?? 0;
+                const endY = e.changedTouches[0]?.clientY ?? 0;
+                const dx = endX - touchStartX;
+                const dy = endY - touchStartY;
+                if (dx < -60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                    const currentFilters = this.deps.getFilters();
+                    const currentCat = currentFilters.category?.trim();
+                    if (currentCat) {
+                        const parts = currentCat.split("/").filter(Boolean);
+                        if (parts.length > 0) {
+                            parts.pop();
+                            const parentCat = parts.join("/");
+                            this.deps.setFilters({ ...currentFilters, category: parentCat });
+                            lvLaunchpad.haptic(12);
+                            void this.refresh();
+                        }
+                    }
+                }
+            }, {passive: true});
+        }
+
         bodyWrap.appendChild(list);
 
         // 参考图同款：移动端右下角深色悬浮快捷新建加号键（FAB）
@@ -1203,7 +1289,10 @@ export class CommonSearchDialog {
                     lvLaunchpad.haptic(12);
                     const text = entry.content || entry.summary || entry.title;
                     void this.deps.copyText(text).then((ok) => {
-                        if (ok) lvNotify.inline(insertBtn, "已复制");
+                        if (ok) {
+                            lvNotify.inline(insertBtn, "已复制");
+                            this.trackCopyCombo(entry);
+                        }
                     });
                 }
             });
@@ -2267,14 +2356,16 @@ export class CommonSearchDialog {
         this.finishSearchLoad(list);
         this.renderList(list);
         this.renderTopChips();
+        this.renderMobileBreadcrumbs();
+        void this.checkClipboardSmartMatch();
         this.updatePreview();
         this.syncQueueChipRef?.();
     }
 
     /**
-     * 移动端置顶高频片段直达行 (Mobile Spec v1):
-     * 按照使用频次、收藏与更新时序计算 frecency 前 5 个常用条目，置顶为快捷胶囊 chips。
-     * 点击直接复制文本 + 触感 12ms + inline 打勾，坚决不弹窗。
+     * 移动端置顶高频片段直达行 (Mobile Spec v1 + v2):
+     * 固定的条目排在最前并带 📌 标记；未固定的按使用频次与热度补齐到前 5 个；
+     * 支持长按 500ms 切换固定/取消固定；点击复制并触发连击计数。
      */
     private renderTopChips(): void {
         if (!this.topChipsContainer || !this.deps.isMobile()) return;
@@ -2286,7 +2377,12 @@ export class CommonSearchDialog {
         }
 
         const usage = this.usageCounts;
+        const pinnedIds = new Set(this.deps.getPinnedTopChips?.() ?? []);
+
         const sorted = candidates.slice().sort((a, b) => {
+            const isPinnedA = pinnedIds.has(a.id) ? 1 : 0;
+            const isPinnedB = pinnedIds.has(b.id) ? 1 : 0;
+            if (isPinnedB !== isPinnedA) return isPinnedB - isPinnedA; // 固定的排在最前！
             const countA = usage.get(a.id) ?? 0;
             const countB = usage.get(b.id) ?? 0;
             if (countB !== countA) return countB - countA;
@@ -2304,35 +2400,251 @@ export class CommonSearchDialog {
 
         this.topChipsContainer.style.display = "flex";
         for (const entry of top5) {
+            const isPinned = pinnedIds.has(entry.id);
             const chip = document.createElement("button");
             chip.type = "button";
-            chip.className = "xlc-top-chip";
-            chip.title = `点击直接复制「${entry.title}」`;
+            chip.className = "xlc-top-chip" + (isPinned ? " xlc-top-chip--pinned" : "");
+            chip.title = `点击复制，长按${isPinned ? "取消固定" : "固定"}「${entry.title}」`;
             chip.setAttribute("aria-label", chip.title);
 
             const iconSpan = document.createElement("span");
             iconSpan.className = "xlc-top-chip-icon";
-            iconSpan.textContent = "⚡";
+            iconSpan.textContent = isPinned ? "📌" : "⚡";
 
             const textSpan = document.createElement("span");
             textSpan.className = "xlc-top-chip-text";
             textSpan.textContent = entry.title || "常用片段";
 
             chip.append(iconSpan, textSpan);
+
+            // 长按固定/取消固定 (Mobile Spec v2 专项深化 3)
+            let chipLongPressTimer: ReturnType<typeof setTimeout> | undefined;
+            let chipMoved = false;
+            let startX = 0;
+            let startY = 0;
+
+            chip.addEventListener("touchstart", (e) => {
+                chipMoved = false;
+                startX = e.touches[0]?.clientX ?? 0;
+                startY = e.touches[0]?.clientY ?? 0;
+                chipLongPressTimer = setTimeout(() => {
+                    chipLongPressTimer = undefined;
+                    lvLaunchpad.haptic(12);
+                    const currentPinned = (this.deps.getPinnedTopChips?.() ?? []).slice();
+                    let nextPinned: string[];
+                    if (currentPinned.includes(entry.id)) {
+                        nextPinned = currentPinned.filter((id) => id !== entry.id);
+                        lvNotify.inline(chip, "已取消固定");
+                    } else {
+                        nextPinned = [entry.id, ...currentPinned.filter((id) => id !== entry.id)].slice(0, 5);
+                        lvNotify.inline(chip, "已固定到直达行");
+                    }
+                    this.deps.setPinnedTopChips?.(nextPinned);
+                    this.renderTopChips();
+                }, 500);
+            }, {passive: true});
+
+            chip.addEventListener("touchmove", (e) => {
+                const dx = Math.abs((e.touches[0]?.clientX ?? 0) - startX);
+                const dy = Math.abs((e.touches[0]?.clientY ?? 0) - startY);
+                if (Math.max(dx, dy) > 8 && chipLongPressTimer) {
+                    clearTimeout(chipLongPressTimer);
+                    chipLongPressTimer = undefined;
+                    chipMoved = true;
+                }
+            }, {passive: true});
+
+            chip.addEventListener("touchend", () => {
+                if (chipLongPressTimer) {
+                    clearTimeout(chipLongPressTimer);
+                    chipLongPressTimer = undefined;
+                }
+            }, {passive: true});
+
             chip.addEventListener("click", async (e) => {
                 e.stopPropagation();
-                // 规范 5：轻触感反馈 12ms
+                if (chipMoved) return;
                 lvLaunchpad.haptic(12);
                 const text = entry.content || entry.summary || entry.title;
                 const ok = await this.deps.copyText(text);
                 if (ok) {
                     iconSpan.textContent = "✓";
                     lvNotify.inline(chip, "已复制");
-                    setTimeout(() => { iconSpan.textContent = "⚡"; }, 1500);
+                    setTimeout(() => { iconSpan.textContent = isPinned ? "📌" : "⚡"; }, 1500);
+                    this.trackCopyCombo(entry);
                 }
             });
             this.topChipsContainer.appendChild(chip);
         }
+    }
+
+    /**
+     * 剪贴板智能匹配 (Mobile Spec v2 专项深化 1):
+     * 若系统剪贴板文本与某片段名或内容前缀匹配（≥4 字符），顶部显示一键替换横幅。
+     */
+    private async checkClipboardSmartMatch(): Promise<void> {
+        if (!this.deps.isClipboardSmartMatchEnabled?.() || !this.smartMatchBannerEl) return;
+        try {
+            if (!navigator.clipboard?.readText || (typeof window !== "undefined" && !window.isSecureContext)) return;
+            const clipText = (await navigator.clipboard.readText() || "").trim();
+            if (clipText.length < 4) {
+                this.smartMatchBannerEl.style.display = "none";
+                return;
+            }
+
+            const matched = this.results.find((entry) => {
+                const title = (entry.title || "").trim();
+                const alias = (entry.alias || "").trim();
+                const content = (entry.content || entry.summary || "").trim();
+                if (title && (title.toLowerCase().startsWith(clipText.toLowerCase()) || clipText.toLowerCase().startsWith(title.toLowerCase()))) return true;
+                if (alias && alias.toLowerCase() === clipText.toLowerCase()) return true;
+                if (content && (content.toLowerCase().startsWith(clipText.toLowerCase()) || clipText.toLowerCase().startsWith(content.slice(0, 40).toLowerCase()))) return true;
+                return false;
+            });
+
+            if (!matched) {
+                this.smartMatchBannerEl.style.display = "none";
+                return;
+            }
+
+            this.smartMatchBannerEl.innerHTML = "";
+            this.smartMatchBannerEl.style.display = "flex";
+
+            const bannerText = document.createElement("span");
+            bannerText.className = "xlc-smart-match-text";
+            bannerText.textContent = this.deps.t("clipboardSmartMatchBanner", matched.title);
+
+            const replaceBtn = document.createElement("button");
+            replaceBtn.type = "button";
+            replaceBtn.className = "b3-button b3-button--small xlc-btn-primary";
+            replaceBtn.textContent = "一键替换";
+            replaceBtn.addEventListener("click", async () => {
+                lvLaunchpad.haptic(12);
+                const text = matched.content || matched.summary || matched.title;
+                const ok = await this.deps.copyText(text);
+                if (ok) {
+                    bannerText.textContent = this.deps.t("clipboardSmartMatchDone");
+                    lvNotify.inline(replaceBtn, "已复制");
+                    setTimeout(() => {
+                        if (this.smartMatchBannerEl) this.smartMatchBannerEl.style.display = "none";
+                    }, 1500);
+                }
+            });
+
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.className = "xlc-banner-close";
+            closeBtn.textContent = "✕";
+            closeBtn.addEventListener("click", () => {
+                if (this.smartMatchBannerEl) this.smartMatchBannerEl.style.display = "none";
+            });
+
+            this.smartMatchBannerEl.append(bannerText, replaceBtn, closeBtn);
+        } catch {
+            // 用户未授权或环境限制时静默处理
+        }
+    }
+
+    /**
+     * 移动端多级分类面包屑导航 (Mobile Spec v2 专项深化 2):
+     * 支持面包屑节点快速切换分类与左滑返回上一级分类。
+     */
+    private renderMobileBreadcrumbs(): void {
+        if (!this.mobileBreadcrumbsEl || !this.deps.isMobile()) return;
+        const currentFilters = this.deps.getFilters();
+        const category = currentFilters.category?.trim();
+        if (!category || !category.includes("/")) {
+            this.mobileBreadcrumbsEl.style.display = "none";
+            this.mobileBreadcrumbsEl.innerHTML = "";
+            return;
+        }
+
+        this.mobileBreadcrumbsEl.innerHTML = "";
+        this.mobileBreadcrumbsEl.style.display = "flex";
+
+        const parts = category.split("/").filter(Boolean);
+        const allBtn = document.createElement("button");
+        allBtn.type = "button";
+        allBtn.className = "xlc-breadcrumb-item";
+        allBtn.textContent = "全部";
+        allBtn.addEventListener("click", () => {
+            this.deps.setFilters({ ...currentFilters, category: "" });
+            void this.refresh();
+        });
+        this.mobileBreadcrumbsEl.appendChild(allBtn);
+
+        let acc = "";
+        for (let i = 0; i < parts.length; i++) {
+            const sep = document.createElement("span");
+            sep.className = "xlc-breadcrumb-sep";
+            sep.textContent = "›";
+            this.mobileBreadcrumbsEl.appendChild(sep);
+
+            acc = acc ? `${acc}/${parts[i]}` : parts[i]!;
+            const targetCat = acc;
+            const partBtn = document.createElement("button");
+            partBtn.type = "button";
+            partBtn.className = "xlc-breadcrumb-item" + (i === parts.length - 1 ? " xlc-breadcrumb-item--active" : "");
+            partBtn.textContent = parts[i]!;
+            if (i < parts.length - 1) {
+                partBtn.addEventListener("click", () => {
+                    this.deps.setFilters({ ...currentFilters, category: targetCat });
+                    void this.refresh();
+                });
+            }
+            this.mobileBreadcrumbsEl.appendChild(partBtn);
+        }
+    }
+
+    /**
+     * 复制连击计数 (Mobile Spec v2 专项深化 4):
+     * 同一片段 30 秒内连续复制 ≥2 次时提示批量导出并提供多选入口。
+     */
+    private trackCopyCombo(entry: SearchEntry): void {
+        const now = Date.now();
+        if (this.copyCombo.itemId === entry.id && (now - this.copyCombo.lastTime) <= 30_000) {
+            this.copyCombo.count++;
+        } else {
+            this.copyCombo.itemId = entry.id;
+            this.copyCombo.count = 1;
+        }
+        this.copyCombo.lastTime = now;
+
+        if (this.copyCombo.count >= 2) {
+            this.showCopyComboBanner(entry, this.copyCombo.count);
+        }
+    }
+
+    private showCopyComboBanner(entry: SearchEntry, count: number): void {
+        if (!this.copyComboBannerEl) return;
+        this.copyComboBannerEl.innerHTML = "";
+        this.copyComboBannerEl.style.display = "flex";
+
+        const textSpan = document.createElement("span");
+        textSpan.className = "xlc-combo-text";
+        textSpan.textContent = this.deps.t("copyComboCount", String(count));
+
+        const multiBtn = document.createElement("button");
+        multiBtn.type = "button";
+        multiBtn.className = "b3-button b3-button--small xlc-btn-primary";
+        multiBtn.textContent = this.deps.t("enterMultiSelect");
+        multiBtn.addEventListener("click", () => {
+            this.multiSelectMode = true;
+            this.selectedIds.add(entry.id);
+            this.copyComboBannerEl!.style.display = "none";
+            this.renderBatchBar();
+            if (this.listEl) this.renderList(this.listEl);
+        });
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "xlc-banner-close";
+        closeBtn.textContent = "✕";
+        closeBtn.addEventListener("click", () => {
+            this.copyComboBannerEl!.style.display = "none";
+        });
+
+        this.copyComboBannerEl.append(textSpan, multiBtn, closeBtn);
     }
 
     /** 收尾一次搜索刷新：解除列表加载反馈（成功与失败路径共用）。 */
@@ -4517,10 +4829,27 @@ export class CommonSearchDialog {
         };
 
         const buildDefault = (): void => {
-            // 标题行（原型：条目名 · 动作）
+            // 标题行（条目名 · 动作，移动端补齐可见 ✕ 关闭按钮）
             const lbl = document.createElement("div");
             lbl.className = "xlc-menu-lbl";
-            lbl.textContent = (entry.title || this.deps.t("unknownType")) + " · " + this.deps.t("actionsNoun");
+            const lblText = document.createElement("span");
+            lblText.textContent = (entry.title || this.deps.t("unknownType")) + " · " + this.deps.t("actionsNoun");
+            lbl.appendChild(lblText);
+
+            if (this.deps.isMobile()) {
+                const closeBtn = document.createElement("button");
+                closeBtn.type = "button";
+                closeBtn.className = "xlc-menu-close-btn";
+                closeBtn.textContent = "✕";
+                closeBtn.title = this.deps.t("close") || "关闭菜单";
+                closeBtn.setAttribute("aria-label", closeBtn.title);
+                closeBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    this.menuDismiss?.();
+                    this.menuDismiss = null;
+                });
+                lbl.appendChild(closeBtn);
+            }
             menu.appendChild(lbl);
             appendMediaHint();
             // 预览盒（原文摘要）：原型屏 2 置于动作分区之后（先见动作，预览兜底）；占位降调

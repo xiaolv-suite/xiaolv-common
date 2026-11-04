@@ -757,6 +757,20 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     clipLimitRow.appendChild(clipLimitControls);
     sec.appendChild(clipLimitRow);
 
+    // 剪贴板智能匹配（默认关闭，设置内 opt-in · Mobile Spec v2）
+    const smartMatchSwitchRow = buildSwitchRow(
+        t("clipboardSmartMatchToggle"),
+        t("clipboardSmartMatchSub"),
+        ctx.state.clipboardSmartMatchEnabled === true,
+        (value) => {
+            ctx.state.clipboardSmartMatchEnabled = value;
+            ctx.persistSoon();
+        },
+    );
+    const smartMatchInput = smartMatchSwitchRow.querySelector<HTMLInputElement>("input[type='checkbox']");
+    if (smartMatchInput) smartMatchInput.dataset.xlcControl = "settings.prefs.clipboardSmartMatchEnabled";
+    sec.appendChild(smartMatchSwitchRow);
+
     const syncClipLimitUi = (): void => {
         const on = !(ctx.state.clipboardHistoryEnabled === false);
         clipLimitRow.style.display = on ? "" : "none";

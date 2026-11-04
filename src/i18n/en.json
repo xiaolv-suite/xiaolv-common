@@ -718,5 +718,11 @@
   "globalQuickMini": "Global Quick Mini Snippets (Cross-app / Background)",
   "globalQuickMiniDone": "Copied to clipboard and returned to background, press Ctrl+V to paste",
   "starterPacksTitle": "Starter Packs Hub",
-  "starterPacksBtn": "Starter Packs"
+  "starterPacksBtn": "Starter Packs",
+  "clipboardSmartMatchToggle": "Clipboard Smart Match (Experimental)",
+  "clipboardSmartMatchSub": "When opening search, if clipboard text matches snippet name or prefix (>=4 chars), show instant replacement banner. Requires clipboard read permission, OFF by default.",
+  "clipboardSmartMatchBanner": "Detected clipboard match: '%s' -> click to replace",
+  "clipboardSmartMatchDone": "✓ Copied replacement content",
+  "copyComboCount": "Copied %s times consecutively. Need batch export?",
+  "enterMultiSelect": "Multi-select"
 }

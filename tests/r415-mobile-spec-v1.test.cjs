@@ -63,3 +63,41 @@ test("Mobile Spec v1: onunload 绝对禁止写 petal 契约", () => {
     const onunloadBlock = indexSrc.slice(onunloadIdx, onunloadIdx + 3000);
     assert.equal(onunloadBlock.toLowerCase().includes("petal"), false, "onunload 绝不可出现 petal 关键词");
 });
+
+test("Mobile Spec v2: 真机教训审计契约 (Esc-only 可见 ✕ 按钮、svgIcon 逐字一致性)", () => {
+    const scss = fs.readFileSync(path.join(__dirname, "../src/styles/index.scss"), "utf8");
+    const iconsSrc = fs.readFileSync(path.join(__dirname, "../src/ui/icons.ts"), "utf8");
+    const indexSrc = fs.readFileSync(path.join(__dirname, "../src/index.ts"), "utf8");
+
+    // 1) Esc-only 关闭面审计：移动端可见 ✕ 关闭按钮
+    assert.ok(scss.includes(".xlc-mobile-close-btn"), "必须包含移动端顶部可见 ✕ 关闭按钮样式");
+    assert.ok(scss.includes(".xlc-menu-close-btn"), "必须包含动作菜单可见 ✕ 关闭按钮样式");
+
+    // 2) svgIcon 逐字一致性：lvLaunchpad.register 的 svgIcon 必须与 addIcons 声明逐字一致
+    const regMatch = indexSrc.match(/svgIcon:\s*"([^"]+)"/);
+    assert.ok(regMatch, "必须声明 svgIcon");
+    const registeredIcon = regMatch[1];
+    assert.ok(iconsSrc.includes(`id="${registeredIcon}"`), `addIcons 注入的 symbol ID 必须包含 "${registeredIcon}"`);
+});
+
+test("Mobile Spec v2: 专项深化契约 (剪贴板智能匹配、多级面包屑、高频固定 📌、复制连击计数)", () => {
+    const scss = fs.readFileSync(path.join(__dirname, "../src/styles/index.scss"), "utf8");
+    const zh = JSON.parse(fs.readFileSync(path.join(__dirname, "../src/i18n/zh-CN.json"), "utf8"));
+    const en = JSON.parse(fs.readFileSync(path.join(__dirname, "../src/i18n/en.json"), "utf8"));
+
+    // 1) 剪贴板智能匹配
+    assert.ok(zh.clipboardSmartMatchToggle && en.clipboardSmartMatchToggle, "双语必须包含剪贴板智能匹配开关文案");
+    assert.ok(zh.clipboardSmartMatchBanner && en.clipboardSmartMatchBanner, "双语必须包含剪贴板智能匹配替换横幅文案");
+    assert.ok(scss.includes(".xlc-smart-match-banner"), "必须包含 .xlc-smart-match-banner 样式");
+
+    // 2) 手机端多级分类面包屑导航
+    assert.ok(scss.includes(".xlc-mobile-breadcrumbs"), "必须包含 .xlc-mobile-breadcrumbs 面包屑样式");
+
+    // 3) 高频直达行长按固定 📌 样式
+    assert.ok(scss.includes(".xlc-top-chip--pinned"), "必须包含 .xlc-top-chip--pinned 固定样式");
+
+    // 4) 复制连击计数
+    assert.ok(zh.copyComboCount && en.copyComboCount, "双语必须包含连击计数提示文案");
+    assert.ok(zh.enterMultiSelect && en.enterMultiSelect, "双语必须包含进入多选文案");
+    assert.ok(scss.includes(".xlc-combo-copy-banner"), "必须包含 .xlc-combo-copy-banner 样式");
+});

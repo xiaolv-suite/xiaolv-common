@@ -4269,6 +4269,12 @@
         background: var(--b3-theme-primary-lightest);
         transform: scale(0.96);
       }
+      &--pinned,
+      &.xlc-top-chip--pinned {
+        border-color: var(--b3-theme-primary);
+        background: var(--b3-theme-primary-lightest);
+        font-weight: var(--xlc-weight-semibold);
+      }
       .xlc-top-chip-icon {
         font-size: 11px;
         color: var(--b3-theme-primary);
@@ -4282,7 +4288,158 @@
     }
   }
 
-  .xlc-search { height: 44px; }
+  .xlc-search {
+    height: 44px;
+
+    .xlc-mobile-close-btn {
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      min-height: 38px;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--b3-theme-on-surface);
+      font-size: var(--xlc-font-lg);
+      cursor: pointer;
+      touch-action: manipulation;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 2px;
+      flex-shrink: 0;
+
+      &:active {
+        background: var(--b3-theme-surface-lighter);
+      }
+    }
+  }
+
+  // 剪贴板智能匹配横幅 (Mobile Spec v2: 默认关闭，设置内 opt-in)
+  .xlc-smart-match-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xlc-space-2);
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    margin-bottom: var(--xlc-space-1);
+    background: var(--b3-theme-primary-lightest);
+    border: 1px solid var(--b3-theme-primary-light);
+    border-radius: var(--xlc-radius);
+    color: var(--b3-theme-primary);
+    font-size: var(--xlc-font-xs);
+    line-height: var(--xlc-line-control);
+    touch-action: manipulation;
+
+    .xlc-smart-match-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .b3-button {
+      flex-shrink: 0;
+      min-height: 28px;
+      padding: 0 var(--xlc-space-2);
+      font-size: var(--xlc-font-xs);
+      touch-action: manipulation;
+    }
+
+    .xlc-banner-close {
+      border: none;
+      background: transparent;
+      color: var(--b3-theme-primary);
+      cursor: pointer;
+      padding: 4px 6px;
+      font-size: var(--xlc-font-xs);
+      touch-action: manipulation;
+    }
+  }
+
+  // 连续复制连击批量导出提示栏 (Mobile Spec v2)
+  .xlc-combo-copy-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xlc-space-2);
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    margin-bottom: var(--xlc-space-1);
+    background: var(--b3-theme-surface);
+    border: 1px solid var(--b3-border-color);
+    border-radius: var(--xlc-radius);
+    font-size: var(--xlc-font-xs);
+    touch-action: manipulation;
+
+    .xlc-combo-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .b3-button {
+      flex-shrink: 0;
+      min-height: 28px;
+      padding: 0 var(--xlc-space-2);
+      font-size: var(--xlc-font-xs);
+      touch-action: manipulation;
+    }
+
+    .xlc-banner-close {
+      border: none;
+      background: transparent;
+      color: var(--b3-theme-on-surface);
+      cursor: pointer;
+      padding: 4px 6px;
+      font-size: var(--xlc-font-xs);
+      touch-action: manipulation;
+    }
+  }
+
+  // 移动端多级分类面包屑导航 (Mobile Spec v2: 面包屑 + 左滑返回上级)
+  .xlc-mobile-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: var(--xlc-space-1) 0;
+    margin-bottom: var(--xlc-space-1);
+    scrollbar-width: none;
+    touch-action: manipulation;
+    -webkit-overflow-scrolling: touch;
+    &::-webkit-scrollbar { display: none; }
+
+    .xlc-breadcrumb-item {
+      border: none;
+      background: transparent;
+      color: var(--b3-theme-primary);
+      font-size: var(--xlc-font-xs);
+      cursor: pointer;
+      white-space: nowrap;
+      padding: 4px 6px;
+      border-radius: var(--xlc-radius-sm);
+      touch-action: manipulation;
+
+      &:active {
+        background: var(--b3-theme-primary-lightest);
+      }
+
+      &--active {
+        color: var(--b3-theme-on-surface);
+        font-weight: var(--xlc-weight-semibold);
+        pointer-events: none;
+      }
+    }
+
+    .xlc-breadcrumb-sep {
+      color: var(--b3-theme-on-surface-light);
+      font-size: 11px;
+    }
+  }
 
   // 语义搜索提示在窄屏完整保留入口和前置条件，最多显示两行。
   .xlc-search-hint {
@@ -4400,6 +4557,17 @@
     box-sizing: border-box;
 
     .xlc-menu-item { min-height: 48px; touch-action: manipulation; }
+
+    .xlc-menu-close-btn {
+      border: none;
+      background: transparent;
+      color: var(--b3-theme-on-surface);
+      font-size: var(--xlc-font-md);
+      cursor: pointer;
+      touch-action: manipulation;
+      padding: 4px 8px;
+      float: right;
+    }
   }
 
   .xlc-footer {

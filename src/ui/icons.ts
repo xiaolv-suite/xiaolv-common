@@ -14,6 +14,13 @@ export const ICONS = `
   <path d="M12.5 16.5h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
   <circle cx="22.5" cy="8.5" r="3" fill="currentColor"/>
 </symbol>
+<symbol id="icon-lv-common" viewBox="0 0 32 32">
+  <path d="M11 5h10c1.7 0 3 1.3 3 3v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-opacity="0.4"/>
+  <rect x="6" y="8" width="16" height="19" rx="3.5" fill="none" stroke="currentColor" stroke-width="2"/>
+  <path d="M10.5 13.5c-1 0-1.5.8-1.5 1.5v1c0 .8-.8 1-.8 1s.8.2.8 1v1c0 .7.5 1.5 1.5 1.5M17.5 13.5c1 0 1.5.8 1.5 1.5v1c0 .8.8 1 .8 1s-.8.2-.8 1v1c0 .7-.5 1.5-1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M12.5 16.5h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="22.5" cy="8.5" r="3" fill="currentColor"/>
+</symbol>
 <symbol id="iconXlcPin" viewBox="0 0 32 32">
   <path d="M16 4v12m0 0l-6 12m6-12l6 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
 </symbol>
