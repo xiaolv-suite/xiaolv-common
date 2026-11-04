@@ -189,6 +189,7 @@ export interface LvAiRequestOptions {
     temperature?: number;
     priority?: "high" | "low";   // 默认 high (前台交互即时响应)；low 为后台批量
     signal?: AbortSignal;
+    maxRetries?: number;         // 默认 0 (除 429 限流外不重试)；设置后可对 5xx 等网络故障重试
 }
 
 export interface LvAiResponse {
@@ -1573,6 +1574,7 @@ function getAiHub(): LvAiGatewayHub {
     let activeCount = 0;
     const requestQueue: Array<{
         execute: () => Promise<void>;
+        task: () => Promise<void>;
         priority: "high" | "low";
     }> = [];
 
@@ -1583,22 +1585,24 @@ function getAiHub(): LvAiGatewayHub {
         if (!next) return;
         activeCount++;
         next.execute().finally(() => {
-            activeCount--;
+            activeCount = Math.max(0, activeCount - 1);
             processQueue();
         });
     }
 
     async function executeChatRequest(cfg: LvAiConfig | null, opts: LvAiRequestOptions): Promise<LvAiResponse> {
-        if (!cfg || !cfg.apiKey) {
+        const apiKey = opts.apiKey || cfg?.apiKey;
+        if (!apiKey) {
             throw new Error("[LvAiGateway] 未配置共享 API Key（请在任意小驴插件设置中配置）");
         }
 
-        const endpoint = (cfg.endpoint || "https://api.deepseek.com/v1").replace(/\/+$/, "");
+        const rawEndpoint = opts.endpoint || cfg?.endpoint || "https://api.deepseek.com/v1";
+        const endpoint = rawEndpoint.replace(/\/+$/, "");
         const targetUrl = endpoint.endsWith("/chat/completions") ? endpoint : `${endpoint}/chat/completions`;
-        const model = opts.model || cfg.model || "deepseek-chat";
+        const model = opts.model || cfg?.model || "deepseek-chat";
 
         let retries = 0;
-        const maxRetries = 3;
+        const maxRetries = opts.maxRetries ?? 0;
 
         while (true) {
             try {
@@ -1606,18 +1610,18 @@ function getAiHub(): LvAiGatewayHub {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        Authorization: `Bearer ${cfg.apiKey}`,
+                        Authorization: `Bearer ${apiKey}`,
                     },
                     body: JSON.stringify({
                         model,
                         messages: opts.messages,
-                        temperature: opts.temperature ?? cfg.temperature ?? 0.7,
-                        max_tokens: cfg.maxTokens,
+                        temperature: opts.temperature ?? cfg?.temperature ?? 0.7,
+                        max_tokens: cfg?.maxTokens,
                     }),
                     signal: opts.signal,
                 });
 
-                if (response.status === 429 && retries < maxRetries) {
+                if (response.status === 429 && retries < (opts.maxRetries ?? 2)) {
                     retries++;
                     const backoffMs = Math.pow(2, retries) * 1000;
                     console.warn(`[LvAiGateway] 遇到 429 限流，将在 ${backoffMs}ms 后退避重试 (第 ${retries} 次)...`);
@@ -1640,7 +1644,10 @@ function getAiHub(): LvAiGatewayHub {
                     totalTokens,
                 };
             } catch (err) {
-                if (retries < maxRetries && err instanceof Error && !err.name.includes("Abort")) {
+                if (err instanceof Error && (err.name.includes("Abort") || (opts.signal && opts.signal.aborted))) {
+                    throw err;
+                }
+                if (retries < maxRetries && err instanceof Error) {
                     retries++;
                     const backoffMs = Math.pow(2, retries) * 1000;
                     await new Promise(r => setTimeout(r, backoffMs));
@@ -1670,18 +1677,63 @@ function getAiHub(): LvAiGatewayHub {
             return null;
         },
         chat(opts: LvAiRequestOptions): Promise<LvAiResponse> {
+            if (opts.signal?.aborted) {
+                return Promise.reject(new DOMException("The operation was aborted", "AbortError"));
+            }
             return new Promise((resolve, reject) => {
                 const cfg = this.getConfig();
+                let settled = false;
+
+                const cleanupAbort = () => {
+                    opts.signal?.removeEventListener("abort", onAbort);
+                };
+
+                const onAbort = () => {
+                    if (settled) return;
+                    settled = true;
+                    const idx = requestQueue.findIndex(q => q.task === task);
+                    if (idx >= 0) requestQueue.splice(idx, 1);
+                    reject(new DOMException("The operation was aborted", "AbortError"));
+                };
+
+                if (opts.signal) {
+                    opts.signal.addEventListener("abort", onAbort, { once: true });
+                }
+
                 const task = async () => {
+                    if (settled || opts.signal?.aborted) {
+                        if (!settled) {
+                            settled = true;
+                            cleanupAbort();
+                            reject(new DOMException("The operation was aborted", "AbortError"));
+                        }
+                        return;
+                    }
                     try {
-                        const res = await executeChatRequest(cfg, opts);
-                        resolve(res);
+                        const raceAbort = opts.signal ? new Promise<never>((_, rej) => {
+                            if (opts.signal!.aborted) rej(new DOMException("The operation was aborted", "AbortError"));
+                            opts.signal!.addEventListener("abort", () => rej(new DOMException("The operation was aborted", "AbortError")), { once: true });
+                        }) : null;
+
+                        const execPromise = executeChatRequest(cfg, opts);
+                        const res = raceAbort ? await Promise.race([execPromise, raceAbort]) : await execPromise;
+                        if (!settled) {
+                            settled = true;
+                            cleanupAbort();
+                            resolve(res);
+                        }
                     } catch (e) {
-                        reject(e);
+                        if (!settled) {
+                            settled = true;
+                            cleanupAbort();
+                            reject(e);
+                        }
                     }
                 };
+
                 requestQueue.push({
                     execute: task,
+                    task,
                     priority: opts.priority ?? "high",
                 });
                 processQueue();
