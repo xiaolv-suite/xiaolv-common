@@ -2414,27 +2414,32 @@ function updateBallSuppression(): void {
     if (ball) ball.classList.toggle("lv-ball-suppressed", ballDialogOpen || ballInputFocused);
 }
 
+/** 依据实时状态重算抑制：对话框开合 + 当前焦点元素（不依赖 focusout——焦点元素被移除时 Chromium 不派发 focusout） */
+function recomputeBallSuppression(): void {
+    let open = false;
+    try {
+        // 桌面宿主 Dialog 为 .b3-dialog--container（双横线），手机宿主为 .b3-dialog__container（双下划线）
+        open = Boolean(document.querySelector(".b3-dialog--container, .b3-dialog__container"));
+    } catch { /* ignore */ }
+    if (open !== ballDialogOpen) ballDialogOpen = open;
+    const el = document.activeElement as HTMLElement | null;
+    // 鸭子类型判定（避免依赖 HTMLElement 全局——非浏览器测试环境无此构造器）
+    ballInputFocused = Boolean(el) &&
+        (el!.tagName === "INPUT" || el!.tagName === "TEXTAREA" || el!.isContentEditable === true);
+    updateBallSuppression();
+}
+
 function wireMobileSuppression(): void {
     if (ballDialogObserver || typeof document === "undefined") return;
     // 原生/插件 Dialog 覆盖层出现时让位（body 直挂子级探测，不做深层 subtree 扫描，开销恒定）
     if (typeof MutationObserver === "function") {
-        ballDialogObserver = new MutationObserver(() => {
-            let open = false;
-            try { open = Boolean(document.querySelector(".b3-dialog--container")); } catch { /* ignore */ }
-            if (open !== ballDialogOpen) { ballDialogOpen = open; updateBallSuppression(); }
-        });
+        ballDialogObserver = new MutationObserver(() => recomputeBallSuppression());
         try { ballDialogObserver.observe(document.body, { childList: true }); } catch { /* ignore */ }
     }
     // 键盘弹起（任意文本输入聚焦）时隐藏，避免悬浮球压在软键盘/输入法面板上
     if (typeof document.addEventListener === "function") {
-        ballFocusHandler = (ev: FocusEvent) => {
-            const t = ev.target;
-            ballInputFocused = t instanceof HTMLElement &&
-                (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable === true);
-            updateBallSuppression();
-        };
+        ballFocusHandler = () => recomputeBallSuppression();
         document.addEventListener("focusin", ballFocusHandler, true);
-        document.addEventListener("focusout", ballFocusHandler, true);
     }
 }
 
@@ -2442,10 +2447,7 @@ function unwireMobileSuppression(): void {
     try { ballDialogObserver?.disconnect(); } catch { /* ignore */ }
     ballDialogObserver = undefined;
     if (ballFocusHandler && typeof document !== "undefined" && typeof document.removeEventListener === "function") {
-        try {
-            document.removeEventListener("focusin", ballFocusHandler, true);
-            document.removeEventListener("focusout", ballFocusHandler, true);
-        } catch { /* ignore */ }
+        try { document.removeEventListener("focusin", ballFocusHandler, true); } catch { /* ignore */ }
     }
     ballFocusHandler = undefined;
     ballDialogOpen = false;
@@ -2500,6 +2502,7 @@ function closeMobileSheet(): void {
     if (mask.classList.contains("lv-sheet-closing")) return; // 收场动画中幂等
     try { lvSurfaceStack.pop("lv-launchpad-mobile-sheet"); } catch { /* ignore */ }
     refreshEntryBadgeDot(); // 坞内停留期间徽记可能变化，关坞即刷新入口圆点
+    recomputeBallSuppression(); // 坞内搜索框随坞移除后焦点静默丢失，主动重算球抑制态
 
     const reduceMotion = typeof globalThis.matchMedia === "function" &&
         globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -2559,6 +2562,16 @@ function resolveIconHref(svgIcon?: string): string | null {
             if (document.getElementById(id)) return `#${id}`;
         } catch { /* ignore */ }
     }
+    // kebab→camel 会丢失符号原始内部大写与连字符形态差异（icon-lv-quickgate ↔ iconLvQuickGate），
+    // 终极兜底：全量 symbol 归一化小写比对（去连字符；数量级 ~200，磁贴构建时开销可忽略）
+    try {
+        const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const wanted = new Set(iconIdCandidates(svgIcon).map(normalize));
+        const symbols = document.querySelectorAll("symbol[id]");
+        for (const s of Array.from(symbols)) {
+            if (wanted.has(normalize(s.id))) return `#${s.id}`;
+        }
+    } catch { /* ignore */ }
     return null;
 }
 

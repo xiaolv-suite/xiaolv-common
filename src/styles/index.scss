@@ -4010,15 +4010,17 @@
   top: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
+  height: 100dvh !important;
   max-width: 100vw !important;
   max-height: 100vh !important;
+  max-height: 100dvh !important;
   border-radius: 0;
   margin: 0 !important;
   transform: none !important;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  padding-top: max(0px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(0px, env(safe-area-inset-left, 0px));
+  padding-right: max(0px, env(safe-area-inset-right, 0px));
   box-sizing: border-box;
 
   .b3-dialog__content, .b3-dialog__body {
@@ -4070,29 +4072,50 @@
     .xlc-filters { gap: var(--xlc-space-1); }
 
     .xlc-footer {
-      padding-top: var(--xlc-space-0-5);
-      gap: var(--xlc-space-0-5) var(--xlc-space-2);
-      row-gap: var(--xlc-space-0-5);
+      padding-top: var(--xlc-space-1);
+      padding-bottom: calc(var(--xlc-space-3) + env(safe-area-inset-bottom, 0px));
+      padding-left: max(var(--xlc-space-2), env(safe-area-inset-left, 0px));
+      padding-right: max(var(--xlc-space-2), env(safe-area-inset-right, 0px));
+      gap: var(--xlc-space-1) var(--xlc-space-2);
+      row-gap: var(--xlc-space-1);
     }
   }
 
   // 移动端标题栏压缩为单行任务头，把首屏留给搜索与结果。
   .b3-dialog__container.xlc-sheet {
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(0px, env(safe-area-inset-left, 0px));
+    padding-right: max(0px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+
     .b3-dialog__header {
-      padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-1);
+      padding: max(var(--xlc-space-2), env(safe-area-inset-top, 0px)) max(var(--xlc-space-4), env(safe-area-inset-right, 0px)) var(--xlc-space-1) max(var(--xlc-space-4), env(safe-area-inset-left, 0px));
       font-size: var(--xlc-font-xl);
       line-height: var(--xlc-line-heading);
     }
 
     .b3-dialog__body,
     .b3-dialog__content {
-      padding: var(--xlc-space-2) var(--xlc-space-3) var(--xlc-space-2);
+      padding: var(--xlc-space-2) max(var(--xlc-space-3), env(safe-area-inset-right, 0px)) var(--xlc-space-1) max(var(--xlc-space-3), env(safe-area-inset-left, 0px));
     }
   }
 
   .b3-dialog__container.xlc-form-host {
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(0px, env(safe-area-inset-left, 0px));
+    padding-right: max(0px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+
     .b3-dialog__body, .b3-dialog__content {
-      padding: var(--xlc-space-4) var(--xlc-space-4) var(--xlc-space-4);
+      padding: var(--xlc-space-3) var(--xlc-space-4) calc(var(--xlc-space-4) + env(safe-area-inset-bottom, 0px));
     }
   }
 }
@@ -4183,7 +4206,11 @@
 // ---------- 移动端：底部 sheet（触控优先；行 = 圆角卡片，原型屏4）----------
 .xlc-dialog--mobile {
   gap: var(--xlc-space-2);
-  padding: env(safe-area-inset-top, var(--xlc-space-0)) env(safe-area-inset-right, var(--xlc-space-0)) env(safe-area-inset-bottom, var(--xlc-space-0)) env(safe-area-inset-left, var(--xlc-space-0));
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  box-sizing: border-box;
+  padding: max(var(--xlc-space-1), env(safe-area-inset-top, 0px)) max(var(--xlc-space-1), env(safe-area-inset-right, 0px)) 0 max(var(--xlc-space-1), env(safe-area-inset-left, 0px));
   touch-action: manipulation;
 
   .xlc-top { gap: var(--xlc-space-2); }
@@ -4365,32 +4392,41 @@
   .xlc-menu {
     inset: auto 0 0 0;
     border-radius: var(--xlc-radius-sheet-top);
-    padding-bottom: env(safe-area-inset-bottom, var(--xlc-space-0));
-    max-height: 78%;
+    padding-bottom: calc(var(--xlc-space-3) + env(safe-area-inset-bottom, var(--xlc-space-0)));
+    padding-left: max(var(--xlc-space-2), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--xlc-space-2), env(safe-area-inset-right, 0px));
+    max-height: min(85dvh, 78%);
     transform-origin: 50% 100%;
+    box-sizing: border-box;
 
     .xlc-menu-item { min-height: 48px; touch-action: manipulation; }
   }
 
   .xlc-footer {
     border-top: none;
-    padding-top: var(--xlc-space-0-5);
-    gap: var(--xlc-space-0-5) var(--xlc-space-2);
+    padding-top: var(--xlc-space-1);
+    padding-bottom: calc(var(--xlc-space-3) + env(safe-area-inset-bottom, 0px));
+    padding-left: max(var(--xlc-space-2), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--xlc-space-2), env(safe-area-inset-right, 0px));
+    gap: var(--xlc-space-1) var(--xlc-space-2);
     flex-wrap: wrap;
-    row-gap: var(--xlc-space-0-5);
+    row-gap: var(--xlc-space-1);
     font-size: var(--xlc-font-xs);
+    box-sizing: border-box;
 
     .xlc-footer-claim { display: none; }
-    :is(.xlc-footer-guide, .xlc-footer-gear) { min-height: 36px; padding: var(--xlc-space-1) var(--xlc-space-2); font-size: var(--xlc-font-xs); touch-action: manipulation; }
+    :is(.xlc-footer-guide, .xlc-footer-gear) { min-height: 38px; padding: var(--xlc-space-1) var(--xlc-space-2); font-size: var(--xlc-font-xs); touch-action: manipulation; }
   }
 
   .xlc-empty { padding: var(--xlc-space-6) var(--xlc-space-3); gap: var(--xlc-space-1); }
 
-  // 操作钮行（触控目标 ≥52px，规范 4）
+  // 操作钮行（触控目标 ≥52px，规范 4；在 iPhone 手势条上方留足安全边距防遮挡）
   .xlc-mobile-foot {
     display: flex;
     gap: var(--xlc-space-2);
     width: 100%;
+    padding-bottom: max(var(--xlc-space-1), env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
 
     .b3-button {
       flex: 1;
@@ -4555,11 +4591,12 @@
 // 窄屏：卡片尽量占满可用区域，横滚留给正文本身
 @media (max-width: 620px) {
   .xlc-quicklook {
-    padding: var(--xlc-space-2);
+    padding: max(var(--xlc-space-2), env(safe-area-inset-top, 0px)) max(var(--xlc-space-2), env(safe-area-inset-right, 0px)) calc(var(--xlc-space-2) + env(safe-area-inset-bottom, 0px)) max(var(--xlc-space-2), env(safe-area-inset-left, 0px));
+    box-sizing: border-box;
 
     .xlc-quicklook-card {
       max-width: none;
-      max-height: 85vh;
+      max-height: min(85dvh, 85vh);
     }
 
     .xlc-quicklook-hints {
@@ -5296,10 +5333,20 @@
 
 @media (max-width: 620px) {
   .b3-dialog__container.xlc-discovery-host {
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(0px, env(safe-area-inset-left, 0px));
+    padding-right: max(0px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+
     .b3-dialog__content,
     .b3-dialog__body {
       overflow-y: auto;
       overscroll-behavior: contain;
+      padding-bottom: calc(var(--xlc-space-3) + env(safe-area-inset-bottom, 0px));
     }
   }
 
