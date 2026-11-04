@@ -103,7 +103,7 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 160; // 1.6.0 (Phase 7: Omnisearch & IFTTT Automation)
+const PROTOCOL_VERSION = 170; // 1.7.0 (Phase 8: Mobile Compass, Focus Mode & Ecosystem Direct Actions)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
 const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
@@ -269,6 +269,7 @@ interface LvLaunchpadHub {
     executeAction: (id: string, actionName: string) => boolean;
     open: (mode?: "popover" | "center") => void;
     close: () => void;
+    checkBedlineReminder?: (now?: Date) => boolean;
 }
 
 interface LvOmnisearchHub {
@@ -543,6 +544,40 @@ const STYLES = `
 .lv-sheet-tile-badge--success { background: rgba(39,174,96,0.14); color: #27ae60; }
 .lv-sheet-tile-badge--warn { background: rgba(242,153,74,0.16); color: #d35400; }
 .lv-sheet-result-count { font-size: 11px; color: var(--b3-theme-on-surface-light, #9ca3af); padding: 0 2px 2px; }
+/* 穿透结果分组头（按来源） */
+.lv-sheet-result-group { font-size: 11px; font-weight: 700; color: var(--b3-theme-primary, #3576c7); padding: 6px 2px 2px; }
+/* 搜索历史 chips */
+.lv-sheet-histrow { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; overscroll-behavior-x: contain; }
+.lv-sheet-histrow-label { flex-shrink: 0; font-size: 11px; color: var(--b3-theme-on-surface-light, #9ca3af); }
+.lv-sheet-histrow-chip {
+    flex-shrink: 0;
+    border: 1px dashed var(--b3-border-color, #d7dbe0);
+    background: transparent;
+    border-radius: 999px;
+    padding: 4px 11px;
+    font-size: 12px;
+    color: var(--b3-theme-on-surface, #1f2329);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.lv-sheet-histrow-chip:active { background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12)); }
+/* 生态直达行（今日回顾 / 小驴 AI） */
+.lv-sheet-eco-row { display: flex; gap: 8px; margin: 2px 0 10px; }
+.lv-sheet-eco-chip {
+    flex: 1;
+    border: 1px solid var(--b3-border-color, #e4e7eb);
+    background: var(--b3-theme-background-light, #f6f7f9);
+    border-radius: 12px;
+    padding: 9px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--b3-theme-on-surface, #1f2329);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.lv-sheet-eco-chip:active { transform: scale(0.97); background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12)); }
 /* 最近直达行：上次使用的插件一键再达（最常用单手路径零翻找） */
 .lv-sheet-recent { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding-bottom: 2px; overscroll-behavior-x: contain; }
 .lv-sheet-recent-label { flex-shrink: 0; font-size: 11px; color: var(--b3-theme-on-surface-light, #9ca3af); }
@@ -731,7 +766,46 @@ const STYLES = `
 }
 
 /* 触控目标防误触：禁双击缩放，磁贴/行动 chips/结果行/关闭键统一 */
-.lv-sheet-tile, .lv-sheet-action-chip, .lv-sheet-result, .lv-sheet-close { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.lv-sheet-tile, .lv-sheet-action-chip, .lv-sheet-result, .lv-sheet-close, .lv-sheet-moon, .lv-sheet-today-chip { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+/* ===== 今日一站式聚合条：各插件徽记数字一眼总览，点 chip 直达 ===== */
+.lv-sheet-today { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding: 6px 8px; border-radius: 12px; background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.08)); overscroll-behavior-x: contain; }
+.lv-sheet-today-label { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--b3-theme-primary, #3576c7); }
+.lv-sheet-today-chip {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--b3-border-color, #e4e7eb);
+    background: var(--b3-theme-surface, #fff);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--b3-theme-on-surface, #1f2329);
+    cursor: pointer;
+}
+.lv-sheet-today-chip:active { transform: scale(0.96); }
+.lv-sheet-today-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--b3-theme-primary, #3576c7); }
+
+/* ===== 专注模式：坞头 🌙 开关 + 入口徽记 ===== */
+.lv-sheet-moon {
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    line-height: 1;
+    padding: 6px 8px;
+    margin-right: 2px;
+    border-radius: 8px;
+    color: var(--b3-theme-on-surface, #1f2329);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.lv-sheet-moon[aria-pressed="true"] {
+    background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12));
+    color: var(--b3-theme-primary, #3576c7);
+    font-weight: 600;
+}
 @media (prefers-reduced-motion: reduce) {
     #lv-launchpad-mobile-ball { transition: none; }
 }
@@ -884,7 +958,11 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                 return;
             }
 
-            if (packet.mode === "silent") {
+            // 专注模式：card/capsule 全生态降级为 silent（仍入历史留档，不再弹窗打扰）
+            const focusOn = isNotifyFocusActive();
+            const effectiveMode = focusOn && (packet.mode === "card" || packet.mode === "capsule") ? "silent" : packet.mode;
+
+            if (effectiveMode === "silent") {
                 historyList.unshift(packet);
                 if (historyList.length > 100) historyList.pop();
                 return;
@@ -1319,7 +1397,64 @@ export async function withDocLock<T>(docId: string, task: () => Promise<T>): Pro
 /* 9. 客户端通知 API 暴露                                                    */
 /* ========================================================================= */
 
+/* ===== 全局专注模式（Protocol v1.7）：时间戳静音——开启后 card/capsule 全生态降级为历史留档 ===== */
+const NOTIFY_FOCUS_KEY = "lv_notify_focus_until";
+
+export function getNotifyFocusUntil(): number {
+    if (typeof localStorage === "undefined") return 0;
+    try {
+        const n = Number(localStorage.getItem(NOTIFY_FOCUS_KEY));
+        return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch { return 0; }
+}
+
+export function isNotifyFocusActive(): boolean {
+    return getNotifyFocusUntil() > Date.now();
+}
+
+function refreshEntryFocusState(): void {
+    if (typeof document === "undefined") return;
+    const focus = isNotifyFocusActive();
+    for (const root of [document.getElementById(MOBILE_ENTRY_ID), document.getElementById(MOBILE_BALL_ID)]) {
+        if (!root) continue;
+        const moon = root.querySelector(".lv-entry-moon") as HTMLElement | null;
+        if (moon) moon.style.display = focus ? "inline-block" : "none";
+    }
+}
+
+export function setNotifyFocusUntil(ts: number): void {
+    if (typeof localStorage === "undefined") return;
+    try { localStorage.setItem(NOTIFY_FOCUS_KEY, String(Math.max(0, Math.round(ts)))); } catch { /* ignore */ }
+    refreshEntryFocusState();
+}
+
+export function clearNotifyFocus(): void {
+    if (typeof localStorage === "undefined") return;
+    try { localStorage.removeItem(NOTIFY_FOCUS_KEY); } catch { /* ignore */ }
+    refreshEntryFocusState();
+}
+
 export const lvNotify = {
+    /** 开启全局专注模式：直至指定时间戳，card/capsule 全生态降级为历史留档不弹窗 */
+    setFocusUntil(ts: number): void {
+        setNotifyFocusUntil(ts);
+    },
+
+    /** 退出全局专注模式 */
+    clearFocus(): void {
+        clearNotifyFocus();
+    },
+
+    /** 专注模式是否生效中 */
+    isFocusActive(): boolean {
+        return isNotifyFocusActive();
+    },
+
+    /** 专注模式截止时间戳（0=未开启） */
+    getFocusUntil(): number {
+        return getNotifyFocusUntil();
+    },
+
     card(options: CardNoticeOptions): string {
         const id = `card_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
         const hub = getHub(options.source);
@@ -1917,6 +2052,7 @@ function getLaunchpadHub(): LvLaunchpadHub {
 
         register(item: LvLaunchpadItem): () => void {
             launchpadRegistry.set(item.id, item);
+            maybeShowOnboardingCard();
             return () => {
                 launchpadRegistry.delete(item.id);
             };
@@ -1954,6 +2090,10 @@ function getLaunchpadHub(): LvLaunchpadHub {
 
         close(): void {
             window.dispatchEvent(new CustomEvent("lv:launchpad:close"));
+        },
+
+        checkBedlineReminder(now?: Date): boolean {
+            return checkAndTriggerBedline(now);
         }
     };
 
@@ -2031,6 +2171,11 @@ export const lvLaunchpad = {
     /** 设定手机端入口模式并实时生效（持久化；顶栏按钮与悬浮球按模式增删） */
     setMobileEntryMode(mode: LvMobileEntryMode): void {
         setMobileEntryMode(mode);
+    },
+
+    /** 睡前日报定时提醒核对与触发（满足时间+有活动+未开启专注+今日未触发） */
+    checkBedlineReminder(now?: Date): boolean {
+        return checkAndTriggerBedline(now);
     }
 };
 
@@ -2104,15 +2249,18 @@ function clampBallYRatio(v: number): number {
     return Math.min(0.85, Math.max(0.15, v));
 }
 
-/** 聚合徽记：任一已注册罗盘条目带 badge 时，在入口上点亮脉冲圆点 */
+/** 聚合徽记：任一已注册罗盘条目带 badge 时点亮脉冲圆点；专注模式时点亮 🌙 */
 function refreshEntryBadgeDot(): void {
     if (typeof document === "undefined") return;
     try {
         const hasBadge = getLaunchpadHub().getItems().some((it) => Boolean(it.badge) && it.state !== "hidden");
+        const focus = isNotifyFocusActive();
         for (const root of [document.getElementById(MOBILE_ENTRY_ID), document.getElementById(MOBILE_BALL_ID)]) {
             if (!root) continue;
             const dot = root.querySelector(".lv-entry-dot");
             if (dot) (dot as HTMLElement).style.display = hasBadge ? "block" : "none";
+            const moon = root.querySelector(".lv-entry-moon");
+            if (moon) (moon as HTMLElement).style.display = focus ? "inline-block" : "none";
         }
     } catch { /* ignore */ }
 }
@@ -2131,7 +2279,7 @@ function buildMobileEntryButton(): boolean {
     btn.setAttribute("aria-label", "小驴罗盘");
     btn.setAttribute("title", "小驴罗盘 · 全家桶极速直达");
     // 内联线性罗盘 SVG（1.85px 描边）：零 sprite 依赖，任何主题下都稳定渲染
-    btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
+    btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;margin-left:2px;font-size:11px;line-height:1;">🌙</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
     btn.addEventListener("click", () => {
         hapticFeedback(8);
         openMobileSheet();
@@ -2185,7 +2333,7 @@ function buildMobileBallButton(): boolean {
     ball.className = "lv-ball";
     ball.setAttribute("aria-label", "小驴罗盘悬浮球 · 点击打开全家桶，拖拽移动，长按切换沉浸");
     ball.setAttribute("title", "小驴罗盘");
-    ball.innerHTML = `${COMPASS_SVG}<span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);box-shadow:0 0 0 2px var(--b3-theme-surface,#fff);"></span>`;
+    ball.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;position:absolute;top:-3px;left:-3px;font-size:12px;line-height:1;">🌙</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);box-shadow:0 0 0 2px var(--b3-theme-surface,#fff);"></span>`;
 
     let pos = normalizeBallPosition(undefined);
     try {
@@ -2249,6 +2397,10 @@ function buildMobileBallButton(): boolean {
             applyBallPosition(ball, pos, false);
             hapticFeedback(6);
             scheduleBallIdle(ball, pos);
+            // 双球避让广播（Protocol v1.7）：雷切动作球等监听此事件，与本球重叠时自行错开
+            try {
+                window.dispatchEvent(new CustomEvent("lv:launchpad:ball-moved", { detail: { edge: pos.edge, yRatio: pos.yRatio } }));
+            } catch { /* 事件不可用静默 */ }
             return;
         }
         scheduleBallIdle(ball, pos);
@@ -2359,6 +2511,87 @@ function mobileEntryFullyApplied(): boolean {
     return topbarOk && ballOk;
 }
 
+/* ===== 新用户引导卡（Protocol v1.7）：≥3 个插件首次入坞时一次性欢迎卡 ===== */
+const ONBOARDING_KEY = "lv_launchpad_onboarding_done";
+
+function maybeShowOnboardingCard(): void {
+    if (typeof localStorage === "undefined" || typeof document === "undefined") return;
+    try { if (localStorage.getItem(ONBOARDING_KEY) === "1") return; } catch { /* ignore */ }
+    const items = getLaunchpadHub().getItems();
+    if (items.length < 3) return; // 单双插件用户不需要生态引导
+    try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    lvNotify.card({
+        source: "罗盘",
+        title: "👋 欢迎使用小驴罗盘",
+        message: `已为你收敛 ${items.length} 个插件的入口：点磁贴直达主界面、长按磁贴展开快捷行动、顶部搜索穿透全家桶、🌙 一键专注静音。顶栏与悬浮球可在快门设置中改为单入口。`,
+        level: "info",
+        duration: 0,
+        actions: [
+            { label: "知道了", primary: true },
+            { label: "打开快门配置中心", onClick: () => { try { getLaunchpadHub().executeAction("siyuan-quickgate", "打开快门配置中心"); } catch { /* ignore */ } } },
+        ],
+    });
+}
+
+/* ===== 睡前日报定时提醒（Protocol v1.7）：22:30 且今日有活动时一次性卡片 ===== */
+const BEDLINE_KEY = "lv_launchpad_bedline_reminder"; // "on"（默认）/ "off"
+const BEDLINE_LAST_KEY = "lv_launchpad_bedline_last"; // 上次提醒日期 YYYY-MM-DD
+const BEDLINE_FORCE_KEY = "lv_launchpad_bedline_force"; // 测试钩子：强制阈值 hh:mm
+
+/** 纯函数：是否到达睡前提醒阈值（默认 22:30；测试可用 force 钩子覆盖阈值） */
+export function bedlineDue(now: Date): boolean {
+    let threshold = "22:30";
+    try {
+        if (typeof localStorage !== "undefined") {
+            const forced = localStorage.getItem(BEDLINE_FORCE_KEY);
+            if (forced && /^\d{2}:\d{2}$/.test(forced)) threshold = forced;
+        }
+    } catch { /* ignore */ }
+    const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    return hhmm >= threshold;
+}
+
+function bedlineEnabled(): boolean {
+    try { return (typeof localStorage !== "undefined" ? localStorage.getItem(BEDLINE_KEY) : null) !== "off"; } catch { return true; }
+}
+
+/** 纯函数：睡前提醒核对并触发（满足时间+有活动+未开启专注+今日未触发），返回是否触发了提醒 */
+export function checkAndTriggerBedline(now = new Date()): boolean {
+    if (!bedlineEnabled() || !bedlineDue(now) || isNotifyFocusActive()) return false;
+    const stats = lvActivity.getDailyStats();
+    const total = Number(stats?.total ?? 0);
+    if (total <= 0) return false;
+    const today = now.toDateString();
+    try {
+        if (typeof localStorage !== "undefined") {
+            if (localStorage.getItem(BEDLINE_LAST_KEY) === today) return false;
+            localStorage.setItem(BEDLINE_LAST_KEY, today);
+        }
+    } catch { /* ignore */ }
+    lvNotify.card({
+        source: "罗盘",
+        title: "🌙 今日回顾",
+        message: `今天共 ${total} 项生态活动，花一分钟写进日记吧——明天翻开就是完整的自己。`,
+        level: "info",
+        duration: 0,
+        category: "bedline",
+        actions: [
+            { label: "立即写入", primary: true, onClick: () => { try { getLaunchpadHub().executeAction("siyuan-quickgate", "今日回顾写入日记"); } catch { /* ignore */ } } },
+            { label: "明天再说" },
+        ],
+    });
+    return true;
+}
+
+function maybeStartBedlineReminder(): void {
+    if (typeof window === "undefined" || (window as unknown as { __LV_BEDLINE_TICKER__?: boolean }).__LV_BEDLINE_TICKER__) return;
+    (window as unknown as { __LV_BEDLINE_TICKER__?: boolean }).__LV_BEDLINE_TICKER__ = true;
+    lvTicker.onMinute("lv-launchpad", (now) => {
+        checkAndTriggerBedline(now);
+    });
+}
+
+
 /**
  * 统一手机端入口：desktop 调用直接返回 no-op；
  * 移动端按入口模式（getMobileEntryMode，默认 both 并行）注入顶栏罗盘按钮与悬浮球，
@@ -2377,7 +2610,10 @@ function ensureMobileEntry(): MobileEntryCleanup {
     mobileEntryRetryTimers.forEach((t) => { try { window.clearTimeout(t); } catch { /* ignore */ } });
     mobileEntryRetryTimers = [];
     syncMobileEntryDom();
-    if (firstOwner) wireMobileSuppression();
+    if (firstOwner) {
+        wireMobileSuppression();
+        maybeStartBedlineReminder(); // 睡前日报定时提醒随首个宿主启动（lvTicker 单例，全局一次）
+    }
     if (!mobileEntryFullyApplied()) {
         // mobileTopBar 尚未挂载等：错峰重试直至入口全部就位
         for (const delay of [800, 1500, 4000, 10000]) {
@@ -2522,6 +2758,26 @@ function closeMobileSheet(): void {
 
 const MOBILE_RECENT_KEY = "lv_launchpad_recent_tiles";
 const MOBILE_RECENT_MAX = 6;
+const MOBILE_SEARCH_HISTORY_KEY = "lv_launchpad_search_history";
+const MOBILE_SEARCH_HISTORY_MAX = 6;
+
+/** 穿透搜索历史：读取（新在前，去重裁剪） */
+function getSearchHistory(): string[] {
+    if (typeof localStorage === "undefined") return [];
+    try {
+        const list = JSON.parse(localStorage.getItem(MOBILE_SEARCH_HISTORY_KEY) ?? "[]");
+        return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string" && x.trim() !== "") : [];
+    } catch { return []; }
+}
+
+function pushSearchHistory(kw: string): void {
+    const k = kw.trim();
+    if (typeof localStorage === "undefined" || !k) return;
+    try {
+        const next = [k, ...getSearchHistory().filter((x) => x !== k)].slice(0, MOBILE_SEARCH_HISTORY_MAX);
+        localStorage.setItem(MOBILE_SEARCH_HISTORY_KEY, JSON.stringify(next));
+    } catch { /* ignore */ }
+}
 
 /** 最近直达：读取上次使用过的罗盘条目 id（新在前，去重裁剪） */
 function getRecentTileIds(): string[] {
@@ -2686,6 +2942,10 @@ function openMobileSheet(): void {
     handle.setAttribute("aria-hidden", "true");
     sheet.appendChild(handle);
 
+    // 磁贴数据源（hidden 过滤、pinned 置顶）——提前到头部，供今日聚合条/最近行/网格共用
+    const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+    items.sort((a, b) => (a.state === "pinned" ? 0 : 1) - (b.state === "pinned" ? 0 : 1));
+
     // 标题行
     const head = document.createElement("div");
     head.className = "lv-sheet-head";
@@ -2700,7 +2960,74 @@ function openMobileSheet(): void {
     closeBtn.textContent = "✕";
     closeBtn.addEventListener("click", () => closeMobileSheet());
     head.appendChild(closeBtn);
+
+    // 专注模式开关（🌙）：开启后全生态 card/capsule 静音至今晚，仅留历史档
+    const moonBtn = document.createElement("button");
+    moonBtn.type = "button";
+    moonBtn.className = "lv-sheet-moon";
+    moonBtn.setAttribute("aria-label", "专注模式开关");
+    const syncMoon = () => {
+        const active = isNotifyFocusActive();
+        const until = getNotifyFocusUntil();
+        moonBtn.textContent = active ? `🌙 至 ${new Date(until).toTimeString().slice(0, 5)}` : "🌙";
+        moonBtn.setAttribute("aria-pressed", String(active));
+        moonBtn.title = active ? "点击退出专注模式" : "开启专注模式（全生态静音至今晚）";
+    };
+    syncMoon();
+    moonBtn.addEventListener("click", () => {
+        if (isNotifyFocusActive()) {
+            clearNotifyFocus();
+            hapticFeedback(8);
+            lvNotify.capsule({ source: "罗盘", message: "已退出专注模式", duration: 2000 });
+        } else {
+            const now = new Date();
+            const until = new Date(now);
+            until.setHours(23, 0, 0, 0);
+            if (until.getTime() <= now.getTime()) until.setTime(now.getTime() + 2 * 3_600_000);
+            setNotifyFocusUntil(until.getTime());
+            hapticFeedback(10);
+            lvNotify.capsule({ source: "罗盘", message: `已开启专注模式至 ${until.toTimeString().slice(0, 5)}，通知将静音留档`, duration: 2600 });
+        }
+        syncMoon();
+        refreshEntryBadgeDot();
+    });
+    head.appendChild(moonBtn);
     sheet.appendChild(head);
+
+    // 今日一站式聚合条：解析各插件徽记数字，一眼总览今日待办，点 chip 直达对应插件
+    const todayItems = items
+        .map((it) => ({ it, m: /(\d+)/.exec(it.badge ?? "") }))
+        .filter((x) => x.m !== null && Number(x.m![1]) > 0)
+        .slice(0, 5);
+    if (todayItems.length > 0) {
+        const today = document.createElement("div");
+        today.className = "lv-sheet-today";
+        const todayLabel = document.createElement("span");
+        todayLabel.className = "lv-sheet-today-label";
+        todayLabel.textContent = "今日";
+        today.appendChild(todayLabel);
+        for (const { it, m } of todayItems) {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "lv-sheet-today-chip";
+            chip.setAttribute("aria-label", `今日待办直达 ${it.fullName || it.name}`);
+            const cDot = document.createElement("span");
+            cDot.className = "lv-sheet-today-dot";
+            if (it.color) cDot.style.background = it.color;
+            chip.appendChild(cDot);
+            const cText = document.createElement("span");
+            cText.textContent = `${it.name} ${m![1]}`;
+            chip.appendChild(cText);
+            chip.addEventListener("click", () => {
+                hapticFeedback(8);
+                pushRecentTileId(it.id);
+                closeMobileSheet();
+                try { it.onClick(); } catch (e) { console.warn("[LvLaunchpad] 今日直达失败:", e); }
+            });
+            today.appendChild(chip);
+        }
+        sheet.appendChild(today);
+    }
 
     // 穿透搜索框（lvOmnisearch 全生态 1000ms 熔断并发检索）
     const search = document.createElement("input");
@@ -2713,12 +3040,67 @@ function openMobileSheet(): void {
     results.className = "lv-sheet-results";
     sheet.appendChild(results);
 
+    // 搜索历史 chips：空态时展示最近搜索，点 chip 填词重搜
+    const histRow = document.createElement("div");
+    histRow.className = "lv-sheet-histrow";
+    const renderHistory = () => {
+        histRow.textContent = "";
+        const kws = getSearchHistory();
+        if (!kws.length) { histRow.style.display = "none"; return; }
+        histRow.style.display = "flex";
+        const label = document.createElement("span");
+        label.className = "lv-sheet-histrow-label";
+        label.textContent = "最近搜索";
+        histRow.appendChild(label);
+        for (const kw of kws.slice(0, 5)) {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "lv-sheet-histrow-chip";
+            chip.textContent = kw;
+            chip.addEventListener("click", () => {
+                hapticFeedback(6);
+                search.value = kw;
+                search.dispatchEvent(new Event("input"));
+                search.focus({ preventScroll: true });
+            });
+            histRow.appendChild(chip);
+        }
+    };
+    renderHistory();
+    sheet.appendChild(histRow);
+
+    // 生态直达行：今日回顾入日记 / 统一 AI 助手（经快门 executeAction 分发）
+    const ecoRow = document.createElement("div");
+    ecoRow.className = "lv-sheet-eco-row";
+    const ecoDefs: Array<{ label: string; action: string }> = [
+        { label: "📝 今日回顾入日记", action: "今日回顾写入日记" },
+        { label: "🤖 小驴 AI 助手", action: "小驴 AI 助手" },
+    ];
+    for (const def of ecoDefs) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "lv-sheet-eco-chip";
+        btn.textContent = def.label;
+        btn.addEventListener("click", () => {
+            hapticFeedback(8);
+            const ok = getLaunchpadHub().executeAction("siyuan-quickgate", def.action);
+            if (!ok) {
+                lvNotify.capsule({ source: "罗盘", message: "快门未就绪，请先启用小驴快门", duration: 2500 });
+                return;
+            }
+            closeMobileSheet();
+        });
+        ecoRow.appendChild(btn);
+    }
+    sheet.appendChild(ecoRow);
+
     let searchSeq = 0;
     search.addEventListener("input", () => {
         const seq = ++searchSeq;
         const kw = search.value.trim();
         results.textContent = "";
-        if (!kw) return;
+        if (!kw) { renderHistory(); return; }
+        histRow.style.display = "none";
         void lvOmnisearch.search(kw).then((hits) => {
             if (seq !== searchSeq || !document.getElementById(MOBILE_SHEET_ID)) return; // 过期响应或坞已关
             if (hits.length > 0) {
@@ -2727,32 +3109,47 @@ function openMobileSheet(): void {
                 count.textContent = hits.length > 12 ? `共 ${hits.length} 条穿透结果 · 显示前 12 条` : `${hits.length} 条穿透结果`;
                 results.appendChild(count);
             }
-            for (const hit of hits.slice(0, 12)) {
-                const row = document.createElement("button");
-                row.type = "button";
-                row.className = "lv-sheet-result";
-                const badge = document.createElement("span");
-                badge.className = "lv-sheet-result-badge";
-                badge.textContent = hit.source || hit.badge || "小驴";
-                row.appendChild(badge);
-                const body = document.createElement("span");
-                body.className = "lv-sheet-result-body";
-                const t = document.createElement("span");
-                t.className = "lv-sheet-result-title";
-                t.textContent = hit.title;
-                body.appendChild(t);
-                if (hit.snippet) {
-                    const s = document.createElement("span");
-                    s.className = "lv-sheet-result-snippet";
-                    s.textContent = hit.snippet;
-                    body.appendChild(s);
+            // 按来源分组渲染（打卡/管家/… 各成一组，组内保持相关度序）
+            const shown = hits.slice(0, 12);
+            const groups = new Map<string, typeof shown>();
+            for (const hit of shown) {
+                const key = hit.source || hit.badge || "小驴";
+                const bucket = groups.get(key);
+                if (bucket) bucket.push(hit); else groups.set(key, [hit]);
+            }
+            for (const [sourceName, groupHits] of groups) {
+                const groupHead = document.createElement("div");
+                groupHead.className = "lv-sheet-result-group";
+                groupHead.textContent = `${sourceName} · ${groupHits.length} 条`;
+                results.appendChild(groupHead);
+                for (const hit of groupHits) {
+                    const row = document.createElement("button");
+                    row.type = "button";
+                    row.className = "lv-sheet-result";
+                    const badge = document.createElement("span");
+                    badge.className = "lv-sheet-result-badge";
+                    badge.textContent = sourceName;
+                    row.appendChild(badge);
+                    const body = document.createElement("span");
+                    body.className = "lv-sheet-result-body";
+                    const t = document.createElement("span");
+                    t.className = "lv-sheet-result-title";
+                    t.textContent = hit.title;
+                    body.appendChild(t);
+                    if (hit.snippet) {
+                        const s = document.createElement("span");
+                        s.className = "lv-sheet-result-snippet";
+                        s.textContent = hit.snippet;
+                        body.appendChild(s);
+                    }
+                    row.appendChild(body);
+                    row.addEventListener("click", () => {
+                        pushSearchHistory(kw); // 点选结果=确认意图，记入搜索历史
+                        closeMobileSheet();
+                        try { hit.onClick?.(); } catch (e) { console.warn("[LvLaunchpad] 穿透结果打开失败:", e); }
+                    });
+                    results.appendChild(row);
                 }
-                row.appendChild(body);
-                row.addEventListener("click", () => {
-                    closeMobileSheet();
-                    try { hit.onClick?.(); } catch (e) { console.warn("[LvLaunchpad] 穿透结果打开失败:", e); }
-                });
-                results.appendChild(row);
             }
             if (!hits.length) {
                 const empty = document.createElement("div");
@@ -2762,10 +3159,6 @@ function openMobileSheet(): void {
             }
         }).catch(() => { /* 检索异常静默 */ });
     });
-
-    // 磁贴网格（hidden 过滤、pinned 置顶；1~2 个插件时居中稀疏排布避免孤卡稀疏感）
-    const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
-    items.sort((a, b) => (a.state === "pinned" ? 0 : 1) - (b.state === "pinned" ? 0 : 1));
 
     // 最近直达行：上次用过的插件置顶一键再达（单手最常用路径零翻找）
     const recentIds = getRecentTileIds();
