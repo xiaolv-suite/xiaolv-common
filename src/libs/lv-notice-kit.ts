@@ -318,7 +318,13 @@ const STYLES = `
     flex-direction: column;
     align-items: flex-end;
     gap: 8px;
+    /* 堆叠上限：长文卡可展开至全文，多卡同时存在时向内滚动收纳，不遮整个工作区 */
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
 }
+#lv-notice-host::-webkit-scrollbar { display: none; }
 
 .lv-notice-card {
     pointer-events: auto;
@@ -386,7 +392,7 @@ const STYLES = `
     padding: 1px 5px;
     border-radius: 10px;
     background: var(--b3-theme-primary, #4285f4);
-    color: #fff;
+    color: var(--b3-theme-on-primary, #fff);
 }
 
 .lv-notice-close-btn {
@@ -415,6 +421,13 @@ const STYLES = `
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    cursor: default;
+}
+/* 无行动按钮的长文卡：点击正文整卡展开/收起（截断 3 行 → 全文），双向阅读路径 */
+.lv-notice-body--expanded {
+    -webkit-line-clamp: 999;
+    cursor: zoom-out;
+}
 }
 
 .lv-notice-actions {
@@ -444,7 +457,7 @@ const STYLES = `
 }
 .lv-notice-btn--primary {
     background: var(--b3-theme-primary, #4285f4);
-    color: #ffffff;
+    color: var(--b3-theme-on-primary, #ffffff);
 }
 .lv-notice-btn--primary:hover {
     filter: brightness(1.08);
@@ -489,6 +502,11 @@ const STYLES = `
         bottom: auto;
         align-items: center;
         padding: 0 12px;
+        /* 小屏堆叠上限：3 张长卡（每张可展开至全文）会占近半屏遮挡正文——
+           限高滚动收纳，最新卡在可视区顶部，旧卡滚动可达 */
+        max-height: calc(100dvh - 160px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
     }
     .lv-notice-card {
         width: 100%;
@@ -901,6 +919,14 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                     ${actionsHtml || snoozeHtml ? `<div class="lv-notice-actions">${actionsHtml}${snoozeHtml}</div>` : ""}
                 `;
 
+                // 无行动按钮的长文卡片：点击正文整卡展开/收起（line-clamp 截断的双向阅读路径）
+                if (!actionsHtml && !snoozeHtml) {
+                    const bodyEl = card.querySelector<HTMLElement>(".lv-notice-body");
+                    bodyEl?.addEventListener("click", () => {
+                        bodyEl.classList.toggle("lv-notice-body--expanded");
+                    });
+                }
+
                 card.querySelector('[data-role="close"]')?.addEventListener("click", () => {
                     hub.dismiss(packet.id);
                 });
@@ -1005,7 +1031,13 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                     timers.delete(id);
                 }
                 removed?.onDismiss?.();
-                render();
+                // 定向移除：单卡离场不再全量重建其余卡片——保住已展开的长文与悬停状态
+                const cardEl = hostEl?.querySelector(`[data-id="${id}"]`);
+                if (cardEl) {
+                    try { cardEl.remove(); } catch { /* ignore */ }
+                } else {
+                    render();
+                }
             }
         },
 
@@ -1866,8 +1898,11 @@ function formatActivityMarkdown(records: LvActivityRecord[]): string {
     records.forEach(r => {
         const icon = categoryIcons[r.category] || "🔹";
         const link = r.linkBlockId ? ` (([链接](siyuan://blocks/${r.linkBlockId})))` : "";
-        const detail = r.detail ? ` — *${r.detail}*` : "";
-        lines.push(`- **${r.timeStr}** [${r.source}] ${icon} ${r.title}${detail}${link}`);
+        // Markdown 注入防护：title/detail 来自各插件自由文本，含换行会截断列表项；
+        // 折叠为单行并剥离首尾标记符号，保证写入日记的段落结构完整
+        const safeTitle = String(r.title ?? "").replace(/[\r\n]+/g, " ").trim();
+        const safeDetail = String(r.detail ?? "").replace(/[\r\n]+/g, " ").trim();
+        lines.push(`- **${r.timeStr}** [${r.source}] ${icon} ${safeTitle}${safeDetail ? ` — *${safeDetail}*` : ""}${link}`);
     });
 
     return lines.join("\n");
@@ -2549,6 +2584,13 @@ function syncMobileEntryDom(): void {
     } else {
         try { document.getElementById(MOBILE_ENTRY_ID)?.remove(); } catch { /* ignore */ }
     }
+    // 模式切换时顶栏宿主可能尚未就绪（mobileTopBar 未渲染）：
+    // 挂一次性延迟补建，避免切换后入口永远缺席（ensureMobileEntry 的错峰循环仅覆盖初次装载窗口）
+    if (!mobileEntryFullyApplied()) {
+        for (const delay of [1200, 4000]) {
+            window.setTimeout(() => syncMobileEntryDom(), delay);
+        }
+    }
     if (mode === "ball" || mode === "both") {
         buildMobileBallButton();
     } else {
@@ -2613,6 +2655,9 @@ function bedlineEnabled(): boolean {
 /** 纯函数：睡前提醒核对并触发（满足时间+有活动+未开启专注+今日未触发），返回是否触发了提醒 */
 export function checkAndTriggerBedline(now = new Date()): boolean {
     if (!bedlineEnabled() || !bedlineDue(now) || isNotifyFocusActive()) return false;
+    // 阈值越界窗（22:30~23:59）内才提醒；若 ticker 因休眠跳到次日 00:00 后才补跑，
+    // 说明用户早已休息——不补弹，把机会留给当晚（避免 00:05 被“今日回顾”吵醒）
+    if (now.getHours() < 20) return false;
     const stats = lvActivity.getDailyStats();
     const total = Number(stats?.total ?? 0);
     if (total <= 0) return false;
