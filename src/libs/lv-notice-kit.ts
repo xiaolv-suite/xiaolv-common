@@ -1169,8 +1169,10 @@ function getSurfaceStack(): LvSurfaceHandle[] {
                 if (handled !== false) {
                     e.preventDefault();
                     e.stopPropagation();
-                    const idx = stack.indexOf(top);
-                    if (idx >= 0) stack.splice(idx, 1);
+                    if (handled !== "keep") {
+                        const idx = stack.indexOf(top);
+                        if (idx >= 0) stack.splice(idx, 1);
+                    }
                 }
             }
         }, true);
@@ -1380,14 +1382,15 @@ export async function withDocLock<T>(docId: string, task: () => Promise<T>): Pro
 
     let release!: () => void;
     const current = new Promise<void>((resolve) => { release = resolve; });
-    map.set(docId, prev.then(() => current, () => current));
+    const chained = prev.then(() => current, () => current);
+    map.set(docId, chained);
 
     try {
         await prev;
         return await task();
     } finally {
         release();
-        if (map.get(docId) === current) {
+        if (map.get(docId) === chained) {
             map.delete(docId);
         }
     }
