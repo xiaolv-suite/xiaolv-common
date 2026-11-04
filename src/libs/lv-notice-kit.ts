@@ -3350,8 +3350,11 @@ function openMobileSheet(): void {
     } catch { /* 焦点栈不可用不阻断 */ }
 
     document.body.appendChild(mask);
-    // 焦点落搜索框，键盘直入检索态
-    try { search.focus({ preventScroll: true }); } catch { /* ignore */ }
+    // 焦点策略分端：桌面聚焦搜索框直入检索态；移动端不自动聚焦——
+    // 软键盘弹出会立刻遮挡下半屏磁贴网格，用户想直达插件却先要收键盘（真机截图实测）
+    if (!isMobileFrontend()) {
+        try { search.focus({ preventScroll: true }); } catch { /* ignore */ }
+    }
     armSheetHistory(); // Android 系统返回手势/返回键 → 关坞而非退出
     hapticFeedback(8);
 }
