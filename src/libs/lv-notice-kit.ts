@@ -2938,6 +2938,7 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
     tile.type = "button";
     tile.className = "lv-sheet-tile";
     tile.setAttribute("aria-label", item.fullName || item.name);
+    tile.setAttribute("aria-expanded", "false");
     // 优先渲染插件真实 sprite 图标（kebab/camel 双形态探测）；缺失时回退品牌色圆点
     const iconHref = resolveIconHref(item.svgIcon);
     if (iconHref) {
@@ -2984,8 +2985,12 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
             hapticFeedback(14);
             const mask = document.getElementById(MOBILE_SHEET_ID);
             if (!mask) return;
-            mask.querySelectorAll(".lv-sheet-tile--expanded").forEach((el) => el.classList.remove("lv-sheet-tile--expanded"));
+            mask.querySelectorAll(".lv-sheet-tile--expanded").forEach((el) => {
+                el.classList.remove("lv-sheet-tile--expanded");
+                el.setAttribute("aria-expanded", "false");
+            });
             tile.classList.add("lv-sheet-tile--expanded");
+            tile.setAttribute("aria-expanded", "true");
             mask.querySelectorAll(".lv-sheet-tile-actions").forEach((el) => el.remove());
             const actWrap = document.createElement("span");
             actWrap.className = "lv-sheet-tile-actions";
@@ -3350,6 +3355,24 @@ function openMobileSheet(): void {
     } catch { /* 焦点栈不可用不阻断 */ }
 
     document.body.appendChild(mask);
+    // 键盘循环（零依赖内联版 focus-trap）：Tab 在坞内循环，不外逸到底层文档
+    mask.addEventListener("keydown", (ev) => {
+        const kev = ev as KeyboardEvent;
+        if (kev.key !== "Tab") return;
+        const focusables = Array.from(mask.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]:not([tabindex='-1'])"))
+            .filter((el) => !el.hasAttribute("disabled") && (el as HTMLElement).offsetParent !== null);
+        if (focusables.length === 0) return;
+        const first = focusables[0] as HTMLElement | undefined;
+        const last = focusables[focusables.length - 1] as HTMLElement | undefined;
+        if (!first || !last) return;
+        if (kev.shiftKey && document.activeElement === first) {
+            kev.preventDefault();
+            last.focus({ preventScroll: true });
+        } else if (!kev.shiftKey && document.activeElement === last) {
+            kev.preventDefault();
+            first.focus({ preventScroll: true });
+        }
+    });
     // 焦点策略分端：桌面聚焦搜索框直入检索态；移动端不自动聚焦——
     // 软键盘弹出会立刻遮挡下半屏磁贴网格，用户想直达插件却先要收键盘（真机截图实测）
     if (!isMobileFrontend()) {
