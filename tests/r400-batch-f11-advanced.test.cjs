@@ -92,6 +92,7 @@ test("TODO-FEAT-027: 主题套件连环取用拼板 DOM 装配与进度指示契
                 for (const it of items) this.appendChild(it);
             },
             setAttribute(k, v) { this[k] = v; },
+            getAttribute(k) { return this[k] ?? null; },
             removeAttribute(k) { delete this[k]; },
             classList: {
                 add(...cls) { cls.forEach((c) => this._classes.add(c)); },

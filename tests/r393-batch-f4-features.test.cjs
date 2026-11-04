@@ -86,6 +86,7 @@ test("TODO-FEAT-010: 单条便携分享码卡片 DOM 装配与复制闭环契约
                 }
             },
             setAttribute(k, v) { this[k] = v; },
+            getAttribute(k) { return this[k] ?? null; },
             removeAttribute(k) { delete this[k]; },
             classList: {
                 add(...cls) { cls.forEach((c) => this._classes.add(c)); },

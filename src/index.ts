@@ -129,6 +129,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     private backupCleaner?: (() => void);
     /** 小驴罗盘 · 弹射坞卸载注销清理器 (Epoch 7 Phase 5) */
     private launchpadCleaner?: (() => void);
+    /** 小驴全生态统一手机端入口清理器 (Protocol v1.6.0 Mobile) */
+    private mobileEntryCleaner?: (() => void);
     /** 小驴穿透搜索 · 卸载注销清理器 (Epoch 7 Phase 7) */
     private searchCleaner?: (() => void);
     private unloading = false;
@@ -527,7 +529,14 @@ export default class XiaolvCommonPlugin extends Plugin {
         // 小驴罗盘 · 注册插件入口与二级行动直达 (Epoch 7 Phase 5)
         this.syncLaunchpadRegistry();
 
-        // 小驴穿透搜索 · 注册常用代码片段与模版检索切面 (Epoch 7 Phase 7)
+        // 小驴罗盘 · 移动端统一收敛入口挂载 (Protocol v1.6.0 Mobile)
+        try {
+            this.mobileEntryCleaner = lvLaunchpad.ensureMobileEntry();
+        } catch {
+            // 环境防御
+        }
+
+        // 小驴穿透搜索 · 注册常用代码片段与模版检索切面 (Epoch 7 Phase 7 / Mobile Spec v1)
         try {
             this.searchCleaner = lvOmnisearch.registerProvider("xiaolv-common", async (keyword) => {
                 const hits = await this.searchSnippets(keyword);
@@ -537,7 +546,23 @@ export default class XiaolvCommonPlugin extends Plugin {
                     category: "note",
                     title: s.title,
                     snippet: s.content.slice(0, 60),
-                    onClick: () => { void this.insertSnippet(s.id); },
+                    onClick: async () => {
+                        lvLaunchpad.haptic(12);
+                        if (this.host.isMobile()) {
+                            let text = s.content;
+                            if (this.library) {
+                                const got = await this.library.getItem(s.id);
+                                if (got.ok) {
+                                    const kdRes = await this.library.getStoredItemKramdown(got.data);
+                                    text = kdRes.ok && kdRes.data ? kdRes.data : (got.data.summary || s.content);
+                                }
+                            }
+                            await this.host.writeClipboard(text);
+                            this.notify("info", "已复制，去目标应用粘贴");
+                        } else {
+                            void this.insertSnippet(s.id);
+                        }
+                    },
                 }));
             });
         } catch {
@@ -1696,7 +1721,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 digit: 8,
                 badge,
                 badgeType: "primary",
-                actions: ["快速搜索片段代码", "新建常用富文本宏模版", "查看近期高频调用历史记录", "生成常用智能变体"],
+                actions: ["打开片段搜索", "复制置顶片段", "从剪贴板保存片段", "查看剪贴板历史"],
                 onClick: () => this.openCommonPanel(),
                 onAction: (action) => this.handleQuickAction(action),
             });
@@ -3485,11 +3510,20 @@ export default class XiaolvCommonPlugin extends Plugin {
     async handleQuickAction(action: string): Promise<void> {
         if (action.includes("搜索")) {
             this.openSearch();
-        } else if (action.includes("新建")) {
-            void this.capture?.newManual();
-        } else if (action.includes("历史") || action.includes("高频")) {
-            this.state.sort = "recent";
-            this.openSearch();
+        } else if (action.includes("复制置顶") || action.includes("置顶")) {
+            lvLaunchpad.haptic(12);
+            const top = await this.getTopSnippet();
+            if (top) {
+                await this.host.writeClipboard(top.content);
+                this.notify("info", `已复制「${top.title}」，去目标应用粘贴`);
+            } else {
+                this.notify("info", "暂无可复制的置顶常用片段");
+            }
+        } else if (action.includes("剪贴板保存") || action.includes("从剪贴板") || action.includes("新建")) {
+            lvLaunchpad.haptic(12);
+            void this.capture?.quickCaptureFromClipboard();
+        } else if (action.includes("剪贴板历史") || action.includes("历史")) {
+            this.openSearch(undefined, undefined, undefined, undefined, "clipboard");
         } else if (action.includes("变体") || action.includes("智能生成")) {
             const targetId = this.state.favorites[0] || this.state.recents[0]?.id;
             if (targetId) {
@@ -3503,6 +3537,30 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         } else {
             this.openSearch();
+        }
+    }
+
+    /** 读取首条置顶/高频常用片段，供手机端一键复制 (Mobile Spec v1) */
+    async getTopSnippet(): Promise<{ id: string; title: string; content: string } | null> {
+        if (!this.library) return null;
+        try {
+            const idx = await this.library.ensureIndex();
+            if (!idx || idx.entries.length === 0) return null;
+            let topId = this.state.favorites[0] || this.state.recents[0]?.id;
+            let entry = topId ? idx.entries.find((e) => e.id === topId) : undefined;
+            if (!entry && idx.entries.length > 0) {
+                entry = idx.entries[0];
+            }
+            if (!entry) return null;
+            const got = await this.library.getItem(entry.id);
+            let content = entry.summary || entry.title;
+            if (got.ok) {
+                const kdRes = await this.library.getStoredItemKramdown(got.data);
+                content = kdRes.ok && kdRes.data ? kdRes.data : (got.data.summary || entry.title);
+            }
+            return { id: entry.id, title: entry.title, content };
+        } catch {
+            return null;
         }
     }
 
@@ -3564,6 +3622,17 @@ export default class XiaolvCommonPlugin extends Plugin {
                     });
                 }
             }
+            // 覆盖手机高频实体：按使用频次与收藏权重排序
+            hits.sort((a, b) => {
+                const uA = this.state.usage[a.id];
+                const countA = typeof uA === "number" ? uA : (uA?.count ?? 0);
+                const uB = this.state.usage[b.id];
+                const countB = typeof uB === "number" ? uB : (uB?.count ?? 0);
+                if (countB !== countA) return countB - countA;
+                const isFavA = this.state.favorites.includes(a.id) ? 1 : 0;
+                const isFavB = this.state.favorites.includes(b.id) ? 1 : 0;
+                return isFavB - isFavA;
+            });
             return hits;
         } catch {
             return [];
@@ -3628,6 +3697,13 @@ export default class XiaolvCommonPlugin extends Plugin {
             // 宿主已销毁：忽略
         }
         this.launchpadCleaner = undefined;
+        // 小驴罗盘 · 移动端统一收敛入口卸载 (Protocol v1.6.0 Mobile)
+        try {
+            this.mobileEntryCleaner?.();
+        } catch {
+            // 宿主已销毁：忽略
+        }
+        this.mobileEntryCleaner = undefined;
         // 小驴穿透搜索 · 注销检索切面 (Epoch 7 Phase 7)
         try {
             this.searchCleaner?.();
@@ -3770,7 +3846,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     uninstall(): Promise<void> {
-        // 卸载不删用户库文档；侧车数据由宿主清理（data/storage/petal/）
+        // 卸载不删用户库文档；侧车数据由宿主清理（data/storage/）
         return Promise.resolve();
     }
 }

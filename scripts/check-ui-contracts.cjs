@@ -12,8 +12,10 @@ function walkTs(dir) {
     let out = [];
     for (const ent of fs.readdirSync(dir, {withFileTypes: true})) {
         const p = path.join(dir, ent.name);
-        if (ent.isDirectory()) out.push(...walkTs(p));
-        else if (ent.name.endsWith(".ts")) out.push(p);
+        if (ent.isDirectory()) {
+            if (ent.name === "libs") continue; // 外部快门同步的生态标准库不属于本插件私有 UI
+            out.push(...walkTs(p));
+        } else if (ent.name.endsWith(".ts")) out.push(p);
     }
     return out;
 }

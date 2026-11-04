@@ -4007,11 +4007,19 @@
   left: 0;
   right: 0;
   bottom: 0;
-  top: auto !important;
-  margin-bottom: var(--xlc-space-0);
-  border-radius: var(--xlc-radius-sheet-top);
+  top: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  border-radius: 0;
+  margin: 0 !important;
   transform: none !important;
-  padding-bottom: env(safe-area-inset-bottom, var(--xlc-space-0));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  box-sizing: border-box;
 
   .b3-dialog__content, .b3-dialog__body {
     padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-3);
@@ -4175,13 +4183,77 @@
 // ---------- 移动端：底部 sheet（触控优先；行 = 圆角卡片，原型屏4）----------
 .xlc-dialog--mobile {
   gap: var(--xlc-space-2);
-  padding: var(--xlc-space-0);
+  padding: env(safe-area-inset-top, var(--xlc-space-0)) env(safe-area-inset-right, var(--xlc-space-0)) env(safe-area-inset-bottom, var(--xlc-space-0)) env(safe-area-inset-left, var(--xlc-space-0));
+  touch-action: manipulation;
 
   .xlc-top { gap: var(--xlc-space-2); }
   .xlc-top-main { gap: var(--xlc-space-2); }
   .xlc-search-block { min-width: 0; }
 
-  .xlc-kbdrow { display: none; }
+  // 手机端隐藏仅桌面功能入口：宏配置、密度切换、固定窗口、迷你条、套件市场等
+  .xlc-kbdrow,
+  .xlc-search-pin,
+  .xlc-search-density-btn,
+  .xlc-search-mini-btn,
+  .xlc-mini-drag-bar,
+  .xlc-footer-starter-packs,
+  .xlc-footer-stepguide,
+  .xlc-row-action-tray {
+    display: none !important;
+  }
+
+  // 高频片段直达行（frecency 前 5 个置顶 chips）
+  .xlc-top-chips-row {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-2);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: var(--xlc-space-1) var(--xlc-space-0);
+    margin-bottom: var(--xlc-space-1);
+    scrollbar-width: none;
+    touch-action: manipulation;
+    -webkit-overflow-scrolling: touch;
+    &::-webkit-scrollbar { display: none; }
+
+    .xlc-top-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 38px;
+      min-height: 38px;
+      max-width: 150px;
+      padding: 0 var(--xlc-space-3);
+      border-radius: 19px;
+      border: 1px solid var(--b3-theme-primary-light);
+      background: var(--b3-theme-surface);
+      color: var(--b3-theme-on-surface);
+      font-size: var(--xlc-font-sm);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      flex-shrink: 0;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-sizing: border-box;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+
+      &:active {
+        background: var(--b3-theme-primary-lightest);
+        transform: scale(0.96);
+      }
+      .xlc-top-chip-icon {
+        font-size: 11px;
+        color: var(--b3-theme-primary);
+        opacity: 0.9;
+      }
+      .xlc-top-chip-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+  }
 
   .xlc-search { height: 44px; }
 
@@ -4257,8 +4329,16 @@
     margin-bottom: var(--xlc-space-2);
     padding: var(--xlc-space-3) var(--xlc-space-3);
     min-height: 52px;
+    touch-action: manipulation;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
 
     &:last-child { border-bottom: 1px solid var(--b3-border-color); }
+
+    &:active {
+      opacity: 0.88;
+      transform: scale(0.995);
+    }
 
     &--active {
       border-color: var(--b3-theme-primary);
@@ -4274,6 +4354,7 @@
       min-height: 44px;
       margin: var(--xlc-space-neg-1-5) var(--xlc-space-neg-1-5) var(--xlc-space-neg-1-5) var(--xlc-space-0);
       font-size: var(--xlc-font-xl);
+      touch-action: manipulation;
     }
   }
 
@@ -4288,7 +4369,7 @@
     max-height: 78%;
     transform-origin: 50% 100%;
 
-    .xlc-menu-item { min-height: 44px; }
+    .xlc-menu-item { min-height: 48px; touch-action: manipulation; }
   }
 
   .xlc-footer {
@@ -4300,12 +4381,12 @@
     font-size: var(--xlc-font-xs);
 
     .xlc-footer-claim { display: none; }
-    :is(.xlc-footer-guide, .xlc-footer-gear) { min-height: 32px; padding: var(--xlc-space-0-5) var(--xlc-space-1); font-size: var(--xlc-font-xs); }
+    :is(.xlc-footer-guide, .xlc-footer-gear) { min-height: 36px; padding: var(--xlc-space-1) var(--xlc-space-2); font-size: var(--xlc-font-xs); touch-action: manipulation; }
   }
 
   .xlc-empty { padding: var(--xlc-space-6) var(--xlc-space-3); gap: var(--xlc-space-1); }
 
-  // 操作钮行（F3/原型屏 7：＋新建 / 插入选中；40px 触控命中）
+  // 操作钮行（触控目标 ≥52px，规范 4）
   .xlc-mobile-foot {
     display: flex;
     gap: var(--xlc-space-2);
@@ -4313,9 +4394,11 @@
 
     .b3-button {
       flex: 1;
-      min-height: 40px;
+      min-height: 52px;
+      height: 52px;
       border-radius: var(--xlc-radius);
       font-size: var(--xlc-font-md);
+      touch-action: manipulation;
     }
   }
 }

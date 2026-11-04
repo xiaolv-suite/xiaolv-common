@@ -108,6 +108,7 @@ function createMockElement(tag) {
         attributes: {},
         setAttribute(k, v) { this.attributes[k] = String(v); },
         getAttribute(k) { return this.attributes[k] || null; },
+        removeAttribute(k) { delete this.attributes[k]; },
         classList: {
             add: (cls) => classList.add(cls),
             remove: (cls) => classList.delete(cls),

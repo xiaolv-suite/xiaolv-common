@@ -5,7 +5,7 @@
 // 触控：44px 命中区、长按 550ms（移动 <10px 判定）弹动作菜单；不依赖 hover、不做坐标猜测。
 // AI：? 前缀语义找条目（默认仅元数据出域）；动作菜单 AI 变换（预览后选插入，原文永不被改写）。
 import {Dialog} from "siyuan";
-import {lvEcosystem, lvNotify, lvSurfaceStack} from "../libs/lv-notice-kit";
+import {lvEcosystem, lvLaunchpad, lvNotify, lvSurfaceStack} from "../libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations, extractCleanPayload} from "../model/item";
 import {ItemSortMode} from "../model/storage";
@@ -221,6 +221,8 @@ export class CommonSearchDialog {
     private selectedIds = new Set<string>();
     private capturedOmniIds = new Set<string>();
     private batchBarEl: HTMLElement | null = null;
+    /** 移动端置顶高频片段直达行容器 (Mobile Spec v1) */
+    private topChipsContainer: HTMLElement | null = null;
     /** 动作菜单 document 监听兜底清理（destroy 时调用；防键盘关弹窗残留监听） */
     private menuDismiss: (() => void) | null = null;
     private inputDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -548,51 +550,63 @@ export class CommonSearchDialog {
         search.appendChild(input);
         search.appendChild(clearBtn);
 
-        // 窗口固定按钮（连续取用时不自动关闭窗口，支持 Alt+P 快捷切换 · G50）
-        const pinBtn = document.createElement("button");
-        pinBtn.type = "button";
-        pinBtn.className = "xlc-search-pin" + (this.pinWindow ? " xlc-search-pin--active" : "");
-        pinBtn.dataset.xlcControl = "search.pin";
-        pinBtn.textContent = "📌";
-        pinBtn.title = "固定窗口（连续复制/插入不关闭，Alt+P 切换）";
-        pinBtn.setAttribute("aria-label", "固定窗口");
-        pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
-        pinBtn.addEventListener("click", () => {
-            this.togglePinWindow();
-        });
-        search.appendChild(pinBtn);
+        if (!isMobile) {
+            // 窗口固定按钮（连续取用时不自动关闭窗口，支持 Alt+P 快捷切换 · G50）
+            const pinBtn = document.createElement("button");
+            pinBtn.type = "button";
+            pinBtn.className = "xlc-search-pin" + (this.pinWindow ? " xlc-search-pin--active" : "");
+            pinBtn.dataset.xlcControl = "search.pin";
+            pinBtn.textContent = "📌";
+            pinBtn.title = "固定窗口（连续复制/插入不关闭，Alt+P 切换）";
+            pinBtn.setAttribute("aria-label", "固定窗口");
+            pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
+            pinBtn.addEventListener("click", () => {
+                this.togglePinWindow();
+            });
+            search.appendChild(pinBtn);
 
-        // 视图密度切换按钮（紧凑单行 / 舒适卡片双视图，支持 Alt+V 切换 · CAND-012 / TODO-FEAT-011）
-        const densityBtn = document.createElement("button");
-        densityBtn.type = "button";
-        densityBtn.className = "xlc-search-density-btn" + (this.density === "compact" ? " xlc-search-density-btn--compact" : "");
-        densityBtn.dataset.xlcControl = "search.density.toggle";
-        densityBtn.textContent = this.density === "compact" ? "☰" : "☷";
-        densityBtn.title = this.density === "compact" ? "当前为紧凑单行视图（点击或 Alt+V 切换为舒适卡片）" : "当前为舒适卡片视图（点击或 Alt+V 切换为紧凑单行）";
-        densityBtn.setAttribute("aria-label", "切换视图密度");
-        densityBtn.setAttribute("aria-pressed", String(this.density === "compact"));
-        densityBtn.addEventListener("click", () => {
-            this.toggleDensity();
-        });
-        this.densityBtn = densityBtn;
-        search.appendChild(densityBtn);
+            // 视图密度切换按钮（紧凑单行 / 舒适卡片双视图，支持 Alt+V 切换 · CAND-012 / TODO-FEAT-011）
+            const densityBtn = document.createElement("button");
+            densityBtn.type = "button";
+            densityBtn.className = "xlc-search-density-btn" + (this.density === "compact" ? " xlc-search-density-btn--compact" : "");
+            densityBtn.dataset.xlcControl = "search.density.toggle";
+            densityBtn.textContent = this.density === "compact" ? "☰" : "☷";
+            densityBtn.title = this.density === "compact" ? "当前为紧凑单行视图（点击或 Alt+V 切换为舒适卡片）" : "当前为舒适卡片视图（点击或 Alt+V 切换为紧凑单行）";
+            densityBtn.setAttribute("aria-label", "切换视图密度");
+            densityBtn.setAttribute("aria-pressed", String(this.density === "compact"));
+            densityBtn.addEventListener("click", () => {
+                this.toggleDensity();
+            });
+            this.densityBtn = densityBtn;
+            search.appendChild(densityBtn);
 
-        // 极窄迷你悬浮模式切换按钮（📐，Alt+M · CAND-018 / TODO-FEAT-017）
-        const miniModeBtn = document.createElement("button");
-        miniModeBtn.type = "button";
-        miniModeBtn.className = "xlc-search-mini-btn" + (this.miniMode ? " xlc-search-mini-btn--active" : "");
-        miniModeBtn.dataset.xlcControl = "search.mini.toggle";
-        miniModeBtn.textContent = "📐";
-        miniModeBtn.title = "迷你悬浮浮条模式（极窄单列无遮挡，Alt+M 切换）";
-        miniModeBtn.setAttribute("aria-label", "切换迷你悬浮模式");
-        miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
-        miniModeBtn.addEventListener("click", () => {
-            this.toggleMiniMode();
-        });
-        this.miniModeBtn = miniModeBtn;
-        search.appendChild(miniModeBtn);
+            // 极窄迷你悬浮模式切换按钮（📐，Alt+M · CAND-018 / TODO-FEAT-017）
+            const miniModeBtn = document.createElement("button");
+            miniModeBtn.type = "button";
+            miniModeBtn.className = "xlc-search-mini-btn" + (this.miniMode ? " xlc-search-mini-btn--active" : "");
+            miniModeBtn.dataset.xlcControl = "search.mini.toggle";
+            miniModeBtn.textContent = "📐";
+            miniModeBtn.title = "迷你悬浮浮条模式（极窄单列无遮挡，Alt+M 切换）";
+            miniModeBtn.setAttribute("aria-label", "切换迷你悬浮模式");
+            miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
+            miniModeBtn.addEventListener("click", () => {
+                this.toggleMiniMode();
+            });
+            this.miniModeBtn = miniModeBtn;
+            search.appendChild(miniModeBtn);
+        }
 
         searchBlock.appendChild(search);
+
+        // 移动端置顶高频片段直达行 (Mobile Spec v1: 位于搜索框正下方，frecency 前 5 个 chips)
+        if (isMobile) {
+            const chipsRow = document.createElement("div");
+            chipsRow.className = "xlc-top-chips-row";
+            chipsRow.dataset.xlcControl = "search.mobile.top-chips";
+            this.topChipsContainer = chipsRow;
+            searchBlock.appendChild(chipsRow);
+        }
+
         const searchHint = document.createElement("div");
         searchHint.className = "xlc-search-hint";
         searchHint.textContent = this.deps.t("searchHint");
@@ -1041,7 +1055,12 @@ export class CommonSearchDialog {
                 this.activeIndex = index;
                 this.activeProvider = -1;
                 this.paintActive();
-                this.schedulePreview(entry);
+                // 规范 5: 手机核心场景点击即复制 + 轻触感 haptic(12) + inline 打勾，坚决不弹窗
+                lvLaunchpad.haptic(12);
+                const text = entry.content || entry.summary || entry.title;
+                void this.deps.copyText(text).then((ok) => {
+                    if (ok) lvNotify.inline(row, "已复制");
+                });
                 return;
             }
             void this.runPrimary(entry);
@@ -1180,7 +1199,13 @@ export class CommonSearchDialog {
             }
             insertBtn.addEventListener("click", () => {
                 const entry = this.results[this.activeIndex];
-                if (entry) void this.runPrimary(entry);
+                if (entry) {
+                    lvLaunchpad.haptic(12);
+                    const text = entry.content || entry.summary || entry.title;
+                    void this.deps.copyText(text).then((ok) => {
+                        if (ok) lvNotify.inline(insertBtn, "已复制");
+                    });
+                }
             });
             footBtns.appendChild(insertBtn);
             footer.appendChild(footBtns);
@@ -1215,42 +1240,44 @@ export class CommonSearchDialog {
         guide.addEventListener("click", () => this.openUsageGuide());
         footer.appendChild(guide);
 
-        // 新手分步实操指引入口
-        const stepGuide = document.createElement("button");
-        stepGuide.type = "button";
-        stepGuide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-stepguide";
-        stepGuide.dataset.xlcControl = "footer.stepguide";
-        stepGuide.textContent = "🎓 " + (this.deps.t("stepGuideTitle") || "新手实操指引");
-        stepGuide.setAttribute("aria-label", this.deps.t("stepGuideTitle") || "新手实操指引");
-        stepGuide.addEventListener("click", () => {
-            openStepByStepGuideDialog({
-                t: this.deps.t,
-                isMobile: this.deps.isMobile,
-                onOpenSearch: () => this.focusInput(),
-            });
-        });
-        footer.appendChild(stepGuide);
-
-        // 开箱即用套件市场直达入口（随时自主挑选启用 · CAND-036 / TODO-FEAT-031）
-        const starterPacksBtn = document.createElement("button");
-        starterPacksBtn.type = "button";
-        starterPacksBtn.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-starter-packs";
-        starterPacksBtn.dataset.xlcControl = "footer.starter-packs";
-        starterPacksBtn.textContent = "📦 " + (this.deps.t("starterPacksBtn") || "开箱套件");
-        starterPacksBtn.title = "打开开箱即用套件市场，随时挑选启用行业场景常用语";
-        starterPacksBtn.setAttribute("aria-label", "打开开箱即用套件市场");
-        starterPacksBtn.addEventListener("click", () => {
-            if (this.deps.importStarterPackDirect) {
-                openStarterPacksHubDialog({
+        // 新手分步实操指引与套件包市场（仅桌面端展示，手机端隐藏保持界面纯粹 · Mobile Spec v1）
+        if (!isMobile) {
+            const stepGuide = document.createElement("button");
+            stepGuide.type = "button";
+            stepGuide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-stepguide";
+            stepGuide.dataset.xlcControl = "footer.stepguide";
+            stepGuide.textContent = "🎓 " + (this.deps.t("stepGuideTitle") || "新手实操指引");
+            stepGuide.setAttribute("aria-label", this.deps.t("stepGuideTitle") || "新手实操指引");
+            stepGuide.addEventListener("click", () => {
+                openStepByStepGuideDialog({
                     t: this.deps.t,
-                    notify: this.deps.notify,
-                    importStarterPackDirect: this.deps.importStarterPackDirect,
-                    createStarterPackDedicatedDoc: this.deps.createStarterPackDedicatedDoc,
-                    onImportSuccess: () => void this.refresh(),
+                    isMobile: this.deps.isMobile,
+                    onOpenSearch: () => this.focusInput(),
                 });
-            }
-        });
-        footer.appendChild(starterPacksBtn);
+            });
+            footer.appendChild(stepGuide);
+
+            // 开箱即用套件市场直达入口（随时自主挑选启用 · CAND-036 / TODO-FEAT-031）
+            const starterPacksBtn = document.createElement("button");
+            starterPacksBtn.type = "button";
+            starterPacksBtn.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-starter-packs";
+            starterPacksBtn.dataset.xlcControl = "footer.starter-packs";
+            starterPacksBtn.textContent = "📦 " + (this.deps.t("starterPacksBtn") || "开箱套件");
+            starterPacksBtn.title = "打开开箱即用套件市场，随时挑选启用行业场景常用语";
+            starterPacksBtn.setAttribute("aria-label", "打开开箱即用套件市场");
+            starterPacksBtn.addEventListener("click", () => {
+                if (this.deps.importStarterPackDirect) {
+                    openStarterPacksHubDialog({
+                        t: this.deps.t,
+                        notify: this.deps.notify,
+                        importStarterPackDirect: this.deps.importStarterPackDirect,
+                        createStarterPackDedicatedDoc: this.deps.createStarterPackDedicatedDoc,
+                        onImportSuccess: () => void this.refresh(),
+                    });
+                }
+            });
+            footer.appendChild(starterPacksBtn);
+        }
 
         // 设置入口双端可达（移动端无顶栏/命令面板，此处是唯一设置路径）
         const gear = document.createElement("button");
@@ -2239,8 +2266,73 @@ export class CommonSearchDialog {
         }
         this.finishSearchLoad(list);
         this.renderList(list);
+        this.renderTopChips();
         this.updatePreview();
         this.syncQueueChipRef?.();
+    }
+
+    /**
+     * 移动端置顶高频片段直达行 (Mobile Spec v1):
+     * 按照使用频次、收藏与更新时序计算 frecency 前 5 个常用条目，置顶为快捷胶囊 chips。
+     * 点击直接复制文本 + 触感 12ms + inline 打勾，坚决不弹窗。
+     */
+    private renderTopChips(): void {
+        if (!this.topChipsContainer || !this.deps.isMobile()) return;
+        this.topChipsContainer.innerHTML = "";
+        const candidates = (this.results || []).filter((r) => !r.isOmni);
+        if (candidates.length === 0) {
+            this.topChipsContainer.style.display = "none";
+            return;
+        }
+
+        const usage = this.usageCounts;
+        const sorted = candidates.slice().sort((a, b) => {
+            const countA = usage.get(a.id) ?? 0;
+            const countB = usage.get(b.id) ?? 0;
+            if (countB !== countA) return countB - countA;
+            const isFavA = this.deps.isFavorite(a.id) ? 1 : 0;
+            const isFavB = this.deps.isFavorite(b.id) ? 1 : 0;
+            if (isFavB !== isFavA) return isFavB - isFavA;
+            return (b.updatedAt || 0) - (a.updatedAt || 0);
+        });
+
+        const top5 = sorted.slice(0, 5);
+        if (top5.length === 0) {
+            this.topChipsContainer.style.display = "none";
+            return;
+        }
+
+        this.topChipsContainer.style.display = "flex";
+        for (const entry of top5) {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "xlc-top-chip";
+            chip.title = `点击直接复制「${entry.title}」`;
+            chip.setAttribute("aria-label", chip.title);
+
+            const iconSpan = document.createElement("span");
+            iconSpan.className = "xlc-top-chip-icon";
+            iconSpan.textContent = "⚡";
+
+            const textSpan = document.createElement("span");
+            textSpan.className = "xlc-top-chip-text";
+            textSpan.textContent = entry.title || "常用片段";
+
+            chip.append(iconSpan, textSpan);
+            chip.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                // 规范 5：轻触感反馈 12ms
+                lvLaunchpad.haptic(12);
+                const text = entry.content || entry.summary || entry.title;
+                const ok = await this.deps.copyText(text);
+                if (ok) {
+                    iconSpan.textContent = "✓";
+                    lvNotify.inline(chip, "已复制");
+                    setTimeout(() => { iconSpan.textContent = "⚡"; }, 1500);
+                }
+            });
+            this.topChipsContainer.appendChild(chip);
+        }
     }
 
     /** 收尾一次搜索刷新：解除列表加载反馈（成功与失败路径共用）。 */
@@ -2567,7 +2659,7 @@ export class CommonSearchDialog {
                 });
                 actionsWrap.appendChild(saveBtn);
 
-                if (this.deps.captureOmniWithForm) {
+                if (this.deps.captureOmniWithForm && !this.deps.isMobile()) {
                     const editBtn = document.createElement("button");
                     editBtn.className = "b3-button b3-button--small xlc-row-action";
                     editBtn.dataset.xlcControl = "item.edit-capture";
@@ -2691,23 +2783,25 @@ export class CommonSearchDialog {
             });
             row.appendChild(star);
 
-            // 常用语购物车暂存托盘按钮（CAND-019 / TODO-FEAT-018）
-            const trayBtn = document.createElement("button");
-            trayBtn.type = "button";
-            trayBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action-tray";
-            trayBtn.dataset.xlcControl = "item.add-tray";
-            const inTray = this.pasteTrayItems.some((it) => it.id === entry.id);
-            trayBtn.textContent = inTray ? "✓" : "🛒";
-            trayBtn.title = inTray ? "已加入暂存托盘" : "加入暂存托盘 (Alt+A)";
-            trayBtn.setAttribute("aria-label", trayBtn.title);
-            trayBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                this.togglePasteTrayItem(entry);
-                const nowIn = this.pasteTrayItems.some((it) => it.id === entry.id);
-                trayBtn.textContent = nowIn ? "✓" : "🛒";
-                lvNotify.inline(trayBtn, nowIn ? "已暂存" : "已移出");
-            });
-            row.appendChild(trayBtn);
+            // 常用语购物车暂存托盘按钮（仅桌面端展示，手机端隐藏 · CAND-019 / Mobile Spec v1）
+            if (!this.deps.isMobile()) {
+                const trayBtn = document.createElement("button");
+                trayBtn.type = "button";
+                trayBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action-tray";
+                trayBtn.dataset.xlcControl = "item.add-tray";
+                const inTray = this.pasteTrayItems.some((it) => it.id === entry.id);
+                trayBtn.textContent = inTray ? "✓" : "🛒";
+                trayBtn.title = inTray ? "已加入暂存托盘" : "加入暂存托盘 (Alt+A)";
+                trayBtn.setAttribute("aria-label", trayBtn.title);
+                trayBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    this.togglePasteTrayItem(entry);
+                    const nowIn = this.pasteTrayItems.some((it) => it.id === entry.id);
+                    trayBtn.textContent = nowIn ? "✓" : "🛒";
+                    lvNotify.inline(trayBtn, nowIn ? "已暂存" : "已移出");
+                });
+                row.appendChild(trayBtn);
+            }
         }
         return row;
     }
@@ -3232,7 +3326,9 @@ export class CommonSearchDialog {
                 }
             }
 
-            for (let i = 0; i < this.results.length; i++) {
+            const totalCount = this.results.length;
+            const renderCount = this.deps.isMobile() ? Math.min(totalCount, 50) : totalCount;
+            for (let i = 0; i < renderCount; i++) {
                 while (headCursor + 1 < groupLabels.length && i === headStarts[headCursor + 1]) {
                     headCursor++;
                     const head = groupLabels[headCursor];
@@ -3271,6 +3367,15 @@ export class CommonSearchDialog {
                     list.appendChild(omniHead);
                 }
                 if (entry) list.appendChild(this.createEntryRow(entry, i));
+            }
+            if (this.deps.isMobile() && totalCount > 50) {
+                const limitNotice = document.createElement("div");
+                limitNotice.className = "xlc-list-end-divider";
+                limitNotice.dataset.xlcControl = "search.mobile.limit-notice";
+                const noticeSpan = document.createElement("span");
+                noticeSpan.textContent = `已显示前 50 条高频结果（共 ${totalCount} 条），输入关键词可精准查找`;
+                limitNotice.appendChild(noticeSpan);
+                list.appendChild(limitNotice);
             }
         }
         // 提供方分区（pv: 虚拟行；点击弹小菜单=插入/复制 payload；不进键盘导航）
