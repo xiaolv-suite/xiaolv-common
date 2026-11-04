@@ -692,6 +692,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
 
     const clipLimitInput = document.createElement("input");
     clipLimitInput.type = "number";
+    clipLimitInput.inputMode = "numeric";
     clipLimitInput.className = "b3-text-field";
     clipLimitInput.style.cssText = "width:72px; text-align:center; display:none;";
     clipLimitInput.min = "10";
