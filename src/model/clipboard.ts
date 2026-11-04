@@ -196,7 +196,7 @@ export function renderWechatArticleHtml(markdown: string): string {
  * 优先使用标准异步 ClipboardItem API，失败时平滑降级到纯文本写入
  */
 export async function writeRichClipboard(
-    text: string,
+    rawText: string,
     html?: string,
     options?: {
         clipboard?: {
@@ -206,6 +206,9 @@ export async function writeRichClipboard(
         isSecure?: boolean;
     },
 ): Promise<boolean> {
+    // T-7867 换行符归一化：跨应用粘贴保真——把 CRLF/孤立 CR 统一为 LF，
+    // 防止片段从思源复制到微信/企业微信/邮件客户端时出现 ^M 或丢行
+    const text = rawText.replace(/\r\n?/g, "\n");
     const navClipboard = options?.clipboard ?? (typeof navigator !== "undefined" ? navigator.clipboard : undefined);
     const isSecure = options?.isSecure ?? (typeof window !== "undefined" ? window.isSecureContext : true);
 

@@ -285,7 +285,11 @@ export class DockView {
             this.searchInput.value = "";
             this.clearBtn.style.display = "none";
             this.searchInput.focus();
-            void this.refresh();
+            void this.refresh().then(() => {
+                // 清空搜索后回滚列表至顶部：高频置顶片段重新可见，避免停留在空旷滚动偏移位
+                const listEl = this.container.querySelector<HTMLElement>(".xlc-dock-list");
+                if (listEl) listEl.scrollTop = 0;
+            });
         });
         searchBox.appendChild(this.clearBtn);
         this.container.appendChild(searchBox);
