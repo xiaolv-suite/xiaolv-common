@@ -924,6 +924,7 @@ export class CommonSearchDialog {
 
         for (const scope of scopes) {
             const chip = document.createElement("button");
+            chip.type = "button";
             const on = this.currentScope === scope;
             chip.className = "xlc-chip xlc-scope-chip" + (on ? " xlc-chip--on xlc-scope-chip--on" : "");
             chip.dataset.scope = scope;
@@ -1013,6 +1014,7 @@ export class CommonSearchDialog {
         filters.insertBefore(aiBanner, filters.firstChild);
         // 排序 chip：点击弹直选菜单（4 档可枚举，当前档 ✓；替代不可见的循环切换）
         const sortChip = document.createElement("button");
+        sortChip.type = "button";
         sortChip.className = "xlc-chip xlc-sort-chip";
         sortChip.dataset.xlcControl = "sort.open";
         const paintSort = (): void => {
@@ -1266,6 +1268,7 @@ export class CommonSearchDialog {
             const footBtns = document.createElement("div");
             footBtns.className = "xlc-mobile-foot";
             const newBtn = document.createElement("button");
+            newBtn.type = "button";
             newBtn.className = "b3-button";
             newBtn.dataset.xlcControl = "search.new";
             newBtn.textContent = this.deps.t("quickNew");
@@ -1273,6 +1276,7 @@ export class CommonSearchDialog {
             newBtn.addEventListener("click", () => this.deps.newItem());
             footBtns.appendChild(newBtn);
             const insertBtn = document.createElement("button");
+            insertBtn.type = "button";
             insertBtn.className = "b3-button xlc-btn-primary xlc-mobile-insert";
             insertBtn.dataset.xlcControl = "preview.mobile-primary";
             insertBtn.textContent = this.deps.t(this.mobilePrimaryIsCopy() ? "copy" : "quickInsertSelected");
@@ -1370,6 +1374,7 @@ export class CommonSearchDialog {
 
         // 设置入口双端可达（移动端无顶栏/命令面板，此处是唯一设置路径）
         const gear = document.createElement("button");
+        gear.type = "button";
         gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";
         gear.dataset.xlcControl = "footer.settings";
         gear.textContent = "⚙ " + this.deps.t("openSettings");
@@ -1563,6 +1568,7 @@ export class CommonSearchDialog {
             }
         });
         const insert = document.createElement("button");
+        insert.type = "button";
         insert.className = "b3-button xlc-btn-primary";
         insert.textContent = this.deps.t("insert");
         insert.dataset.xlcPaneAct = "insert";
@@ -1579,6 +1585,7 @@ export class CommonSearchDialog {
             if (entry) void this.runPrimary(entry);
         });
         const copy = document.createElement("button");
+        copy.type = "button";
         copy.className = "b3-button";
         copy.textContent = this.deps.t("copy");
         copy.dataset.xlcPaneAct = "copy";
@@ -1644,6 +1651,7 @@ export class CommonSearchDialog {
 
         // AI 变换：打开动作菜单（含 AI 变换分区；原型窗格底部第三按钮）
         const aiBtn = document.createElement("button");
+        aiBtn.type = "button";
         aiBtn.className = "b3-button xlc-btn-ai";
         aiBtn.textContent = "✦ " + this.deps.t("aiTransform");
         aiBtn.dataset.xlcPaneAct = "ai";
@@ -1656,6 +1664,7 @@ export class CommonSearchDialog {
 
         // 嵌入同步块按钮（Shift+Enter）
         const embedBtn = document.createElement("button");
+        embedBtn.type = "button";
         embedBtn.className = "b3-button b3-button--text xlc-btn-ghost";
         embedBtn.textContent = "⊞ " + (this.deps.t("insertEmbed") || "同步嵌入");
         embedBtn.title = "作为思源原生嵌入块插入（源变动时多处自动同步更新，Shift+Enter）";
@@ -1669,6 +1678,7 @@ export class CommonSearchDialog {
 
         // 插入块引用按钮（Alt+Enter）
         const refBtn = document.createElement("button");
+        refBtn.type = "button";
         refBtn.className = "b3-button b3-button--text xlc-btn-ghost";
         refBtn.textContent = "＋ " + (this.deps.t("insertRef") || "插入引用");
         refBtn.title = "作为思源原生块引用插入（Alt+Enter）";
@@ -1683,6 +1693,7 @@ export class CommonSearchDialog {
         const spacer = document.createElement("span");
         spacer.className = "xlc-foot-spacer";
         const source = document.createElement("button");
+        source.type = "button";
         source.className = "b3-button b3-button--text xlc-btn-ghost";
         source.textContent = this.deps.t("openSource");
         source.dataset.xlcPaneAct = "source";
@@ -1699,6 +1710,7 @@ export class CommonSearchDialog {
             }
         });
         const edit = document.createElement("button");
+        edit.type = "button";
         edit.className = "b3-button b3-button--text xlc-btn-ghost";
         edit.textContent = this.deps.t("edit");
         edit.dataset.xlcPaneAct = "edit";
@@ -1717,6 +1729,7 @@ export class CommonSearchDialog {
             }
         });
         const editAndCapture = document.createElement("button");
+        editAndCapture.type = "button";
         editAndCapture.className = "b3-button b3-button--text xlc-btn-ghost";
         editAndCapture.textContent = "✎ " + this.deps.t("editAndCapture");
         editAndCapture.dataset.xlcPaneAct = "edit-and-capture-omni";
@@ -1729,6 +1742,7 @@ export class CommonSearchDialog {
             }
         });
         const saveOmni = document.createElement("button");
+        saveOmni.type = "button";
         saveOmni.className = "b3-button b3-button--text xlc-btn-ghost";
         saveOmni.textContent = "✦ " + this.deps.t("saveToCommon");
         saveOmni.dataset.xlcPaneAct = "save-omni";
@@ -1777,6 +1791,7 @@ export class CommonSearchDialog {
         foot.appendChild(saveOmni);
 
         const cleanClipBtn = document.createElement("button");
+        cleanClipBtn.type = "button";
         cleanClipBtn.className = "b3-button b3-button--text xlc-btn-ghost";
         cleanClipBtn.textContent = "🧹 格式清洗";
         cleanClipBtn.title = "剥离零宽字符、合并软换行与压缩多余空行";
@@ -2389,7 +2404,9 @@ export class CommonSearchDialog {
             const isFavA = this.deps.isFavorite(a.id) ? 1 : 0;
             const isFavB = this.deps.isFavorite(b.id) ? 1 : 0;
             if (isFavB !== isFavA) return isFavB - isFavA;
-            return (b.updatedAt || 0) - (a.updatedAt || 0);
+            const timeDiff = (b.updatedAt || 0) - (a.updatedAt || 0);
+            if (timeDiff !== 0) return timeDiff;
+            return a.id.localeCompare(b.id);
         });
 
         const top5 = sorted.slice(0, 5);
@@ -2575,17 +2592,19 @@ export class CommonSearchDialog {
 
         let acc = "";
         for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            if (!part) continue;
             const sep = document.createElement("span");
             sep.className = "xlc-breadcrumb-sep";
             sep.textContent = "›";
             this.mobileBreadcrumbsEl.appendChild(sep);
 
-            acc = acc ? `${acc}/${parts[i]}` : parts[i]!;
+            acc = acc ? `${acc}/${part}` : part;
             const targetCat = acc;
             const partBtn = document.createElement("button");
             partBtn.type = "button";
             partBtn.className = "xlc-breadcrumb-item" + (i === parts.length - 1 ? " xlc-breadcrumb-item--active" : "");
-            partBtn.textContent = parts[i]!;
+            partBtn.textContent = part;
             if (i < parts.length - 1) {
                 partBtn.addEventListener("click", () => {
                     this.deps.setFilters({ ...currentFilters, category: targetCat });
@@ -2936,6 +2955,7 @@ export class CommonSearchDialog {
 
                 const isCaptured = this.capturedOmniIds.has(entry.id);
                 const saveBtn = document.createElement("button");
+                saveBtn.type = "button";
                 saveBtn.className = "b3-button b3-button--small xlc-row-action";
                 saveBtn.dataset.xlcControl = "item.save-to-common";
                 saveBtn.textContent = isCaptured ? "✓" : "⭐";
@@ -2973,6 +2993,7 @@ export class CommonSearchDialog {
 
                 if (this.deps.captureOmniWithForm && !this.deps.isMobile()) {
                     const editBtn = document.createElement("button");
+                    editBtn.type = "button";
                     editBtn.className = "b3-button b3-button--small xlc-row-action";
                     editBtn.dataset.xlcControl = "item.edit-capture";
                     editBtn.textContent = "✎";
@@ -2988,6 +3009,7 @@ export class CommonSearchDialog {
                 const homeBridge = getBridgeSafely<any>("home");
                 if (homeBridge && typeof homeBridge.addMemo === "function") {
                     const memoBtn = document.createElement("button");
+                    memoBtn.type = "button";
                     memoBtn.className = "b3-button b3-button--small xlc-row-action";
                     memoBtn.dataset.xlcControl = "item.promote-to-home";
                     memoBtn.textContent = "📋";
@@ -3029,6 +3051,7 @@ export class CommonSearchDialog {
 
                 if (this.deps.openDocBlock) {
                     const locateBtn = document.createElement("button");
+                    locateBtn.type = "button";
                     locateBtn.className = "b3-button b3-button--small xlc-row-action";
                     locateBtn.dataset.xlcControl = "item.locate-source";
                     locateBtn.textContent = "↗";
@@ -3043,6 +3066,7 @@ export class CommonSearchDialog {
 
                 const isCaptured = this.capturedOmniIds.has(entry.id);
                 const saveBtn = document.createElement("button");
+                saveBtn.type = "button";
                 saveBtn.className = "b3-button b3-button--small xlc-row-action";
                 saveBtn.dataset.xlcControl = "item.save-to-common";
                 saveBtn.textContent = isCaptured ? "✓" : "✦";
@@ -3081,6 +3105,7 @@ export class CommonSearchDialog {
             }
         } else {
             const star = document.createElement("button");
+            star.type = "button";
             star.className = "b3-button b3-button--small xlc-row-action";
             star.dataset.xlcControl = "item.favorite";
             star.textContent = fav ? "★" : "☆";

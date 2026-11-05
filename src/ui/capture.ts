@@ -889,6 +889,7 @@ export class CaptureDialog {
         const sugText = document.createElement("span");
         sugrow.appendChild(sugText);
         const adoptBtn = document.createElement("button");
+        adoptBtn.type = "button";
         adoptBtn.className = "xlc-sugrow-adopt";
         adoptBtn.dataset.xlcControl = "capture.ai.suggestion.adopt";
         if (typeof adoptBtn.setAttribute === "function") {
@@ -1106,6 +1107,7 @@ export class CaptureDialog {
             actions.setAttribute("aria-label", "捕获表单操作栏");
         }
         const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
         cancelBtn.className = "b3-button";
         cancelBtn.dataset.xlcControl = "capture.cancel";
         cancelBtn.textContent = t("cancel");
@@ -1119,6 +1121,7 @@ export class CaptureDialog {
             dialog.destroy();
         });
         const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
         saveBtn.className = "b3-button xlc-btn-primary";
         saveBtn.dataset.xlcControl = "capture.save";
         saveBtn.textContent = t("save");

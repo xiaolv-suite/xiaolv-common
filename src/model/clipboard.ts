@@ -26,8 +26,58 @@ export function isMarkdownFormattingPresent(text: string): boolean {
         /^>\s+/m.test(text) || // 引用
         /^[-*+]\s+/m.test(text) || // 无序列表
         /^\d+\.\s+/m.test(text) || // 有序列表
-        /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/.test(text) // 链接
+        /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/.test(text) || // 链接
+        /^\s*\|?.+?\|.+?\|\s*$/m.test(text) // 表格
     );
+}
+
+/** 将 Markdown 表格渲染为具有保真内联样式的标准 HTML 表格（跨应用粘贴增强 · ADR 0070） */
+function renderMarkdownTableToHtml(lines: string[]): string | null {
+    if (lines.length < 2) return null;
+    const isTableRow = (l: string) => /^\s*\|?(.+?\|)+.+?\|?\s*$/.test(l);
+    if (!lines.every(isTableRow)) return null;
+
+    const headerLine = lines[0];
+    const separatorLine = lines[1];
+    if (!headerLine || !separatorLine) return null;
+
+    const sepCells = separatorLine.replace(/^\s*\||\|\s*$/g, "").split("|").map((c) => c.trim());
+    if (sepCells.length === 0 || !sepCells.every((c) => /^:?-+:?$/.test(c))) {
+        return null;
+    }
+
+    const parseRow = (line: string): string[] => {
+        return line.replace(/^\s*\||\|\s*$/g, "").split("|").map((c) => c.trim());
+    };
+
+    const aligns = sepCells.map((c) => {
+        const left = c.startsWith(":");
+        const right = c.endsWith(":");
+        if (left && right) return "center";
+        if (right) return "right";
+        return "left";
+    });
+
+    const headers = parseRow(headerLine);
+    const ths = headers.map((h, i) => {
+        const align = aligns[i] ?? "left";
+        return `<th style="border: 1px solid #d0d7de; padding: 6px 13px; background-color: #f6f8fa; font-weight: 600; text-align: ${align};">${h}</th>`;
+    }).join("\n      ");
+
+    const trs: string[] = [];
+    for (let r = 2; r < lines.length; r++) {
+        const rowLine = lines[r];
+        if (!rowLine) continue;
+        const cells = parseRow(rowLine);
+        const tds = headers.map((_, i) => {
+            const cellVal = cells[i] ?? "";
+            const align = aligns[i] ?? "left";
+            return `<td style="border: 1px solid #d0d7de; padding: 6px 13px; text-align: ${align};">${cellVal}</td>`;
+        }).join("\n      ");
+        trs.push(`    <tr>\n      ${tds}\n    </tr>`);
+    }
+
+    return `<table style="border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 13px; line-height: 1.5;">\n  <thead>\n    <tr>\n      ${ths}\n    </tr>\n  </thead>\n  <tbody>\n${trs.join("\n")}\n  </tbody>\n</table>`;
 }
 
 /**
@@ -106,6 +156,13 @@ export function renderSafeHtmlFromMarkdown(markdown: string): string {
                 .map((line) => line.replace(/^&gt;\s?/, ""))
                 .join("<br>");
             htmlParagraphs.push(`<blockquote style="margin: 0.8em 0; padding: 0.4em 0.8em; border-left: 3px solid #d0d7de; color: #57606a; background-color: #f6f8fa;">${quoteContent}</blockquote>`);
+            continue;
+        }
+
+        // 表格块（以管道符分割）
+        const tableHtml = renderMarkdownTableToHtml(lines);
+        if (tableHtml) {
+            htmlParagraphs.push(tableHtml);
             continue;
         }
 

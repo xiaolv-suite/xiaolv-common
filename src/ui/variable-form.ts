@@ -160,6 +160,13 @@ export function openVariableFillCard(options: VariableFillOptions): void {
             input.setAttribute("enterkeyhint", "done");
         }
         if (field.kind === "date") (input as HTMLInputElement).type = "date";
+        if (field.kind === "text" && (
+            /(?:数量|金额|数目|次数|年龄|端口|序号|编号|价格|比例|count|num|amount|price|port|index|age|qty)/i.test(field.name) ||
+            /^(?:\d+|\d+\.\d+)$/.test(field.defaultValue || "")
+        )) {
+            (input as HTMLInputElement).type = "number";
+            input.setAttribute("inputmode", "numeric");
+        }
         if (field.kind === "select") {
             // datalist id 按索引起：字段名安全化后可能碰撞（如「a,b」与「a：b」），错绑候选列表（R138）
             input.setAttribute("list", `xlc-varform-list-${fieldIndex}`);
@@ -563,6 +570,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     kbdHint.textContent = options.fields.some((f) => f.kind === "textarea") ? t("varFormHintMultiline") : t("varFormHint");
     foot.appendChild(kbdHint);
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "variable.cancel";
     cancelBtn.textContent = t("cancel");
@@ -606,6 +614,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     }
 
     const insertBtn = document.createElement("button");
+    insertBtn.type = "button";
     insertBtn.className = "b3-button xlc-btn-primary";
     insertBtn.textContent = t("insert");
     insertBtn.setAttribute("aria-label", t("insert"));

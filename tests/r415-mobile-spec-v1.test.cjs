@@ -101,3 +101,25 @@ test("Mobile Spec v2: 专项深化契约 (剪贴板智能匹配、多级面包�
     assert.ok(zh.enterMultiSelect && en.enterMultiSelect, "双语必须包含进入多选文案");
     assert.ok(scss.includes(".xlc-combo-copy-banner"), "必须包含 .xlc-combo-copy-banner 样式");
 });
+
+test("Mobile Polish: 跨应用剪贴板保真度契约 (Markdown 表格与代码块富文本渲染)", () => {
+    const { renderSafeHtmlFromMarkdown, isMarkdownFormattingPresent } = entry.clipboard;
+    const mdTable = [
+        "| 列1 | 列2 |",
+        "| :--- | ---: |",
+        "| 单元格A | 单元格B |",
+    ].join("\n");
+
+    assert.ok(isMarkdownFormattingPresent(mdTable), "必须识别表格为富文本");
+    const html = renderSafeHtmlFromMarkdown(mdTable);
+    assert.ok(html.includes("<table"), "必须渲染为标准 table 元素");
+    assert.ok(html.includes("<th") && html.includes("background-color: #f6f8fa"), "表头必须带内联样式");
+    assert.ok(html.includes("<td") && html.includes("单元格A"), "单元格必须保留");
+
+    // 代码块保真度
+    const mdCode = "```ts\nconst x = 1;\n```";
+    const codeHtml = renderSafeHtmlFromMarkdown(mdCode);
+    assert.ok(codeHtml.includes("<pre") && codeHtml.includes("<code"), "代码块必须渲染 pre/code 元素");
+    assert.ok(codeHtml.includes("data-language=\"ts\""), "必须保留语言元属性");
+});
+

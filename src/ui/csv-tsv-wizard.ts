@@ -169,6 +169,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     }
 
     const autoBtn = document.createElement("button");
+    autoBtn.type = "button";
     autoBtn.className = "b3-button b3-button--secondary";
     autoBtn.textContent = "✨ " + t("autoInfer");
     if (typeof autoBtn.setAttribute === "function") {
@@ -210,6 +211,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     }
 
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
     cancelBtn.textContent = t("cancel");
     if (typeof cancelBtn.setAttribute === "function") {
@@ -222,6 +224,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
 
     let isSubmitting = false;
     const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.textContent = t("setupNext");
     nextBtn.disabled = true;

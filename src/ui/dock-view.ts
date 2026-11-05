@@ -142,6 +142,7 @@ export class DockView {
         });
 
         const newBtn = document.createElement("button");
+        newBtn.type = "button";
         newBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
         newBtn.title = (this.deps.t("newItemAction") || "新建常用语") + " (Alt+Shift+N)";
         if (typeof newBtn.setAttribute === "function") newBtn.setAttribute("aria-label", newBtn.title);
@@ -150,6 +151,7 @@ export class DockView {
         actions.appendChild(newBtn);
 
         const refreshBtn = document.createElement("button");
+        refreshBtn.type = "button";
         refreshBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
         refreshBtn.title = this.deps.t("reindex") || "刷新内容库";
         if (typeof refreshBtn.setAttribute === "function") refreshBtn.setAttribute("aria-label", refreshBtn.title);
@@ -165,6 +167,7 @@ export class DockView {
 
         if (this.deps.openLibraryDoc) {
             const libDocBtn = document.createElement("button");
+            libDocBtn.type = "button";
             libDocBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
             libDocBtn.dataset.xlcDockAct = "open-lib-doc";
             libDocBtn.title = "在思源中打开常用库文档";
@@ -176,6 +179,7 @@ export class DockView {
 
         if (this.deps.openSettings) {
             const gearBtn = document.createElement("button");
+            gearBtn.type = "button";
             gearBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
             gearBtn.title = this.deps.t("openSettings") || "打开小驴常用设置";
             if (typeof gearBtn.setAttribute === "function") gearBtn.setAttribute("aria-label", gearBtn.title);
@@ -185,6 +189,7 @@ export class DockView {
         }
 
         const groupToggleBtn = document.createElement("button");
+        groupToggleBtn.type = "button";
         groupToggleBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
         groupToggleBtn.dataset.xlcDockAct = "toggle-group-mode";
         groupToggleBtn.title = "切换组织模式：分类大纲 ↔ 标签聚合";
@@ -975,6 +980,7 @@ export class DockView {
         head.appendChild(title);
 
         const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
         closeBtn.className = "xlc-dock-drawer-close";
         closeBtn.textContent = "×";
         closeBtn.title = this.deps.t("cancel") || "关闭预览";
@@ -1043,6 +1049,7 @@ export class DockView {
         });
 
         const insertBtn = document.createElement("button");
+        insertBtn.type = "button";
         insertBtn.className = "b3-button xlc-btn-primary";
         insertBtn.textContent = "＋ " + (this.deps.t("insert") || "插入到当前正文");
         if (typeof insertBtn.setAttribute === "function") {
@@ -1053,6 +1060,7 @@ export class DockView {
         foot.appendChild(insertBtn);
 
         const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
         copyBtn.className = "b3-button";
         copyBtn.textContent = "⧉ " + (this.deps.t("copy") || "复制");
         if (typeof copyBtn.setAttribute === "function") {
@@ -1062,6 +1070,7 @@ export class DockView {
         foot.appendChild(copyBtn);
 
         const refBtn = document.createElement("button");
+        refBtn.type = "button";
         refBtn.className = "b3-button";
         refBtn.dataset.xlcDockAct = "insert-ref";
         refBtn.textContent = "((•))";
@@ -1074,6 +1083,7 @@ export class DockView {
         foot.appendChild(refBtn);
 
         const embedBtn = document.createElement("button");
+        embedBtn.type = "button";
         embedBtn.className = "b3-button";
         embedBtn.dataset.xlcDockAct = "insert-embed";
         embedBtn.textContent = "{{•}}";
@@ -1086,6 +1096,7 @@ export class DockView {
         foot.appendChild(embedBtn);
 
         const openBtn = document.createElement("button");
+        openBtn.type = "button";
         openBtn.className = "b3-button";
         openBtn.dataset.xlcDockAct = "open-source";
         openBtn.textContent = "↗";

@@ -1081,7 +1081,7 @@
     }
 
     &--active .xlc-row-ordinal {
-      color: var(--xlc-accent-contrast);
+      color: var(--b3-theme-on-primary);
       border-color: var(--b3-theme-primary);
       background-color: var(--b3-theme-primary);
       box-shadow: 0 0 0 2px var(--xlc-lavender);
@@ -1151,7 +1151,7 @@
 
         &--on {
           background: var(--b3-theme-primary);
-          color: var(--xlc-accent-contrast);
+          color: var(--b3-theme-on-primary);
           font-weight: var(--xlc-weight-semibold);
         }
 
@@ -3232,7 +3232,7 @@
 
         &:hover {
           background: var(--b3-theme-primary);
-          color: var(--xlc-surface);
+          color: var(--b3-theme-on-primary);
           border-color: var(--b3-theme-primary);
         }
 
@@ -5961,7 +5961,7 @@
   &:hover {
     transform: scale(1.05);
     background-color: var(--b3-theme-primary);
-    color: var(--xlc-accent-contrast);
+    color: var(--b3-theme-on-primary);
     border-color: var(--b3-theme-primary);
     box-shadow: var(--xlc-shadow-lg);
   }

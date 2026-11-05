@@ -168,6 +168,7 @@ export function openQuickEditDialog(
     }
 
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button b3-button--cancel";
     cancelBtn.textContent = deps.t("cancel");
     cancelBtn.dataset.xlcControl = "quick-edit.cancel";
@@ -180,6 +181,7 @@ export function openQuickEditDialog(
     });
 
     const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
     saveBtn.className = "b3-button xlc-btn-primary";
     saveBtn.textContent = deps.t("saveChanges");
     saveBtn.dataset.xlcControl = "quick-edit.save";

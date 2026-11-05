@@ -243,6 +243,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
                 : t("libModeDoc", String(cfg.containerDocIds.length))
         : t("libraryNone");
     const changeBtn = document.createElement("button");
+    changeBtn.type = "button";
     changeBtn.className = "b3-button";
     changeBtn.dataset.xlcControl = "settings.library.change";
     changeBtn.textContent = t("openSettingsChangeLib");
@@ -515,12 +516,14 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
         }
     });
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "settings.pack-export.cancel";
     cancelBtn.textContent = t("cancel");
     cancelBtn.setAttribute("aria-label", t("cancel"));
     actions.appendChild(cancelBtn);
     const exportBtn = document.createElement("button");
+    exportBtn.type = "button";
     exportBtn.className = "b3-button xlc-btn-primary";
     exportBtn.textContent = t("packExportBtn");
     exportBtn.setAttribute("aria-label", t("packExportBtn"));
@@ -784,6 +787,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     hint.textContent = t("usageStatsHint");
     foot.appendChild(hint);
     const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
     clearBtn.className = "b3-button";
     clearBtn.setAttribute("aria-label", t("clearUsageBtn"));
     const hasUsage = (): boolean =>
@@ -1632,6 +1636,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     nameInput.value = t("setupNewDocName");
     nameRow.appendChild(nameInput);
     const createBtn = document.createElement("button");
+    createBtn.type = "button";
     createBtn.className = "b3-button xlc-btn-primary";
     createBtn.dataset.xlcControl = "setup.newdoc.create";
     createBtn.style.whiteSpace = "nowrap";
@@ -1817,6 +1822,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     step1Actions.setAttribute("aria-label", "向导第一步操作");
     if (opts?.onDismiss) {
         const dismissBtn = document.createElement("button");
+        dismissBtn.type = "button";
         dismissBtn.className = "b3-button xlc-btn-ghost";
         dismissBtn.dataset.xlcControl = "setup.later";
         dismissBtn.textContent = t("setupLater");
@@ -1825,6 +1831,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
         step1Actions.appendChild(dismissBtn);
     }
     const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.dataset.xlcControl = "setup.next";
     nextBtn.textContent = t("setupNext");
@@ -1885,6 +1892,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     step2Actions.setAttribute("role", "toolbar");
     step2Actions.setAttribute("aria-label", "向导第二步操作");
     const backBtn = document.createElement("button");
+    backBtn.type = "button";
     backBtn.className = "b3-button xlc-btn-ghost";
     backBtn.dataset.xlcControl = "setup.back";
     backBtn.textContent = t("setupBack");
@@ -1892,6 +1900,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     backBtn.addEventListener("click", () => gotoStep(1));
     step2Actions.appendChild(backBtn);
     const finishBtn = document.createElement("button");
+    finishBtn.type = "button";
     finishBtn.className = "b3-button xlc-btn-primary";
     finishBtn.dataset.xlcControl = "setup.finish";
     finishBtn.textContent = t("setupFinish");
@@ -3384,12 +3393,14 @@ function openEspansoImportDialog(ctx: SettingsUiContext, onClose?: () => void): 
     foot.style.justifyContent = "flex-end";
     foot.style.gap = "8px";
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "settings.espanso.cancel";
     cancelBtn.textContent = t("cancel");
     cancelBtn.setAttribute("aria-label", t("cancel"));
     foot.appendChild(cancelBtn);
     const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.dataset.xlcControl = "settings.espanso.next";
     nextBtn.textContent = t("setupNext");
@@ -3529,6 +3540,7 @@ async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown"> {
     actions.setAttribute("role", "toolbar");
     actions.setAttribute("aria-label", "标签体检操作栏");
     const close = document.createElement("button");
+    close.type = "button";
     close.className = "b3-button";
     close.dataset.xlcControl = "settings.tag-audit.close";
     close.textContent = t("close");

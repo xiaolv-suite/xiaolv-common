@@ -1981,6 +1981,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     /** 顶栏图标右键极速气泡卡片（Top 5 收藏与高频项秒取 · CAND-008 / TODO-FEAT-007） */
     private async openQuickAccessPopover(e: MouseEvent): Promise<void> {
         this.closeQuickAccessPopover();
+        const prevFocused = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
         const existing = typeof document !== "undefined" ? document.querySelector(".xlc-quick-popover") : null;
         if (existing) existing.remove();
 
@@ -2107,11 +2108,37 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         });
 
+        popover.addEventListener("keydown", (evt) => {
+            if (evt.key === "Tab") {
+                const focusables = Array.from(popover.querySelectorAll<HTMLElement>("button:not([disabled])"));
+                if (focusables.length === 0) return;
+                const idx = focusables.indexOf(document.activeElement as HTMLElement);
+                if (evt.shiftKey) {
+                    if (idx <= 0) {
+                        evt.preventDefault();
+                        focusables[focusables.length - 1]?.focus();
+                    }
+                } else {
+                    if (idx === -1 || idx >= focusables.length - 1) {
+                        evt.preventDefault();
+                        focusables[0]?.focus();
+                    }
+                }
+            }
+        });
+
         const cleanup = () => {
             surfaceUnreg();
             document.removeEventListener("mousedown", onDismiss);
             document.removeEventListener("keydown", onDismiss);
             popover.remove();
+            try {
+                if (prevFocused && document.body.contains(prevFocused)) {
+                    prevFocused.focus();
+                }
+            } catch {
+                // 回落忽略
+            }
         };
 
         setTimeout(() => {
@@ -3115,6 +3142,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             }).catch(() => undefined);
         }
         const relinkBtn = document.createElement("button");
+        relinkBtn.type = "button";
         relinkBtn.className = "b3-button b3-button--text xlc-form-ai";
         relinkBtn.textContent = t("relinkCurrent");
         relinkBtn.addEventListener("click", () => {
@@ -3138,6 +3166,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         srcRow.appendChild(relinkBtn);
         if (item.source.sourceDocId || item.source.sourceBlockId) {
             const clearBtn = document.createElement("button");
+            clearBtn.type = "button";
             clearBtn.className = "b3-button b3-button--text xlc-form-ai";
             clearBtn.textContent = t("clearSource");
             clearBtn.addEventListener("click", () => {
@@ -3192,10 +3221,12 @@ export default class XiaolvCommonPlugin extends Plugin {
         const actions = document.createElement("div");
         actions.className = "xlc-form-actions";
         const cancel = document.createElement("button");
+        cancel.type = "button";
         cancel.className = "b3-button";
         cancel.textContent = t("cancel");
         cancel.addEventListener("click", () => dialog.destroy());
         const save = document.createElement("button");
+        save.type = "button";
         save.className = "b3-button xlc-btn-primary";
         save.textContent = t("save");
         // 单行输入 Enter 提交（与捕获表单一致；textarea 换行合法，不绑）
