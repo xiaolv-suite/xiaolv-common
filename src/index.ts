@@ -33,6 +33,7 @@ import {LibraryService} from "./service/library";
 import {ExportIntegrityError} from "./service/export-markdown";
 import {ActionExecutor, HostBridge} from "./service/commands";
 import {AiAssistant, AiUnavailableError, SearchMetaEntry, type AiEndpointName, aiSmartExpandTemplate, aiGenerateSnippetVariants, type TemplateExpansionContext} from "./service/ai";
+import {PromoteClipPayload} from "./ui/promote-clip";
 import {ProviderRegistry} from "./service/providers";
 import {XiaolvCommonService} from "./service/service";
 import {DiscoveryService, type DiscoveryReceipt, type DiscoverySessionView} from "./service/discovery";
@@ -2385,6 +2386,56 @@ export default class XiaolvCommonPlugin extends Plugin {
                     const notifyMsg = isClip
                         ? (this.i18nFn()("promoteClipboardSuccess", created.data.item.title) || `已将「${created.data.item.title}」沉淀为常用语`)
                         : this.i18nFn()("saved", created.data.item.title);
+                    this.notify("info", notifyMsg);
+                    this.notifyExternalDataChange();
+                    return true;
+                } else {
+                    this.notify("error", created.message);
+                    return false;
+                }
+            },
+            promoteClipboardEntry: async (entry: SearchEntry, payload: PromoteClipPayload) => {
+                if (!this.library) return false;
+                const created = await this.library.createItem({
+                    itemType: entry.itemType || "text",
+                    markdown: payload.markdown,
+                    title: payload.title,
+                    shortcode: payload.shortcode || undefined,
+                    tags: payload.tags,
+                    category: payload.category,
+                    source: {
+                        sourceDocId: entry.sourceDocId || "",
+                        sourceBlockId: entry.targetBlockId || entry.sourceBlockId || "",
+                        sourceType: "clipboard",
+                    },
+                });
+
+                if (created.ok) {
+                    const itemId = created.data.item.id;
+                    const now = Date.now();
+                    // 转正生效：赋予初始使用频次与当前时间戳（进入 frecency 排序体系）
+                    this.state.usage[itemId] = { count: 1, lastAt: now };
+                    this.state.recents = [
+                        { id: itemId, usedAt: now },
+                        ...(this.state.recents || []).filter((r) => r.id !== itemId),
+                    ].slice(0, 50);
+                    if (payload.category) {
+                        this.state.uiPrefs.lastCategoryFilter = payload.category;
+                    }
+                    this.persistSoon();
+
+                    // 生态活动广播 (Epoch 7 Activity Stream)
+                    const scTitle = payload.shortcode ? payload.shortcode : payload.title;
+                    try {
+                        lvActivity.record({
+                            source: "常用",
+                            category: "note",
+                            title: `剪贴板晋升片段: ${scTitle}`,
+                        });
+                    } catch {}
+
+                    const notifyMsg = this.i18nFn()("promoteClipboardSuccess", created.data.item.title)
+                        || `已将「${created.data.item.title}」沉淀为常用语`;
                     this.notify("info", notifyMsg);
                     this.notifyExternalDataChange();
                     return true;

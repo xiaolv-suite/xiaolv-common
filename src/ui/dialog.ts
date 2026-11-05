@@ -42,6 +42,7 @@ import {getRecommendedEntries, DocumentContext} from "../model/contextual-recomm
 import {callBridge, getBridgeSafely} from "../ecosystem-bridge-kit";
 import {getClipboardTimeGroup, MiniPosition, calculateMagneticSnap} from "../model/storage";
 import {STARTER_PACKS, StarterPackMeta} from "../service/prompt-pack";
+import {openPromoteClipDialog, PromoteClipPayload} from "./promote-clip";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -188,6 +189,7 @@ export interface DialogDeps {
     isClipboardSmartMatchEnabled?: () => boolean;
     getPinnedTopChips?: () => string[];
     setPinnedTopChips?: (ids: string[]) => void;
+    promoteClipboardEntry?: (entry: SearchEntry, payload: PromoteClipPayload) => Promise<boolean>;
 }
 
 const TYPE_BADGES: Record<ItemType, string> = {
@@ -2959,12 +2961,37 @@ export class CommonSearchDialog {
                 saveBtn.className = "b3-button b3-button--small xlc-row-action";
                 saveBtn.dataset.xlcControl = "item.save-to-common";
                 saveBtn.textContent = isCaptured ? "✓" : "⭐";
-                saveBtn.title = isCaptured ? "已沉淀为常用语" : "一键沉淀为常用语 (Alt+S)";
-                saveBtn.setAttribute("aria-label", isCaptured ? "已沉淀为常用语" : "一键沉淀为常用语");
+                saveBtn.title = isCaptured ? "已存为常用" : "存为常用 (转正为永久片段)";
+                saveBtn.setAttribute("aria-label", isCaptured ? "已存为常用" : "存为常用");
                 saveBtn.disabled = isCaptured;
                 saveBtn.addEventListener("click", async (e) => {
                     e.stopPropagation();
                     if (saveBtn.disabled || this.capturedOmniIds.has(entry.id)) return;
+                    if (this.deps.promoteClipboardEntry) {
+                        const existingCategories = Array.from(new Set(this.results.map((r) => r.category).filter(Boolean)));
+                        const lastCategory = this.deps.getFilters().category || "常用";
+                        openPromoteClipDialog({
+                            t: this.deps.t,
+                            entry,
+                            categories: existingCategories,
+                            defaultCategory: lastCategory,
+                            entries: this.results,
+                            notify: this.deps.notify,
+                            onPromote: async (payload) => {
+                                const ok = await this.deps.promoteClipboardEntry!(entry, payload);
+                                if (ok) {
+                                    this.capturedOmniIds.add(entry.id);
+                                    saveBtn.textContent = "✓";
+                                    saveBtn.disabled = true;
+                                    saveBtn.title = "已存为常用";
+                                    lvNotify.inline(saveBtn, "已存为常用");
+                                    this.syncPaneActions();
+                                }
+                                return ok;
+                            },
+                        });
+                        return;
+                    }
                     saveBtn.disabled = true;
                     saveBtn.textContent = "…";
                     if (this.deps.createFromOmni) {
@@ -5033,7 +5060,36 @@ export class CommonSearchDialog {
                             this.deps.notify?.("info", `已转为 Markdown 表格并复制 (${table.rowCount}行)`);
                         });
                     }
-                    if (this.deps.createFromOmni) {
+                    if (this.deps.promoteClipboardEntry) {
+                        addSilent("⭐", "⭐ 存为常用 (转正为永久片段)", () => {
+                            const existingCategories = Array.from(new Set(this.results.map((r) => r.category).filter(Boolean)));
+                            const lastCategory = this.deps.getFilters().category || "常用";
+                            openPromoteClipDialog({
+                                t: this.deps.t,
+                                entry,
+                                categories: existingCategories,
+                                defaultCategory: lastCategory,
+                                entries: this.results,
+                                notify: this.deps.notify,
+                                onPromote: async (payload) => {
+                                    const ok = await this.deps.promoteClipboardEntry!(entry, payload);
+                                    if (ok) {
+                                        this.capturedOmniIds.add(entry.id);
+                                        this.syncPaneActions();
+                                        const activeRow = this.dialog?.element.querySelector<HTMLElement>(`[data-xlc-item-id="${entry.id}"]`);
+                                        const rowSaveBtn = activeRow?.querySelector<HTMLButtonElement>('[data-xlc-control="item.save-to-common"]');
+                                        if (rowSaveBtn) {
+                                            rowSaveBtn.textContent = "✓";
+                                            rowSaveBtn.disabled = true;
+                                            rowSaveBtn.title = "已存为常用";
+                                            lvNotify.inline(rowSaveBtn, "已存为常用");
+                                        }
+                                    }
+                                    return ok;
+                                },
+                            });
+                        });
+                    } else if (this.deps.createFromOmni) {
                         addSilent("⭐", "一键沉淀为常用语 (Alt+S)", async () => {
                             const ok = await this.deps.createFromOmni!(entry);
                             if (ok) {

@@ -3603,6 +3603,38 @@
   }
 }
 
+// ---------- 剪贴板转正常用微弹窗宿主 (.xlc-promote-clip-host) ----------
+.b3-dialog__container.xlc-promote-clip-host {
+  max-width: min(480px, 92vw);
+  border-radius: var(--xlc-radius-xl);
+
+  .xlc-promote-form {
+    padding: var(--xlc-space-1) 0;
+
+    .xlc-promote-content {
+      font-family: var(--mono, ui-monospace, monospace);
+      font-size: var(--xlc-font-sm);
+      line-height: var(--xlc-line-body);
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .xlc-promote-shortcode {
+      font-family: var(--mono, ui-monospace, monospace);
+      font-size: var(--xlc-font-md);
+      font-weight: var(--xlc-weight-semibold);
+      letter-spacing: 0.5px;
+    }
+
+    .xlc-shortcode-status {
+      font-size: var(--xlc-font-xs);
+      color: var(--b3-theme-error);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+  }
+}
+
 // ---------- 变量填充卡宿主容器（原型屏 4：紧凑卡，无独立标题栏）----------
 // 卡头（徽标+标题+Esc 取消）即标题；取消/插入按钮与 Esc 均可达，隐藏宿主头不损失关闭路径
 .b3-dialog__container.xlc-varform-host {

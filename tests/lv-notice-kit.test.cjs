@@ -110,13 +110,17 @@ function setupMockDom() {
             }
         },
         setTimeout(fn, ms) {
-            return setTimeout(fn, ms);
+            const id = setTimeout(fn, ms);
+            if (id && typeof id.unref === "function") id.unref();
+            return id;
         },
         clearTimeout(t) {
             clearTimeout(t);
         },
         setInterval(fn, ms) {
-            return setInterval(fn, ms);
+            const id = setInterval(fn, ms);
+            if (id && typeof id.unref === "function") id.unref();
+            return id;
         },
         clearInterval(t) {
             clearInterval(t);

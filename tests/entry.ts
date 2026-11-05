@@ -66,6 +66,7 @@ import * as expansion from "../src/model/expansion";
 import * as contextualRecommend from "../src/model/contextual-recommend";
 import * as pinboard from "../src/ui/pinboard";
 import * as starterPacksDialog from "../src/ui/starter-packs-dialog";
+import * as promoteClip from "../src/ui/promote-clip";
 import * as lvNoticeKit from "../src/libs/lv-notice-kit";
 
 export {
@@ -133,5 +134,6 @@ export {
     contextualRecommend,
     pinboard,
     starterPacksDialog,
+    promoteClip,
     lvNoticeKit,
 };
