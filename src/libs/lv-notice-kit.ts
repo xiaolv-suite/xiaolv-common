@@ -1828,16 +1828,26 @@ function getActivityHub(): LvActivityStreamHub {
     const listeners = new Set<(item: LvActivityRecord) => void>();
     let lastDateKey = getTodayKey();
 
+    const checkAndResetDay = () => {
+        const today = getTodayKey();
+        if (today !== lastDateKey) {
+            lastDateKey = today;
+            todayActivities.length = 0;
+        }
+    };
+
+    try {
+        lvTicker.onDateCross("lv-activity", (newDay) => {
+            lastDateKey = newDay;
+            todayActivities.length = 0;
+        });
+    } catch { /* ignore */ }
+
     const activityHub: LvActivityStreamHub = {
         version: PROTOCOL_VERSION,
         record(item: Omit<LvActivityRecord, "id" | "timestamp" | "timeStr">) {
             const now = new Date();
-            const today = getTodayKey(now);
-            // 跨日自动重置当日内存流
-            if (today !== lastDateKey) {
-                lastDateKey = today;
-                todayActivities.length = 0;
-            }
+            checkAndResetDay();
 
             const record: LvActivityRecord = {
                 ...item,
@@ -1853,6 +1863,7 @@ function getActivityHub(): LvActivityStreamHub {
         },
 
         getTodayRecords(): LvActivityRecord[] {
+            checkAndResetDay();
             return [...todayActivities];
         },
 
@@ -1862,10 +1873,12 @@ function getActivityHub(): LvActivityStreamHub {
         },
 
         formatAsMarkdown(): string {
+            checkAndResetDay();
             return formatActivityMarkdown(todayActivities);
         },
 
         getDailyStats(): Record<string, number> {
+            checkAndResetDay();
             const stats: Record<string, number> = { total: todayActivities.length };
             todayActivities.forEach(r => {
                 stats[r.category] = (stats[r.category] || 0) + 1;
@@ -3222,10 +3235,16 @@ function openMobileSheet(): void {
                 const bucket = groups.get(key);
                 if (bucket) bucket.push(hit); else groups.set(key, [hit]);
             }
+            const SOURCE_ICONS: Record<string, string> = {
+                "打卡": "🏃", "管家": "🏠", "拾遗": "🔖",
+                "雷切": "✂️", "闪卡": "🎴", "考试": "📝",
+                "人脉": "👥", "常用": "🔤", "快门": "⚡",
+            };
             for (const [sourceName, groupHits] of groups) {
+                const icon = SOURCE_ICONS[sourceName] || "🔹";
                 const groupHead = document.createElement("div");
                 groupHead.className = "lv-sheet-result-group";
-                groupHead.textContent = `${sourceName} · ${groupHits.length} 条`;
+                groupHead.textContent = `${icon} ${sourceName} · ${groupHits.length} 条`;
                 results.appendChild(groupHead);
                 for (const hit of groupHits) {
                     const row = document.createElement("button");
@@ -3233,7 +3252,7 @@ function openMobileSheet(): void {
                     row.className = "lv-sheet-result";
                     const badge = document.createElement("span");
                     badge.className = "lv-sheet-result-badge";
-                    badge.textContent = sourceName;
+                    badge.textContent = `${icon} ${sourceName}`;
                     row.appendChild(badge);
                     const body = document.createElement("span");
                     body.className = "lv-sheet-result-body";
