@@ -2311,12 +2311,14 @@ function getLaunchpadHub(): LvLaunchpadHub {
         },
 
         open(_mode?: "popover" | "center"): void {
-            // 通过 DOM 或 CustomEvent 派发打开弹射坞
+            // 通过 DOM 或 CustomEvent 派发打开弹射坞并唤起罗盘
             window.dispatchEvent(new CustomEvent("lv:launchpad:open", { detail: { mode: _mode || "popover" } }));
+            openMobileSheet();
         },
 
         close(): void {
             window.dispatchEvent(new CustomEvent("lv:launchpad:close"));
+            closeMobileSheet();
         },
 
         checkBedlineReminder(now?: Date): boolean {
