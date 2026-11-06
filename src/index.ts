@@ -134,6 +134,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     private mobileEntryCleaner?: (() => void);
     /** 小驴穿透搜索 · 卸载注销清理器 (Epoch 7 Phase 7) */
     private searchCleaner?: (() => void);
+    /** 全局遮罩点击即关清理器 */
+    private scrimClickCleaner?: (() => void);
     private unloading = false;
 
     async onload(): Promise<void> {
@@ -153,6 +155,22 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.registerEntries();
         this.registerCommands();
         this.setupClipboardTracking();
+
+        // 全局遮罩点击即关（Backdrop Scrim Click-to-Dismiss · 对齐常用全弹窗人体工程学）
+        if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+            const onCommonScrimClick = (e: MouseEvent) => {
+                const target = e.target as HTMLElement | null;
+                if (target && target.classList?.contains("b3-dialog__scrim")) {
+                    const dialogEl = target.closest(".b3-dialog");
+                    if (dialogEl && dialogEl.querySelector('[class*="xlc-"], [id*="xlc-"]')) {
+                        const closeBtn = dialogEl.querySelector<HTMLElement>(".b3-dialog__close, [data-action='close'], .xlc-dialog-close");
+                        if (closeBtn) closeBtn.click();
+                    }
+                }
+            };
+            window.addEventListener("click", onCommonScrimClick, true);
+            this.scrimClickCleaner = () => window.removeEventListener("click", onCommonScrimClick, true);
+        }
         try {
             this.bootServices();
         } catch (err) {
@@ -3125,6 +3143,11 @@ export default class XiaolvCommonPlugin extends Plugin {
             height: "min(860px, 92vh)",
         });
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+        dialog.element.addEventListener("click", (e) => {
+            if (e.target === dialog.element || (e.target as HTMLElement).classList?.contains("b3-dialog__scrim")) {
+                dialog.destroy();
+            }
+        });
         mountPlatformDialogTitleWrap(dialog.element, dialogTitle);
         const body = getDialogBody(dialog.element);
         if (!body) return;
@@ -3760,6 +3783,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     async onunload(): Promise<void> {
+        this.scrimClickCleaner?.();
+        this.scrimClickCleaner = undefined;
         const unloadStartedAt = Date.now();
         const discoveryWaitBudgetMs = 4000;
         this.unloading = true;

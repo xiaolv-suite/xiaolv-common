@@ -87,6 +87,11 @@ export function openTextPromptDialog(options: TextPromptDialogOptions): Dialog {
         width: "min(440px, 92vw)",
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+    dialog.element.addEventListener("click", (e) => {
+        if (e.target === dialog.element || (e.target as HTMLElement).classList?.contains("b3-dialog__scrim")) {
+            dialog.destroy();
+        }
+    });
     mountPlatformDialogTitleWrap(dialog.element, options.title);
     const body = getDialogBody(dialog.element);
     if (!body) {
@@ -154,6 +159,11 @@ export function openInfoDialog(title: string, lines: string[], closeText = "å…³é
         width: "min(400px, 92vw)",
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+    dialog.element.addEventListener("click", (e) => {
+        if (e.target === dialog.element || (e.target as HTMLElement).classList?.contains("b3-dialog__scrim")) {
+            dialog.destroy();
+        }
+    });
     mountPlatformDialogTitleWrap(dialog.element, title);
     const body = getDialogBody(dialog.element);
     if (!body) {

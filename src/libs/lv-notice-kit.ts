@@ -443,11 +443,14 @@ body.dark {
     font-size: 14px;
     line-height: 1;
     border-radius: 4px;
-    transition: background 0.15s ease;
+    transition: all 0.15s ease;
 }
 .lv-notice-close-btn:hover {
     background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.08));
-    color: var(--b3-theme-on-surface, #202124);
+    transform: scale(1.08);
+}
+.lv-notice-close-btn:active {
+    transform: scale(0.92);
 }
 
 .lv-notice-body {
@@ -465,7 +468,6 @@ body.dark {
 .lv-notice-body--expanded {
     -webkit-line-clamp: 999;
     cursor: zoom-out;
-}
 }
 
 .lv-notice-actions {
