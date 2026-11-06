@@ -508,6 +508,69 @@ export class ActionExecutor {
                 );
                 output = output.replaceAll("{{xlc:contacts:recent}}", contactsSummaryText);
             }
+            if (output.includes("{{xlc:cards:today}}") || output.includes("{{xlc:flashcard:today}}")) {
+                const cardsSummaryText = await callBridge<any, string>(
+                    "cards",
+                    "cards.read",
+                    async (bridge) => {
+                        if (typeof bridge.getDueSummary === "function") {
+                            const res = await bridge.getDueSummary();
+                            const data = res?.data || res;
+                            if (data && typeof data.unreviewedCount === "number") {
+                                if (data.unreviewedCount === 0) return "今日闪卡（全部复习完毕）";
+                                return `【闪卡复习】今日待复习: ${data.unreviewedCount} 张 (新卡: ${data.unreviewedNewCardCount ?? 0}, 待复习: ${data.unreviewedOldCardCount ?? 0})`;
+                            }
+                        }
+                        if (typeof bridge.getStats === "function") {
+                            const res = await bridge.getStats();
+                            const data = res?.data || res;
+                            if (data) {
+                                return `【闪卡概览】连续: ${data.streak ?? 0} 天，今日已复习: ${data.todayReviews ?? 0} 张`;
+                            }
+                        }
+                        return "（暂无闪卡数据）";
+                    },
+                    () => "（未检测到小驴闪卡）"
+                );
+                output = output.replaceAll("{{xlc:cards:today}}", cardsSummaryText)
+                               .replaceAll("{{xlc:flashcard:today}}", cardsSummaryText);
+            }
+            if (output.includes("{{xlc:exam:today}}") || output.includes("{{xlc:exam:stats}}")) {
+                const examSummaryText = await callBridge<any, string>(
+                    "exam",
+                    "exam.read",
+                    async (bridge) => {
+                        if (typeof bridge.statsRead === "function") {
+                            const s = await bridge.statsRead();
+                            if (s) {
+                                return `【小驴考试】今日刷题: ${s.todayAnswered ?? 0} 道，正确率: ${s.accuracyPercent ?? 0}%，错题待消灭: ${s.wrongbookCount ?? 0} 题`;
+                            }
+                        }
+                        return "（暂无考试数据）";
+                    },
+                    () => "（未检测到小驴考试）"
+                );
+                output = output.replaceAll("{{xlc:exam:today}}", examSummaryText)
+                               .replaceAll("{{xlc:exam:stats}}", examSummaryText);
+            }
+            if (output.includes("{{xlc:raikiri:active}}") || output.includes("{{xlc:speedswitch:active}}")) {
+                const raikiriSummaryText = await callBridge<any, string>(
+                    "raikiri",
+                    "navigation.context",
+                    (bridge) => {
+                        if (typeof bridge.getNavigationContext === "function") {
+                            const ctx = bridge.getNavigationContext();
+                            if (ctx && ctx.currentDocTitle) {
+                                return `当前文档：${ctx.currentDocTitle} (${ctx.currentDocId || ""})`;
+                            }
+                        }
+                        return "（无活动导航上下文）";
+                    },
+                    () => "（未检测到小驴雷切）"
+                );
+                output = output.replaceAll("{{xlc:raikiri:active}}", raikiriSummaryText)
+                               .replaceAll("{{xlc:speedswitch:active}}", raikiriSummaryText);
+            }
             return output;
         } catch {
             return text;
