@@ -865,21 +865,31 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
     const timers = new Map<string, number>();
     const pluginRegistry = new Map<string, () => void>();
 
-    // 接入统一浮层栈 Esc 秒关
-    const unregisterSurface = lvSurfaceStack.push({
-        id: "lv-notice-active-card",
-        type: "card",
-        dismiss: () => {
-            const top = activePackets[activePackets.length - 1];
-            if (top) {
-                hub.dismiss(top.id);
-                return true;
-            }
-            return false;
+    // 接入统一浮层栈 Esc 秒关（动态同步：仅当真正存在活动卡片时入栈，卡片清空时出栈）
+    let unregisterNoticeSurface: (() => void) | null = null;
+    function syncNoticeSurface() {
+        const hasVisible = activePackets.length > 0;
+        if (hasVisible && !unregisterNoticeSurface) {
+            unregisterNoticeSurface = lvSurfaceStack.push({
+                id: "lv-notice-active-card",
+                type: "card",
+                dismiss: () => {
+                    const top = activePackets[activePackets.length - 1];
+                    if (top) {
+                        hub.dismiss(top.id);
+                        return true;
+                    }
+                    return false;
+                }
+            });
+        } else if (!hasVisible && unregisterNoticeSurface) {
+            unregisterNoticeSurface();
+            unregisterNoticeSurface = null;
         }
-    });
+    }
 
     function render() {
+        syncNoticeSurface();
         if (!hostEl) return;
         hostEl.innerHTML = "";
 
@@ -1110,7 +1120,10 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         },
 
         destroy() {
-            unregisterSurface();
+            if (unregisterNoticeSurface) {
+                unregisterNoticeSurface();
+                unregisterNoticeSurface = null;
+            }
             timers.forEach((t) => clearTimeout(t));
             timers.clear();
             hostEl?.remove();
@@ -1191,21 +1204,22 @@ function getSurfaceStack(): LvSurfaceHandle[] {
     if (typeof window === "undefined") return [];
     if (!window.__LV_SURFACE_STACK__) {
         window.__LV_SURFACE_STACK__ = [];
-        // 捕获阶段拦截 Escape 键，阻止向底层冒泡
+        // 捕获阶段拦截 Escape 键，阻止向底层冒泡（自顶向下检索能响应该次 Esc 的活跃浮层）
         window.addEventListener("keydown", (e: KeyboardEvent) => {
             if (e.key !== "Escape") return;
             const stack = window.__LV_SURFACE_STACK__;
             if (!stack || stack.length === 0) return;
-            const top = stack[stack.length - 1];
-            if (top) {
-                const handled = top.dismiss();
+            for (let i = stack.length - 1; i >= 0; i--) {
+                const item = stack[i];
+                if (!item) continue;
+                const handled = item.dismiss();
                 if (handled !== false) {
                     e.preventDefault();
                     e.stopPropagation();
                     if (handled !== "keep") {
-                        const idx = stack.indexOf(top);
-                        if (idx >= 0) stack.splice(idx, 1);
+                        stack.splice(i, 1);
                     }
+                    break;
                 }
             }
         }, true);
