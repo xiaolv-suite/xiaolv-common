@@ -34,7 +34,7 @@ export interface LvNoticeSnoozeOption {
 }
 
 export interface CardNoticeOptions {
-    /** 来源插件标识：如 "打卡" | "雷切" | "管家" | "拾遗" | "考试" | "闪卡" | "快门" 等 */
+    /** 来源插件标识：如 "打卡" | "雷切" | "管家" | "拾遗" | "考试" | "闪卡" | "常用" 等 */
     source?: string;
     /** 分类标识：如 "daily-reminder" | "sync" | "export"，用于免打扰比对与同类聚合 */
     category?: string;
@@ -115,7 +115,7 @@ const AUTOMATION_RULES_KEY = "lv_automation_rules_config";
 
 export interface LvSearchResultItem {
     id: string;
-    source: string;              // "打卡" | "拾遗" | "考试" | "闪卡" | "人脉" | "管家" | "常用" | "快门"
+    source: string;              // "打卡" | "拾遗" | "考试" | "闪卡" | "人脉" | "管家" | "常用" | "雷切"
     category: string;
     title: string;
     snippet?: string;
@@ -206,7 +206,7 @@ export interface LvActivityRecord {
     id: string;
     timestamp: number;
     timeStr: string;            // "14:32"
-    source: string;             // "打卡" | "拾遗" | "考试" | "闪卡" | "管家" | "人脉" | "雷切" | "快门"
+    source: string;             // "打卡" | "拾遗" | "考试" | "闪卡" | "管家" | "人脉" | "雷切" | "常用"
     category: "habit" | "clip" | "exam" | "card" | "task" | "contact" | "note";
     title: string;              // 简要摘要，如 "完成英语单词打卡"、"剪藏《架构白皮书》"
     detail?: string;            // 可选详细内容
@@ -2757,12 +2757,11 @@ function maybeShowOnboardingCard(): void {
     lvNotify.card({
         source: "罗盘",
         title: "👋 欢迎使用小驴罗盘",
-        message: `已为你收敛 ${items.length} 个插件的入口：点磁贴直达主界面、长按磁贴展开快捷行动、顶部搜索穿透全家桶、🌙 一键专注静音。顶栏与悬浮球可在快门设置中改为单入口。`,
+        message: `已为你收敛 ${items.length} 个插件的入口：点磁贴直达主界面、长按磁贴展开快捷行动、顶部搜索穿透全家桶、🌙 一键专注静音。可在各插件设置中自定义。`,
         level: "info",
         duration: 0,
         actions: [
             { label: "知道了", primary: true },
-            { label: "打开快门配置中心", onClick: () => { try { getLaunchpadHub().executeAction("siyuan-quickgate", "打开快门配置中心"); } catch { /* ignore */ } } },
         ],
     });
 }
@@ -2813,7 +2812,21 @@ export function checkAndTriggerBedline(now = new Date()): boolean {
         duration: 0,
         category: "bedline",
         actions: [
-            { label: "立即写入", primary: true, onClick: () => { try { getLaunchpadHub().executeAction("siyuan-quickgate", "今日回顾写入日记"); } catch { /* ignore */ } } },
+            { label: "立即写入", primary: true, onClick: async () => {
+                try {
+                    const md = lvActivity.formatAsMarkdown();
+                    if (!md || !md.trim()) {
+                        lvNotify.capsule({ source: "罗盘", message: "今日暂无生态活动记录", duration: 2500 });
+                        return;
+                    }
+                    try {
+                        await navigator.clipboard.writeText(md);
+                        lvNotify.capsule({ source: "罗盘", message: "已复制今日回顾，可直接粘贴进日记", duration: 3000 });
+                    } catch {
+                        lvNotify.capsule({ source: "罗盘", message: "今日回顾已就绪", duration: 2500 });
+                    }
+                } catch { /* ignore */ }
+            } },
             { label: "明天再说" },
         ],
     });
@@ -3055,7 +3068,7 @@ function resolveIconHref(svgIcon?: string): string | null {
             if (document.getElementById(id)) return `#${id}`;
         } catch { /* ignore */ }
     }
-    // kebab→camel 会丢失符号原始内部大写与连字符形态差异（icon-lv-quickgate ↔ iconLvQuickGate），
+    // kebab→camel 会丢失符号原始内部大写与连字符形态差异（icon-lv-raikiri ↔ iconLvRaikiri），
     // 终极兜底：全量 symbol 归一化小写比对（去连字符；数量级 ~200，磁贴构建时开销可忽略）
     try {
         const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -3322,12 +3335,50 @@ function openMobileSheet(): void {
     renderHistory();
     sheet.appendChild(histRow);
 
-    // 生态直达行：今日回顾入日记 / 统一 AI 助手（经快门 executeAction 分发）
+    // 生态直达行：今日回顾入日记 / 呼出雷切画板
     const ecoRow = document.createElement("div");
     ecoRow.className = "lv-sheet-eco-row";
-    const ecoDefs: Array<{ label: string; action: string }> = [
-        { label: "📝 今日回顾入日记", action: "今日回顾写入日记" },
-        { label: "🤖 小驴 AI 助手", action: "小驴 AI 助手" },
+    const ecoDefs: Array<{ label: string; action: () => void | Promise<void> }> = [
+        {
+            label: "📝 今日回顾入日记",
+            action: async () => {
+                const md = lvActivity.formatAsMarkdown();
+                if (!md || !md.trim()) {
+                    lvNotify.capsule({ source: "罗盘", message: "今日暂无生态活动记录", duration: 2500 });
+                    return;
+                }
+                let written = false;
+                try {
+                    const host = (window as any).siyuanCheckin || (window as any).LvHome;
+                    if (host && typeof host.appendDailyNote === "function") {
+                        await host.appendDailyNote(md);
+                        written = true;
+                    }
+                } catch { /* ignore */ }
+                if (written) {
+                    lvNotify.capsule({ source: "罗盘", message: "已将今日回顾写入日记", duration: 2500 });
+                } else {
+                    try {
+                        await navigator.clipboard.writeText(md);
+                        lvNotify.capsule({ source: "罗盘", message: "已复制今日回顾，可粘贴至日记", duration: 3000 });
+                    } catch {
+                        lvNotify.capsule({ source: "罗盘", message: "今日回顾已就绪", duration: 2500 });
+                    }
+                }
+            }
+        },
+        {
+            label: "⚡ 打开雷切画板",
+            action: () => {
+                const ok = getLaunchpadHub().executeAction("siyuan-speed-switch", "打开切片库");
+                if (!ok) {
+                    const host = (window as any).siyuanSpeedSwitch;
+                    if (host && typeof host.showSwitcher === "function") {
+                        host.showSwitcher(true);
+                    }
+                }
+            }
+        },
     ];
     for (const def of ecoDefs) {
         const btn = document.createElement("button");
@@ -3336,10 +3387,10 @@ function openMobileSheet(): void {
         btn.textContent = def.label;
         btn.addEventListener("click", () => {
             hapticFeedback(8);
-            const ok = getLaunchpadHub().executeAction("siyuan-quickgate", def.action);
-            if (!ok) {
-                lvNotify.capsule({ source: "罗盘", message: "快门未就绪，请先启用小驴快门", duration: 2500 });
-                return;
+            try {
+                void def.action();
+            } catch (err) {
+                console.warn("[LvLaunchpad] eco action failed", err);
             }
             closeMobileSheet();
         });
@@ -3373,7 +3424,7 @@ function openMobileSheet(): void {
             const SOURCE_ICONS: Record<string, string> = {
                 "打卡": "🏃", "管家": "🏠", "拾遗": "🔖",
                 "雷切": "✂️", "闪卡": "🎴", "考试": "📝",
-                "人脉": "👥", "常用": "🔤", "快门": "⚡",
+                "人脉": "👥", "常用": "🔤",
             };
             for (const [sourceName, groupHits] of groups) {
                 const icon = SOURCE_ICONS[sourceName] || "🔹";

@@ -100,7 +100,7 @@ export function createFocusTrap(
     // 焦点已在容器外（程序化跳转等）——按 Tab 自动拉回圈内
     if (!current || (typeof container.contains === 'function' && !container.contains(current))) {
       e.preventDefault();
-      if (typeof first.focus === 'function') first.focus();
+      if (first && typeof first.focus === 'function') first.focus();
       return;
     }
 
@@ -108,13 +108,13 @@ export function createFocusTrap(
       // Shift + Tab：如果在第一个元素，循环到最后一个
       if (current === first) {
         e.preventDefault();
-        if (typeof last.focus === 'function') last.focus();
+        if (last && typeof last.focus === 'function') last.focus();
       }
     } else {
       // Tab：如果在最后一个元素，循环到第一个
       if (current === last) {
         e.preventDefault();
-        if (typeof first.focus === 'function') first.focus();
+        if (first && typeof first.focus === 'function') first.focus();
       }
     }
   };
