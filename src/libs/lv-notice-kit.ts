@@ -1910,6 +1910,7 @@ function getActivityHub(): LvActivityStreamHub {
             };
 
             todayActivities.push(record);
+            if (todayActivities.length > 1000) todayActivities.shift();
             listeners.forEach(cb => {
                 try { cb(record); } catch (e) { console.error("[LvActivityStream] error:", e); }
             });
@@ -3500,12 +3501,13 @@ function getOmnisearchHub(): LvOmnisearchHub {
             const results: LvSearchResultItem[] = [];
             const providers = Array.from(searchProviders.entries());
 
-            // 并发向所有已注册插件发起穿透检索，带 1000ms 超时熔断保护
+            // 并发向所有已注册插件发起穿透检索，带 1000ms 超时熔断保护（finally 清除定时器句柄，消减挂起任务）
             await Promise.all(
                 providers.map(async ([plugin, provider]) => {
+                    let timerId: any = null;
                     try {
                         const timeoutPromise = new Promise<LvSearchResultItem[]>((_, reject) => {
-                            setTimeout(() => reject(new Error("Timeout")), 1000);
+                            timerId = setTimeout(() => reject(new Error("Timeout")), 1000);
                         });
                         const providerPromise = Promise.resolve(provider(kw));
                         const items = await Promise.race([providerPromise, timeoutPromise]);
@@ -3514,17 +3516,22 @@ function getOmnisearchHub(): LvOmnisearchHub {
                         }
                     } catch (err) {
                         console.warn(`[LvOmnisearch] 插件 ${plugin} 检索异常或超时:`, err);
+                    } finally {
+                        if (timerId !== null) {
+                            clearTimeout(timerId);
+                        }
                     }
                 })
             );
 
-            // 相关度排序：标题完全匹配/前缀匹配优先
+            // 相关度排序：标题完全匹配 (3) > 前缀匹配 (2) > 包含匹配 (1)；平局时较短标题优先
             return results.sort((a, b) => {
                 const aTitle = a.title.toLowerCase();
                 const bTitle = b.title.toLowerCase();
-                const aExact = aTitle === kw ? 2 : aTitle.includes(kw) ? 1 : 0;
-                const bExact = bTitle === kw ? 2 : bTitle.includes(kw) ? 1 : 0;
-                return bExact - aExact;
+                const aScore = aTitle === kw ? 3 : aTitle.startsWith(kw) ? 2 : aTitle.includes(kw) ? 1 : 0;
+                const bScore = bTitle === kw ? 3 : bTitle.startsWith(kw) ? 2 : bTitle.includes(kw) ? 1 : 0;
+                if (bScore !== aScore) return bScore - aScore;
+                return aTitle.length - bTitle.length;
             });
         }
     };
