@@ -82,6 +82,10 @@ export interface LvNoticePacket extends CardNoticeOptions {
     mode: "card" | "capsule" | "silent";
     createdAt: number;
     repeatCount: number;
+    action?: {
+        label: string;
+        onClick?: () => void | Promise<void>;
+    };
 }
 
 /* ========================================================================= */
@@ -519,6 +523,29 @@ body.dark {
     animation: lvNoticeFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.lv-notice-capsule-action {
+    background: var(--b3-theme-primary, #3576c7);
+    color: var(--b3-theme-on-primary, #ffffff);
+    border: none;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-left: 6px;
+    line-height: 1.4;
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+.lv-notice-capsule-action:hover {
+    filter: brightness(1.1);
+    transform: scale(1.05);
+}
+.lv-notice-capsule-action:active {
+    transform: scale(0.95);
+}
+
 @keyframes lvInlinePop {
     0% { transform: scale(1); }
     40% { transform: scale(1.12); }
@@ -942,10 +969,28 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
             card.dataset.level = packet.level || "info";
 
             if (packet.mode === "capsule") {
+                const actionHtml = packet.action ? `
+                    <button type="button" class="lv-notice-capsule-action" data-role="capsule-action">
+                        ${escapeHtml(packet.action.label)}
+                    </button>
+                ` : "";
                 card.innerHTML = `
                     <span class="lv-notice-source-badge">${escapeHtml(packet.source || "提示")}</span>
                     <span>${escapeHtml(packet.message)}</span>
+                    ${actionHtml}
                 `;
+                if (packet.action) {
+                    const actBtn = card.querySelector<HTMLElement>("[data-role='capsule-action']");
+                    actBtn?.addEventListener("click", async (e) => {
+                        e.stopPropagation();
+                        try {
+                            await packet.action?.onClick?.();
+                        } catch (err) {
+                            console.error("[LvNotice] capsule action error", err);
+                        }
+                        hub.dismiss(packet.id);
+                    });
+                }
             } else {
                 const actionsHtml = (packet.actions || []).map((act, idx) => `
                     <button type="button" class="lv-notice-btn ${act.primary ? "lv-notice-btn--primary" : ""}" data-action-idx="${idx}">
@@ -1569,10 +1614,33 @@ export const lvNotify = {
             message: options.message,
             level: options.level || "info",
             duration: options.duration ?? 2500,
+            action: options.action,
             createdAt: Date.now(),
             repeatCount: 1
         });
         return id;
+    },
+
+    /**
+     * 撤销胶囊通知（Undo Action Pill · 人体工程学撤销范式）
+     * 替代强阻断性的二次 confirm 弹窗：操作立即生效，底部滑出 5 秒倒计时撤销胶囊
+     */
+    undo(options: {
+        source?: string;
+        message: string;
+        undoLabel?: string;
+        duration?: number;
+        onUndo: () => void | Promise<void>;
+    }): string {
+        return this.capsule({
+            source: options.source || "撤销",
+            message: options.message,
+            duration: options.duration ?? 5000,
+            action: {
+                label: options.undoLabel || "撤销",
+                onClick: options.onUndo,
+            },
+        });
     },
 
     inline(target: HTMLElement | null | undefined, tipText?: string, isSuccess = true): void {
