@@ -122,7 +122,7 @@ test("TODO-FEAT-039 (T-0819): 全域生态联邦搜索 queryEcosystemItems 契�
 
     // 1. 探测状态验证
     const status = detectEcosystem(mockHost);
-    assert.equal(status.totalChecked, 6);
+    assert.equal(status.totalChecked, 8);
     assert.ok(status.installedCount >= 4);
 
     // 2. 搜索管家待办

@@ -62,6 +62,22 @@ export function detectEcosystem(host: any = (typeof window !== "undefined" ? win
             capability: "通过公开协议在雷切中秒级调用常用语",
         },
         {
+            id: "siyuan-lv-cards",
+            name: "小驴闪卡",
+            bridgeKey: "window.xiaolvCards",
+            installed: Boolean(host.xiaolvCards || host.lvCards || host.LvCards || host.siyuanCards),
+            description: "间隔重复、FSRS遗忘曲线与记忆卡片",
+            capability: "插入今日待复习闪卡统计与微任务清单",
+        },
+        {
+            id: "siyuan-exam",
+            name: "小驴考试",
+            bridgeKey: "window.LvExam",
+            installed: Boolean(host.LvExam || host.siyuanExam || host.xiaolvExam || host.lvExam),
+            description: "智能题库、真题模考与错题管理",
+            capability: "快速插入今日刷题统计与错题回顾",
+        },
+        {
             id: "siyuan-task-horizon",
             name: "任务视界",
             bridgeKey: "window.TaskHorizon",
@@ -219,6 +235,51 @@ export async function queryEcosystemItems(
                         providerName: "任务视界",
                     });
                 }
+            }
+        }
+    } catch {
+        // 静默隔离
+    }
+
+    // 6. 小驴闪卡联动 (siyuan-lv-cards)
+    try {
+        const cards = host.xiaolvCards || host.lvCards || host.LvCards || host.siyuanCards;
+        if (cards && (q.includes("闪卡") || q.includes("复习") || q.includes("cards") || q.includes("卡片"))) {
+            if (typeof cards.generateDailyTaskMarkdown === "function") {
+                const res = await cards.generateDailyTaskMarkdown();
+                if (res?.ok && res?.data?.markdown) {
+                    items.push({
+                        title: `小驴闪卡 · 今日待复习 (${res.data.dueCount}张)`,
+                        payload: res.data.markdown,
+                        providerName: "小驴闪卡",
+                    });
+                }
+            } else if (typeof cards.getDueSummary === "function") {
+                const res = await cards.getDueSummary();
+                const total = res?.data?.unreviewedCount ?? (typeof res?.unreviewedCount === "number" ? res.unreviewedCount : 0);
+                items.push({
+                    title: `小驴闪卡 · 今日待复习 (${total}张)`,
+                    payload: `- [ ] 记忆复习：今日待复习 ${total} 张闪卡`,
+                    providerName: "小驴闪卡",
+                });
+            }
+        }
+    } catch {
+        // 静默隔离
+    }
+
+    // 7. 小驴考试联动 (siyuan-exam)
+    try {
+        const exam = host.LvExam || host.siyuanExam || host.xiaolvExam || host.lvExam;
+        if (exam && (q.includes("考试") || q.includes("刷题") || q.includes("错题") || q.includes("exam"))) {
+            if (typeof exam.statsRead === "function") {
+                const stats = await exam.statsRead();
+                const count = stats?.todayCount ?? stats?.totalQuestions ?? 0;
+                items.push({
+                    title: `小驴考试 · 题库概览`,
+                    payload: `【小驴考试】今日练习进度：${count} 题`,
+                    providerName: "小驴考试",
+                });
             }
         }
     } catch {

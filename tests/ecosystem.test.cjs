@@ -9,11 +9,11 @@ test("生态探测：无任何兄弟插件时安全降级，installedCount 为 0
     const emptyHost = {};
     const status = detectEcosystem(emptyHost);
     assert.strictEqual(status.installedCount, 0);
-    assert.strictEqual(status.totalChecked, 6);
+    assert.strictEqual(status.totalChecked, 8);
     assert.ok(status.plugins.every((p) => p.installed === false));
 });
 
-test("生态探测：正确识别挂载的兄弟插件（打卡、人脉、管家、拾遗、雷切、任务视界）", () => {
+test("生态探测：正确识别挂载的兄弟插件（打卡、人脉、管家、拾遗、雷切、闪卡、考试、任务视界）", () => {
     const mockHost = {
         siyuanCheckin: {
             getItems: () => [],
@@ -26,12 +26,14 @@ test("生态探测：正确识别挂载的兄弟插件（打卡、人脉、管�
             listClips: async () => [],
         },
         siyuanSpeedSwitch: {},
+        xiaolvCards: {},
+        LvExam: {},
         TaskHorizon: {},
     };
 
     const status = detectEcosystem(mockHost);
-    assert.strictEqual(status.installedCount, 6);
-    assert.strictEqual(status.totalChecked, 6);
+    assert.strictEqual(status.installedCount, 8);
+    assert.strictEqual(status.totalChecked, 8);
     assert.ok(status.plugins.every((p) => p.installed === true));
 });
 
