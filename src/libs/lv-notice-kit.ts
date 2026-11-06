@@ -3012,7 +3012,7 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
         const iconWrap = document.createElement("span");
         iconWrap.className = "lv-sheet-tile-icon";
         if (item.color) iconWrap.style.color = item.color; // 品牌色染色，磁贴一眼可辨
-        iconWrap.innerHTML = `<svg aria-hidden="true"><use href="${iconHref}"></use></svg>`;
+        iconWrap.innerHTML = `<svg aria-hidden="true"><use xlink:href="${iconHref}" href="${iconHref}"></use></svg>`;
         tile.appendChild(iconWrap);
     } else {
         const dot = document.createElement("span");
@@ -3044,38 +3044,49 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
         closeMobileSheet();
         try { item.onClick(); } catch (e) { console.warn("[LvLaunchpad] 磁贴唤起失败:", e); }
     });
-    // 长按 500ms：展开该插件二级行动直达 chips（不关坞）
+
+    // 展开二级行动直达芯片（触屏长按 500ms / 桌面右键 contextmenu 统一展开）
+    const expandTile = () => {
+        hapticFeedback(14);
+        const mask = document.getElementById(MOBILE_SHEET_ID);
+        if (!mask) return;
+        mask.querySelectorAll(".lv-sheet-tile--expanded").forEach((el) => {
+            el.classList.remove("lv-sheet-tile--expanded");
+            el.setAttribute("aria-expanded", "false");
+        });
+        tile.classList.add("lv-sheet-tile--expanded");
+        tile.setAttribute("aria-expanded", "true");
+        mask.querySelectorAll(".lv-sheet-tile-actions").forEach((el) => el.remove());
+        const actWrap = document.createElement("span");
+        actWrap.className = "lv-sheet-tile-actions";
+        for (const actName of item.actions || []) {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "lv-sheet-action-chip";
+            chip.textContent = actName;
+            chip.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                hapticFeedback(8);
+                pushRecentTileId(item.id);
+                closeMobileSheet();
+                try { getLaunchpadHub().executeAction(item.id, actName); } catch (e) { console.warn("[LvLaunchpad] 行动直达失败:", e); }
+            });
+            actWrap.appendChild(chip);
+        }
+        tile.appendChild(actWrap);
+    };
+
+    tile.addEventListener("contextmenu", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        expandTile();
+    });
+
     let pressTimer: number | undefined;
     tile.addEventListener("touchstart", () => {
         pressTimer = window.setTimeout(() => {
             pressTimer = undefined;
-            hapticFeedback(14);
-            const mask = document.getElementById(MOBILE_SHEET_ID);
-            if (!mask) return;
-            mask.querySelectorAll(".lv-sheet-tile--expanded").forEach((el) => {
-                el.classList.remove("lv-sheet-tile--expanded");
-                el.setAttribute("aria-expanded", "false");
-            });
-            tile.classList.add("lv-sheet-tile--expanded");
-            tile.setAttribute("aria-expanded", "true");
-            mask.querySelectorAll(".lv-sheet-tile-actions").forEach((el) => el.remove());
-            const actWrap = document.createElement("span");
-            actWrap.className = "lv-sheet-tile-actions";
-            for (const actName of item.actions || []) {
-                const chip = document.createElement("button");
-                chip.type = "button";
-                chip.className = "lv-sheet-action-chip";
-                chip.textContent = actName;
-                chip.addEventListener("click", (ev) => {
-                    ev.stopPropagation();
-                    hapticFeedback(8);
-                    pushRecentTileId(item.id);
-                    closeMobileSheet();
-                    try { getLaunchpadHub().executeAction(item.id, actName); } catch (e) { console.warn("[LvLaunchpad] 行动直达失败:", e); }
-                });
-                actWrap.appendChild(chip);
-            }
-            tile.appendChild(actWrap);
+            expandTile();
         }, 500);
     }, { passive: true });
     tile.addEventListener("touchend", () => { if (pressTimer !== undefined) { window.clearTimeout(pressTimer); pressTimer = undefined; } }, { passive: true });
