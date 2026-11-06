@@ -585,8 +585,8 @@ const STYLES = `
 .lv-sheet-eco-row { display: flex; gap: 8px; margin: 2px 0 10px; }
 .lv-sheet-eco-chip {
     flex: 1;
-    border: 1px solid var(--b3-border-color, #e4e7eb);
-    background: var(--b3-theme-background-light, #f6f7f9);
+    border: 1px solid var(--b3-border-color, rgba(128, 128, 128, 0.2));
+    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
     border-radius: 12px;
     padding: 9px 10px;
     font-size: 13px;
@@ -602,8 +602,8 @@ const STYLES = `
 .lv-sheet-recent-label { flex-shrink: 0; font-size: 11px; color: var(--b3-theme-on-surface-light, #9ca3af); }
 .lv-sheet-recent-chip {
     flex-shrink: 0;
-    border: 1px solid var(--b3-border-color, #e4e7eb);
-    background: var(--b3-theme-background-light, #f6f7f9);
+    border: 1px solid var(--b3-border-color, rgba(128, 128, 128, 0.2));
+    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
     border-radius: 999px;
     padding: 5px 12px;
     font-size: 13px;
@@ -644,7 +644,7 @@ const STYLES = `
     gap: 8px;
     width: 100%;
     border: none;
-    background: var(--b3-theme-background-light, #f6f7f9);
+    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
     border-radius: 10px;
     padding: 8px 10px;
     text-align: left;
@@ -677,8 +677,8 @@ const STYLES = `
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    border: 1px solid var(--b3-border-color, #e4e7eb);
-    background: var(--b3-theme-background-light, #f6f7f9);
+    border: 1px solid var(--b3-border-color, rgba(128, 128, 128, 0.2));
+    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
     border-radius: 14px;
     padding: 12px 6px 10px;
     cursor: pointer;
