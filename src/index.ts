@@ -1264,6 +1264,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         try {
             // 编辑器右键菜单：基于划选状态智能上下文分流，杜绝菜单过度平铺臃肿
             this.menuHandler = (event) => {
+                if (!event?.detail?.menu) return;
                 const {menu} = event.detail;
                 const sel = typeof window !== "undefined" ? window.getSelection()?.toString().trim() : "";
                 if (sel) {
@@ -1300,6 +1301,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.eventBus.on("open-menu-content", this.menuHandler);
             // 块引用右键：把被引用块存为 blockref 条目（官方 detail.element data-id）
             this.blockRefMenuHandler = (event) => {
+                if (!event?.detail?.menu) return;
                 const {menu, element} = event.detail;
                 const blockId = element?.getAttribute?.("data-id") ?? "";
                 if (!blockId || !element) return;
@@ -1312,6 +1314,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.eventBus.on("open-menu-blockref", this.blockRefMenuHandler);
             // 链接右键：http(s)/assets 存为 URL/资源条目（其余协议诚实拒绝）
             this.linkMenuHandler = (event) => {
+                if (!event?.detail?.menu) return;
                 const {menu, element} = event.detail;
                 const href = element?.getAttribute?.("href") ?? "";
                 if (!href || !element) return;
@@ -1324,6 +1327,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.eventBus.on("open-menu-link", this.linkMenuHandler);
             // 图片右键：把图片存为图片条目（官方 detail.element = assetElement，src 即 assets/ 路径）
             this.imageMenuHandler = (event) => {
+                if (!event?.detail?.menu) return;
                 const {menu, element} = event.detail;
                 const src = element?.getAttribute?.("src") ?? "";
                 const target = classifyLinkTarget(src.startsWith("assets/") ? src : "");
@@ -1337,6 +1341,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.eventBus.on("open-menu-image", this.imageMenuHandler);
             // 文档树右键：把选中文档一键设为常用库文档（doc 模式；多选取前 64 个）
             this.docTreeMenuHandler = (event) => {
+                if (!event?.detail?.menu) return;
                 const {menu, elements, type, items} = event.detail;
                 if (type !== "items" && type !== "doc" && type !== "docs" && type !== undefined) return;
                 const ids: string[] = [];
