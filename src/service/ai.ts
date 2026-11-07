@@ -415,7 +415,12 @@ export async function aiGenerateSnippetVariants(title: string, content: string):
     if (!jsonMatch) {
         throw new Error("AI 变体响应格式解析失败");
     }
-    const parsed = JSON.parse(jsonMatch[0]);
+    let parsed: any;
+    try {
+        parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+        throw new Error("AI 变体响应格式解析失败");
+    }
     return [
         { type: "bilingual", label: "中英双语版", titleSuffix: " (中英双语版)", content: String(parsed.bilingual || "") },
         { type: "business", label: "礼貌商务版", titleSuffix: " (礼貌商务版)", content: String(parsed.business || "") },
