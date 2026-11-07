@@ -438,10 +438,18 @@ export async function callBridge<TBridge, TResult>(
         }
     }
 
-    // 3. 业务调用
+    // 3. 业务调用（带熔断保护，防止目标插件内部任务悬挂）
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-        return await caller(bridge);
+        const callerP = Promise.resolve(caller(bridge));
+        const timeoutP = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("caller-timeout")), timeoutMs);
+        });
+        const result = await Promise.race([callerP, timeoutP]);
+        if (timer !== undefined) clearTimeout(timer);
+        return result;
     } catch (err) {
+        if (timer !== undefined) clearTimeout(timer);
         console.warn(`[小驴生态联邦] 调用 ${target}.${requiredCapability} 失败，已优雅降级:`, err);
         return fallback();
     }
