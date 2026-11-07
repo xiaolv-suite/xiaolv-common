@@ -405,6 +405,8 @@ export const BRIDGE_ALIASES = Object.freeze({
     common: ["xiaolvCommon", "LvCommon", "lvCommon", "siyuanCommon"],
     quickgate: ["siyuanSpeedSwitch", "xiaolvSpeedSwitch", "xiaolvRaikiri", "lvRaikiri"],
     taskHorizon: ["TaskHorizon", "taskHorizon", "siyuanTaskHorizon"],
+    sireader: ["sireader", "SiReader", "siyuanSireader"],
+    simedia: ["siyuanMediaPlayer", "siplayer", "SiMedia"],
 } as const);
 
 /* ========================================================================= */
@@ -552,6 +554,55 @@ export async function pushFlashcardSafely(options: {
         },
         () => false
     );
+}
+
+/**
+ * 将大额合同、保单条款或长篇说明书安全推入小驴拾遗渐进阅读流
+ */
+export async function pushToGleanReadingSafely(options: {
+    docId?: string;
+    blockId?: string;
+    title: string;
+    module: string;
+    summary?: string;
+}): Promise<{ mode: "bridge" | "clipboard"; text: string }> {
+    const fallbackText = `📖 【渐进阅读切片 · ${options.title}】\n* 来源：小驴管家 · ${options.module}\n${options.docId ? `* 关联文档：((${options.docId} '${options.title}'))\n` : ""}${options.summary ? `* 要点摘要：${options.summary}\n` : ""}* 渐进建议：每日消化 1~2 个条款切片，厘清权益与免责条款。`;
+
+    if (typeof window === "undefined") {
+        return { mode: "clipboard", text: fallbackText };
+    }
+
+    const glean = getBridgeSafely<any>("glean");
+    if (glean && typeof glean.ingestClip === "function") {
+        try {
+            await glean.ingestClip({
+                title: options.title,
+                docId: options.docId,
+                blockId: options.blockId,
+                tags: ["管家资产", options.module],
+                summary: options.summary,
+            });
+            return { mode: "bridge", text: fallbackText };
+        } catch {
+            /* 回退 */
+        }
+    }
+
+    try {
+        window.dispatchEvent(new CustomEvent("lv-glean:add-clip", {
+            detail: {
+                title: options.title,
+                docId: options.docId,
+                blockId: options.blockId,
+                tags: ["管家资产", options.module],
+                summary: options.summary,
+            },
+        }));
+    } catch {
+        /* soft */
+    }
+
+    return { mode: glean ? "bridge" : "clipboard", text: fallbackText };
 }
 
 /**
