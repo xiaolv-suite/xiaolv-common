@@ -6,7 +6,7 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock} from "./libs/lv-notice-kit";
+import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock, lvTicker} from "./libs/lv-notice-kit";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {EXPORT_SCHEMA_VERSION, LIMITS, PLUGIN_VERSION, PROTOCOL_NAME, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -134,6 +134,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     private mobileEntryCleaner?: (() => void);
     /** 小驴穿透搜索 · 卸载注销清理器 (Epoch 7 Phase 7) */
     private searchCleaner?: (() => void);
+    /** 小驴统一心跳时钟跨日清理器 */
+    private dateCrossCleaner?: (() => void);
     /** 全局遮罩点击即关清理器 */
     private scrimClickCleaner?: (() => void);
     private unloading = false;
@@ -583,6 +585,15 @@ export default class XiaolvCommonPlugin extends Plugin {
                         }
                     },
                 }));
+            });
+        } catch {
+            // 环境防御
+        }
+
+        // 小驴统一节拍时钟 · 注册跨日日期刷新与缓存清理切面
+        try {
+            this.dateCrossCleaner = lvTicker.onDateCross("xiaolv-common", () => {
+                this.previewCache.clear();
             });
         } catch {
             // 环境防御
@@ -3824,6 +3835,13 @@ export default class XiaolvCommonPlugin extends Plugin {
             // 宿主已销毁：忽略
         }
         this.searchCleaner = undefined;
+        // 小驴统一节拍时钟 · 注销跨日切面
+        try {
+            this.dateCrossCleaner?.();
+        } catch {
+            // 宿主已销毁：忽略
+        }
+        this.dateCrossCleaner = undefined;
         // 对外窗口桥先行注销（兄弟插件在桥消失后应得到 unsupported，而非悬挂调用）
         try {
             this.bridgeDisposer?.();
