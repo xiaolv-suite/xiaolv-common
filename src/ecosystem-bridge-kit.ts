@@ -66,6 +66,9 @@ export const ECOSYSTEM_EVENTS = Object.freeze({
     EXAM_STATS: "lv-exam:stats",
     // 闪卡
     CARDS_REVIEWED: "lv-cards:reviewed",
+    CARDS_INCREMENTAL_EXTRACT: "lv-cards:incremental-extract",
+    // 任务视界 (Task Horizon) 联动
+    HORIZON_ACTION_CREATED: "horizon:action-created",
     // 常用
     COMMON_CREATED: "xiaolv:common:item-created",
     COMMON_UPDATED: "xiaolv:common:item-updated",
