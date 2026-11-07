@@ -1565,7 +1565,6 @@ export default class XiaolvCommonPlugin extends Plugin {
                         size: { width: 300, height: 0 },
                         icon: "iconXlcCommon",
                         title: this.i18nFn()("pluginName") || "小驴常用",
-                        hotkey: "⌥⇧D",
                     },
                     data: {},
                     type: "xiaolv-common-dock",
