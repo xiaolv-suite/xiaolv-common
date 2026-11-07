@@ -17,15 +17,31 @@ export function formatPanguSpacing(text: string): string {
         return placeholder;
     });
 
-    // 2. 保护 URL 链接免受内部插入空格破坏
+    // 2. 保护 URL 链接与 Markdown 链接免受内部插入空格破坏
     const urls: string[] = [];
-    sanitized = sanitized.replace(/(https?:\/\/[^\s\u4e00-\u9fa5<>"']+)/g, (match) => {
+    sanitized = sanitized.replace(/(https?:\/\/[^\s\u4e00-\u9fa5<>"')）\]]+|\[[^\]]+\]\([^)]+\))/g, (match) => {
         const placeholder = ` XLCURL${urls.length}XLC `;
         urls.push(match);
         return placeholder;
     });
 
-    // 3. 中文字符与英文字母/数字间补充空格
+    // 3. 保护 LaTeX 数学公式 ($$...$$ 与 $...$)
+    const mathBlocks: string[] = [];
+    sanitized = sanitized.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (match) => {
+        const placeholder = ` XLCMATH${mathBlocks.length}XLCMATH `;
+        mathBlocks.push(match);
+        return placeholder;
+    });
+
+    // 4. 保护思源原生块引用与动态模板占位符
+    const syBlocks: string[] = [];
+    sanitized = sanitized.replace(/(\(\([a-z0-9\-]{14,24}(?:\s+"[^"]*")?\)\)|\{\{[\s\S]*?\}\})/gi, (match) => {
+        const placeholder = ` XLCSY${syBlocks.length}XLCSY `;
+        syBlocks.push(match);
+        return placeholder;
+    });
+
+    // 5. 中文字符与英文字母/数字间补充空格
     sanitized = sanitized
         // 中文 -> 英文/数字
         .replace(/([\u4e00-\u9fa5\u3040-\u30ff])([a-zA-Z0-9$#@%&*])/g, "$1 $2")
@@ -35,13 +51,19 @@ export function formatPanguSpacing(text: string): string {
         .replace(/([\u4e00-\u9fa5\u3040-\u30ff])([(])/g, "$1 $2")
         .replace(/([)])([\u4e00-\u9fa5\u3040-\u30ff])/g, "$1 $2");
 
-    // 4. 清理冗余的连续空格（保留换行）
+    // 6. 清理冗余的连续空格（保留换行）
     sanitized = sanitized.replace(/[ \t]{2,}/g, " ");
 
-    // 5. 还原 URL
+    // 7. 还原思源原生块引用与动态模板占位符
+    sanitized = sanitized.replace(/XLCSY(\d+)XLCSY/g, (_, idx) => syBlocks[Number(idx)] || "");
+
+    // 8. 还原 LaTeX 数学公式
+    sanitized = sanitized.replace(/XLCMATH(\d+)XLCMATH/g, (_, idx) => mathBlocks[Number(idx)] || "");
+
+    // 9. 还原 URL
     sanitized = sanitized.replace(/XLCURL(\d+)XLC/g, (_, idx) => urls[Number(idx)] || "");
 
-    // 6. 还原代码块
+    // 10. 还原代码块
     sanitized = sanitized.replace(/XLCCODE(\d+)XLC/g, (_, idx) => codeBlocks[Number(idx)] || "");
 
     return sanitized.trim();

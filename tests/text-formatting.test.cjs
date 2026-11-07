@@ -42,4 +42,17 @@ assert.equal(
     "连续多余空格应规范化为单一空格"
 );
 
+// 5. 保护 LaTeX 数学公式与思源块引用
+assert.equal(
+    formatPanguSpacing("质能方程$E=mc^2$是重要定律"),
+    "质能方程 $E=mc^2$ 是重要定律",
+    "LaTeX 公式内部不能被插入空格，两端与中文之间必须加空格"
+);
+
+assert.equal(
+    formatPanguSpacing("前置引用((20261107120000-abcdef0 \"相关文献\"))后置说明"),
+    "前置引用 ((20261107120000-abcdef0 \"相关文献\")) 后置说明",
+    "思源原生块引用语法不能被破坏"
+);
+
 console.log("✓ text-formatting 盘古之白排版测试全部通过！");

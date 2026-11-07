@@ -44,14 +44,28 @@ export function formatPanguSpacing(text: string): {result: string; spacedCount: 
 
     // 2. 保护 Markdown 链接与原生 URL
     const urlBlocks: string[] = [];
-    processed = processed.replace(/(https?:\/\/[^\s)）\]]+|\[[^\]]+\]\([^)]+\))/g, (match) => {
+    processed = processed.replace(/(https?:\/\/[^\s\u4e00-\u9fa5<>"')）\]]+|\[[^\]]+\]\([^)]+\))/g, (match) => {
         urlBlocks.push(match);
         return `__XLC_URL_PLACEHOLDER_${urlBlocks.length - 1}__`;
     });
 
-    // 3. 保护动态模板占位符 {{xlc:...}}
+    // 3. 保护 LaTeX 数学公式 ($$...$$ 与 $...$)
+    const mathBlocks: string[] = [];
+    processed = processed.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (match) => {
+        mathBlocks.push(match);
+        return `__XLC_MATH_PLACEHOLDER_${mathBlocks.length - 1}__`;
+    });
+
+    // 4. 保护思源原生块引用与嵌入块
+    const syBlocks: string[] = [];
+    processed = processed.replace(/(\(\([a-z0-9\-]{14,24}(?:\s+"[^"]*")?\)\)|\{\{select[\s\S]*?\}\})/gi, (match) => {
+        syBlocks.push(match);
+        return `__XLC_SY_PLACEHOLDER_${syBlocks.length - 1}__`;
+    });
+
+    // 5. 保护动态模板占位符 {{...}}
     const xlcBlocks: string[] = [];
-    processed = processed.replace(/\{\{xlc:[\s\S]*?\}\}/g, (match) => {
+    processed = processed.replace(/\{\{[\s\S]*?\}\}/g, (match) => {
         xlcBlocks.push(match);
         return `__XLC_TAG_PLACEHOLDER_${xlcBlocks.length - 1}__`;
     });
@@ -79,12 +93,22 @@ export function formatPanguSpacing(text: string): {result: string; spacedCount: 
         return xlcBlocks[Number(idx)] ?? "";
     });
 
-    // 8. 还原 URL
+    // 8. 还原思源原生块引用与嵌入块
+    processed = processed.replace(/__XLC_SY_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+        return syBlocks[Number(idx)] ?? "";
+    });
+
+    // 9. 还原 LaTeX 数学公式
+    processed = processed.replace(/__XLC_MATH_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+        return mathBlocks[Number(idx)] ?? "";
+    });
+
+    // 10. 还原 URL
     processed = processed.replace(/__XLC_URL_PLACEHOLDER_(\d+)__/g, (_, idx) => {
         return urlBlocks[Number(idx)] ?? "";
     });
 
-    // 9. 还原代码块
+    // 11. 还原代码块
     processed = processed.replace(/__XLC_CODE_PLACEHOLDER_(\d+)__/g, (_, idx) => {
         return codeBlocks[Number(idx)] ?? "";
     });
