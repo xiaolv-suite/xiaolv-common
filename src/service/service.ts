@@ -4,6 +4,7 @@ import {CAPABILITIES, ActionResult, CapabilityDescriptor, CommonItemRef, Provide
 import {SearchQuery, SearchContext, SearchEntry, searchEntries, listByScope} from "../model/search";
 import {InsertMode} from "../model/actions";
 import {CommonItem, cleanShortcode, isItemType} from "../model/item";
+import {formatLocalDate} from "../model/placeholders";
 import {toErrorMessage} from "../model/errors";
 import {PluginState} from "../model/storage";
 import {EVENTS, PROTOCOL_VERSION} from "../constants";
@@ -691,7 +692,7 @@ export class XiaolvCommonService {
             count: Math.min((current?.count ?? 0) + 1, 1_000_000),
             lastAt: Date.now(),
         };
-        const today = new Date().toISOString().slice(0, 10);
+        const today = formatLocalDate();
         this.deps.state.dailyUsage ??= {};
         this.deps.state.dailyUsage[today] = Math.min((this.deps.state.dailyUsage[today] ?? 0) + 1, 1_000_000);
         this.deps.onStateChange();

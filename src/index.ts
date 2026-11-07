@@ -24,6 +24,7 @@ import {LibraryConfig, CONFIG_VERSION, migrateState, normalizeLibraryConfig, nor
 import {SearchContext, collectCategories, collectTags, searchEntries, applyBasicFilters, SearchEntry} from "./model/search";
 import {findDuplicateByContent} from "./model/dedupe";
 import {LruCache, PREVIEW_CACHE_CAPACITY, PREVIEW_CACHE_TTL_MS} from "./model/lru";
+import {formatLocalDate} from "./model/placeholders";
 import {readWithTimeout} from "./model/startup";
 import {setPinyinAdapter, createNoopPinyinAdapter, getPinyinAdapter} from "./model/pinyin";
 import {createTinyPinyinAdapter} from "./model/pinyin-tiny";
@@ -1944,7 +1945,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             count: Math.min((current?.count ?? 0) + 1, 1_000_000),
             lastAt: Date.now(),
         };
-        const today = new Date().toISOString().slice(0, 10);
+        const today = formatLocalDate();
         this.state.dailyUsage ??= {};
         this.state.dailyUsage[today] = Math.min((this.state.dailyUsage[today] ?? 0) + 1, 1_000_000);
         this.persistSoon();

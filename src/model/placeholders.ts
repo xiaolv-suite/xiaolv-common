@@ -90,8 +90,12 @@ function pad(n: number): string {
     return String(n).padStart(2, "0");
 }
 
-function renderDate(now: Date): string {
+export function formatLocalDate(now: Date = new Date()): string {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function renderDate(now: Date): string {
+    return formatLocalDate(now);
 }
 
 /** 格式化日期时间对象，零依赖轻量替换 */

@@ -5,7 +5,7 @@ import * as siyuan from "siyuan";
 import {getActiveEditor, openTab} from "siyuan";
 import {EVENTS, PROTOCOL_VERSION} from "../constants";
 import {ActionContext, InsertMode, InsertPlan, OpenTarget, planAction, planOpenSource} from "../model/actions";
-import {applyPlaceholders, listPlaceholders} from "../model/placeholders";
+import {applyPlaceholders, formatLocalDate, listPlaceholders} from "../model/placeholders";
 import {applyAskDefaults, expandAsks, extractCursorPosition, stripCursorToken} from "../model/variables";
 import {CommonItem, extractCleanPayload} from "../model/item";
 import {LibraryService, SourceHealth} from "./library";
@@ -544,7 +544,7 @@ export class ActionExecutor {
                             const s = await bridge.statsRead();
                             const data = s?.data || s;
                             if (data) {
-                                const todayStr = new Date().toISOString().substring(0, 10);
+                                const todayStr = formatLocalDate();
                                 const todayItem = Array.isArray(data.daily) ? data.daily.find((d: any) => d.date === todayStr) : null;
                                 const todayAnswered = data.todayAnswered ?? todayItem?.attempts ?? 0;
                                 const accuracy = data.accuracy ?? data.accuracyPercent ?? 0;
