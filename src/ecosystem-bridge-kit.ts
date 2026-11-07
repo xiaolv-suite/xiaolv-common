@@ -166,6 +166,8 @@ export interface ContactsBridgeApi {
     getPerson(docId: string): Promise<ContactsPerson | null>;
     ensurePerson(name: string, options?: { ref?: string; docId?: string }): Promise<ContactsPerson & { created: boolean }>;
     recordInteraction(docIds: readonly string[], meta?: { ref?: string; date?: string; place?: string; note?: string }): Promise<ContactsInteractionResult>;
+    appendFact?(personDocId: string, input: { text: string; category?: string; sourceRef?: string }): Promise<unknown>;
+    getFacts?(personDocId: string): Promise<unknown[]>;
 }
 
 // --- ③ 小驴管家 (siyuan-home) ---
@@ -268,7 +270,38 @@ export interface CardsDueSummary {
     unreviewedCount: number;
     unreviewedNewCardCount: number;
     unreviewedOldCardCount: number;
+    todayReviewedCount?: number;
     updatedAt: string;
+}
+
+/** 渐进阅读划词摘录载荷（Issue #17 标准） */
+export interface IncrementalExtractPayload {
+    text: string;
+    sourceBlockId: string;
+    docId: string;
+    docTitle?: string;
+    sourceUrl?: string;
+    tags?: string[];
+    createdAt?: string;
+}
+
+/** 任务视界 (Task Horizon) 联动行动项载荷 */
+export interface TaskHorizonActionPayload {
+    taskMarkdown: string;
+    quoteText: string;
+    sourceDocId: string;
+    sourceBlockId?: string;
+    sourceTitle?: string;
+    sourceUrl?: string;
+    priority?: string;
+    createdAt?: string;
+}
+
+export function formatTaskHorizonItem(quote: string, docId: string, title: string, blockId?: string): string {
+    const cleanQuote = quote.replace(/[\r\n]+/g, " ").trim().slice(0, 80);
+    const refId = blockId || docId;
+    const cleanTitle = title || "文章";
+    return `- [ ] 落地阅读行动项：${cleanQuote} 来源：(( ${refId} '${cleanTitle}' )) {: custom-status="todo" custom-priority="medium" }`;
 }
 
 export interface CreateCardInput {
@@ -290,6 +323,13 @@ export interface CardsBridgeApi {
     openHub?(tab?: string): Promise<ActionResult<boolean>>;
     openReview?(options?: unknown): Promise<ActionResult<boolean>>;
     createCard?(input: CreateCardInput): Promise<ActionResult<boolean>>;
+    receiveExtract?(envelope: {
+        content: string;
+        sourceBlockId: string;
+        sourceDocId?: string;
+        sourceTitle?: string;
+        tags?: string[];
+    }): Promise<ActionResult<{ blockID?: string; enrolled?: boolean }>>;
 }
 
 // --- ⑧ 小驴常用 (xiaolv-common) ---
@@ -311,9 +351,19 @@ export interface CommonBridgeApi {
     get(id: string): Promise<ActionResult<CommonSnippet | null>>;
     recent(): Promise<ActionResult<CommonSnippet[]>>;
     favorites(): Promise<ActionResult<CommonSnippet[]>>;
+    captureQuote?(input: {
+        quote: string;
+        author?: string;
+        sourceDocId?: string;
+        sourceBlockId?: string;
+        sourceTitle?: string;
+        tags?: string[];
+        category?: string;
+        alias?: string;
+        shortcode?: string;
+    }): Promise<ActionResult<{ id?: string }>>;
 }
 
-// --- ⑨ 思源雷切命令画板 / 思源外骨骼 ---
 // --- ⑨ 思源雷切命令画板 / 思源外骨骼 ---
 export interface SpeedSwitchCommandBridgeApi {
     readonly protocol: number;
@@ -790,3 +840,300 @@ export async function completeCheckinOccasionSafely(id: string, occurrenceDate: 
         () => false
     );
 }
+
+/* ========================================================================= */
+/* 7. 专项生态联邦安全互通工具 (Specialized Interop Helpers)                  */
+/* ========================================================================= */
+
+/**
+ * 安全推送渐进摘录至小驴闪卡（siyuan-lv-cards）
+ * 自动建立双向反链血缘并纳入轻量级渐进学习轮转箱，绝不破坏 FSRS 主队列
+ */
+export async function sendExtractToCardsSafely(envelope: {
+    content: string;
+    sourceBlockId: string;
+    sourceDocId?: string;
+    sourceTitle?: string;
+    tags?: string[];
+}): Promise<{ ok: boolean; message?: string }> {
+    return await callBridge<CardsBridgeApi, { ok: boolean; message?: string }>(
+        "cards",
+        "receiveExtract",
+        async (bridge) => {
+            if (typeof bridge.receiveExtract !== "function") return { ok: false, message: "not-supported" };
+            const res = await bridge.receiveExtract(envelope);
+            const isOk = Boolean(res?.ok ?? (res as any)?.enrolled ?? (res as any)?.data?.enrolled ?? (res as any)?.data?.ok);
+            return { ok: isOk, message: (res as any)?.message };
+        },
+        () => ({ ok: false, message: "cards-not-available" })
+    );
+}
+
+/**
+ * 安全读取小驴闪卡今日待复习量与已复习量（只读）
+ */
+export async function getCardsDueSummarySafely(): Promise<{ ok: boolean; unreviewedCount: number; todayReviewedCount?: number }> {
+    return await callBridge<CardsBridgeApi, { ok: boolean; unreviewedCount: number; todayReviewedCount?: number }>(
+        "cards",
+        "due",
+        async (bridge) => {
+            if (typeof bridge.getDueSummary !== "function") return { ok: false, unreviewedCount: 0 };
+            const res = await bridge.getDueSummary();
+            if (res?.ok && res.data) {
+                return {
+                    ok: true,
+                    unreviewedCount: (res.data.unreviewedCount ?? 0) + (res.data.unreviewedNewCardCount ?? 0) + (res.data.unreviewedOldCardCount ?? 0),
+                    todayReviewedCount: res.data.todayReviewedCount ?? 0,
+                };
+            }
+            return { ok: false, unreviewedCount: 0 };
+        },
+        () => ({ ok: false, unreviewedCount: 0 })
+    );
+}
+
+/**
+ * 安全唤起小驴闪卡复习界面
+ */
+export async function openCardsReviewSafely(): Promise<boolean> {
+    return await callBridge<CardsBridgeApi, boolean>(
+        "cards",
+        "openReview",
+        async (bridge) => {
+            if (typeof bridge.openReview === "function") {
+                const res = await bridge.openReview();
+                return Boolean(res?.ok);
+            }
+            if (typeof bridge.openHub === "function") {
+                const res = await bridge.openHub();
+                return Boolean(res?.ok);
+            }
+            return false;
+        },
+        () => false
+    );
+}
+
+/**
+ * 安全检索联系人（小驴人脉 siyuan-contacts）
+ */
+export async function searchPersonSafely(keyword: string): Promise<ContactsPerson | null> {
+    const kw = (keyword || "").trim();
+    if (!kw) return null;
+    return await callBridge<ContactsBridgeApi, ContactsPerson | null>(
+        "contacts",
+        "searchPeople",
+        async (bridge) => {
+            const list = await bridge.searchPeople(kw);
+            if (!Array.isArray(list) || list.length === 0) return null;
+            const exact = list.find((p) => p.name === kw);
+            return exact || list[0] || null;
+        },
+        () => null
+    );
+}
+
+/**
+ * 一键安全沉淀联系人至小驴人脉（创建或查找）
+ */
+export async function ensurePersonSafely(name: string, options?: { docId?: string }): Promise<{ ok: boolean; person?: ContactsPerson; created?: boolean }> {
+    const cleanName = (name || "").trim();
+    if (!cleanName) return { ok: false };
+    return await callBridge<ContactsBridgeApi, { ok: boolean; person?: ContactsPerson; created?: boolean }>(
+        "contacts",
+        "ensurePerson",
+        async (bridge) => {
+            const person = await bridge.ensurePerson(cleanName, options);
+            return { ok: Boolean(person?.docId), person, created: Boolean(person?.created) };
+        },
+        () => ({ ok: false })
+    );
+}
+
+/**
+ * 安全向小驴人脉联系人主档案追加事实项（appendFact）
+ */
+export async function appendPersonFactSafely(
+    personDocId: string,
+    fact: { text: string; category?: string; sourceRef?: string }
+): Promise<boolean> {
+    if (!personDocId || !fact.text) return false;
+    return await callBridge<ContactsBridgeApi, boolean>(
+        "contacts",
+        "appendFact",
+        async (bridge) => {
+            if (typeof bridge.appendFact !== "function") return false;
+            await bridge.appendFact(personDocId, fact);
+            return true;
+        },
+        () => false
+    );
+}
+
+/**
+ * 一键安全存入金句/常用片段至小驴常用（xiaolv-common）
+ */
+export async function captureQuoteToCommonSafely(input: {
+    quote: string;
+    author?: string;
+    sourceDocId?: string;
+    sourceBlockId?: string;
+    sourceTitle?: string;
+    tags?: string[];
+    alias?: string;
+    shortcode?: string;
+}): Promise<{ ok: boolean; itemId?: string }> {
+    if (!input.quote) return { ok: false };
+    return await callBridge<CommonBridgeApi, { ok: boolean; itemId?: string }>(
+        "common",
+        "captureQuote",
+        async (bridge) => {
+            if (typeof bridge.captureQuote !== "function") return { ok: false };
+            const res = await bridge.captureQuote({
+                ...input,
+                category: "拾遗金句",
+            });
+            return { ok: Boolean(res?.ok), itemId: res?.data?.id };
+        },
+        () => ({ ok: false })
+    );
+}
+
+/**
+ * 安全读取打卡项目的连续打卡天数（小驴打卡 siyuan-checkin）
+ */
+export async function getCheckinStreaksSafely(itemId?: string): Promise<{ current: number; longest: number } | null> {
+    return await callBridge<CheckinBridgeApi, { current: number; longest: number } | null>(
+        "checkin",
+        "streaks.read",
+        async (bridge) => {
+            if (typeof bridge.getStreaks !== "function") return null;
+            const list = bridge.getStreaks(itemId ? [itemId] : undefined);
+            if (!Array.isArray(list) || list.length === 0) return null;
+            const target = itemId ? list.find((s) => (s as any).itemId === itemId) : list[0];
+            if (!target) return null;
+            return { current: target.current ?? 0, longest: target.longest ?? 0 };
+        },
+        () => null
+    );
+}
+
+/**
+ * 自动探测小驴打卡中与闪卡复习最匹配的打卡项 ID（零配置智能联动）
+ */
+export async function findMatchingCheckinItemId(configuredId?: string): Promise<string | null> {
+    if (configuredId && configuredId.trim()) {
+        return configuredId.trim();
+    }
+    if (typeof window === "undefined") return null;
+    const checkin = getBridgeSafely<CheckinBridgeApi>("checkin");
+    if (!checkin || typeof checkin.queryItems !== "function") return null;
+    try {
+        const items = checkin.queryItems({ includeArchived: false });
+        if (!Array.isArray(items) || items.length === 0) return null;
+        // 1. 优先匹配名称包含「闪卡」的项目
+        const flashcardItem = items.find(it => !it.archived && (it.name.includes("闪卡") || it.name.toLowerCase().includes("flashcard")));
+        if (flashcardItem) return flashcardItem.id;
+        // 2. 次优匹配名称包含「复习」或「记忆」
+        const reviewItem = items.find(it => !it.archived && (it.name.includes("复习") || it.name.includes("记忆")));
+        if (reviewItem) return reviewItem.id;
+    } catch {
+        // 静默隔离
+    }
+    return null;
+}
+
+/**
+ * 安全查询小驴考试概览与考期目标（若安装且挂载）
+ */
+export async function getExamOverviewSafely(): Promise<{ name: string; days: number; activeWrongCount?: number } | null> {
+    if (typeof window === "undefined") return null;
+    const exam = getBridgeSafely<ExamBridgeApi>("exam");
+    if (!exam) return null;
+    try {
+        if (typeof exam.getOverview === "function") {
+            const overview: any = exam.getOverview();
+            if (overview && typeof overview === "object") {
+                const stats: any = overview.stats;
+                const activeWrong = stats?.activeWrong ?? stats?.activeWrongCount ?? overview.activeWrongCount;
+                const examDateStr = overview.examDate || overview.targetDate || stats?.examDate;
+                if (examDateStr && typeof examDateStr === "string") {
+                    const target = new Date(examDateStr.includes("T") ? examDateStr : examDateStr.replace(/-/g, "/"));
+                    if (!Number.isNaN(target.getTime())) {
+                        const now = new Date();
+                        const diffMs = target.getTime() - now.getTime();
+                        const days = Math.max(0, Math.ceil(diffMs / 86400000));
+                        return {
+                            name: overview.examTitle || overview.title || "小驴考试目标",
+                            days,
+                            activeWrongCount: activeWrong,
+                        };
+                    }
+                }
+                if (typeof activeWrong === "number") {
+                    return {
+                        name: overview.examTitle || overview.title || "小驴考试",
+                        days: 0,
+                        activeWrongCount: activeWrong,
+                    };
+                }
+            }
+        }
+    } catch {
+        // 静默隔离
+    }
+    return null;
+}
+
+/**
+ * 安全打开小驴考试模块（练习台、错题本、模考等）
+ */
+export function openExamModuleSafely(action: "practice" | "wrongbook" | "mock" = "practice"): boolean {
+    if (typeof window === "undefined") return false;
+    const exam = getBridgeSafely<ExamBridgeApi>("exam");
+    if (!exam) return false;
+    try {
+        if (action === "wrongbook" && typeof exam.wrongbook === "function") {
+            exam.wrongbook();
+            return true;
+        }
+        if (action === "mock" && typeof exam.mock === "function") {
+            exam.mock();
+            return true;
+        }
+        if (typeof exam.practice === "function") {
+            exam.practice();
+            return true;
+        }
+    } catch {
+        // 静默隔离
+    }
+    return false;
+}
+
+/**
+ * 安全获取小驴常用语中的收藏或最近条目（供制卡素材快速填入）
+ */
+export async function getCommonSnippetsSafely(): Promise<CommonSnippet[]> {
+    if (typeof window === "undefined") return [];
+    const common = getBridgeSafely<CommonBridgeApi>("common");
+    if (!common) return [];
+    try {
+        if (typeof common.favorites === "function") {
+            const favRes = await common.favorites();
+            if (favRes && favRes.ok && Array.isArray(favRes.data) && favRes.data.length > 0) {
+                return favRes.data;
+            }
+        }
+        if (typeof common.recent === "function") {
+            const recRes = await common.recent();
+            if (recRes && recRes.ok && Array.isArray(recRes.data) && recRes.data.length > 0) {
+                return recRes.data;
+            }
+        }
+    } catch {
+        // 静默隔离
+    }
+    return [];
+}
+
