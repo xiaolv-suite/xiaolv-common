@@ -1120,6 +1120,7 @@ export class DockView {
     public destroy(): void {
         this.isDestroyed = true;
         this.closeContextMenu();
+        this.fullBodyCache.clear();
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
         this.container.classList.remove("xlc-dock");
         this.container.innerHTML = "";
