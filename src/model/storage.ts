@@ -403,9 +403,13 @@ export function normalizeState(raw: unknown): PluginState {
 
 export function normalizeDailyUsage(raw: unknown): Record<string, number> {
     const dailyRaw = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const keys = Object.keys(dailyRaw).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+    // 约束存储有界性：最多保留最近 365 天，防止长期挂机无限膨胀
+    const keptKeys = keys.length > 365 ? keys.slice(-365) : keys;
     const dailyUsage: Record<string, number> = {};
-    for (const [dateKey, val] of Object.entries(dailyRaw)) {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey) && typeof val === "number" && Number.isInteger(val) && val > 0) {
+    for (const dateKey of keptKeys) {
+        const val = dailyRaw[dateKey];
+        if (typeof val === "number" && Number.isInteger(val) && val > 0) {
             dailyUsage[dateKey] = Math.min(val, 1_000_000);
         }
     }
