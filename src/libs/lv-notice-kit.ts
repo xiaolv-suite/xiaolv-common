@@ -1507,8 +1507,9 @@ function getDocLockMap(): Map<string, Promise<unknown>> {
 
 /**
  * 思源文档排队互斥锁：同一文档 ID 的异步写入自动串行化，彻底消除 document is locked 错误
+ * 支持超时自动熔断（默认 20s），杜绝异常挂起任务永久死锁文档
  */
-export async function withDocLock<T>(docId: string, task: () => Promise<T>): Promise<T> {
+export async function withDocLock<T>(docId: string, task: () => Promise<T>, timeoutMs = 20000): Promise<T> {
     if (!docId) return task();
     const map = getDocLockMap();
     const prev = map.get(docId) || Promise.resolve();
@@ -1518,10 +1519,23 @@ export async function withDocLock<T>(docId: string, task: () => Promise<T>): Pro
     const chained = prev.then(() => current, () => current);
     map.set(docId, chained);
 
+    let timer: any = null;
     try {
         await prev;
-        return await task();
+        const taskPromise = task();
+        if (timeoutMs > 0 && typeof setTimeout === "function") {
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                timer = setTimeout(() => {
+                    reject(new Error(`[withDocLock] 写入任务超时 (${timeoutMs}ms) 强制释放: ${docId}`));
+                }, timeoutMs);
+            });
+            return await Promise.race([taskPromise, timeoutPromise]);
+        }
+        return await taskPromise;
     } finally {
+        if (timer !== null) {
+            clearTimeout(timer);
+        }
         release();
         if (map.get(docId) === chained) {
             map.delete(docId);
