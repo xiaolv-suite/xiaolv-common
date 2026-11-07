@@ -2391,6 +2391,27 @@ export const lvLaunchpad = {
         return ensureMobileEntry();
     },
 
+    /**
+     * 统一桌面端顶栏收敛入口（Protocol v1.7 Desktop）：
+     * 挂载至桌面端 #toolbar。
+     * 仅有 1 个插件时左键直达主界面，长按/右键打开罗盘弹射坞，杜绝多层损耗；
+     * >= 2 个插件时左键打开罗盘弹射坞；
+     * 用户可通过 pinned 状态决定是否保留该插件的独立原生顶栏图标。
+     */
+    ensureDesktopEntry(): () => void {
+        return ensureDesktopEntry();
+    },
+
+    /** 统一全端顶栏收敛入口（自动适配桌面与移动端环境） */
+    ensureUnifiedEntry(): () => void {
+        const cleanM = ensureMobileEntry();
+        const cleanD = ensureDesktopEntry();
+        return () => {
+            cleanM();
+            cleanD();
+        };
+    },
+
     /** 唤醒移动端底部弹射坞（Bottom Sheet：磁贴网格 + 穿透搜索 + 长按展开二级行动） */
     openMobileSheet(): void {
         openMobileSheet();
@@ -2427,6 +2448,7 @@ export const lvLaunchpad = {
 /* ========================================================================= */
 
 const MOBILE_ENTRY_ID = "lvLaunchpadMobileEntry";
+const DESKTOP_ENTRY_ID = "lvLaunchpadDesktopEntry";
 const MOBILE_SHEET_ID = "lv-launchpad-sheet-mask";
 
 /** 思源移动端检测：手机宿主渲染 #mobileTopBar；UA 兜底覆盖 browser-mobile 场景 */
@@ -2492,18 +2514,29 @@ function clampBallYRatio(v: number): number {
     return Math.min(0.85, Math.max(0.15, v));
 }
 
-/** 聚合徽记：任一已注册罗盘条目带 badge 时点亮脉冲圆点；专注模式时点亮 🌙 */
+/** 聚合徽记与单插件自适应：任一已注册条目带 badge 时点亮圆点；专注模式点亮 🌙；单插件时动态呈现专属标题 */
 function refreshEntryBadgeDot(): void {
     if (typeof document === "undefined") return;
     try {
-        const hasBadge = getLaunchpadHub().getItems().some((it) => Boolean(it.badge) && it.state !== "hidden");
+        const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+        const hasBadge = items.some((it) => Boolean(it.badge));
         const focus = isNotifyFocusActive();
-        for (const root of [document.getElementById(MOBILE_ENTRY_ID), document.getElementById(MOBILE_BALL_ID)]) {
+        for (const root of [document.getElementById(MOBILE_ENTRY_ID), document.getElementById(MOBILE_BALL_ID), document.getElementById(DESKTOP_ENTRY_ID)]) {
             if (!root) continue;
             const dot = root.querySelector(".lv-entry-dot");
             if (dot) (dot as HTMLElement).style.display = hasBadge ? "block" : "none";
             const moon = root.querySelector(".lv-entry-moon");
             if (moon) (moon as HTMLElement).style.display = focus ? "inline-block" : "none";
+
+            // 单插件时动态适配专属名称与操作提示；多插件时保持全家桶统一标题
+            if (items.length === 1) {
+                const singleName = items[0].fullName || items[0].name;
+                root.setAttribute("aria-label", `${singleName} · 小驴罗盘`);
+                root.setAttribute("title", `${singleName} (左键直达 · 右键小驴罗盘)`);
+            } else if (items.length > 1) {
+                root.setAttribute("aria-label", "小驴罗盘");
+                root.setAttribute("title", `小驴罗盘 · 全家桶极速直达 (${items.length} 插件已联结)`);
+            }
         }
     } catch { /* ignore */ }
 }
@@ -2525,6 +2558,16 @@ function buildMobileEntryButton(): boolean {
     btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;margin-left:2px;font-size:11px;line-height:1;">🌙</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
     btn.addEventListener("click", () => {
         hapticFeedback(8);
+        const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+        if (items.length === 1) {
+            // 只有 1 个插件时：点击直接穿透触发该插件主功能（零多余层级，极致效率）
+            try { items[0].onClick(); } catch (e) { console.warn("[LvLaunchpad] 移动端单插件直达失败:", e); }
+            return;
+        }
+        openMobileSheet();
+    });
+    btn.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
         openMobileSheet();
     });
     topBar.appendChild(btn);
@@ -2687,8 +2730,18 @@ function buildMobileBallButton(): boolean {
     ball.addEventListener("click", () => {
         if (suppressClick) { suppressClick = false; return; } // 拖拽结束的合成 click 不开坞
         hapticFeedback(8);
+        const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+        if (items.length === 1) {
+            try { items[0].onClick(); } catch (e) { console.warn("[LvLaunchpad] 悬浮球单插件直达失败:", e); }
+            scheduleBallIdle(ball, pos);
+            return;
+        }
         openMobileSheet();
         scheduleBallIdle(ball, pos);
+    });
+    ball.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        openMobileSheet();
     });
 
     document.body.appendChild(ball);
@@ -2900,6 +2953,69 @@ function ensureMobileEntry(): MobileEntryCleanup {
         ballCurrentPos = undefined;
         try { document.getElementById(MOBILE_ENTRY_ID)?.remove(); } catch { /* ignore */ }
         try { document.getElementById(MOBILE_BALL_ID)?.remove(); } catch { /* ignore */ }
+    };
+}
+
+/* ===== 桌面端小驴罗盘顶栏收敛入口（Desktop TopBar Entry · Protocol v1.7） ===== */
+const desktopEntryOwners = new Set<string>();
+let desktopEntryRetryTimers: number[] = [];
+
+function buildDesktopEntryButton(): boolean {
+    if (typeof document === "undefined" || isMobileFrontend()) return false;
+    const toolbar = document.getElementById("toolbar");
+    if (!toolbar) return false;
+    if (document.getElementById(DESKTOP_ENTRY_ID)) { refreshEntryBadgeDot(); return true; }
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = DESKTOP_ENTRY_ID;
+    btn.className = "toolbar__item ariaLabel";
+    btn.setAttribute("aria-label", "小驴罗盘");
+    btn.setAttribute("title", "小驴罗盘 · 全家桶极速直达");
+    btn.style.position = "relative";
+    btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;margin-left:2px;font-size:11px;line-height:1;">🌙</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
+
+    btn.addEventListener("click", () => {
+        const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+        if (items.length === 1) {
+            // 只有 1 个插件时：左键点击直接穿透触发该插件原生主入口（零多余层级，极致效率）
+            try { items[0].onClick(); } catch (err) { console.warn("[LvLaunchpad] 桌面单插件直达失败:", err); }
+            return;
+        }
+        openMobileSheet();
+    });
+
+    btn.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        // 右键一律呼出小驴罗盘完整弹射坞（含二级行动直达与生态状态）
+        openMobileSheet();
+    });
+
+    toolbar.appendChild(btn);
+    refreshEntryBadgeDot();
+    return true;
+}
+
+function ensureDesktopEntry(): MobileEntryCleanup {
+    if (typeof document === "undefined") return () => {};
+    if (isMobileFrontend()) return () => {};
+    const owner = `owner_desktop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    desktopEntryOwners.add(owner);
+    desktopEntryRetryTimers.forEach((t) => { try { window.clearTimeout(t); } catch { /* ignore */ } });
+    desktopEntryRetryTimers = [];
+    buildDesktopEntryButton();
+    for (const delay of [800, 2000, 5000]) {
+        const tid = window.setTimeout(() => {
+            if (!document.getElementById(DESKTOP_ENTRY_ID)) buildDesktopEntryButton();
+        }, delay);
+        desktopEntryRetryTimers.push(tid);
+    }
+    return () => {
+        desktopEntryOwners.delete(owner);
+        if (desktopEntryOwners.size > 0) return;
+        desktopEntryRetryTimers.forEach((t) => { try { window.clearTimeout(t); } catch { /* ignore */ } });
+        desktopEntryRetryTimers = [];
+        try { document.getElementById(DESKTOP_ENTRY_ID)?.remove(); } catch { /* ignore */ }
     };
 }
 
