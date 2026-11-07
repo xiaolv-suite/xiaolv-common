@@ -68,6 +68,13 @@ export class DockView {
     private activeMenuEl: HTMLElement | null = null;
     private menuCleanup: (() => void) | null = null;
     private fullBodyCache = new Map<string, string>();
+    private setFullBodyCache(id: string, text: string): void {
+        if (this.fullBodyCache.size >= 200) {
+            const oldest = this.fullBodyCache.keys().next().value;
+            if (oldest) this.fullBodyCache.delete(oldest);
+        }
+        this.fullBodyCache.set(id, text);
+    }
     private isInsertBusy = false;
     private isCopyBusy = false;
     /** 大纲组织模式：分类树 (category) 或 标签聚合 (tag) · CAND-004 / TODO-FEAT-004 */
@@ -597,7 +604,7 @@ export class DockView {
         const prefetchFullBody = () => {
             if (this.fullBodyCache.has(entry.id) || typeof this.deps.preview !== "function") return;
             void this.deps.preview(entry.id).then((text) => {
-                if (text) this.fullBodyCache.set(entry.id, text);
+                if (text) this.setFullBodyCache(entry.id, text);
             }).catch(() => {});
         };
         row.addEventListener("mouseenter", prefetchFullBody);
@@ -997,7 +1004,7 @@ export class DockView {
         this.drawerContainer.appendChild(body);
 
         void this.deps.preview(entry.id).then((text) => {
-            if (text) this.fullBodyCache.set(entry.id, text);
+            if (text) this.setFullBodyCache(entry.id, text);
             if (this.isDestroyed) return;
             body.innerHTML = "";
             const rawText = text || entry.summary || "";
