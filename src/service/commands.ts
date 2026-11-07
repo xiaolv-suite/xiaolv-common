@@ -542,8 +542,15 @@ export class ActionExecutor {
                     async (bridge) => {
                         if (typeof bridge.statsRead === "function") {
                             const s = await bridge.statsRead();
-                            if (s) {
-                                return `【小驴考试】今日刷题: ${s.todayAnswered ?? 0} 道，正确率: ${s.accuracyPercent ?? 0}%，错题待消灭: ${s.wrongbookCount ?? 0} 题`;
+                            const data = s?.data || s;
+                            if (data) {
+                                const todayStr = new Date().toISOString().substring(0, 10);
+                                const todayItem = Array.isArray(data.daily) ? data.daily.find((d: any) => d.date === todayStr) : null;
+                                const todayAnswered = data.todayAnswered ?? todayItem?.attempts ?? 0;
+                                const accuracy = data.accuracy ?? data.accuracyPercent ?? 0;
+                                const wrongCount = data.activeWrong ?? data.wrongbookCount ?? 0;
+                                const streakDays = data.streak ?? 0;
+                                return `【小驴考试】今日刷题: ${todayAnswered} 道，正确率: ${accuracy}%，错题在册: ${wrongCount} 题${streakDays > 0 ? ` (连续 ${streakDays} 天)` : ""}`;
                             }
                         }
                         return "（暂无考试数据）";
@@ -559,7 +566,8 @@ export class ActionExecutor {
                     "navigation.context",
                     (bridge) => {
                         if (typeof bridge.getNavigationContext === "function") {
-                            const ctx = bridge.getNavigationContext();
+                            const raw = bridge.getNavigationContext();
+                            const ctx = raw?.data || raw;
                             if (ctx && ctx.currentDocTitle) {
                                 return `当前文档：${ctx.currentDocTitle} (${ctx.currentDocId || ""})`;
                             }
