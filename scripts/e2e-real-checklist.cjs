@@ -653,6 +653,46 @@ function check(name, ok, detail = "") {
             settingsR431.panelOpen && settingsR431.navFlush && settingsR431.jumpNotCovered && settingsR431.heatmapWordingOk,
             JSON.stringify(settingsR431));
 
+        // ══════════ 第 10c 步：CSV 向导空态与解析预览（R433 真机验收） ══════════
+        const csvWizardState = await page.evaluate(async () => {
+            const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+            const csvBtn = document.querySelector("[data-xlc-control='settings.data.csvImport']");
+            csvBtn?.scrollIntoView({block: "center"});
+            csvBtn?.click();
+            let wizardBody = null;
+            for (let i = 0; i < 16; i++) {
+                wizardBody = document.querySelector("[data-xlc-control='wizard.csv.text']")?.closest(".b3-dialog__body") ?? null;
+                if (wizardBody) break;
+                await sleepMs(250);
+            }
+            if (!wizardBody) return {opened: false};
+            const previewBox = wizardBody.querySelector(".xlc-wizard-preview-box");
+            const ta = wizardBody.querySelector("[data-xlc-control='wizard.csv.text']");
+            const emptyPreviewHidden = previewBox ? getComputedStyle(previewBox).display === "none" : false;
+            if (ta) {
+                ta.value = "标题,内容,分类,标签\n打卡签到,今日已按计划完成各项任务，请查收！,工作,打卡;工作汇报\n会议通知,请于今天下午两点在三楼会议室召开周会。,工作,通知";
+                ta.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+            await sleepMs(1000);
+            const parsedShown = previewBox ? getComputedStyle(previewBox).display !== "none" : false;
+            const parsedText = previewBox?.textContent ?? "";
+            const cancelBtn = Array.from(wizardBody.querySelectorAll("button")).find((b) => (b.textContent ?? "").trim() === "取消");
+            cancelBtn?.click();
+            await sleepMs(300);
+            const wizardClosed = !document.querySelector("[data-xlc-control='wizard.csv.text']");
+            return {
+                opened: true,
+                emptyPreviewHidden,
+                parsedShown,
+                parsedText: parsedText.slice(0, 44),
+                wizardClosed,
+            };
+        });
+        check("步骤 10c：CSV 向导空态预览隐藏、粘贴后真实解析出条目（R433 真机验收）",
+            csvWizardState.opened && csvWizardState.emptyPreviewHidden && csvWizardState.parsedShown
+                && (csvWizardState.parsedText ?? "").includes("解析出") && csvWizardState.wizardClosed,
+            JSON.stringify(csvWizardState));
+
         // ══════════ 第 10 步进阶：剪贴板条目一键沉淀转正（智能注解自动剥离入库） ══════════
         await page.evaluate(() => {
             (window.siyuan?.dialogs ?? []).slice().forEach((d) => {
