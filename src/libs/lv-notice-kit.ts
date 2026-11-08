@@ -3599,8 +3599,8 @@ export function toggleDesktopLaunchpadPopover(anchorEl?: HTMLElement | null): vo
 function insertDesktopEntryButton(toolbar: HTMLElement, btn: HTMLElement): void {
     if (typeof toolbar.querySelector === "function" && typeof toolbar.insertBefore === "function") {
         try {
-            // 优先在系统设置、帮助按钮或窗口控制按钮之前插入，与第三方插件按钮整齐并列，绝不插在最右侧窗口控制区后方
-            const anchor = toolbar.querySelector("#barDockR, #barSetting, #barSettings, #barHelp, .toolbar__window-control, #windowControls");
+            // 优先在插件集管理、命令面板、全局搜索或设置/窗口控制之前插入，与插件图标整齐并列在插件区末尾，绝不插在最右侧窗口控制区
+            const anchor = toolbar.querySelector("#barPlugins, #barCommand, #barSearch, #barDockR, #barSetting, #barSettings, #barHelp, .toolbar__window-control, #windowControls");
             if (anchor && anchor.parentElement === toolbar) {
                 toolbar.insertBefore(btn, anchor);
                 return;
@@ -3693,19 +3693,20 @@ function ensureDesktopEntry(): MobileEntryCleanup {
     if (isMobileFrontend()) return () => {};
     const owner = `owner_desktop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     desktopEntryOwners.add(owner);
-    desktopEntryRetryTimers.forEach((t) => { try { window.clearTimeout(t); } catch { /* ignore */ } });
+    desktopEntryRetryTimers.forEach((t) => { try { if (typeof window !== "undefined") window.clearTimeout(t); else clearTimeout(t); } catch { /* ignore */ } });
     desktopEntryRetryTimers = [];
     buildDesktopEntryButton();
     for (const delay of [800, 2000, 5000]) {
-        const tid = window.setTimeout(() => {
+        const scheduleFn = typeof window !== "undefined" ? window.setTimeout : setTimeout;
+        const tid = Number(scheduleFn(() => {
             if (!document.getElementById(DESKTOP_ENTRY_ID)) buildDesktopEntryButton();
-        }, delay);
+        }, delay));
         desktopEntryRetryTimers.push(tid);
     }
     return () => {
         desktopEntryOwners.delete(owner);
         if (desktopEntryOwners.size > 0) return;
-        desktopEntryRetryTimers.forEach((t) => { try { window.clearTimeout(t); } catch { /* ignore */ } });
+        desktopEntryRetryTimers.forEach((t) => { try { if (typeof window !== "undefined") window.clearTimeout(t); else clearTimeout(t); } catch { /* ignore */ } });
         desktopEntryRetryTimers = [];
         try { desktopToolbarObserver?.disconnect(); } catch { /* ignore */ }
         desktopToolbarObserver = null;

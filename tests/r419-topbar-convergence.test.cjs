@@ -513,4 +513,45 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             try { unreg2(); } catch {}
         }
     });
+
+    await t.test("8. 顶栏挂载锚点安全性：必须在系统窗口控制区之前插入，绝不置于关闭按钮右侧", () => {
+        let insertedBefore = null;
+        let appendChildCalled = false;
+
+        const windowControls = { id: "windowControls", parentElement: null };
+        const toolbar = {
+            id: "toolbar",
+            querySelector(sel) {
+                if (sel.includes("windowControls")) return windowControls;
+                return null;
+            },
+            insertBefore(newNode, refNode) {
+                insertedBefore = refNode;
+            },
+            appendChild() {
+                appendChildCalled = true;
+            },
+        };
+        windowControls.parentElement = toolbar;
+
+        const prevDoc = globalThis.document;
+        globalThis.document = {
+            getElementById(id) {
+                if (id === "toolbar") return toolbar;
+                if (id === "lvLaunchpadDesktopEntry") return null;
+                return null;
+            },
+            createElement: () => ({ setAttribute: () => {}, querySelector: () => null, style: {}, addEventListener: () => {} }),
+        };
+
+        try {
+            const cleanup = lvLaunchpad.ensureDesktopEntry();
+            // 验证必须调用 insertBefore 在 windowControls 之前插入，而不能直接 appendChild 到末尾
+            assert.equal(insertedBefore, windowControls, "罗盘图标必须插在 windowControls 之前");
+            assert.equal(appendChildCalled, false, "严禁将罗盘 appendChild 至窗口控制区后面");
+            cleanup();
+        } finally {
+            globalThis.document = prevDoc;
+        }
+    });
 });
