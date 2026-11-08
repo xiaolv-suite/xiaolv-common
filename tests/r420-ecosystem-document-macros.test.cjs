@@ -68,4 +68,14 @@ test("小驴常用 · 全家桶思源文档原生宏体系 (Ecosystem Document M
         assert.ok(res.includes("今日完成阅读: **0** 篇"));
         assert.ok(res.includes('{: custom-type="glean-reading-digest" custom-reading-count="0" }'));
     });
+
+    await t.test("7. 自然别名与管道参数兼容性：{{xlc:checkin}} / {{xlc:home}} / {{xlc:cards}} / {{xlc:exam}} / {{xlc:contacts}}", () => {
+        assert.ok(applyPlaceholders("{{xlc:checkin}}", fixedNow, true).includes("custom-type=\"daily-achievement\""));
+        assert.ok(applyPlaceholders("{{xlc:checkin|card}}", fixedNow, true).includes("custom-type=\"daily-achievement\""));
+        assert.ok(applyPlaceholders("{{xlc:home}}", fixedNow, true).includes("custom-type=\"home-alert-board\""));
+        assert.ok(applyPlaceholders("{{xlc:cards}}", fixedNow, true).includes("custom-type=\"flashcard-review-summary\""));
+        assert.ok(applyPlaceholders("{{xlc:exam|英语}}", fixedNow, true).includes("custom-type=\"exam-scorecard\""));
+        assert.ok(applyPlaceholders("{{xlc:contacts|李四}}", fixedNow, true).includes("custom-type=\"meeting-brief\""));
+        assert.ok(applyPlaceholders("{{xlc:glean}}", fixedNow, true).includes("custom-type=\"glean-reading-digest\""));
+    });
 });

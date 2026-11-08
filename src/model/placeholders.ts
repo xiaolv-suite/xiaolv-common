@@ -41,11 +41,11 @@ import {extractUrlComponent, prefixLines, suffixLines, csvToList, buildUrlQuery}
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "nanoid" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats" | "radix" | "kv" | "match" | "valid" | "template" | "obfuscate" | "scramble" | "thousands" | "checksum" | "pad" | "seq" | "fingerprint" | "randomcolor" | "btruncate" | "initials" | "plural" | "escape" | "repeat" | "center" | "slash" | "revwords" | "randomname" | "if" | "smask" | "censor" | "shuffle" | "progress" | "json" | "line" | "csv" | "achievement" | "home_board" | "review_card" | "exam_scorecard" | "reading_digest" | "meeting_brief";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "nanoid" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats" | "radix" | "kv" | "match" | "valid" | "template" | "obfuscate" | "scramble" | "thousands" | "checksum" | "pad" | "seq" | "fingerprint" | "randomcolor" | "btruncate" | "initials" | "plural" | "escape" | "repeat" | "center" | "slash" | "revwords" | "randomname" | "if" | "smask" | "censor" | "shuffle" | "progress" | "json" | "line" | "csv" | "achievement" | "home_board" | "review_card" | "exam_scorecard" | "reading_digest" | "meeting_brief" | "checkin" | "home" | "cards" | "exam" | "glean" | "contacts";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|achievement|home_board|review_card|exam_scorecard|reading_digest|meeting_brief|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|achievement|home_board|review_card|exam_scorecard|reading_digest|meeting_brief|checkin(?::[a-zA-Z0-9_-]+)?|home(?::[a-zA-Z0-9_-]+)?|cards(?::[a-zA-Z0-9_-]+)?|exam(?::[a-zA-Z0-9_-]+)?|glean(?::[a-zA-Z0-9_-]+)?|contacts(?::[a-zA-Z0-9_-]+)?|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -2376,6 +2376,16 @@ export function resolvePlaceholder(
             subAction = rawKind.split(":")[1];
         }
     }
+    if (
+        rawKind.startsWith("checkin:") ||
+        rawKind.startsWith("home:") ||
+        rawKind.startsWith("butler:") ||
+        rawKind.startsWith("task:") ||
+        rawKind.startsWith("glean:") ||
+        rawKind.startsWith("contacts:")
+    ) {
+        return null; // 留给 variables.ts 预览层与 commands.ts 生态桥接特化渲染
+    }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
     if (kind === "time") return arg ? resolveTimeArg(now, arg) : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -2478,7 +2488,7 @@ export function resolvePlaceholder(
     if (kind === "json") return arg ? resolveJsonArg(arg, subAction) : null;
     if (kind === "line") return arg ? resolveLineArg(arg, subAction) : null;
     if (kind === "csv") return arg ? resolveCsvArg(arg, subAction) : null;
-    if (kind === "achievement") {
+    if (kind === "achievement" || (kind.startsWith("checkin") && subAction !== "today" && arg !== "today")) {
         const today = formatLocalDate(now);
         return [
             `> 🌅 **今日自律成就卡 · ${today}**`,
@@ -2490,7 +2500,7 @@ export function resolvePlaceholder(
             `{: custom-type="daily-achievement" custom-checkin-card="true" }`,
         ].join("\n");
     }
-    if (kind === "home_board") {
+    if (kind === "home_board" || kind.startsWith("home")) {
         const today = formatLocalDate(now);
         return [
             `> 🏠 **今日家庭生活备忘与到期预警 · ${today}**`,
@@ -2500,7 +2510,7 @@ export function resolvePlaceholder(
             `{: custom-type="home-alert-board" custom-home-summary="true" }`,
         ].join("\n");
     }
-    if (kind === "review_card") {
+    if (kind === "review_card" || kind.startsWith("cards")) {
         const today = formatLocalDate(now);
         return [
             `> 🗂️ **今日闪卡复习战报 · ${today}**`,
@@ -2510,7 +2520,7 @@ export function resolvePlaceholder(
             `{: custom-type="flashcard-review-summary" custom-cards-reviewed="0" custom-retention="100" }`,
         ].join("\n");
     }
-    if (kind === "exam_scorecard") {
+    if (kind === "exam_scorecard" || kind.startsWith("exam")) {
         const title = arg ? arg.replace(/[\r\n]+/g, " ").trim() : "综合专项测验";
         return [
             `> 📝 **今日测评战报 · ${title}**`,
@@ -2520,7 +2530,7 @@ export function resolvePlaceholder(
             `{: custom-type="exam-scorecard" custom-score="100" custom-pass="true" }`,
         ].join("\n");
     }
-    if (kind === "reading_digest") {
+    if (kind === "reading_digest" || kind.startsWith("glean")) {
         const today = formatLocalDate(now);
         return [
             `> 📖 **今日阅读拾遗轨迹 · ${today}**`,
@@ -2530,7 +2540,7 @@ export function resolvePlaceholder(
             `{: custom-type="glean-reading-digest" custom-reading-count="0" }`,
         ].join("\n");
     }
-    if (kind === "meeting_brief") {
+    if (kind === "meeting_brief" || kind.startsWith("contacts")) {
         const person = arg ? arg.replace(/[\r\n]+/g, " ").trim() : "联系人";
         return [
             `> 🤝 **与 ${person} 的会前 30 秒破冰速览**`,
