@@ -1,7 +1,7 @@
 // R187 · 小驴常用视觉基座。
 // 配色取自小驴闪卡 R54 原型；变量别名参考小驴打卡的局部主题适配。
 // 只向本插件的根与已标记弹窗提供变量，不重定义宿主全局主题。
-$roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.xlc-dialog-host, .b3-dialog__container.xlc-form-host, .b3-dialog__container.xlc-varform-host, .b3-dialog__container.xlc-sheet";
+$roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-quick-popover, .xlc-copy-format-menu, .b3-dialog__container.xlc-dialog-host, .b3-dialog__container.xlc-form-host, .b3-dialog__container.xlc-varform-host, .b3-dialog__container.xlc-sheet, .b3-dialog__container.xlc-sync-diff-modal, .b3-dialog__container.xlc-mobile-modal";
 
 @mixin light-palette {
   // ① 底色关系：以主题色色相(243°)为基准，L=97.6%、S=4.5%的极浅同族底色，与纯白卡片明度差仅2.4%
@@ -155,6 +155,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-font-4xl: 24px;
   // Four proportional line-height roles; fixed line boxes cover controls/headings.
   --xlc-leading-none: 1;
+  --xlc-leading-snug: 1.35;
   --xlc-leading-tight: 1.35;
   --xlc-leading-normal: 1.5;
   --xlc-leading-relaxed: 1.65;
@@ -175,6 +176,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-space-0: 0px;
   --xlc-space-0-5: 2px;
   --xlc-space-1: 4px;
+  --xlc-space-1-5: 6px;
   --xlc-space-2: 8px;
   --xlc-space-3: 12px;
   --xlc-space-4: 16px;
@@ -189,10 +191,15 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-space-neg-1-5: -6px;
 
   // Five radius roles plus shape primitives; 严格遵循外圆角减内边距层级递减公式 R_in = max(R_out - P, 0)
+  --xlc-radius-2xl: 20px;
+  --xlc-radius-xl: 16px;
+  --xlc-radius-dialog: 16px;
   --xlc-radius-overlay: 20px;
   --xlc-radius-lg: 16px;
   --xlc-radius: 12px;
+  --xlc-radius-md: 10px;
   --xlc-radius-sm: 8px;
+  --xlc-radius-xs: 4px;
   --xlc-radius-none: 0;
   --xlc-radius-hairline: 1px;
   --xlc-radius-sheet: 16px;
@@ -209,6 +216,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-dur-fast: 120ms;
   --xlc-dur-control: 140ms;
   --xlc-dur: 160ms;
+  --xlc-dur-normal: var(--xlc-dur);
   --xlc-dur-slow: 200ms;
   // 三类标准动效时长（禁止随意时长与无意义弹跳）
   --xlc-dur-state: var(--xlc-dur-fast); // 120ms 状态微交互
@@ -222,6 +230,15 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
   --xlc-shadow-2: var(--xlc-shadow-md);
   --xlc-shadow-3: var(--xlc-shadow-lg);
   --xlc-shadow-soft-focus: var(--xlc-shadow-sm);
+
+  --xlc-surface-raised: var(--xlc-raised);
+  --xlc-amber: var(--xlc-warm-ink);
+  --xlc-hit-text: var(--xlc-accent-text);
+  --xlc-accent-border: color-mix(in srgb, var(--b3-theme-primary) 35%, var(--xlc-line));
+  --xlc-telemetry-bg: var(--xlc-data-soft);
+  --xlc-telemetry-emerald: var(--xlc-data-accent);
+  --xlc-telemetry-border: color-mix(in srgb, var(--xlc-data-accent) 30%, transparent);
+  --xlc-list-selected: var(--b3-list-hover);
 
   --xlc-badge-text: var(--xlc-success);
   --xlc-badge-text-bg: var(--xlc-success-soft);
@@ -565,7 +582,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog__container.
     background: var(--xlc-surface);
     box-shadow: none;
 
-    &:focus-within { border-color: #3575f0; background: var(--xlc-surface); box-shadow: 0 0 0 1px rgba(53, 117, 240, 0.35); }
+    &:focus-within { border-color: var(--b3-theme-primary); background: var(--xlc-surface); box-shadow: 0 0 0 1px color-mix(in srgb, var(--b3-theme-primary) 35%, transparent); }
   }
 
   .xlc-search .xlc-search-input { min-height: 40px; height: auto; padding: var(--xlc-space-0); border: 0; border-radius: 0; background: transparent; font-size: var(--xlc-font-lg); box-shadow: none; }

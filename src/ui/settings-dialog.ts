@@ -263,8 +263,10 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     statusText.textContent = libStatus.textContent;
     libRow.appendChild(statusText);
     const libBtnWrap = document.createElement("div");
+    libBtnWrap.className = "xlc-lib-btn-wrap";
     libBtnWrap.style.display = "inline-flex";
     libBtnWrap.style.alignItems = "center";
+    libBtnWrap.style.flexWrap = "wrap";
     libBtnWrap.style.gap = "8px";
     if (cfg && ctx.openLibraryDoc) {
         const openLibBtn = document.createElement("button");
@@ -446,6 +448,8 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     sanitizeRow.style.display = "flex";
     sanitizeRow.style.alignItems = "center";
     sanitizeRow.style.justifyContent = "space-between";
+    sanitizeRow.style.flexWrap = "wrap";
+    sanitizeRow.style.gap = "8px";
     sanitizeRow.style.marginTop = "8px";
 
     const sanitizeLabelWrap = document.createElement("label");
@@ -682,7 +686,8 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     clipLimitRow.appendChild(clipLimitCol);
 
     const clipLimitControls = document.createElement("div");
-    clipLimitControls.style.cssText = "display:inline-flex; align-items:center; gap:8px;";
+    clipLimitControls.className = "xlc-clip-limit-controls";
+    clipLimitControls.style.cssText = "display:inline-flex; align-items:center; flex-wrap:wrap; gap:8px;";
 
     const clipLimitSelect = document.createElement("select");
     clipLimitSelect.className = "b3-select";

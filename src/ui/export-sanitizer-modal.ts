@@ -3,7 +3,7 @@
 
 import type {SanitizerOptions, SanitizeMode} from "../model/export-sanitizer";
 import {escapeHtml} from "../model/clipboard";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {Dialog} from "siyuan";
 
 export interface SanitizerModalProps {
@@ -256,13 +256,14 @@ export function openSanitizerOptionsDialog(
     onConfirm?: (options: SanitizerOptions) => void,
 ): Dialog | null {
     if (typeof Dialog === "undefined") return null;
+    const isMobileModal = isMobileDialogViewport();
     let dialog: Dialog;
     try {
         dialog = new Dialog({
             title: "导出安全脱敏选项",
             content: "",
-            width: "min(560px, 92vw)",
-            height: "min(640px, 86vh)",
+            width: isMobileModal ? "100vw" : "min(560px, 92vw)",
+            height: isMobileModal ? "100dvh" : "min(640px, 86vh)",
         });
     } catch {
         return null;
@@ -270,6 +271,7 @@ export function openSanitizerOptionsDialog(
     const container = dialog.element.querySelector(".b3-dialog__container");
     container?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, "导出安全脱敏选项");
+    adaptSecondaryDialogForMobile(dialog, "关闭");
     const body = getDialogBody(dialog.element);
     if (!body) return dialog;
     body.innerHTML = "";

@@ -7,7 +7,7 @@ import {
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
 import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock, lvTicker} from "./libs/lv-notice-kit";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {EXPORT_SCHEMA_VERSION, LIMITS, PLUGIN_VERSION, PROTOCOL_NAME, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
 import {createKernelClient, parseExistingMap, type IKernelClient, type SyncPost, type SyncPostContext} from "./kernel/client";
@@ -2066,8 +2066,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             bottom: (e?.clientY ?? 0) + 8,
             right: (e?.clientX ?? 0) + 220,
         };
-        const posX = typeof window !== "undefined" ? Math.max(12, Math.min(rect.right - 240, window.innerWidth - 260)) : 100;
-        const posY = typeof window !== "undefined" ? Math.min(rect.bottom + 6, window.innerHeight - 280) : 100;
+        const popW = typeof window !== "undefined" ? Math.min(250, Math.max(180, window.innerWidth - 16)) : 250;
+        const posX = typeof window !== "undefined" ? Math.max(8, Math.min(rect.right - popW, window.innerWidth - popW - 8)) : 100;
+        const posY = typeof window !== "undefined" ? Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 280)) : 100;
 
         popover.style.position = "fixed";
         popover.style.left = `${posX}px`;
@@ -3167,13 +3168,14 @@ export default class XiaolvCommonPlugin extends Plugin {
         const t = this.i18nFn();
         const kd = await this.library.getStoredItemKramdown(item);
         const initialKramdown = kd.ok ? kd.data : "";
+        const isMobileModal = isMobileDialogViewport();
         const dialogTitle = `${t("edit")} · ${(item.title || t("unknownType")).slice(0, 24)}${item.title.length > 24 ? "…" : ""}`;
         const dialog = new Dialog({
             // 标题带条目名（截断 24 字）：确认正在编辑哪一条
             title: dialogTitle,
             content: "",
-            width: "min(620px, 92vw)",
-            height: "min(860px, 92vh)",
+            width: isMobileModal ? "100vw" : "min(620px, 92vw)",
+            height: isMobileModal ? "100dvh" : "min(860px, 92vh)",
         });
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
         dialog.element.addEventListener("click", (e) => {
@@ -3182,6 +3184,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         });
         mountPlatformDialogTitleWrap(dialog.element, dialogTitle);
+        adaptSecondaryDialogForMobile(dialog, t("close"));
         const body = getDialogBody(dialog.element);
         if (!body) return;
         body.innerHTML = "";

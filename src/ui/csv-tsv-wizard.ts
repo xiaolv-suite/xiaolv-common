@@ -4,7 +4,7 @@
 // 实时预览前 5 行解析结果，确认后再进入导入策略对话框。
 
 import {Dialog} from "siyuan";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {inferColumnMapping} from "../service/csv-tsv-import";
 import {ExportedItem} from "../model/transfer";
 import {toErrorMessage} from "../model/errors";
@@ -46,10 +46,11 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
         onClose?.();
     };
 
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("csvImportTitle"),
         content: "",
-        width: "min(800px, 96vw)",
+        width: isMobileModal ? "100vw" : "min(800px, 96vw)",
         // R433：高度自适应内容——固定高度会让空态 body 底部留出 ~230px 空白断层
         destroyCallback: () => {
             release();
@@ -58,6 +59,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     const container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("csvImportTitle"));
+    adaptSecondaryDialogForMobile(dialog, t("cancel") || "关闭");
 
     // 移动端虚拟键盘安全避让
     const handleViewport = () => {

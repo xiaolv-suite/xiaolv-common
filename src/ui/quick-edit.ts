@@ -3,7 +3,7 @@
 // 写入前遵循单块边界（单行正文或完整代码围栏），原地更新不拆块、不破坏排版层级。
 
 import {Dialog} from "siyuan";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {validateOmniBlockUpdate} from "../service/omni-search";
 import {toErrorMessage} from "../model/errors";
 import {renderSafePreview} from "./preview-renderer";
@@ -24,11 +24,12 @@ export function openQuickEditDialog(
     let saving = false;
     let isPreviewOpen = false;
     let previewDebounce: ReturnType<typeof setTimeout> | null = null;
+    const isMobileModal = isMobileDialogViewport();
     const prevActive = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
     const dialog = new Dialog({
         title: `${deps.t("quickEditBlock")} (${blockId})`,
         content: "",
-        width: "min(620px, 92vw)",
+        width: isMobileModal ? "100vw" : "min(620px, 92vw)",
         destroyCallback: () => {
             closed = true;
             if (previewDebounce) {
@@ -49,6 +50,7 @@ export function openQuickEditDialog(
 
     const containerDialog = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     if (containerDialog) containerDialog.classList.add("xlc-form-host", "xlc-dialog-host");
+    adaptSecondaryDialogForMobile(dialog, deps.t("cancel") || "关闭");
     const handleViewport = () => {
         if (!containerDialog || typeof window === "undefined" || !window.visualViewport) return;
         const offset = Math.max(0, window.innerHeight - window.visualViewport.height);

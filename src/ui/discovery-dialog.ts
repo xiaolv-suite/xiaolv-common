@@ -1,7 +1,7 @@
 import {Dialog} from "siyuan";
 import {LIMITS} from "../constants";
 import {lvSurfaceStack} from "../libs/lv-notice-kit";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {isBlockId, ITEM_TYPES, ItemType} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {buildDiscoveryTagFacets, matchesDiscoveryTag} from "../model/discovery-facets";
@@ -444,6 +444,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         });
         this.closeConfirmationDialog = dialog;
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+        mountPlatformDialogTitleWrap(dialog.element, this.tx("discoveryCloseTitle"));
+        adaptSecondaryDialogForMobile(dialog, this.tx("cancel") || "关闭", () => cancelClose());
         const body = getDialogBody(dialog.element);
         if (!body) {
             dialog.destroy();
@@ -1682,6 +1684,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         });
         this.saveViewDialog = dialog;
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+        mountPlatformDialogTitleWrap(dialog.element, this.tx("discoverySaveView"));
+        adaptSecondaryDialogForMobile(dialog, this.tx("cancel") || "关闭", () => cancelNaming());
         const body = getDialogBody(dialog.element);
         if (!body) {
             dialog.destroy();

@@ -1669,7 +1669,7 @@
       border: 1px solid var(--xlc-line);
       border-radius: var(--xlc-radius);
       overflow: hidden;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      box-shadow: var(--xlc-shadow-sm);
 
       &--source {
         border-color: var(--xlc-line);
@@ -2193,7 +2193,7 @@
 
       &:hover {
         border-color: var(--b3-theme-primary);
-        background-color: var(--xlc-list-selected, rgba(53, 117, 240, 0.12));
+        background-color: var(--xlc-list-selected, var(--b3-list-hover));
         color: var(--b3-theme-primary);
         transform: scale(1.03);
       }
@@ -2990,7 +2990,7 @@
     padding: var(--xlc-space-3) var(--xlc-space-2);
     border-radius: var(--xlc-radius);
     background-color: var(--xlc-dark-card);
-    border: 1px solid var(--xlc-line);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: var(--xlc-shadow-sm);
     text-align: center;
     transition: transform var(--xlc-dur-fast) var(--xlc-ease),
@@ -3011,7 +3011,8 @@
 
     .xlc-insights-cap {
       font-size: 12px;
-      color: var(--xlc-dark-card-sub);
+      color: var(--xlc-dark-card-ink);
+      opacity: 0.78;
       margin-top: var(--xlc-space-1);
       letter-spacing: 0;
     }
@@ -3020,7 +3021,7 @@
   .xlc-heatmap-section {
     margin-top: var(--xlc-space-3);
     padding: var(--xlc-space-2) var(--xlc-space-3);
-    background-color: var(--xlc-dark-card);
+    background-color: var(--xlc-soft);
     border: 1px solid var(--xlc-line);
     border-radius: var(--xlc-radius);
     box-shadow: var(--xlc-shadow-sm);
@@ -3191,6 +3192,35 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .xlc-varform-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      min-height: 28px;
+      padding: 0;
+      border: none;
+      border-radius: var(--xlc-radius-sm);
+      background: transparent;
+      color: var(--b3-theme-on-surface);
+      font-size: var(--xlc-font-md);
+      cursor: pointer;
+      flex-shrink: 0;
+      touch-action: manipulation;
+
+      &:hover {
+        background: var(--xlc-soft);
+        color: var(--xlc-ink);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
     }
   }
 
@@ -3433,9 +3463,15 @@
     }
   }
 
+  .xlc-varform-preset-wrap {
+    flex-wrap: wrap;
+  }
+
   .xlc-varform-foot {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: var(--xlc-space-2);
     margin-top: var(--xlc-space-1);
 
@@ -3474,7 +3510,7 @@
     line-height: var(--xlc-line-control);
     min-height: 24px;
     padding: var(--xlc-space-0-5) var(--xlc-space-2);
-    border: 1px solid rgba(150, 105, 224, .35);
+    border: 1px solid var(--xlc-line-strong);
     border-radius: var(--xlc-radius-pill);
     color: var(--xlc-var);
     background-color: var(--xlc-var-tint);
@@ -4119,7 +4155,11 @@
     display: none !important;
   }
 
-  .b3-dialog__header {
+  &.xlc-varform-host > .b3-dialog__header {
+    display: none !important;
+  }
+
+  &:not(.xlc-varform-host):not(.xlc-discovery-host) > .b3-dialog__header {
     display: flex !important;
     align-items: center;
     justify-content: space-between;
@@ -4174,7 +4214,9 @@
 
 @media (max-width: 640px) {
   .b3-dialog__container.xlc-form-host,
-  .b3-dialog__container.xlc-varform-host {
+  .b3-dialog__container.xlc-varform-host,
+  .b3-dialog__container.xlc-dialog-host:not(.xlc-sheet),
+  .b3-dialog__container.xlc-sync-diff-modal {
     width: 100vw !important;
     max-width: 100vw !important;
     max-height: 100dvh !important;
@@ -4194,7 +4236,9 @@
     }
   }
 
-  .b3-dialog__container.xlc-form-host:not(.xlc-discovery-host) .b3-dialog__header {
+  .b3-dialog__container.xlc-form-host:not(.xlc-discovery-host) > .b3-dialog__header,
+  .b3-dialog__container.xlc-dialog-host:not(.xlc-sheet) > .b3-dialog__header,
+  .b3-dialog__container.xlc-sync-diff-modal > .b3-dialog__header {
     display: flex !important;
     align-items: center;
     justify-content: space-between;
@@ -4227,6 +4271,103 @@
       cursor: pointer;
       touch-action: manipulation;
     }
+  }
+
+  // 微表单（参数填写弹窗）：手机端隐藏 Esc 键帽提示，显示 44x44 触控关闭钮，底部操作固定可达
+  .xlc-varform {
+    .xlc-varform-head {
+      .xlc-kbd {
+        display: none !important;
+      }
+
+      .xlc-varform-close {
+        display: inline-flex !important;
+        width: 44px !important;
+        height: 44px !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
+        border-radius: var(--xlc-radius-circle);
+        font-size: var(--xlc-font-lg);
+      }
+    }
+
+    .xlc-varform-foot {
+      position: sticky;
+      bottom: 0;
+      background: var(--xlc-canvas, var(--b3-theme-background));
+      padding-top: var(--xlc-space-2);
+      padding-bottom: max(var(--xlc-space-1), env(safe-area-inset-bottom, 0px));
+      z-index: 4;
+
+      .xlc-varform-hint {
+        display: none !important;
+      }
+    }
+  }
+
+  // 设置面板窄屏（<=640px）：顶部横向滚动胶囊导航 + 下方 100% 全宽表单区，表单行自适应换行
+  :is(.xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-form-host) .xlc-settings-nav-bar,
+  .xlc-settings-nav-bar {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+
+    .xlc-settings-nav-pill {
+      flex-shrink: 0;
+    }
+  }
+
+  .xlc-settings {
+    .xlc-card {
+      padding: var(--xlc-space-3) var(--xlc-space-3);
+    }
+
+    .xlc-setting-row:not(.xlc-template-import-row):has(.b3-button, .b3-select, .xlc-setting-actions, .xlc-lib-btn-wrap, .xlc-clip-limit-controls) {
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: var(--xlc-space-2);
+
+      > .xlc-setting-text {
+        flex: 1 1 100%;
+      }
+    }
+
+    .xlc-template-import-row {
+      flex-direction: column;
+      flex-wrap: nowrap;
+      align-items: stretch;
+
+      > .b3-button {
+        white-space: normal;
+        text-align: center;
+        max-width: 100%;
+      }
+    }
+
+    .xlc-ct-row {
+      flex-wrap: wrap;
+
+      .xlc-ct-name {
+        flex: 1 1 140px;
+      }
+
+      .xlc-ct-prompt {
+        flex: 1 1 100%;
+        order: 3;
+      }
+    }
+
+    .xlc-eco-row {
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+  }
+
+  .xlc-discovery .xlc-discovery-head > [data-xlc-discovery-action='close'] {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
   }
 }
 
@@ -4836,7 +4977,12 @@
   .xlc-sugrow-adopt { min-height: 40px; padding: var(--xlc-space-2) var(--xlc-space-3); }
 
   .xlc-menu {
-    inset: auto 0 0 0;
+    inset: auto 0 0 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
     border-radius: var(--xlc-radius-sheet-top);
     padding-bottom: calc(var(--xlc-space-3) + env(safe-area-inset-bottom, var(--xlc-space-0)));
     padding-left: max(var(--xlc-space-2), env(safe-area-inset-left, 0px));
@@ -4845,17 +4991,42 @@
     transform-origin: 50% 100%;
     box-sizing: border-box;
 
+    .xlc-menu-lbl {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--xlc-space-2);
+      padding-right: var(--xlc-space-1);
+
+      > span {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
     .xlc-menu-item { min-height: 48px; touch-action: manipulation; }
 
     .xlc-menu-close-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      flex: 0 0 44px;
       border: none;
+      border-radius: var(--xlc-radius-circle);
       background: transparent;
       color: var(--b3-theme-on-surface);
-      font-size: var(--xlc-font-md);
+      font-size: var(--xlc-font-lg);
       cursor: pointer;
       touch-action: manipulation;
-      padding: 4px 8px;
-      float: right;
+      padding: 0;
+      float: none;
     }
   }
 
@@ -5105,6 +5276,14 @@
     .xlc-quicklook-hints {
       display: none;
     }
+
+    .xlc-quicklook-close {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      font-size: var(--xlc-font-lg);
+    }
   }
 }
 
@@ -5262,7 +5441,7 @@
 
   .xlc-guide-feature-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
     gap: var(--xlc-space-3);
   }
 
@@ -5883,11 +6062,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--xlc-space-2);
   padding: var(--xlc-space-2) var(--xlc-space-3);
+  padding-bottom: max(var(--xlc-space-2), env(safe-area-inset-bottom, 0px));
   background-color: var(--xlc-surface-raised, var(--b3-theme-surface));
   border-top: 1px solid var(--b3-border-color);
   box-shadow: var(--xlc-shadow-sm);
+  box-sizing: border-box;
 
   .xlc-batch-count {
     font-size: var(--xlc-font-xs);
@@ -5895,17 +6077,22 @@
     color: var(--xlc-accent);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .xlc-batch-actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
 
     .b3-button {
-      min-height: 24px;
+      min-height: 28px;
       padding: 2px 8px;
       font-size: var(--xlc-font-xs);
+      white-space: nowrap;
+      flex-shrink: 0;
 
       &:focus-visible {
         outline: 2px solid var(--xlc-accent);
@@ -6019,7 +6206,8 @@
       }
 
       .xlc-sync-strategy-select {
-        min-width: 220px;
+        min-width: min(220px, 100%);
+        max-width: 100%;
         font-size: 12px;
       }
 
@@ -6044,6 +6232,7 @@
   .xlc-sync-diff-table-container {
     flex: 1 1 auto;
     overflow-y: auto;
+    overflow-x: auto;
     min-height: 240px;
     // R433：弹窗高度由 Dialog 固定（min(860px, 92vh)），此处 flex:1 已在界内伸展；
     // 原先叠加 max-height:48vh 会在高视口把表格压短、留出中部断层
@@ -6077,7 +6266,7 @@
       }
 
       tr.xlc-diff-row:hover {
-        background-color: rgba(0, 0, 0, 0.03);
+        background-color: var(--b3-list-hover);
       }
 
       .xlc-type-badge {
@@ -6154,6 +6343,8 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
     padding: 10px 16px;
     border-top: 1px solid var(--b3-border-color);
     background-color: var(--b3-theme-surface);
@@ -6388,6 +6579,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--xlc-space-1);
     padding: var(--xlc-space-2) var(--xlc-space-3);
     border-bottom: 1px solid var(--xlc-line);
     background: var(--xlc-surface);
@@ -6397,12 +6589,24 @@
       display: flex;
       align-items: center;
       gap: var(--xlc-space-1);
+      flex: 1 1 auto;
+      min-width: 0;
       font-size: var(--xlc-font-md);
       font-weight: var(--xlc-weight-bold);
       color: var(--xlc-ink);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
 
       .xlc-dock-icon {
         font-size: var(--xlc-font-lg);
+        flex-shrink: 0;
       }
     }
 
@@ -6410,11 +6614,14 @@
       display: flex;
       align-items: center;
       gap: 2px;
+      flex-shrink: 0;
     }
 
     .xlc-dock-btn-icon {
       width: 26px;
       height: 26px;
+      min-width: 26px;
+      min-height: 26px;
       padding: 0;
       display: inline-flex;
       align-items: center;
@@ -6425,6 +6632,7 @@
       border-radius: var(--xlc-radius-sm);
       cursor: pointer;
       font-size: var(--xlc-font-md);
+      flex-shrink: 0;
 
       &:hover {
         background: var(--xlc-soft);
@@ -6551,7 +6759,7 @@
     border-radius: var(--xlc-radius-sm);
     background: var(--xlc-surface);
     border: 1px solid var(--xlc-line);
-    box-shadow: 0 1px 2px rgba(41, 34, 72, 0.02);
+    box-shadow: var(--xlc-shadow-sm);
     cursor: pointer;
     position: relative;
     user-select: none;
@@ -6569,6 +6777,7 @@
 
       .xlc-dock-row-actions {
         opacity: 1;
+        pointer-events: auto;
       }
     }
 
@@ -6576,6 +6785,11 @@
       background: var(--xlc-lavender);
       border-color: var(--xlc-accent);
       box-shadow: var(--xlc-shadow-sm);
+
+      .xlc-dock-row-actions {
+        opacity: 1;
+        pointer-events: auto;
+      }
     }
 
     .xlc-badge {
@@ -6613,12 +6827,22 @@
     }
 
     .xlc-dock-row-actions {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
       display: flex;
       align-items: center;
       gap: 2px;
+      padding-left: 6px;
+      background: color-mix(in srgb, var(--xlc-surface) 92%, transparent);
+      backdrop-filter: blur(4px);
+      border-radius: var(--xlc-radius-sm);
       opacity: 0;
+      pointer-events: none;
       transition: opacity var(--xlc-dur-fast) ease;
       flex-shrink: 0;
+      z-index: 2;
     }
 
     .xlc-dock-act-btn {
@@ -6766,6 +6990,8 @@
     .xlc-dock-drawer-body {
       flex: 1 1 auto;
       overflow-y: auto;
+      overflow-x: hidden;
+      word-break: break-word;
       max-height: 120px;
       font-size: 12px;
       line-height: 1.4;
@@ -6780,15 +7006,17 @@
       margin-top: 6px;
 
       .b3-button {
-        min-height: 28px;
-        font-size: 12px;
+        min-height: 26px;
+        font-size: 11px;
         padding: 2px 8px;
         white-space: nowrap;
+        flex: 1 1 auto;
+        justify-content: center;
       }
     }
   }
 
-  @container (max-width: 240px) {
+  @container (max-width: 300px) {
     .xlc-dock-head {
       padding: var(--xlc-space-1) var(--xlc-space-2);
     }
@@ -6798,6 +7026,8 @@
     .xlc-dock-btn-icon {
       width: 22px;
       height: 22px;
+      min-width: 22px;
+      min-height: 22px;
       font-size: 13px;
     }
     .xlc-dock-search {
@@ -6842,6 +7072,9 @@
   display: flex;
   flex-direction: column;
   min-width: 150px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
   box-sizing: border-box;
 
   .xlc-dock-menu-item {
@@ -6891,7 +7124,7 @@
 
   .xlc-wizard-mapping-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
     gap: var(--xlc-space-3);
     margin-top: var(--xlc-space-2);
   }
@@ -6959,6 +7192,11 @@
 }
 
 // ---------- 导出安全脱敏选项（G31 / T-0143）----------
+.b3-dialog__body .xlc-export-sanitizer-header,
+.b3-dialog__content .xlc-export-sanitizer-header {
+  display: none !important;
+}
+
 .xlc-export-sanitizer-modal {
   width: 100%;
   box-sizing: border-box;
@@ -6968,16 +7206,17 @@
   .fn__flex {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--xlc-space-3);
 
     .fn__flex-1 {
-      flex: 1 1 auto;
+      flex: 1 1 140px;
       min-width: 0;
     }
 
     .b3-select {
-      flex: 0 1 auto;
-      max-width: 62%;
+      flex: 1 1 180px;
+      max-width: 100%;
     }
   }
 
@@ -7243,14 +7482,17 @@
 
 // ---------- 顶栏图标右键极速常用气泡卡片 (CAND-008 / TODO-FEAT-007) ----------
 .xlc-quick-popover {
-  width: 250px;
+  width: min(250px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 24px);
   background: var(--b3-theme-surface);
   border: 1px solid var(--b3-border-color);
   border-radius: var(--xlc-radius-md);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--xlc-overlay-shadow);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
   font-family: var(--xlc-font-family);
 
   .xlc-quick-popover-head {
@@ -7346,7 +7588,7 @@
   padding: var(--xlc-space-3);
 
   .xlc-share-card-meta {
-    background-color: var(--xlc-dark-card);
+    background-color: var(--xlc-soft);
     border: 1px solid var(--xlc-line);
     border-radius: var(--xlc-radius);
     padding: var(--xlc-space-3);
@@ -7459,6 +7701,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: var(--xlc-space-2);
 
     .xlc-pinboard-title {
@@ -7479,7 +7722,7 @@
 
   .xlc-pinboard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
     gap: var(--xlc-space-2);
     max-height: 380px;
     overflow-y: auto;
@@ -7562,6 +7805,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: var(--xlc-space-2);
     margin-top: var(--xlc-space-1);
 
@@ -7678,6 +7922,7 @@
       display: flex;
       align-items: center;
       justify-content: flex-end;
+      flex-wrap: wrap;
       gap: var(--xlc-space-2);
       margin-top: 2px;
 
@@ -7685,6 +7930,7 @@
         font-size: 11px;
         min-height: 24px;
         padding: 0 10px;
+        white-space: nowrap;
       }
     }
 
@@ -7726,6 +7972,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: var(--xlc-space-2);
     margin-top: var(--xlc-space-1);
 

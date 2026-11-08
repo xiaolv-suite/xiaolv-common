@@ -3,7 +3,7 @@
 // 纯 DOM 装配、零 innerHTML、强 XSS 免疫
 
 import {Dialog} from "siyuan";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {
     STARTER_PACKS,
     StarterPackMeta,
@@ -81,15 +81,17 @@ export const ALL_HUB_PACKS: StarterPackMeta[] = [
 ];
 
 export function openStarterPacksHubDialog(deps: StarterPacksHubDeps): Dialog {
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: deps.t("starterPacksTitle") || "开箱即用套件市场 (Starter Packs Hub)",
         content: "",
-        width: "min(720px, 94vw)",
+        width: isMobileModal ? "100vw" : "min(720px, 94vw)",
     });
     // 令牌作用域（R431）：不加 host 类时 --xlc-* 全部失效，容器 padding 塌陷、关闭按钮贴出边缘
-    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host");
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host", "xlc-form-host");
 
     mountPlatformDialogTitleWrap(dialog.element, deps.t("starterPacksTitle") || "开箱即用套件市场 (Starter Packs Hub)");
+    adaptSecondaryDialogForMobile(dialog, deps.t("close") || "关闭");
 
     const body = getDialogBody(dialog.element);
     if (!body) return dialog;

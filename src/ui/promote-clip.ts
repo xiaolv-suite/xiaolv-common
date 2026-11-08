@@ -4,7 +4,7 @@ import {Dialog} from "siyuan";
 import {lvLaunchpad, lvSurfaceStack} from "../libs/lv-notice-kit";
 import {cleanShortcode, parseSnippetAnnotations} from "../model/item";
 import {SearchEntry} from "../model/search";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface PromoteClipPayload {
     markdown: string;
@@ -47,11 +47,12 @@ export function checkShortcodeConflict(
  */
 export function openPromoteClipDialog(options: PromoteClipDialogOptions): Dialog {
     const t = options.t;
+    const isMobileModal = isMobileDialogViewport();
     const dialogTitle = "⭐ " + (t("promoteToCommon") || "存为常用片段");
     const dialog = new Dialog({
         title: dialogTitle,
         content: "",
-        width: "min(460px, 92vw)",
+        width: isMobileModal ? "100vw" : "min(460px, 92vw)",
         height: "auto",
         destroyCallback: () => {
             surfaceUnreg();
@@ -63,6 +64,7 @@ export function openPromoteClipDialog(options: PromoteClipDialogOptions): Dialog
         container.classList.add("xlc-promote-clip-host", "xlc-form-host");
     }
     mountPlatformDialogTitleWrap(dialog.element, dialogTitle);
+    adaptSecondaryDialogForMobile(dialog, t("close") || "关闭");
 
     // 接入生态焦点栈：Esc 捕获阶段秒关且阻止事件冒泡
     const surfaceUnreg = lvSurfaceStack.push({

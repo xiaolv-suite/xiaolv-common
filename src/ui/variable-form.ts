@@ -3,7 +3,7 @@
 // 填充值仅作用于本次插入（草稿不回写库）；同名重复变量只询问一次（listAskFields 已去重）。
 // 安全：字段名/选项一律 textContent 注入，绝不 innerHTML。
 import {Dialog} from "siyuan";
-import {getDialogBody, openInfoDialog, openTextPromptDialog} from "./dialog-dom";
+import {getDialogBody, isMobileDialogViewport, openInfoDialog, openTextPromptDialog} from "./dialog-dom";
 import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
 import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, maskTextRange, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
@@ -66,10 +66,11 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
     };
 
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("varFormTitle"),
         content: "",
-        width: "min(440px, 92vw)",
+        width: isMobileModal ? "100vw" : "min(440px, 92vw)",
         height: "auto",
         // 所有关闭路径（Esc/scrim）统一走 onCancel：上层搜索弹窗焦点回归（R128）；
         // 按钮确认/取消已自行结算，不在此重复触发（R138 结算语义）
@@ -87,7 +88,10 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     });
     // 原型屏 4：紧凑卡形态，卡头（徽标+标题+Esc 取消）即标题，隐藏宿主标题栏
     container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
-    if (container) container.classList.add("xlc-varform-host");
+    if (container) {
+        container.classList.add("xlc-varform-host");
+        if (isMobileModal) container.classList.add("xlc-mobile-modal");
+    }
 
     if (typeof window !== "undefined" && window.visualViewport) {
         window.visualViewport.addEventListener("resize", handleViewport);
@@ -117,6 +121,15 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     escHint.className = "xlc-kbd";
     escHint.textContent = "Esc " + t("cancel");
     head.appendChild(escHint);
+    const headCloseBtn = document.createElement("button");
+    headCloseBtn.type = "button";
+    headCloseBtn.className = "xlc-varform-close xlc-dialog-close-btn";
+    headCloseBtn.dataset.xlcControl = "variable.close";
+    headCloseBtn.textContent = "✕";
+    headCloseBtn.title = t("cancel") || "关闭";
+    headCloseBtn.setAttribute("aria-label", t("cancel") || "关闭");
+    headCloseBtn.addEventListener("click", () => cancelBtn.click());
+    head.appendChild(headCloseBtn);
     root.appendChild(head);
 
     const sub = document.createElement("div");

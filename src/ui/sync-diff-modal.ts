@@ -13,7 +13,7 @@ import {
 } from "../model/sync-diff";
 import {Dialog} from "siyuan";
 import {escapeHtml} from "../model/clipboard";
-import {mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface SyncDiffModalProps {
     report: LibraryDiffReport;
@@ -365,12 +365,13 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
 
     if (isBrowser) {
         let dialog: Dialog | null = null;
+        const isMobileModal = isMobileDialogViewport();
         try {
             dialog = new Dialog({
                 title: titleText,
                 content: "",
-                width: "min(960px, 94vw)",
-                height: "min(860px, 92vh)",
+                width: isMobileModal ? "100vw" : "min(960px, 94vw)",
+                height: isMobileModal ? "100dvh" : "min(860px, 92vh)",
                 destroyCallback: () => {
                     props.onCancel?.();
                 },
@@ -385,6 +386,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
         container.innerHTML = fullHtml;
         if (hostEl) {
             mountPlatformDialogTitleWrap(hostEl, titleText);
+            if (dialog) adaptSecondaryDialogForMobile(dialog, "关闭");
         } else {
             mountPlatformDialogTitleWrap(container, titleText);
         }

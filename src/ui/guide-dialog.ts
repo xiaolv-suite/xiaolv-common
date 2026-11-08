@@ -1,5 +1,5 @@
 import {Dialog} from "siyuan";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface GuideDialogDeps {
     t: (key: string, ...args: string[]) => string;
@@ -21,20 +21,20 @@ export function openStepByStepGuideDialog(deps: GuideDialogDeps): void {
     activeGuideDialog = null;
 
     const t = deps.t;
-    const _isMobile = deps.isMobile?.() ?? false;
-    void _isMobile;
+    const isMobileModal = (deps.isMobile?.() ?? false) || isMobileDialogViewport();
     const dialogTitle = t("stepGuideTitle") || "新手实操使用指引";
 
     const dialog = new Dialog({
         title: dialogTitle,
         content: "",
-        width: "min(680px, 94vw)",
-        height: "min(680px, 92vh)",
+        width: isMobileModal ? "100vw" : "min(680px, 94vw)",
+        height: isMobileModal ? "100dvh" : "min(680px, 92vh)",
     });
     activeGuideDialog = dialog;
 
     mountPlatformDialogTitleWrap(dialog.element, dialogTitle, "实操引导", "iconXlcCommon");
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-guide-host");
+    adaptSecondaryDialogForMobile(dialog, t("close") || "关闭");
 
     const body = getDialogBody(dialog.element);
     if (!body) return;

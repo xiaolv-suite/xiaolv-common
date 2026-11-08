@@ -16,7 +16,11 @@ export function isMobileDialogViewport(): boolean {
     } catch {
         // ignore
     }
-    if (isMobileFrontend()) return true;
+    try {
+        if (isMobileFrontend()) return true;
+    } catch {
+        // ignore in minimal unit test DOM stubs where document.getElementById is absent
+    }
     try {
         const winMobile = typeof window !== "undefined"
             ? (window as unknown as {siyuan?: {mobile?: unknown}}).siyuan?.mobile

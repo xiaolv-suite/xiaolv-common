@@ -528,7 +528,7 @@ export class DockView {
                     groupHead.className = "xlc-dock-group-head";
                     groupHead.tabIndex = 0;
                     if (node.depth > 0) {
-                        groupHead.style.paddingLeft = `${8 + node.depth * 12}px`;
+                        groupHead.style.paddingLeft = `${8 + Math.min(node.depth, 3) * 10}px`;
                     }
                     if (typeof groupHead.setAttribute === "function") {
                         groupHead.setAttribute("role", "button");
@@ -567,7 +567,7 @@ export class DockView {
                             if (!entry) continue;
                             const row = this.renderItemRow(entry, globalIdx++, orderedEntries, itemIdx);
                             if (node.depth > 0) {
-                                row.style.marginLeft = `${node.depth * 12}px`;
+                                row.style.marginLeft = `${Math.min(node.depth, 3) * 10}px`;
                             }
                             this.listContainer.appendChild(row);
                         }
@@ -796,8 +796,9 @@ export class DockView {
             menu.setAttribute("role", "menu");
             menu.setAttribute("aria-label", entry.title || "条目操作菜单");
         }
-        const posX = typeof window !== "undefined" ? Math.min(e.clientX, window.innerWidth - 180) : e.clientX;
-        const posY = typeof window !== "undefined" ? Math.min(e.clientY, window.innerHeight - 200) : e.clientY;
+        const menuW = typeof window !== "undefined" ? Math.min(180, Math.max(150, window.innerWidth - 16)) : 180;
+        const posX = typeof window !== "undefined" ? Math.max(8, Math.min(e.clientX, window.innerWidth - menuW - 8)) : e.clientX;
+        const posY = typeof window !== "undefined" ? Math.max(8, Math.min(e.clientY, window.innerHeight - 240)) : e.clientY;
         menu.style.position = "fixed";
         menu.style.left = `${posX}px`;
         menu.style.top = `${posY}px`;

@@ -4990,9 +4990,12 @@ export class CommonSearchDialog {
         }
 
         const rect = anchor.getBoundingClientRect();
+        const menuW = Math.min(290, Math.max(180, window.innerWidth - 16));
+        const clampedLeft = Math.max(8, Math.min(rect.left - 80, window.innerWidth - menuW - 8));
+        const clampedBottom = Math.max(8, Math.min(window.innerHeight - rect.top + 6, window.innerHeight - 240));
         menu.style.position = "fixed";
-        menu.style.bottom = `${Math.max(10, window.innerHeight - rect.top + 6)}px`;
-        menu.style.left = `${Math.max(10, rect.left - 80)}px`;
+        menu.style.bottom = `${clampedBottom}px`;
+        menu.style.left = `${clampedLeft}px`;
         menu.style.zIndex = "99999";
         document.body.appendChild(menu);
 
@@ -8658,7 +8661,7 @@ export class CommonSearchDialog {
 
         host = document.createElement("div");
         host.className = "xlc-adjacent-context-box";
-        host.style.cssText = "margin-top:16px; padding:12px; background:var(--xlc-soft, #f1f1f9); border:1px solid var(--b3-border-color); border-radius:8px; font-size:12px; display:flex; flex-direction:column; gap:8px;";
+        host.style.cssText = "margin-top:16px; padding:12px; background:var(--xlc-soft); border:1px solid var(--b3-border-color); border-radius:8px; font-size:12px; display:flex; flex-direction:column; gap:8px;";
         const loadingTitle = document.createElement("div");
         loadingTitle.style.cssText = "font-weight:600; opacity:0.8;";
         loadingTitle.textContent = "🔍 上下文语境探针 (前后相邻块 · Alt+J 收起)：";
@@ -8671,7 +8674,7 @@ export class CommonSearchDialog {
             const rowEl = document.createElement("div");
             rowEl.style.cssText = isCurrent
                 ? "padding:8px; background:var(--b3-theme-background); border-left:3px solid var(--b3-theme-primary); border-radius:4px; font-weight:500;"
-                : "padding:6px 8px; background:rgba(0,0,0,0.03); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
+                : "padding:6px 8px; background:var(--b3-list-hover); border-left:2px solid var(--b3-border-color); opacity:0.75; font-size:11px;";
             const strongEl = document.createElement("strong");
             strongEl.style.cssText = isCurrent ? "color:var(--b3-theme-primary);" : "opacity:0.6;";
             strongEl.textContent = tagLabel;

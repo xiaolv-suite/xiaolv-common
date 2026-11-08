@@ -3,7 +3,7 @@
 
 import {Dialog} from "siyuan";
 import {lvNotify} from "../libs/lv-notice-kit";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface ShareCardDeps {
     t: (key: string, ...args: string[]) => string;
@@ -26,15 +26,17 @@ export function openShareCardDialog(
     item: ShareCardItem,
     shareCode: string,
 ): Dialog {
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: deps.t("shareCardTitle") || "常用条目便携分享卡片",
         content: "",
-        width: "min(560px, 92vw)",
+        width: isMobileModal ? "100vw" : "min(560px, 92vw)",
     });
     // 令牌作用域：与套件市场同源问题，缺 host 类时 --xlc-* 全部失效
-    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host");
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host", "xlc-form-host");
 
     mountPlatformDialogTitleWrap(dialog.element, deps.t("shareCardTitle") || "常用条目便携分享卡片");
+    adaptSecondaryDialogForMobile(dialog, deps.t("close") || "关闭");
 
     const body = getDialogBody(dialog.element);
     if (!body) return dialog;
