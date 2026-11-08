@@ -141,17 +141,19 @@ export function applyAskDefaults(text: string): string {
 /** {{cursor}} / {{xlc:cursor}} / $|$ 光标落点标记（对标 Espanso 与 Templater 核心体验） */
 export const CURSOR_TOKEN = "{{xlc:cursor}}";
 export const CURSOR_TOKENS = ["{{cursor}}", "{{xlc:cursor}}", "$|$"] as const;
+export const CURSOR_PATTERN = /\{\{\s*(?:xlc:)?cursor\s*\}\}|\$\|\$/gi;
 
 /** 剥离全部光标占位符标记 */
 export function stripCursorToken(text: string): string {
     if (!text) return "";
-    return text.replace(/\{\{cursor\}\}|\{\{xlc:cursor\}\}|\$\|\$/g, "");
+    return text.replace(CURSOR_PATTERN, "");
 }
 
 /** 检测文本中是否包含任何光标锚点 */
 export function hasCursorToken(text: string): boolean {
     if (!text) return false;
-    return text.includes("{{cursor}}") || text.includes("{{xlc:cursor}}") || text.includes("$|$");
+    CURSOR_PATTERN.lastIndex = 0;
+    return CURSOR_PATTERN.test(text);
 }
 
 export interface CursorPositionResult {
@@ -164,21 +166,16 @@ export interface CursorPositionResult {
  */
 export function extractCursorPosition(text: string): CursorPositionResult {
     if (!text) return {text: "", cursorOffset: null};
-    let firstIdx = -1;
-    let matchedToken = "";
-    for (const token of CURSOR_TOKENS) {
-        const idx = text.indexOf(token);
-        if (idx !== -1 && (firstIdx === -1 || idx < firstIdx)) {
-            firstIdx = idx;
-            matchedToken = token;
-        }
-    }
-    if (firstIdx === -1) {
+    CURSOR_PATTERN.lastIndex = 0;
+    const match = CURSOR_PATTERN.exec(text);
+    if (!match) {
         return {text, cursorOffset: null};
     }
+    const firstIdx = match.index;
+    const matchedLen = match[0].length;
     const before = text.slice(0, firstIdx);
-    const after = text.slice(firstIdx + matchedToken.length);
-    const cleanedAfter = after.replace(/\{\{cursor\}\}|\{\{xlc:cursor\}\}|\$\|\$/g, "");
+    const after = text.slice(firstIdx + matchedLen);
+    const cleanedAfter = after.replace(CURSOR_PATTERN, "");
     return {
         text: before + cleanedAfter,
         cursorOffset: before.length,

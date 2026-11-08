@@ -29,8 +29,8 @@ export interface IPlaceholderHook {
 export interface IHostBridge {
     /** 桌面端活动编辑器是否存在（getActiveEditor 官方 API） */
     hasActiveEditor(): boolean;
-    /** 在活动编辑器光标处插入 markdown 块 */
-    insertMarkdown(markdown: string, target?: EditorInsertTargetSnapshot | null): boolean;
+    /** 在活动编辑器光标处插入 markdown 块，可选自动投送光标落点偏移量 */
+    insertMarkdown(markdown: string, target?: EditorInsertTargetSnapshot | null, cursorOffset?: number | null): boolean;
     captureInsertTarget(): EditorInsertTargetSnapshot;
     canInsertAtTarget(target: EditorInsertTargetSnapshot | null): boolean;
     releaseInsertTarget(target: EditorInsertTargetSnapshot | null): void;
@@ -52,6 +52,71 @@ export interface EditorInsertTargetSnapshot {
     editor: Protyle | null;
     handle: ITrackedRangeHandle | null;
     docId: string | null;
+}
+
+/**
+ * 纯 DOM 光标精准定位原语（对标 Espanso $|$ 与 Templater tp.file.cursor() 工业标准）
+ * 遍历指定容器内的所有文本节点，精确计算字符偏移并将光标定位到该处。
+ */
+export function setCaretAtOffset(container: Node, targetOffset: number): boolean {
+    if (typeof document === "undefined" || typeof window === "undefined") return false;
+    if (typeof targetOffset !== "number" || targetOffset < 0 || !Number.isFinite(targetOffset)) return false;
+
+    try {
+        const textNodes: Text[] = [];
+        const showText = typeof NodeFilter !== "undefined" ? NodeFilter.SHOW_TEXT : 4;
+        if (typeof document.createTreeWalker === "function") {
+            const walker = document.createTreeWalker(container, showText, null);
+            let n: Text | null = null;
+            while ((n = walker.nextNode() as Text | null)) textNodes.push(n);
+        } else {
+            const collect = (node: Node) => {
+                if (node.nodeType === 3) textNodes.push(node as Text);
+                else if ((node as any).childNodes) {
+                    for (const c of (node as any).childNodes) collect(c);
+                }
+            };
+            collect(container);
+        }
+
+        let currentOffset = 0;
+        let lastTextNode: Text | null = null;
+
+        for (const textNode of textNodes) {
+            lastTextNode = textNode;
+            const len = textNode.nodeValue?.length ?? 0;
+            if (currentOffset + len >= targetOffset) {
+                const offsetInNode = Math.max(0, Math.min(targetOffset - currentOffset, len));
+                const range = document.createRange();
+                range.setStart(textNode, offsetInNode);
+                range.collapse(true);
+                const sel = window.getSelection();
+                if (sel) {
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    return true;
+                }
+                return false;
+            }
+            currentOffset += len;
+        }
+
+        // 若目标偏移量超出所有文本节点总长，放置在最后一个文本节点末尾
+        if (lastTextNode) {
+            const range = document.createRange();
+            range.setStart(lastTextNode, lastTextNode.nodeValue?.length ?? 0);
+            range.collapse(true);
+            const sel = window.getSelection();
+            if (sel) {
+                sel.removeAllRanges();
+                sel.addRange(range);
+                return true;
+            }
+        }
+    } catch {
+        return false;
+    }
+    return false;
 }
 
 export class HostBridge implements IHostBridge {
@@ -184,7 +249,43 @@ export class HostBridge implements IHostBridge {
         }
     }
 
-    insertMarkdown(markdown: string, target?: EditorInsertTargetSnapshot | null): boolean {
+    /**
+     * 模板插入后光标自动精准投送（对标 Espanso $|$ 与 Templater tp.file.cursor() 工业标准）
+     * 计算展开后的字符偏移并自动定位 DOM 光标，零手动位移摩擦。
+     */
+    private positionCursorAtOffset(editor: Protyle, cursorOffset: number): void {
+        if (typeof document === "undefined" || typeof window === "undefined") return;
+        const place = () => {
+            try {
+                const sel = window.getSelection();
+                if (!sel) return;
+                const wysiwygEl = (editor as any)?.protyle?.wysiwyg?.element || (editor as any)?.wysiwyg?.element;
+                let activeBlock: HTMLElement | null = null;
+                if (sel.rangeCount > 0) {
+                    const currentRange = sel.getRangeAt(0);
+                    const container = currentRange.startContainer;
+                    activeBlock = container instanceof HTMLElement ? container.closest("[data-node-id]") : container.parentElement?.closest("[data-node-id]") ?? null;
+                }
+                if (!activeBlock && wysiwygEl) {
+                    const allBlocks = wysiwygEl.querySelectorAll("[data-node-id]");
+                    activeBlock = (allBlocks[allBlocks.length - 1] as HTMLElement) ?? null;
+                }
+                if (!activeBlock) return;
+
+                const editable = activeBlock.querySelector('[contenteditable="true"]') || activeBlock;
+                setCaretAtOffset(editable, cursorOffset);
+            } catch {
+                // 静默防御
+            }
+        };
+
+        place();
+        if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(place);
+        }
+    }
+
+    insertMarkdown(markdown: string, target?: EditorInsertTargetSnapshot | null, cursorOffset?: number | null): boolean {
         try {
             const editor = target === undefined ? this.resolveActiveEditor() : target?.editor;
             if (!editor) return false;
@@ -224,6 +325,7 @@ export class HostBridge implements IHostBridge {
                 if (protyleToolbar) protyleToolbar.range = rangeToRestore;
             }
 
+            let inserted = false;
             // 渐进增强优先调用官方原子插入接口（SiYuan 3.8.8+）
             try {
                 const siyuanApi = siyuan as unknown as {insertContent?: (opts: {data: string; dataType?: string; editor?: Protyle}) => {status: string}};
@@ -234,26 +336,32 @@ export class HostBridge implements IHostBridge {
                         editor,
                     });
                     if (res && res.status === "inserted") {
-                        return true;
+                        inserted = true;
                     }
                 }
             } catch {
                 // 忽略异常，平滑降级走 Protyle.insert
             }
 
-            const protyleInstance = typeof (editor as any).insert === "function"
-                ? editor
-                : (typeof editor.protyle?.getInstance === "function" ? editor.protyle.getInstance() : editor.protyle);
+            if (!inserted) {
+                const protyleInstance = typeof (editor as any).insert === "function"
+                    ? editor
+                    : (typeof editor.protyle?.getInstance === "function" ? editor.protyle.getInstance() : editor.protyle);
 
-            if (typeof (protyleInstance as any)?.insert === "function") {
-                (protyleInstance as any).insert(markdown, true, false);
-                return true;
+                if (typeof (protyleInstance as any)?.insert === "function") {
+                    (protyleInstance as any).insert(markdown, true, false);
+                    inserted = true;
+                } else if (typeof (editor as any)?.insert === "function") {
+                    (editor as any).insert(markdown, true, false);
+                    inserted = true;
+                }
             }
-            if (typeof (editor as any)?.insert === "function") {
-                (editor as any).insert(markdown, true, false);
-                return true;
+
+            if (inserted && typeof cursorOffset === "number" && cursorOffset >= 0) {
+                this.positionCursorAtOffset(editor, cursorOffset);
             }
-            return false;
+
+            return inserted;
         } catch {
             return false;
         }
@@ -782,7 +890,7 @@ export class ActionExecutor {
                         ...(rendered.cursorOffset !== null ? {cursorOffset: rendered.cursorOffset} : {}),
                     };
                 }
-                const inserted = this.host.insertMarkdown(md, editorTarget);
+                const inserted = this.host.insertMarkdown(md, editorTarget, rendered.cursorOffset);
                 if (inserted) {
                     this.emitEvent(EVENTS.itemInserted, item, {
                         insertMode: plan.mode,
