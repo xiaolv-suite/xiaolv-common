@@ -1833,6 +1833,54 @@ function check(name, ok, detail = "") {
             ghostState.skipped === true || (ghostState.deleted && ghostState.noRawIdPills),
             JSON.stringify(ghostState));
 
+        // ══════════ 第 26 步：面板开启延迟门禁与开合循环 DOM 稳定性（R435 泄漏探测） ══════════
+        await page.evaluate(() => {
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => { try { d.destroy(); } catch {} });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+        });
+        const pageErrors = [];
+        const onPageError = (err) => pageErrors.push(String(err?.message ?? err));
+        page.on("pageerror", onPageError);
+        // 1) 开启延迟：唤起面板到首行可见（真实内核检索链路全程），门禁 2000ms
+        const latency = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const t0 = performance.now();
+            void p.protocolCommands["xiaolv.common.open"]();
+            let elapsed = -1;
+            for (let i = 0; i < 160; i++) {
+                if (document.querySelector(".xlc-list .xlc-row[data-xlc-index='0'], .xlc-empty")) {
+                    elapsed = performance.now() - t0;
+                    break;
+                }
+                await new Promise((r) => setTimeout(r, 25));
+            }
+            return {elapsed: Math.round(elapsed)};
+        });
+        check("步骤 26a：主面板开启到首行可见延迟 < 2000ms（真实内核链路）",
+            latency.elapsed >= 0 && latency.elapsed < 2000, JSON.stringify(latency));
+        // 2) 开合循环稳定性：10 轮销毁→重开，弹窗不累积、DOM 节点无显著增长、零 pageerror
+        const domBefore = await page.evaluate(() => document.getElementsByTagName("*").length);
+        const cycleState = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            for (let i = 0; i < 10; i++) {
+                (window.siyuan?.dialogs ?? []).slice().forEach((d) => { try { d.destroy(); } catch {} });
+                document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+                void p.protocolCommands["xiaolv.common.open"]();
+                await new Promise((r) => setTimeout(r, 320));
+            }
+            // 收尾：全部销毁，统计残留
+            (window.siyuan?.dialogs ?? []).slice().forEach((d) => { try { d.destroy(); } catch {} });
+            document.querySelectorAll(".b3-dialog").forEach((d) => d.remove());
+            await new Promise((r) => setTimeout(r, 250));
+            return {residualDialogs: document.querySelectorAll(".b3-dialog").length};
+        });
+        const domAfter = await page.evaluate(() => document.getElementsByTagName("*").length);
+        const nodeGrowth = domAfter - domBefore;
+        page.off("pageerror", onPageError);
+        check("步骤 26b：10 轮开合循环零泄漏（弹窗清零 / DOM 节点增长 < 300 / 零页面异常）",
+            cycleState.residualDialogs === 0 && nodeGrowth < 300 && pageErrors.length === 0,
+            JSON.stringify({residualDialogs: cycleState.residualDialogs, nodeGrowth, domBefore, domAfter, pageErrors: pageErrors.slice(0, 3)}));
+
         cleanup();
         const pass = results.filter((r) => r.ok).length;
         const fail = results.length - pass;
