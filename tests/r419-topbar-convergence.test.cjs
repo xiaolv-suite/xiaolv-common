@@ -427,4 +427,90 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             globalThis.window = prevWin;
         }
     });
+
+    await t.test("6. 误伤隔离验证：思源系统原生按钮与第三方非小驴插件按钮 100% 免疫", () => {
+        // 原生系统按钮与第三方插件按钮
+        const nativeSyncBtn = { id: "barSync", style: { display: "" }, isConnected: true, getAttribute: () => "" };
+        const nativeSearchBtn = { id: "barSearch", style: { display: "" }, isConnected: true, getAttribute: () => "" };
+        const thirdPartyTomatoBtn = {
+            id: "docktomato-btn",
+            style: { display: "" },
+            isConnected: true,
+            getAttribute: (a) => (a === "aria-label" ? "番茄钟计时器" : ""),
+        };
+
+        const compassBtn = {
+            id: "lvLaunchpadDesktopEntry",
+            style: { display: "none" },
+            querySelector: () => null,
+            setAttribute: () => {},
+        };
+
+        const toolbar = {
+            id: "toolbar",
+            querySelectorAll() {
+                return [nativeSyncBtn, nativeSearchBtn, thirdPartyTomatoBtn];
+            },
+        };
+
+        const prevDoc = globalThis.document;
+        const prevWin = globalThis.window;
+
+        globalThis.document = {
+            getElementById(id) {
+                if (id === "toolbar") return toolbar;
+                if (id === "lvLaunchpadDesktopEntry") return compassBtn;
+                return null;
+            },
+        };
+        globalThis.window = {
+            __LV_LAUNCHPAD__: undefined,
+            dispatchEvent: () => true,
+        };
+
+        let unreg1 = () => {};
+        let unreg2 = () => {};
+        try {
+            unreg1 = lvLaunchpad.register({ id: "p-a", name: "甲", fullName: "小驴甲", svgIcon: "icon-lv-a", onClick: () => {} });
+            unreg2 = lvLaunchpad.register({ id: "p-b", name: "乙", fullName: "小驴乙", svgIcon: "icon-lv-b", onClick: () => {} });
+
+            syncTopBarConvergence();
+
+            // 原生按钮与第三方按钮必须保持原本的 display，绝不可被隐藏或误伤！
+            assert.equal(nativeSyncBtn.style.display, "", "原生同步按钮绝不可被隐藏");
+            assert.equal(nativeSearchBtn.style.display, "", "原生搜索按钮绝不可被隐藏");
+            assert.equal(thirdPartyTomatoBtn.style.display, "", "第三方插件番茄钟绝不可被隐藏");
+        } finally {
+            try { unreg1(); } catch {}
+            try { unreg2(); } catch {}
+            globalThis.document = prevDoc;
+            globalThis.window = prevWin;
+        }
+    });
+
+    await t.test("7. 老用户平滑过渡：一键全部平铺（恢复老版顶栏）与一键收敛罗盘双向切换", () => {
+        let unreg1 = () => {};
+        let unreg2 = () => {};
+        try {
+            unreg1 = lvLaunchpad.register({ id: "legacy-chk", name: "打卡", fullName: "小驴打卡", svgIcon: "icon", onClick: () => {} });
+            unreg2 = lvLaunchpad.register({ id: "legacy-crd", name: "闪卡", fullName: "小驴闪卡", svgIcon: "icon", onClick: () => {} });
+
+            // 初始状态：处于收敛状态 (docked)
+            let items = lvLaunchpad.getItems().filter(it => it.id.startsWith("legacy-"));
+            assert.ok(items.every(it => it.state === "docked"));
+
+            // 模拟老用户点击「平铺顶栏」：全部置顶
+            items.forEach(it => lvLaunchpad.setPluginState(it.id, "pinned"));
+            items = lvLaunchpad.getItems().filter(it => it.id.startsWith("legacy-"));
+            assert.ok(items.every(it => it.state === "pinned"), "所有插件应被置顶显示在顶栏");
+
+            // 模拟老用户点击「收敛全部」：全部收回罗盘
+            items.forEach(it => lvLaunchpad.setPluginState(it.id, "docked"));
+            items = lvLaunchpad.getItems().filter(it => it.id.startsWith("legacy-"));
+            assert.ok(items.every(it => it.state === "docked"), "所有插件应被收敛回收");
+        } finally {
+            try { unreg1(); } catch {}
+            try { unreg2(); } catch {}
+        }
+    });
 });

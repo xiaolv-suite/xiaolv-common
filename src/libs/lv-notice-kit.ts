@@ -2996,7 +2996,14 @@ function ensureMobileEntry(): MobileEntryCleanup {
 const desktopEntryOwners = new Set<string>();
 let desktopEntryRetryTimers: number[] = [];
 
-/** 智能探测 #toolbar 中对应插件的顶栏 DOM 元素（抗主题重构与 DOM 自愈探针） */
+const SIYUAN_NATIVE_BUTTON_IDS = new Set([
+    "barSearch", "barSync", "barBack", "barForward",
+    "barDockL", "barDockR", "barDockB", "barSetting", "barSettings",
+    "barHelp", "barHistory", "barMode", "drag", "windowControls",
+    "barWorkspace", "barExit"
+]);
+
+/** 智能探测 #toolbar 中对应插件的顶栏 DOM 元素（抗主题重构与 DOM 自愈探针，严格规避原生与第三方按钮冲突） */
 function findPluginTopBarElementInToolbar(item: LvLaunchpadItem): HTMLElement | null {
     if (typeof document === "undefined") return null;
     const toolbar = document.getElementById("toolbar");
@@ -3014,6 +3021,13 @@ function findPluginTopBarElementInToolbar(item: LvLaunchpadItem): HTMLElement | 
         const candidates = Array.from(toolbar.querySelectorAll<HTMLElement>(".toolbar__item, button"));
         for (const el of candidates) {
             if (!el || el.id === DESKTOP_ENTRY_ID) continue;
+            // 严格排除思源原生功能按钮与窗口拖拽控制区
+            if (el.id && SIYUAN_NATIVE_BUTTON_IDS.has(el.id)) continue;
+            if (el.classList && typeof el.classList.contains === "function") {
+                if (el.classList.contains("toolbar__item--drag") || el.classList.contains("toolbar__window-control")) {
+                    continue;
+                }
+            }
 
             if (el.id === item.id || (typeof el.getAttribute === "function" && el.getAttribute("data-plugin-id") === item.id)) {
                 return el;
@@ -3021,28 +3035,45 @@ function findPluginTopBarElementInToolbar(item: LvLaunchpadItem): HTMLElement | 
 
             const ariaLabel = (typeof el.getAttribute === "function" ? el.getAttribute("aria-label") : "") || "";
             const title = (typeof el.getAttribute === "function" ? el.getAttribute("title") : "") || "";
-            if (
-                (item.fullName && (ariaLabel.includes(item.fullName) || title.includes(item.fullName))) ||
-                (item.name && (ariaLabel.includes(item.name) || title.includes(item.name)))
-            ) {
+
+            // 严格匹配小驴特异性全称（如 "小驴打卡"）
+            if (item.fullName && (ariaLabel.includes(item.fullName) || title.includes(item.fullName))) {
                 return el;
             }
 
-            if (item.svgIcon) {
-                const useEl = typeof el.querySelector === "function" ? el.querySelector("use") : null;
-                const href = (useEl && typeof useEl.getAttribute === "function")
-                    ? (useEl.getAttribute("xlink:href") || useEl.getAttribute("href") || "")
-                    : "";
-                if (href && href.includes(item.svgIcon)) {
-                    return el;
-                }
-                if (typeof el.innerHTML === "string" && el.innerHTML.includes(item.svgIcon)) {
-                    return el;
+            // 若按短名匹配（如 "打卡"），必须带有小驴特异性图标标识，杜绝误判第三方同名插件
+            if (item.name && (ariaLabel.includes(item.name) || title.includes(item.name))) {
+                if (item.svgIcon) {
+                    const useEl = typeof el.querySelector === "function" ? el.querySelector("use") : null;
+                    const href = (useEl && typeof useEl.getAttribute === "function")
+                        ? (useEl.getAttribute("xlink:href") || useEl.getAttribute("href") || "")
+                        : "";
+                    if (href && href.includes(item.svgIcon)) {
+                        return el;
+                    }
+                    if (typeof el.innerHTML === "string" && el.innerHTML.includes(item.svgIcon)) {
+                        return el;
+                    }
                 }
             }
         }
     } catch { /* ignore */ }
     return null;
+}
+
+const DESKTOP_CONVERGENCE_ONBOARDING_KEY = "lv_desktop_convergence_onboarding_done";
+
+function maybeShowDesktopConvergenceOnboarding(itemCount: number): void {
+    if (typeof localStorage === "undefined" || typeof document === "undefined") return;
+    try { if (localStorage.getItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY) === "1") return; } catch { /* ignore */ }
+    try { localStorage.setItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    lvNotify.card({
+        source: "小驴罗盘",
+        title: "🧭 顶栏已升级为小驴罗盘中枢",
+        message: `已为您将 ${itemCount} 个插件自动收敛至顶栏罗盘图标，告别顶栏拥挤。点击罗盘可直达所有插件；若习惯老版独立图标，在罗盘内点击 📌 即可随时固定在顶栏！`,
+        level: "info",
+        duration: 9000,
+    });
 }
 
 /**
@@ -3067,6 +3098,9 @@ export function syncTopBarConvergence(): void {
         if (compassBtn && typeof compassBtn === "object" && "style" in compassBtn && compassBtn.style) {
             compassBtn.style.display = needConverge ? "inline-flex" : "none";
             refreshEntryBadgeDot();
+            if (needConverge) {
+                maybeShowDesktopConvergenceOnboarding(activeItems.length);
+            }
         }
 
         for (const item of items) {
@@ -3272,6 +3306,10 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
         popover.style.overflow = "hidden";
     }
 
+    const allPinned = items.length > 0 && items.every(it => it.state === "pinned");
+    const toggleAllTitle = allPinned ? "收敛全部到小驴罗盘 (新版极简模式)" : "平铺全部独立图标到顶栏 (恢复老版布局)";
+    const toggleAllText = allPinned ? "🧭 收敛全部" : "📌 平铺顶栏";
+
     const headerHtml = `
       <div class="lv-pop-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;border-bottom:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08));">
         <div style="display:flex;align-items:center;gap:6px;">
@@ -3279,7 +3317,10 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
           <span style="font-weight:600;font-size:13px;color:var(--b3-theme-on-background,#333);">小驴罗盘中枢</span>
           <span style="font-size:11px;padding:1px 6px;border-radius:999px;background:var(--b3-theme-primary-light,rgba(53,118,199,0.1));color:var(--b3-theme-primary,#3576c7);">${items.length} 插件已联结</span>
         </div>
-        <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">按 1~${items.length} 极速直达</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button type="button" class="lv-pop-toggle-all-btn" title="${toggleAllTitle}" style="background:transparent;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.15));border-radius:4px;cursor:pointer;font-size:10px;padding:2px 6px;color:var(--b3-theme-primary,#3576c7);user-select:none;">${toggleAllText}</button>
+          <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">1~${items.length}</span>
+        </div>
       </div>
     `;
 
@@ -3379,6 +3420,19 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
         popover.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
             if (!target || typeof target.closest !== "function") return;
+
+            const toggleAllBtn = target.closest<HTMLElement>(".lv-pop-toggle-all-btn");
+            if (toggleAllBtn) {
+                e.stopPropagation();
+                const nextState = allPinned ? "docked" : "pinned";
+                for (const it of items) {
+                    getLaunchpadHub().setPluginState(it.id, nextState);
+                }
+                syncTopBarConvergence();
+                openDesktopLaunchpadPopover(anchor, currentFocusIndex);
+                return;
+            }
+
             const pinBtn = target.closest<HTMLElement>(".lv-pop-pin-btn");
             if (pinBtn) {
                 e.stopPropagation();
@@ -3542,6 +3596,20 @@ export function toggleDesktopLaunchpadPopover(anchorEl?: HTMLElement | null): vo
     }
 }
 
+function insertDesktopEntryButton(toolbar: HTMLElement, btn: HTMLElement): void {
+    if (typeof toolbar.querySelector === "function" && typeof toolbar.insertBefore === "function") {
+        try {
+            // 优先在系统设置、帮助按钮或窗口控制按钮之前插入，与第三方插件按钮整齐并列，绝不插在最右侧窗口控制区后方
+            const anchor = toolbar.querySelector("#barDockR, #barSetting, #barSettings, #barHelp, .toolbar__window-control, #windowControls");
+            if (anchor && anchor.parentElement === toolbar) {
+                toolbar.insertBefore(btn, anchor);
+                return;
+            }
+        } catch { /* ignore */ }
+    }
+    toolbar.appendChild(btn);
+}
+
 function buildDesktopEntryButton(): boolean {
     if (typeof document === "undefined" || isMobileFrontend()) return false;
     const toolbar = document.getElementById("toolbar");
@@ -3571,7 +3639,7 @@ function buildDesktopEntryButton(): boolean {
         toggleDesktopLaunchpadPopover(btn);
     });
 
-    toolbar.appendChild(btn);
+    insertDesktopEntryButton(toolbar, btn);
     refreshEntryBadgeDot();
     syncTopBarConvergence();
     wireDesktopToolbarObserver();
