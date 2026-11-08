@@ -166,4 +166,265 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             globalThis.window = prevWin;
         }
     });
+
+    await t.test("3. 抗主题重构与 DOM 自愈探针：无绑定或断连按钮时自动按 aria-label / title 探测并收敛", () => {
+        // 模拟断连（isConnected = false）或者重新渲染生成的 topbar 按钮
+        const newRebuiltBtn1 = {
+            id: "",
+            getAttribute(attr) {
+                if (attr === "aria-label") return "小驴常用 · 常用代码片段";
+                return "";
+            },
+            style: { display: "" },
+            isConnected: true,
+        };
+        const newRebuiltBtn2 = {
+            id: "",
+            getAttribute(attr) {
+                if (attr === "aria-label") return "小驴打卡";
+                return "";
+            },
+            style: { display: "" },
+            isConnected: true,
+        };
+
+        const compassBtn = {
+            id: "lvLaunchpadDesktopEntry",
+            style: { display: "none" },
+            querySelector: () => null,
+            setAttribute: () => {},
+        };
+
+        const toolbar = {
+            id: "toolbar",
+            querySelectorAll(sel) {
+                return [newRebuiltBtn1, newRebuiltBtn2];
+            },
+        };
+
+        const prevDoc = globalThis.document;
+        const prevWin = globalThis.window;
+
+        globalThis.document = {
+            getElementById(id) {
+                if (id === "toolbar") return toolbar;
+                if (id === "lvLaunchpadDesktopEntry") return compassBtn;
+                if (id === "mobileTopBar") return null;
+                return null;
+            },
+            createElement: () => ({ setAttribute: () => {}, querySelector: () => null, style: {}, addEventListener: () => {} }),
+        };
+        globalThis.window = {
+            __LV_LAUNCHPAD__: undefined,
+            dispatchEvent: () => true,
+        };
+
+        let unregister1 = () => {};
+        let unregister2 = () => {};
+        try {
+            // 注册插件时未预先注入 topBarElement（模拟异步创建或主题切换重构）
+            unregister1 = lvLaunchpad.register({
+                id: "probe-common",
+                name: "常用",
+                fullName: "小驴常用",
+                svgIcon: "iconLvCommon",
+                topBarElement: null,
+                onClick: () => {},
+            });
+            unregister2 = lvLaunchpad.register({
+                id: "probe-checkin",
+                name: "打卡",
+                fullName: "小驴打卡",
+                svgIcon: "iconLvCheckin",
+                topBarElement: null,
+                onClick: () => {},
+            });
+
+            syncTopBarConvergence();
+
+            // 验证自愈机制：两个在 toolbar 中由主题重构生成的按钮被成功嗅探并自动收敛隐藏！
+            assert.equal(newRebuiltBtn1.style.display, "none", "常用重构按钮应被自动嗅探并隐藏");
+            assert.equal(newRebuiltBtn2.style.display, "none", "打卡重构按钮应被自动嗅探并隐藏");
+            assert.equal(compassBtn.style.display, "inline-flex", "罗盘中枢应自动激活");
+        } finally {
+            try { unregister1(); } catch {}
+            try { unregister2(); } catch {}
+            globalThis.document = prevDoc;
+            globalThis.window = prevWin;
+        }
+    });
+
+    await t.test("4. Bento 弹射坞全键盘流交互：方向键导航、Enter 启动、P 键置顶切换、数字键直达", () => {
+        const {
+            openDesktopLaunchpadPopover,
+            closeDesktopLaunchpadPopover,
+        } = require("../src/libs/lv-notice-kit.ts");
+
+        let keydownHandler = null;
+        let launchedPlugin = null;
+
+        const mockTile0 = {
+            classList: {
+                classes: new Set(),
+                add(c) { this.classes.add(c); },
+                remove(c) { this.classes.delete(c); },
+            },
+            scrollIntoView: () => {},
+        };
+        const mockTile1 = {
+            classList: {
+                classes: new Set(),
+                add(c) { this.classes.add(c); },
+                remove(c) { this.classes.delete(c); },
+            },
+            scrollIntoView: () => {},
+        };
+
+        let createdPopover = null;
+
+        const prevDoc = globalThis.document;
+        const prevWin = globalThis.window;
+
+        globalThis.document = {
+            getElementById(id) {
+                if (id === "lv-desktop-launchpad-popover") return createdPopover;
+                if (id === "lvLaunchpadDesktopEntry") return { getBoundingClientRect: () => ({ top: 0, bottom: 32, right: 100 }) };
+                return null;
+            },
+            createElement(tag) {
+                createdPopover = {
+                    tagName: tag,
+                    id: "",
+                    style: {},
+                    classList: { add() {}, remove() {} },
+                    setAttribute() {},
+                    addEventListener() {},
+                    querySelectorAll(sel) {
+                        if (sel === ".lv-pop-tile") return [mockTile0, mockTile1];
+                        return [];
+                    },
+                    remove() { createdPopover = null; },
+                };
+                return createdPopover;
+            },
+            body: {
+                appendChild() {},
+            },
+        };
+
+        globalThis.window = {
+            innerWidth: 1920,
+            innerHeight: 1080,
+            addEventListener(ev, fn) {
+                if (ev === "keydown") keydownHandler = fn;
+            },
+            removeEventListener() {},
+        };
+
+        let unreg1 = () => {};
+        let unreg2 = () => {};
+        try {
+            unreg1 = lvLaunchpad.register({
+                id: "p1",
+                name: "插件1",
+                fullName: "小驴插件1",
+                svgIcon: "icon",
+                onClick: () => { launchedPlugin = "p1"; },
+            });
+            unreg2 = lvLaunchpad.register({
+                id: "p2",
+                name: "插件2",
+                fullName: "小驴插件2",
+                svgIcon: "icon",
+                onClick: () => { launchedPlugin = "p2"; },
+            });
+
+            openDesktopLaunchpadPopover();
+            assert.ok(keydownHandler, "应注册全局 keydown 监听器");
+
+            // 1) 初始焦点在第 0 项
+            assert.ok(mockTile0.classList.classes.has("lv-pop-tile-focused"), "初始应高亮第 0 项");
+
+            // 2) 模拟按 ArrowRight 导航至第 1 项
+            keydownHandler({ key: "ArrowRight", preventDefault: () => {}, stopPropagation: () => {} });
+            assert.ok(mockTile1.classList.classes.has("lv-pop-tile-focused"), "按右方向键后应高亮第 1 项");
+
+            // 3) 模拟按 P 键就地切换置顶状态
+            keydownHandler({ key: "p", preventDefault: () => {}, stopPropagation: () => {} });
+            const statesAfterP = lvLaunchpad.getItems().find(it => it.id === "p2");
+            assert.equal(statesAfterP.state, "pinned", "按 P 键应将当前聚焦项置顶");
+
+            // 4) 模拟按 Enter 执行当前项
+            keydownHandler({ key: "Enter", preventDefault: () => {}, stopPropagation: () => {} });
+            assert.equal(launchedPlugin, "p2", "按 Enter 应启动当前聚焦的插件2");
+
+            closeDesktopLaunchpadPopover();
+        } finally {
+            try { unreg1(); } catch {}
+            try { unreg2(); } catch {}
+            globalThis.document = prevDoc;
+            globalThis.window = prevWin;
+        }
+    });
+
+    await t.test("5. 生态动态徽标与实时健康度探针：updateItem 与紧急告警圆点联动", () => {
+        let entryDotStyle = { display: "none", background: "" };
+        const mockEntryDot = { style: entryDotStyle };
+
+        const compassBtn = {
+            id: "lvLaunchpadDesktopEntry",
+            style: { display: "inline-flex" },
+            querySelector(sel) {
+                if (sel === ".lv-entry-dot") return mockEntryDot;
+                return null;
+            },
+            setAttribute: () => {},
+        };
+
+        const prevDoc = globalThis.document;
+        const prevWin = globalThis.window;
+
+        globalThis.document = {
+            getElementById(id) {
+                if (id === "lvLaunchpadDesktopEntry") return compassBtn;
+                return null;
+            },
+        };
+        globalThis.window = {
+            __LV_LAUNCHPAD__: undefined,
+            dispatchEvent: () => true,
+        };
+
+        try {
+            const unreg = lvLaunchpad.register({
+                id: "siyuan-home",
+                name: "管家",
+                fullName: "小驴管家",
+                svgIcon: "icon",
+                onClick: () => {},
+            });
+
+            // 初始无 badge，圆点隐藏
+            assert.equal(entryDotStyle.display, "none");
+
+            // 1) 动态更新为普通信息徽标 (primary)
+            lvLaunchpad.updateItem("siyuan-home", { badge: "3 待办", badgeType: "primary" });
+            assert.equal(entryDotStyle.display, "block", "有 badge 时应点亮入口圆点");
+            assert.equal(entryDotStyle.background, "var(--b3-theme-primary, #3576c7)");
+
+            // 2) 动态更新为逾期紧急警示徽标 (error)
+            lvLaunchpad.updateItem("siyuan-home", { badge: "1 项逾期", badgeType: "error" });
+            assert.equal(entryDotStyle.display, "block");
+            assert.equal(entryDotStyle.background, "var(--b3-theme-error, #ef4444)", "紧急状态下圆点应变红警示");
+
+            // 3) 清空徽标
+            lvLaunchpad.updateItem("siyuan-home", { badge: undefined });
+            assert.equal(entryDotStyle.display, "none", "徽标清空后圆点恢复隐藏");
+
+            unreg();
+        } finally {
+            globalThis.document = prevDoc;
+            globalThis.window = prevWin;
+        }
+    });
 });

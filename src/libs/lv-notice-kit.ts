@@ -107,7 +107,7 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 170; // 1.7.0 (Phase 8: Mobile Compass, Focus Mode & Ecosystem Direct Actions)
+const PROTOCOL_VERSION = 175; // 1.7.5 (Phase 8: Mobile Compass, Focus Mode, TopBar Convergence & Bento Popover)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
 const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
@@ -148,6 +148,7 @@ export interface LvLaunchpadItem {
     digit?: number;
     badge?: string;
     badgeType?: "primary" | "warn" | "error" | "success";
+    badgeProvider?: () => string | Promise<string> | null | undefined;
     actions?: string[];
     topBarElement?: HTMLElement | null;
     onClick: () => void;
@@ -272,6 +273,7 @@ interface LvLaunchpadHub {
     register: (item: LvLaunchpadItem) => () => void;
     getItems: () => Array<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }>;
     setPluginState: (id: string, state: "pinned" | "docked" | "hidden") => void;
+    updateItem?: (id: string, patch: Partial<LvLaunchpadItem>) => void;
     executeAction: (id: string, actionName: string) => boolean;
     open: (mode?: "popover" | "center") => void;
     close: () => void;
@@ -2281,6 +2283,14 @@ function getLaunchpadHub(): LvLaunchpadHub {
                 states[id] = state;
                 saveLaunchpadStates(states);
             },
+            updateItem: (id, patch) => {
+                const item = launchpadRegistry.get(id);
+                if (item) {
+                    Object.assign(item, patch);
+                    refreshEntryBadgeDot();
+                    syncTopBarConvergence();
+                }
+            },
             executeAction: () => false,
             open: () => {},
             close: () => {},
@@ -2317,6 +2327,15 @@ function getLaunchpadHub(): LvLaunchpadHub {
             states[id] = state;
             saveLaunchpadStates(states);
             syncTopBarConvergence();
+        },
+
+        updateItem(id: string, patch: Partial<LvLaunchpadItem>): void {
+            const item = launchpadRegistry.get(id);
+            if (item) {
+                Object.assign(item, patch);
+                refreshEntryBadgeDot();
+                syncTopBarConvergence();
+            }
         },
 
         executeAction(id: string, actionName: string): boolean {
@@ -2364,6 +2383,11 @@ export const lvLaunchpad = {
     /** 用户动态设定插件状态：pinned（置顶在外） | docked（仅在坞内） | hidden（彻底隐藏） */
     setPluginState(pluginId: string, state: "pinned" | "docked" | "hidden"): void {
         getLaunchpadHub().setPluginState(pluginId, state);
+    },
+
+    /** 动态更新已注册条目的元数据（如徽标、提示语或宿主按钮引用，支持热更新） */
+    updateItem(pluginId: string, patch: Partial<LvLaunchpadItem>): void {
+        getLaunchpadHub().updateItem?.(pluginId, patch);
     },
 
     /** 直接触发指定插件的二级快捷行动（供 Quicker 动作或外部快捷键毫秒级直达） */
@@ -2520,19 +2544,25 @@ function clampBallYRatio(v: number): number {
     return Math.min(0.85, Math.max(0.15, v));
 }
 
-/** 聚合徽记与单插件自适应：任一已注册条目带 badge 时点亮圆点；专注模式点亮 🌙；单插件时动态呈现专属标题 */
+/** 聚合徽记与单插件自适应：任一已注册条目带 badge 时点亮圆点；有紧急待办时点亮警示色；专注模式点亮 🌙；单插件时动态呈现专属标题 */
 function refreshEntryBadgeDot(): void {
     if (typeof document === "undefined") return;
     try {
         const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
         const hasBadge = items.some((it) => Boolean(it.badge));
+        const hasUrgent = items.some((it) => Boolean(it.badge) && (it.badgeType === "error" || it.badgeType === "warn"));
         const focus = isNotifyFocusActive();
         for (const root of [document.getElementById(MOBILE_ENTRY_ID), document.getElementById(MOBILE_BALL_ID), document.getElementById(DESKTOP_ENTRY_ID)]) {
             if (!root) continue;
             const dot = root.querySelector(".lv-entry-dot");
-            if (dot) (dot as HTMLElement).style.display = hasBadge ? "block" : "none";
+            if (dot && typeof dot === "object" && "style" in dot && (dot as HTMLElement).style) {
+                (dot as HTMLElement).style.display = hasBadge ? "block" : "none";
+                (dot as HTMLElement).style.background = hasUrgent ? "var(--b3-theme-error, #ef4444)" : "var(--b3-theme-primary, #3576c7)";
+            }
             const moon = root.querySelector(".lv-entry-moon");
-            if (moon) (moon as HTMLElement).style.display = focus ? "inline-block" : "none";
+            if (moon && typeof moon === "object" && "style" in moon && (moon as HTMLElement).style) {
+                (moon as HTMLElement).style.display = focus ? "inline-block" : "none";
+            }
 
             // 单插件时动态适配专属名称与操作提示；多插件时保持全家桶统一标题
             if (items.length === 1) {
@@ -2541,7 +2571,7 @@ function refreshEntryBadgeDot(): void {
                 root.setAttribute("title", `${singleName} (左键直达 · 右键小驴罗盘)`);
             } else if (items.length > 1) {
                 root.setAttribute("aria-label", "小驴罗盘");
-                root.setAttribute("title", `小驴罗盘 · 全家桶极速直达 (${items.length} 插件已联结)`);
+                root.setAttribute("title", `小驴罗盘 · 全家桶极速直达 (${items.length} 插件已联结 · 快捷键 1~${items.length})`);
             }
         }
     } catch { /* ignore */ }
@@ -2966,6 +2996,55 @@ function ensureMobileEntry(): MobileEntryCleanup {
 const desktopEntryOwners = new Set<string>();
 let desktopEntryRetryTimers: number[] = [];
 
+/** 智能探测 #toolbar 中对应插件的顶栏 DOM 元素（抗主题重构与 DOM 自愈探针） */
+function findPluginTopBarElementInToolbar(item: LvLaunchpadItem): HTMLElement | null {
+    if (typeof document === "undefined") return null;
+    const toolbar = document.getElementById("toolbar");
+    if (!toolbar) return null;
+
+    if (item.topBarElement && (item.topBarElement as HTMLElement).isConnected) {
+        return item.topBarElement;
+    }
+
+    if (typeof toolbar.querySelectorAll !== "function") {
+        return null;
+    }
+
+    try {
+        const candidates = Array.from(toolbar.querySelectorAll<HTMLElement>(".toolbar__item, button"));
+        for (const el of candidates) {
+            if (!el || el.id === DESKTOP_ENTRY_ID) continue;
+
+            if (el.id === item.id || (typeof el.getAttribute === "function" && el.getAttribute("data-plugin-id") === item.id)) {
+                return el;
+            }
+
+            const ariaLabel = (typeof el.getAttribute === "function" ? el.getAttribute("aria-label") : "") || "";
+            const title = (typeof el.getAttribute === "function" ? el.getAttribute("title") : "") || "";
+            if (
+                (item.fullName && (ariaLabel.includes(item.fullName) || title.includes(item.fullName))) ||
+                (item.name && (ariaLabel.includes(item.name) || title.includes(item.name)))
+            ) {
+                return el;
+            }
+
+            if (item.svgIcon) {
+                const useEl = typeof el.querySelector === "function" ? el.querySelector("use") : null;
+                const href = (useEl && typeof useEl.getAttribute === "function")
+                    ? (useEl.getAttribute("xlink:href") || useEl.getAttribute("href") || "")
+                    : "";
+                if (href && href.includes(item.svgIcon)) {
+                    return el;
+                }
+                if (typeof el.innerHTML === "string" && el.innerHTML.includes(item.svgIcon)) {
+                    return el;
+                }
+            }
+        }
+    } catch { /* ignore */ }
+    return null;
+}
+
 /**
  * 桌面端顶栏收敛调度引擎（Convergence Engine · Protocol v1.7.5）：
  * 1. 当已注册的小驴插件 >= 2 个时：
@@ -2991,15 +3070,23 @@ export function syncTopBarConvergence(): void {
         }
 
         for (const item of items) {
-            if (item.topBarElement && typeof item.topBarElement === "object" && "style" in item.topBarElement && item.topBarElement.style) {
+            let el = item.topBarElement;
+            if ((!el || !(el as HTMLElement).isConnected) && typeof document.getElementById === "function") {
+                const found = findPluginTopBarElementInToolbar(item);
+                if (found) {
+                    el = found;
+                    item.topBarElement = found;
+                }
+            }
+            if (el && typeof el === "object" && "style" in el && el.style) {
                 if (needConverge) {
                     if (item.state === "pinned") {
-                        item.topBarElement.style.display = "";
+                        el.style.display = "";
                     } else {
-                        item.topBarElement.style.display = "none";
+                        el.style.display = "none";
                     }
                 } else {
-                    item.topBarElement.style.display = item.state === "hidden" ? "none" : "";
+                    el.style.display = item.state === "hidden" ? "none" : "";
                 }
             }
         }
@@ -3011,6 +3098,98 @@ export function syncTopBarConvergence(): void {
 const DESKTOP_POPOVER_ID = "lv-desktop-launchpad-popover";
 let desktopPopoverKeyDownHandler: ((e: KeyboardEvent) => void) | null = null;
 let desktopPopoverOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+let desktopPopoverResizeHandler: (() => void) | null = null;
+
+function ensureDesktopStyles(): void {
+    if (typeof document === "undefined" || !document.head || typeof document.createElement !== "function") return;
+    if (document.getElementById("lv-launchpad-desktop-styles")) return;
+    try {
+        const style = document.createElement("style");
+        style.id = "lv-launchpad-desktop-styles";
+        style.textContent = `
+.lv-desktop-launchpad-popover {
+  font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  color: var(--b3-theme-on-background, #333);
+  background: var(--b3-theme-surface, #fff);
+  border: 1px solid var(--b3-border-color-trans, rgba(0, 0, 0, 0.08));
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: lvPopoverEnter 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+@keyframes lvPopoverEnter {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.lv-desktop-launchpad-popover.lv-popover-closing {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  pointer-events: none;
+}
+.lv-pop-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--b3-border-color-trans, rgba(0, 0, 0, 0.06));
+  background: var(--b3-theme-surface, #fff);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  outline: none;
+}
+.lv-pop-tile:hover,
+.lv-pop-tile.lv-pop-tile-focused {
+  background: var(--b3-theme-surface-lighter, var(--b3-theme-background-light, rgba(0, 0, 0, 0.03)));
+  border-color: var(--b3-theme-primary-light, rgba(53, 118, 199, 0.3));
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+}
+.lv-pop-tile.lv-pop-tile-focused {
+  border-color: var(--b3-theme-primary, #3576c7);
+  box-shadow: 0 0 0 1.5px var(--b3-theme-primary, #3576c7);
+}
+.lv-pop-pin-btn {
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.lv-pop-pin-btn:hover {
+  opacity: 1 !important;
+  transform: scale(1.15);
+}
+.lv-pop-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+  margin-top: 5px;
+  line-height: 1.4;
+}
+.lv-pop-badge.lv-badge-primary {
+  background: var(--b3-theme-primary-light, rgba(53, 118, 199, 0.12));
+  color: var(--b3-theme-primary, #3576c7);
+}
+.lv-pop-badge.lv-badge-warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+}
+.lv-pop-badge.lv-badge-error {
+  background: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
+}
+.lv-pop-badge.lv-badge-success {
+  background: rgba(16, 185, 129, 0.14);
+  color: #059669;
+}
+`;
+        document.head.appendChild(style);
+    } catch { /* ignore */ }
+}
 
 export function isDesktopPopoverOpen(): boolean {
     if (typeof document === "undefined") return false;
@@ -3030,16 +3209,23 @@ export function closeDesktopLaunchpadPopover(): void {
         window.removeEventListener("mousedown", desktopPopoverOutsideClickHandler, true);
         desktopPopoverOutsideClickHandler = null;
     }
+    if (desktopPopoverResizeHandler && typeof window !== "undefined") {
+        window.removeEventListener("resize", desktopPopoverResizeHandler);
+        desktopPopoverResizeHandler = null;
+    }
 
-    el.classList.add("lv-popover-closing");
+    if (el.classList && typeof el.classList.add === "function") {
+        el.classList.add("lv-popover-closing");
+    }
     setTimeout(() => {
         try { el.remove(); } catch { /* ignore */ }
     }, 150);
 }
 
-export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement): void {
+export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initialFocusIndex = 0): void {
     if (typeof document === "undefined") return;
     closeDesktopLaunchpadPopover();
+    ensureDesktopStyles();
 
     const anchor = anchorEl || document.getElementById(DESKTOP_ENTRY_ID);
     const items = getLaunchpadHub().getItems().filter(it => it.state !== "hidden");
@@ -3050,23 +3236,41 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement): void {
     popover.className = "lv-desktop-launchpad-popover b3-typography";
     popover.setAttribute("role", "dialog");
     popover.setAttribute("aria-label", "小驴罗盘全家桶弹射坞");
+    if ("tabIndex" in popover) popover.tabIndex = -1;
 
-    if (anchor) {
-        const rect = anchor.getBoundingClientRect();
-        popover.style.position = "fixed";
-        popover.style.top = `${Math.round(rect.bottom + 6)}px`;
-        const rightOffset = Math.max(12, Math.round(window.innerWidth - rect.right - 8));
-        popover.style.right = `${rightOffset}px`;
-        popover.style.zIndex = "9999";
+    const reposition = () => {
+        if (!anchor || typeof anchor.getBoundingClientRect !== "function") return;
+        try {
+            const rect = anchor.getBoundingClientRect();
+            if (popover && popover.style) {
+                popover.style.position = "fixed";
+                if (rect && typeof rect.bottom === "number" && rect.bottom > 0) {
+                    popover.style.top = `${Math.round(rect.bottom + 6)}px`;
+                    const winW = typeof window !== "undefined" && typeof window.innerWidth === "number" ? window.innerWidth : 1200;
+                    const rightOffset = Math.max(12, Math.round(winW - (rect.right || 0) - 8));
+                    popover.style.right = `${rightOffset}px`;
+                    const winH = typeof window !== "undefined" && typeof window.innerHeight === "number" ? window.innerHeight : 800;
+                    const availableHeight = Math.max(220, winH - rect.bottom - 24);
+                    popover.style.maxHeight = `${availableHeight}px`;
+                } else {
+                    popover.style.top = "42px";
+                    popover.style.right = "16px";
+                }
+                popover.style.zIndex = "9999";
+            }
+        } catch { /* ignore */ }
+    };
+    reposition();
+
+    if (popover.style) {
+        popover.style.width = "340px";
+        popover.style.borderRadius = "14px";
+        popover.style.boxShadow = "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)";
+        popover.style.background = "var(--b3-theme-surface,#fff)";
+        popover.style.border = "1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08))";
+        popover.style.backdropFilter = "blur(16px)";
+        popover.style.overflow = "hidden";
     }
-
-    popover.style.width = "340px";
-    popover.style.borderRadius = "14px";
-    popover.style.boxShadow = "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)";
-    popover.style.background = "var(--b3-theme-surface,#fff)";
-    popover.style.border = "1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08))";
-    popover.style.backdropFilter = "blur(16px)";
-    popover.style.overflow = "hidden";
 
     const headerHtml = `
       <div class="lv-pop-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;border-bottom:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08));">
@@ -3086,7 +3290,8 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement): void {
         const isPinned = item.state === "pinned";
         const pinIcon = isPinned ? "📌" : "📍";
         const pinTitle = isPinned ? "已置顶在顶栏 (点击收敛回罗盘)" : "置顶到顶栏独立显示";
-        const badgeHtml = item.badge ? `<span class="lv-pop-badge" style="font-size:10px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb, ${item.color || "var(--b3-theme-primary)"} 15%, transparent);color:${item.color || "var(--b3-theme-primary)"};margin-top:4px;display:inline-block;">${item.badge}</span>` : "";
+        const badgeClass = item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary";
+        const badgeHtml = item.badge ? `<span class="lv-pop-badge ${badgeClass}">${item.badge}</span>` : "";
 
         gridHtml += `
           <div class="lv-pop-tile" data-idx="${idx}" data-id="${item.id}" style="position:relative;display:flex;flex-direction:column;padding:10px;border-radius:10px;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-surface,#fff);cursor:pointer;user-select:none;transition:all 0.15s ease;">
@@ -3111,73 +3316,225 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement): void {
 
     const footerHtml = `
       <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-background-light,rgba(0,0,0,0.02));border-radius:0 0 14px 14px;">
-        <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">快捷键 1~${items.length} 瞬发直达</span>
+        <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">快捷键: 方向键/1~${items.length} · Enter 执行 · P 置顶</span>
         <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--b3-theme-primary,#3576c7);">Esc 关闭</button>
       </div>
     `;
 
     popover.innerHTML = headerHtml + gridHtml + footerHtml;
 
-    popover.addEventListener("click", (e) => {
-        const target = e.target as HTMLElement;
-        const pinBtn = target.closest<HTMLElement>(".lv-pop-pin-btn");
-        if (pinBtn) {
-            e.stopPropagation();
-            const id = pinBtn.getAttribute("data-pin-id");
-            if (id) {
-                const cur = getLaunchpadStates()[id] || "docked";
-                const next = cur === "pinned" ? "docked" : "pinned";
-                getLaunchpadHub().setPluginState(id, next);
-                syncTopBarConvergence();
-                openDesktopLaunchpadPopover(anchor);
-            }
-            return;
-        }
-
-        const tile = target.closest<HTMLElement>(".lv-pop-tile");
-        if (tile) {
-            const idxStr = tile.getAttribute("data-idx");
-            if (idxStr !== null) {
-                const idx = parseInt(idxStr, 10);
-                if (items[idx]) {
-                    closeDesktopLaunchpadPopover();
-                    try { items[idx].onClick(); } catch (err) { console.warn("[LvLaunchpad] 启动失败:", err); }
+    // 动态徽标异步探针自动刷新
+    items.forEach((item) => {
+        if (typeof item.badgeProvider === "function") {
+            try {
+                const res = item.badgeProvider();
+                if (res instanceof Promise) {
+                    res.then((dynamicBadge) => {
+                        if (dynamicBadge && typeof dynamicBadge === "string") {
+                            item.badge = dynamicBadge;
+                            if (typeof popover.querySelector === "function") {
+                                const tileEl = popover.querySelector(`[data-id="${item.id}"]`);
+                                if (tileEl) {
+                                    let bEl = tileEl.querySelector(".lv-pop-badge");
+                                    if (!bEl) {
+                                        bEl = document.createElement("span");
+                                        bEl.className = `lv-pop-badge ${item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary"}`;
+                                        tileEl.appendChild(bEl);
+                                    }
+                                    bEl.textContent = dynamicBadge;
+                                }
+                            }
+                            refreshEntryBadgeDot();
+                        }
+                    }).catch(() => { /* ignore */ });
+                } else if (res && typeof res === "string") {
+                    item.badge = res;
                 }
-            }
+            } catch { /* ignore */ }
         }
     });
 
+    let currentFocusIndex = Math.max(0, Math.min(initialFocusIndex, items.length - 1));
+
+    const updateFocusHighlight = () => {
+        if (typeof popover.querySelectorAll !== "function") return;
+        try {
+            const tiles = popover.querySelectorAll<HTMLElement>(".lv-pop-tile");
+            tiles.forEach((t, i) => {
+                if (i === currentFocusIndex) {
+                    if (t.classList && typeof t.classList.add === "function") t.classList.add("lv-pop-tile-focused");
+                    if (typeof t.scrollIntoView === "function") {
+                        try { t.scrollIntoView({ block: "nearest" }); } catch { /* ignore */ }
+                    }
+                } else {
+                    if (t.classList && typeof t.classList.remove === "function") t.classList.remove("lv-pop-tile-focused");
+                }
+            });
+        } catch { /* ignore */ }
+    };
+
+    updateFocusHighlight();
+
+    if (typeof popover.addEventListener === "function") {
+        popover.addEventListener("click", (e) => {
+            const target = e.target as HTMLElement;
+            if (!target || typeof target.closest !== "function") return;
+            const pinBtn = target.closest<HTMLElement>(".lv-pop-pin-btn");
+            if (pinBtn) {
+                e.stopPropagation();
+                const id = pinBtn.getAttribute("data-pin-id");
+                if (id) {
+                    const cur = getLaunchpadStates()[id] || "docked";
+                    const next = cur === "pinned" ? "docked" : "pinned";
+                    getLaunchpadHub().setPluginState(id, next);
+                    syncTopBarConvergence();
+                    openDesktopLaunchpadPopover(anchor, currentFocusIndex);
+                }
+                return;
+            }
+
+            const closeBtn = target.closest<HTMLElement>(".lv-pop-close-btn");
+            if (closeBtn) {
+                e.stopPropagation();
+                closeDesktopLaunchpadPopover();
+                return;
+            }
+
+            const tile = target.closest<HTMLElement>(".lv-pop-tile");
+            if (tile) {
+                const idxStr = tile.getAttribute("data-idx");
+                if (idxStr !== null) {
+                    const idx = parseInt(idxStr, 10);
+                    if (items[idx]) {
+                        closeDesktopLaunchpadPopover();
+                        try { items[idx].onClick(); } catch (err) { console.warn("[LvLaunchpad] 启动失败:", err); }
+                    }
+                }
+            }
+        });
+
+        popover.addEventListener("mousemove", (e) => {
+            const target = e.target as HTMLElement;
+            if (!target || typeof target.closest !== "function") return;
+            const tile = target.closest<HTMLElement>(".lv-pop-tile");
+            if (tile) {
+                const idxStr = tile.getAttribute("data-idx");
+                if (idxStr !== null) {
+                    const idx = parseInt(idxStr, 10);
+                    if (idx >= 0 && idx < items.length && idx !== currentFocusIndex) {
+                        currentFocusIndex = idx;
+                        updateFocusHighlight();
+                    }
+                }
+            }
+        });
+    }
+
     desktopPopoverKeyDownHandler = (e: KeyboardEvent) => {
+        if (!e || typeof e.key !== "string") return;
+
         if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
             closeDesktopLaunchpadPopover();
             return;
         }
+
+        if (e.key === "ArrowDown") {
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+            if (currentFocusIndex + 2 < items.length) {
+                currentFocusIndex += 2;
+            } else if (currentFocusIndex + 1 < items.length) {
+                currentFocusIndex += 1;
+            }
+            updateFocusHighlight();
+            return;
+        }
+
+        if (e.key === "ArrowUp") {
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+            if (currentFocusIndex - 2 >= 0) {
+                currentFocusIndex -= 2;
+            } else if (currentFocusIndex - 1 >= 0) {
+                currentFocusIndex -= 1;
+            }
+            updateFocusHighlight();
+            return;
+        }
+
+        if (e.key === "ArrowRight") {
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+            currentFocusIndex = (currentFocusIndex + 1) % items.length;
+            updateFocusHighlight();
+            return;
+        }
+
+        if (e.key === "ArrowLeft") {
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+            currentFocusIndex = (currentFocusIndex - 1 + items.length) % items.length;
+            updateFocusHighlight();
+            return;
+        }
+
+        if (e.key === "Enter" || e.key === " ") {
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+            const item = items[currentFocusIndex];
+            if (item) {
+                closeDesktopLaunchpadPopover();
+                try { item.onClick(); } catch (err) { console.warn("[LvLaunchpad] 键盘启动失败:", err); }
+            }
+            return;
+        }
+
+        if (e.key === "p" || e.key === "P") {
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+            const item = items[currentFocusIndex];
+            if (item) {
+                const cur = getLaunchpadStates()[item.id] || "docked";
+                const next = cur === "pinned" ? "docked" : "pinned";
+                getLaunchpadHub().setPluginState(item.id, next);
+                syncTopBarConvergence();
+                openDesktopLaunchpadPopover(anchor, currentFocusIndex);
+            }
+            return;
+        }
+
         const num = parseInt(e.key, 10);
         if (!isNaN(num) && num >= 1 && num <= items.length) {
-            e.preventDefault();
-            e.stopPropagation();
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
             closeDesktopLaunchpadPopover();
             try { items[num - 1].onClick(); } catch (err) { console.warn("[LvLaunchpad] 键盘瞬发失败:", err); }
+            return;
         }
     };
-    if (typeof window !== "undefined") window.addEventListener("keydown", desktopPopoverKeyDownHandler, true);
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("keydown", desktopPopoverKeyDownHandler, true);
+    }
 
     desktopPopoverOutsideClickHandler = (e: MouseEvent) => {
         const t = e.target as Node;
-        if (!popover.contains(t) && anchor && !anchor.contains(t)) {
-            closeDesktopLaunchpadPopover();
+        if (typeof popover.contains === "function" && !popover.contains(t) && anchor) {
+            if (typeof anchor.contains === "function" && !anchor.contains(t)) {
+                closeDesktopLaunchpadPopover();
+            }
         }
     };
     setTimeout(() => {
-        if (typeof window !== "undefined") window.addEventListener("mousedown", desktopPopoverOutsideClickHandler!, true);
+        if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+            window.addEventListener("mousedown", desktopPopoverOutsideClickHandler!, true);
+        }
     }, 50);
 
-    document.body.appendChild(popover);
+    desktopPopoverResizeHandler = reposition;
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("resize", desktopPopoverResizeHandler);
+    }
+
+    if (document.body && typeof document.body.appendChild === "function") {
+        document.body.appendChild(popover);
+    }
 }
 
-export function toggleDesktopLaunchpadPopover(anchorEl?: HTMLElement): void {
+export function toggleDesktopLaunchpadPopover(anchorEl?: HTMLElement | null): void {
     if (isDesktopPopoverOpen()) {
         closeDesktopLaunchpadPopover();
     } else {
@@ -3222,28 +3579,45 @@ function buildDesktopEntryButton(): boolean {
 }
 
 let desktopToolbarObserver: MutationObserver | null = null;
+let desktopThemeObserver: MutationObserver | null = null;
 
 function wireDesktopToolbarObserver(): void {
-    if (desktopToolbarObserver || typeof document === "undefined" || isMobileFrontend()) return;
+    if (typeof document === "undefined" || isMobileFrontend()) return;
     const toolbar = document.getElementById("toolbar");
     if (!toolbar || typeof MutationObserver === "undefined") return;
 
-    let debounceTimer: number | null = null;
-    desktopToolbarObserver = new MutationObserver(() => {
-        if (debounceTimer) return;
-        debounceTimer = window.setTimeout(() => {
-            debounceTimer = null;
-            if (!document.getElementById(DESKTOP_ENTRY_ID)) {
-                buildDesktopEntryButton();
-            } else {
-                syncTopBarConvergence();
-            }
-        }, 120);
-    });
+    if (!desktopToolbarObserver) {
+        let debounceTimer: number | null = null;
+        desktopToolbarObserver = new MutationObserver(() => {
+            if (debounceTimer) return;
+            debounceTimer = window.setTimeout(() => {
+                debounceTimer = null;
+                if (!document.getElementById(DESKTOP_ENTRY_ID)) {
+                    buildDesktopEntryButton();
+                } else {
+                    syncTopBarConvergence();
+                }
+            }, 100);
+        });
 
-    try {
-        desktopToolbarObserver.observe(toolbar, { childList: true });
-    } catch { /* ignore */ }
+        try {
+            desktopToolbarObserver.observe(toolbar, { childList: true, subtree: true });
+        } catch { /* ignore */ }
+    }
+
+    if (!desktopThemeObserver && document.documentElement) {
+        let themeDebounce: number | null = null;
+        desktopThemeObserver = new MutationObserver(() => {
+            if (themeDebounce) return;
+            themeDebounce = window.setTimeout(() => {
+                themeDebounce = null;
+                syncTopBarConvergence();
+            }, 120);
+        });
+        try {
+            desktopThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+        } catch { /* ignore */ }
+    }
 }
 
 function ensureDesktopEntry(): MobileEntryCleanup {
@@ -3267,6 +3641,8 @@ function ensureDesktopEntry(): MobileEntryCleanup {
         desktopEntryRetryTimers = [];
         try { desktopToolbarObserver?.disconnect(); } catch { /* ignore */ }
         desktopToolbarObserver = null;
+        try { desktopThemeObserver?.disconnect(); } catch { /* ignore */ }
+        desktopThemeObserver = null;
         closeDesktopLaunchpadPopover();
         try { document.getElementById(DESKTOP_ENTRY_ID)?.remove(); } catch { /* ignore */ }
     };

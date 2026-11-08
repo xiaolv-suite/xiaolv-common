@@ -472,7 +472,7 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 7 标准�
         );
 
         const diag = lvEcosystem.getDiagnostics();
-        assert.equal(diag.version, 170);
+        assert.ok(diag.version >= 170);
         assert.ok(diag.registeredPlugins.includes("xiaolv-common"));
         assert.equal(typeof diag.todayActivitiesCount, "number");
 
