@@ -38,6 +38,14 @@ const b3Vars = `
   --b3-list-hover: #eef1f6; --b3-menu-background: #fff; --b3-theme-error: #d23f31;
   --b3-dialog-shadow: 0 8px 32px rgba(31,35,41,.14), 0 2px 8px rgba(31,35,41,.08);
 }
+/* R433 暗色主题（对齐真实思源暗色变量） */
+.b3-scope.dark {
+  --b3-theme-primary: #5a8af2; --b3-theme-primary-light: #3d4a66; --b3-theme-primary-lighter: #2c3a55;
+  --b3-theme-on-primary: #fff; --b3-theme-background: #1e1e1f; --b3-theme-surface: #26262a;
+  --b3-theme-on-background: #dcdcdc; --b3-theme-on-surface: #8a8a93; --b3-border-color: #36363a;
+  --b3-list-hover: #2c2c31; --b3-menu-background: #26262a; --b3-theme-error: #d23f31;
+  --b3-dialog-shadow: 0 8px 32px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35);
+}
 body { margin: 0; background: #eceef1; }
 .b3-dialog__container {
   background: var(--b3-theme-background);
@@ -66,6 +74,7 @@ const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 fs.writeFileSync(path.join(OUT, "surface-harness.html"), html);
 
 const SURFACES = [
+    ["starterHub", 720],
     ["quickEdit", 720], ["syncDiff", 820], ["csvWizard", 720], ["shareCard", 560],
     ["pinboard", 640], ["promoteClip", 480], ["sanitizer", 560], ["varForm", 560], ["guide", 640],
 ];
@@ -75,26 +84,31 @@ const SURFACES = [
     const page = await browser.newPage({viewport: {width: 1280, height: 900}, deviceScaleFactor: 2});
     await page.goto("file:///" + path.join(OUT, "surface-harness.html").replace(/\\/g, "/"));
     await page.waitForFunction(() => Boolean(window.XlcHarness));
-    for (const [name, width] of SURFACES) {
-        await page.evaluate(() => {
-            document.querySelectorAll(".b3-dialog").forEach((el) => el.remove());
-            document.getElementById("stage").innerHTML = "";
-        });
-        await page.evaluate((n) => window.XlcHarness.openSurface(n), name);
-        await page.waitForTimeout(700);
-        await page.evaluate((w) => {
-            const container = document.querySelector(".b3-dialog__container");
-            if (container) {
-                container.style.margin = "30px auto";
-                container.style.width = Math.min(w, 1160) + "px";
-                container.style.maxHeight = "820px";
-            }
-            const dialogRoot = document.querySelector(".b3-dialog");
-            if (dialogRoot) document.getElementById("stage").appendChild(dialogRoot);
-        }, width);
-        await page.waitForTimeout(250);
-        await page.screenshot({path: path.join(OUT, `surface-${name}.png`)});
-        console.log("shot:", name);
+    const themes = ["light", "dark"];
+    for (const theme of themes) {
+        for (const [name, width] of SURFACES) {
+            await page.evaluate((t) => {
+                document.querySelectorAll(".b3-dialog").forEach((el) => el.remove());
+                const stage = document.getElementById("stage");
+                stage.innerHTML = "";
+                stage.className = "b3-scope " + t;
+            }, theme);
+            await page.evaluate((n) => window.XlcHarness.openSurface(n), name);
+            await page.waitForTimeout(700);
+            await page.evaluate((w) => {
+                const container = document.querySelector(".b3-dialog__container");
+                if (container) {
+                    container.style.margin = "30px auto";
+                    container.style.width = Math.min(w, 1160) + "px";
+                    container.style.maxHeight = "820px";
+                }
+                const dialogRoot = document.querySelector(".b3-dialog");
+                if (dialogRoot) document.getElementById("stage").appendChild(dialogRoot);
+            }, width);
+            await page.waitForTimeout(250);
+            await page.screenshot({path: path.join(OUT, `surface-${name}-${theme}.png`)});
+            console.log("shot:", `${name}-${theme}`);
+        }
     }
     await browser.close();
     console.log("surface sweep done →", OUT);

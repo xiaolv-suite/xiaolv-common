@@ -47964,7 +47964,9 @@ ${details.join("\n")}` : ""}`;
     },
     openSurface(name) {
       void Promise.resolve().then(async () => {
-        if (name === "quickEdit") {
+        if (name === "starterHub") {
+          window.XlcHarness.openStarterHub();
+        } else if (name === "quickEdit") {
           const { openQuickEditDialog: openQuickEditDialog2 } = await Promise.resolve().then(() => (init_quick_edit(), quick_edit_exports));
           openQuickEditDialog2({
             t: T,
@@ -48071,9 +48073,9 @@ ${details.join("\n")}` : ""}`;
             itemType: "markdown",
             title: "\u9879\u76EE\u5EF6\u671F\u9053\u6B49\u4E0E\u8865\u507F\u65B9\u6848",
             fields: [
-              { name: "\u5BA2\u6237\u540D\u79F0", options: [] },
-              { name: "\u8865\u507F\u6BD4\u4F8B", options: ["5%", "10%"] },
-              { name: "\u4E13\u5C5E\u503C\u5B88\u7535\u8BDD", options: [] }
+              { name: "\u5BA2\u6237\u540D\u79F0", kind: "text", options: [] },
+              { name: "\u8865\u507F\u6BD4\u4F8B", kind: "select", options: ["5%", "10%"] },
+              { name: "\u4E13\u5C5E\u503C\u5B88\u7535\u8BDD", kind: "text", options: [] }
             ],
             templateText: "\u5C0A\u656C\u7684 {{xlc:ask:\u5BA2\u6237\u540D\u79F0}}\uFF1A\n\n\u8865\u507F\u65B9\u6848\uFF1A\u672C\u671F\u670D\u52A1\u8D39\u51CF\u514D {{xlc:ask:\u8865\u507F\u6BD4\u4F8B|5%,10%}}\uFF1B\n\u503C\u5B88\u7535\u8BDD\uFF1A{{xlc:ask:\u4E13\u5C5E\u503C\u5B88\u7535\u8BDD}}\u3002\n{{xlc:cursor}}",
             defaults: { "\u5BA2\u6237\u540D\u79F0": "\u738B\u603B" },

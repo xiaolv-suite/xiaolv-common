@@ -859,7 +859,9 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
     openSurface(name: string): void {
         // 全表面视觉审计入口（R433）：渲染所有用户可触达弹窗，供截图目检
         void Promise.resolve().then(async () => {
-            if (name === "quickEdit") {
+            if (name === "starterHub") {
+                window.XlcHarness.openStarterHub();
+            } else if (name === "quickEdit") {
                 const {openQuickEditDialog} = await import("../../src/ui/quick-edit");
                 openQuickEditDialog({
                     t: T,
