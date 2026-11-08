@@ -3896,7 +3896,10 @@ export class CommonSearchDialog {
     }
 
     private mobilePrimaryIsCopy(): boolean {
-        return this.deps.isMobile() && !this.insertTarget;
+        // R432 门禁实证：移动端带插入目标时标签曾显示「插入选中」而点击行为仍是复制
+        // ——标签与行为不一致。移动端插入尚未在真实宿主验收（R430 决策：一律诚实降级），
+        // 故移动端主操作恒为复制并携带降级提示。
+        return this.deps.isMobile();
     }
 
     private async showProviderMenu(row: ProviderRow, anchor: HTMLElement): Promise<void> {

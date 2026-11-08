@@ -24343,6 +24343,9 @@ ${res.progressBar}`;
       topItems
     };
   }
+  function filterKnownTopItems(topItems, knownIds) {
+    return topItems.filter((item) => knownIds.has(item.id));
+  }
   function buildDailyUsageMap(dailyUsage, usage) {
     const result = { ...dailyUsage != null ? dailyUsage : {} };
     if (usage) {
@@ -29185,7 +29188,7 @@ ${exception.mark.snippet}`;
       );
       insightsBox.appendChild(grid);
       const knownItemIds = new Set(items.map((it) => it.id));
-      const visibleTopItems = insights.topItems.filter((it) => knownItemIds.has(it.id));
+      const visibleTopItems = filterKnownTopItems(insights.topItems, knownItemIds);
       if (visibleTopItems.length > 0) {
         const topSec = document.createElement("div");
         topSec.className = "xlc-insights-top";
@@ -33339,7 +33342,8 @@ fi`;
     contentTitle.textContent = "\u7247\u6BB5\u6B63\u6587\u5185\u5BB9";
     contentLabel.appendChild(contentTitle);
     const rawText = options.entry.content || options.entry.summary || options.entry.title || "";
-    const normalizedText = normalizePromoteContent(rawText);
+    const annotationParsed = parseSnippetAnnotations(rawText);
+    const normalizedText = normalizePromoteContent(annotationParsed.cleanText);
     const textarea = document.createElement("textarea");
     textarea.className = "b3-text-field xlc-promote-content";
     textarea.rows = 4;
@@ -36934,7 +36938,7 @@ fi`;
       }
     }
     mobilePrimaryIsCopy() {
-      return this.deps.isMobile() && !this.insertTarget;
+      return this.deps.isMobile();
     }
     async showProviderMenu(row, anchor) {
       var _a, _b, _c, _d, _e, _f;
@@ -40718,6 +40722,10 @@ ${progress.progressBar}`);
         this.miniModeBtn.classList.toggle("xlc-search-mini-btn--active", this.miniMode);
         this.miniModeBtn.title = this.miniMode ? "\u5DF2\u5F00\u542F\u6781\u7A84\u8FF7\u4F60\u6A21\u5F0F\uFF08Alt+M \u6062\u590D\u53CC\u680F\uFF09" : "\u8FF7\u4F60\u60AC\u6D6E\u6D6E\u6761\u6A21\u5F0F\uFF08\u6781\u7A84\u5355\u5217\u65E0\u906E\u6321\uFF0CAlt+M \u5207\u6362\uFF09";
         this.miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
+      }
+      const miniListEl = this.listEl;
+      if (miniListEl && miniListEl.childElementCount > 0 && !this.miniCollapsed) {
+        this.renderList(miniListEl);
       }
       this.applyMiniCollapse();
     }

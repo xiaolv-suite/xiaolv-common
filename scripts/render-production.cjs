@@ -389,6 +389,108 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     }
     console.log("  smoke ✓ settings: 13 assertions");
     await page.screenshot({path: path.join(OUT, "production-settings-light.png")});
+
+    // ── R432 UI 缺陷回归门禁（R431 五项修复的离线视觉断言，防止同类回归） ──
+    // 1) 空库 solo 布局：右预览栏隐藏、列表独占整宽（用户截图实证的割裂缺陷）
+    await page.evaluate(() => {
+        const stage = document.getElementById("stage");
+        stage.className = "b3-scope light";
+        document.querySelectorAll(".b3-dialog").forEach((el) => el.remove());
+        stage.innerHTML = "";
+        window.XlcHarness.openDialog({empty: true, aiEnabled: false, query: ""});
+        const dialogRoot = document.querySelector(".b3-dialog");
+        if (dialogRoot) stage.appendChild(dialogRoot);
+        const root = document.querySelector(".xlc-dialog");
+        if (root) { root.style.height = "700px"; root.style.position = "relative"; }
+        const container = document.querySelector(".b3-dialog__container");
+        if (container) { container.style.margin = "0 auto"; container.style.maxWidth = "960px"; container.style.height = "760px"; }
+        const input = document.querySelector(".xlc-search-input");
+        if (input) { input.value = ""; input.dispatchEvent(new Event("input")); }
+    });
+    await page.waitForTimeout(600);
+    const soloAssertions = await page.evaluate(() => {
+        const body = document.querySelector(".xlc-body");
+        const list = document.querySelector(".xlc-list");
+        const pane = document.querySelector(".xlc-pane");
+        const bodyRect = body?.getBoundingClientRect();
+        const listRect = list?.getBoundingClientRect();
+        return {
+            soloClassOn: Boolean(body?.classList.contains("xlc-body--solo")),
+            paneHidden: pane ? getComputedStyle(pane).display === "none" : false,
+            listFullWidth: Boolean(bodyRect && listRect && Math.abs(bodyRect.width - listRect.width) < 4),
+            emptyShown: (document.querySelector(".xlc-empty-text")?.textContent ?? "").length > 0,
+        };
+    });
+    if (Object.values(soloAssertions).some((v) => !v)) throw new Error("R432 solo regression failed: " + JSON.stringify(soloAssertions));
+    console.log("  smoke ✓ R432 solo: empty-library pane hidden, list spans full width");
+    await page.screenshot({path: path.join(OUT, "production-solo-empty.png")});
+
+    // 2) 套件市场令牌作用域：容器挂 host 类、--xlc-space-3 生效、关闭按钮在容器内（ADR 0166）
+    await page.evaluate(() => {
+        const stage = document.getElementById("stage");
+        stage.className = "b3-scope light";
+        document.querySelectorAll(".b3-dialog").forEach((el) => el.remove());
+        stage.innerHTML = "";
+        window.XlcHarness.openStarterHub();
+    });
+    await page.waitForSelector("[data-xlc-control='starter-hub.close']", {timeout: 8000});
+    await page.evaluate(() => {
+        const dialogRoot = document.querySelector(".b3-dialog");
+        if (dialogRoot) document.getElementById("stage").appendChild(dialogRoot);
+        const container = document.querySelector(".b3-dialog__container");
+        if (container) { container.style.margin = "40px auto"; container.style.width = "720px"; }
+    });
+    await page.waitForTimeout(300);
+    const hubAssertions = await page.evaluate(() => {
+        const container = document.querySelector(".b3-dialog__container");
+        const hubInner = document.querySelector(".xlc-starter-hub-container");
+        const cs = getComputedStyle(hubInner ?? container);
+        const closeBtn = document.querySelector("[data-xlc-control='starter-hub.close']");
+        const body = document.querySelector(".b3-dialog__body");
+        const btnRect = closeBtn?.getBoundingClientRect();
+        const bodyRect = body?.getBoundingClientRect();
+        return {
+            hostClassOn: container.classList.contains("xlc-dialog-host"),
+            paddingResolved: cs.paddingLeft === "12px" && cs.paddingTop === "12px",
+            closeInside: Boolean(btnRect && bodyRect && btnRect.right <= bodyRect.right + 1 && btnRect.left >= bodyRect.left - 1),
+        };
+    });
+    if (Object.values(hubAssertions).some((v) => !v)) throw new Error("R432 starter hub regression failed: " + JSON.stringify(hubAssertions));
+    console.log("  smoke ✓ R432 starter hub: token scope resolved, close button inside container");
+    await page.screenshot({path: path.join(OUT, "production-starter-hub.png")});
+
+    // 3) 设置面板 sticky 导航贴顶：padding-top 覆盖规则必须压过 form-host 的 (0,4,0) 规则
+    await page.evaluate(() => {
+        const stage = document.getElementById("stage");
+        stage.className = "b3-scope light";
+        document.querySelectorAll(".b3-dialog").forEach((el) => el.remove());
+        stage.innerHTML = "";
+        window.XlcHarness.openSettings();
+        const dialogRoot = document.querySelector(".b3-dialog");
+        if (dialogRoot) stage.appendChild(dialogRoot);
+        const container = document.querySelector(".b3-dialog__container");
+        if (container) { container.style.margin = "0 auto"; container.style.height = "640px"; container.style.width = "720px"; }
+    });
+    await page.waitForTimeout(700);
+    const stickyAssertions = await page.evaluate(() => {
+        const body = document.querySelector(".b3-dialog__body");
+        const nav = document.querySelector(".xlc-settings-nav-bar");
+        if (!body || !nav) return {found: false};
+        const target = document.getElementById("xlc-settings-data") ?? body.lastElementChild;
+        target?.scrollIntoView({block: "start"});
+        return new Promise((resolve) => setTimeout(() => {
+            const navTop = nav.getBoundingClientRect().top;
+            const bodyTop = body.getBoundingClientRect().top;
+            resolve({
+                found: true,
+                navFlush: Math.abs(navTop - bodyTop) <= 3,
+                bodyPaddingTop: getComputedStyle(body).paddingTop,
+            });
+        }, 400));
+    });
+    if (!stickyAssertions.found || !stickyAssertions.navFlush) throw new Error("R432 settings sticky regression failed: " + JSON.stringify(stickyAssertions));
+    console.log("  smoke ✓ R432 settings sticky: navbar pins flush to scrollport (body padding-top " + stickyAssertions.bodyPaddingTop + ")");
+    await page.screenshot({path: path.join(OUT, "production-settings-sticky.png")});
     // 模板包导出对话框（R71/F6，原型屏 8 右帧：分类筛选 / 包名 / 内容清单）
     await page.evaluate(() => {
         const stage = document.getElementById("stage");
@@ -1678,8 +1780,10 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
             footButtons: footBtns.length === 2
                 && (footBtns[0].textContent ?? "").includes("新建")
                 && (footBtns[1].textContent ?? "").includes("复制"),
-            mobileCopyDowngradeExplicit: footBtns[1]?.getAttribute("aria-label")?.includes("移动端直接插入尚未验证") === true
-                && footBtns[1]?.title?.includes("当前操作会复制到剪贴板") === true,
+            // Mobile Spec v1（T-0829）降级文案统一为「已复制，去目标应用粘贴」：
+            // aria-label 与 title 均须明示降级语义（R432 对齐陈旧断言）
+            mobileCopyDowngradeExplicit: (footBtns[1]?.getAttribute("aria-label") ?? "").includes("已复制，去目标应用粘贴") === true
+                && (footBtns[1]?.title ?? "").includes("已复制，去目标应用粘贴") === true,
         };
     });
     if (Object.values(mobileAssertions).some((v) => !v)) {
@@ -1696,12 +1800,22 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
             && (window.__xlcActions ?? []).length === before;
     }, actionsBeforeMobileSelection);
     if (!mobileSelectionOnly) throw new Error("mobile row tap should select an item without running the primary action");
-    const mobileActionsBeforeSubmit = await page.evaluate(() => (window.__xlcActions ?? []).length);
+    // T-0829 契约：移动端主按钮「点击即复制」（不经 runAction），inline「已复制」反馈，坚决不弹窗
+    await page.evaluate(() => { delete (window).__xlcCopied; });
     await page.locator("[data-xlc-control='preview.mobile-primary']").click();
-    await page.waitForFunction((before) => (window.__xlcActions ?? []).length === before + 1, mobileActionsBeforeSubmit, {timeout: 3000});
-    const mobileSelectedAction = await page.evaluate(() => (window.__xlcActions ?? []).at(-1));
-    if (mobileSelectedAction?.id !== "xlc-demo0000003" || mobileSelectedAction?.mode !== "copy") {
-        throw new Error("mobile primary action did not use the selected item: " + JSON.stringify(mobileSelectedAction));
+    await page.waitForFunction(() => Boolean((window).__xlcCopied), null, {timeout: 3000});
+    const mobileCopied = await page.evaluate(() => {
+        const copied = (window).__xlcCopied ?? "";
+        const summary = document.querySelector(".xlc-row[data-xlc-index='1'] .xlc-row-summary")?.textContent ?? "";
+        const button = document.querySelector("[data-xlc-control='preview.mobile-primary']");
+        return {
+            copied: copied.slice(0, 30),
+            matchesSelection: copied.length > 0 && (summary.length === 0 || summary.includes(copied.slice(0, 10))),
+            inlineShown: Boolean(document.querySelector(".lv-inline-feedback--success")) || (button?.textContent ?? "").includes("已复制"),
+        };
+    });
+    if (!mobileCopied.matchesSelection) {
+        throw new Error("mobile primary did not copy the selected item: " + JSON.stringify(mobileCopied));
     }
     await page.waitForTimeout(120);
     console.log("  smoke ✓ mobile: 6 assertions");
@@ -1719,19 +1833,24 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
         if (container) container.style.height = "82vh";
     });
     await page.waitForTimeout(300);
+    // R432 契约对齐（R430 决策）：移动端即使带插入目标也一律诚实降级为复制——
+    // 标签为「复制」+ 降级提示「已复制，去目标应用粘贴」，点击复制选中条目
     const mobileTargetAction = await page.evaluate(() => {
         const button = document.querySelector("[data-xlc-control='preview.mobile-primary']");
-        return button?.textContent?.includes("插入选中") === true
-            && !button?.hasAttribute("aria-label")
-            && !button?.title?.includes("移动端直接插入尚未验证");
+        return button?.textContent?.includes("复制") === true
+            && (button?.title ?? "").includes("已复制，去目标应用粘贴");
     });
-    if (!mobileTargetAction) throw new Error("mobile targeted insertion should show its explicit target action without the no-target copy fallback");
-    const targetedActionsBefore = await page.evaluate(() => (window.__xlcDocActions ?? []).length);
+    if (!mobileTargetAction) throw new Error("mobile targeted surface must stay on the honest copy downgrade (label 插入选中 is forbidden until real-host insert verification)");
+    await page.evaluate(() => { delete (window).__xlcCopied; });
     await page.locator("[data-xlc-control='preview.mobile-primary']").click();
-    await page.waitForFunction((before) => (window.__xlcDocActions ?? []).length === before + 1, targetedActionsBefore, {timeout: 3000});
-    const targetAction = await page.evaluate(() => (window.__xlcDocActions ?? []).at(-1));
-    if (targetAction?.id !== "xlc-demo0000003" || targetAction?.docId !== "20240101120001-hijklmn" || targetAction?.hPath !== "/工作手册/客服话术") {
-        throw new Error("mobile targeted primary action missed its selected target: " + JSON.stringify(targetAction));
+    await page.waitForFunction(() => Boolean((window).__xlcCopied), null, {timeout: 3000});
+    const targetCopied = await page.evaluate(() => {
+        const copied = (window).__xlcCopied ?? "";
+        const summary = document.querySelector(".xlc-row[data-xlc-index='1'] .xlc-row-summary")?.textContent ?? "";
+        return {copied: copied.slice(0, 30), matchesSelection: copied.length > 0 && (summary.length === 0 || summary.includes(copied.slice(0, 10)))};
+    });
+    if (!targetCopied.matchesSelection) {
+        throw new Error("mobile targeted surface did not copy the selected item: " + JSON.stringify(targetCopied));
     }
     await page.setViewportSize({width: 1280, height: 720});
     // 按需发现：扫描状态、候选预览、筛选和收录按钮禁用语义
