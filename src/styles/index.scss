@@ -1105,6 +1105,8 @@
       display: flex;
       align-items: center;
       gap: var(--xlc-space-1);
+      min-width: 0;
+      max-width: 100%;
       font-size: var(--xlc-font-xs);
       font-variant-numeric: tabular-nums;
       color: var(--b3-theme-on-surface);
@@ -1176,6 +1178,9 @@
       }
 
       .xlc-row-summary {
+        flex: 1 1 0%;
+        min-width: 0;
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -4964,7 +4969,11 @@
     }
 
     .xlc-row-meta {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;

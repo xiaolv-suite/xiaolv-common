@@ -3472,6 +3472,20 @@ function ensureDesktopStyles(): void {
   color: var(--b3-theme-primary, #2563eb);
   background: var(--b3-theme-primary-lightest, rgba(37, 99, 235, 0.08));
 }
+.lv-pop-sub-btn:active,
+.lv-pop-view-tab:active,
+.lv-pop-strip-chip:active,
+.lv-pop-action-row:active,
+.lv-pop-hit-item:active {
+  transform: scale(0.96);
+}
+.lv-pop-grid,
+.lv-pop-list,
+.lv-pop-pref-drawer,
+.lv-pop-omni-results {
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
 .lv-pop-search-bar {
   padding: 8px 16px;
   border-bottom: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
@@ -3889,7 +3903,7 @@ export function buildLaunchpadPopoverHtml(
         }
 
         prefDrawerHtml = `
-          <div class="lv-pop-pref-drawer" style="padding:12px 16px;border-bottom:1px solid var(--b3-border-color-trans,rgba(15,23,42,0.08));background:var(--b3-theme-surface-lighter,rgba(15,23,42,0.03));display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;">
+          <div class="lv-pop-pref-drawer" style="padding:12px 16px;border-bottom:1px solid var(--b3-border-color-trans,rgba(15,23,42,0.08));background:var(--b3-theme-surface-lighter,rgba(15,23,42,0.03));display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto;">
             <div style="background:var(--b3-theme-primary-light,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:8px 12px;border-radius:8px;font-size:11.5px;line-height:1.5;color:var(--b3-theme-on-surface,#0f172a);">
               👋 <strong>顶栏与罗盘主权设置</strong>：自主决定哪些插件<strong>常驻在思源顶栏</strong>，哪些<strong>仅在罗盘坞内收敛</strong>，哪些<strong>彻底隐藏</strong>。
             </div>
@@ -3897,6 +3911,9 @@ export function buildLaunchpadPopoverHtml(
             <div>${stateRowsHtml}</div>
             <div style="font-weight:700;font-size:12px;color:var(--b3-theme-primary,#2563eb);margin-top:4px;">⚡ 跨插件智能自动化规则 (IFTTT)</div>
             <div style="display:flex;flex-direction:column;gap:5px;">${rulesHtml}</div>
+            <div style="display:flex;justify-content:flex-end;margin-top:4px;">
+              <button type="button" class="lv-pop-sub-btn lv-pop-pref-btn active" style="padding:5px 12px;font-weight:600;">完成设置并返回罗盘 ➔</button>
+            </div>
           </div>
         `;
     }
