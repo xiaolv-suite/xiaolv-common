@@ -266,6 +266,27 @@ function check(name, ok, detail = "") {
         });
         check("步骤 1：首次引导建库并自动进入主搜索面板", /^\d{14}-[0-9a-z]{7}$/.test(libDocId), `libDocId=${libDocId}`);
 
+        // ══════════ 第 1b 步：空库态 solo 布局真机验收（R431 遗留项补证：右预览栏隐藏、列表独占整宽） ══════════
+        await sleep(400);
+        const soloState = await page.evaluate(() => {
+            const body = document.querySelector(".xlc-body");
+            const list = document.querySelector(".xlc-list");
+            const pane = document.querySelector(".xlc-pane");
+            const emptyText = document.querySelector(".xlc-empty-text")?.textContent ?? "";
+            const bodyRect = body?.getBoundingClientRect();
+            const listRect = list?.getBoundingClientRect();
+            return {
+                emptyText,
+                soloClassOn: Boolean(body?.classList.contains("xlc-body--solo")),
+                paneHidden: pane ? getComputedStyle(pane).display === "none" : true,
+                listFullWidth: Boolean(bodyRect && listRect && Math.abs(bodyRect.width - listRect.width) < 4,
+                ),
+            };
+        });
+        check("步骤 1b：空库态 solo 布局（右预览栏隐藏、列表独占整宽）",
+            soloState.soloClassOn && soloState.paneHidden && soloState.listFullWidth && soloState.emptyText.length > 0,
+            JSON.stringify(soloState));
+
         // ══════════ 第 2 步：内置示例包 25/25 导入 ══════════
         await page.locator(".xlc-footer-gear").click();
         await page.waitForSelector("[data-xlc-control='settings.data.templateImport']", {timeout: 10000});
@@ -573,6 +594,64 @@ function check(name, ok, detail = "") {
         check("步骤 10：剪贴板历史默认开启正常采集，支持容量档位设置（上限100条）与主动关闭",
             clipTest.defaultOn && clipTest.recorded && clipAfterOff.disabledNow && clipAfterOff.blockedWhenOff && limitTest.limit50 && limitTest.clamped100,
             JSON.stringify({...clipTest, ...clipAfterOff, ...limitTest}));
+
+        // ══════════ 第 10a 步：设置面板 sticky 导航贴顶、跳转落点补偿与热力图「窗口内」口径（R431/R432 真机验收） ══════════
+        const settingsR431 = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const nav = document.querySelector(".xlc-settings-nav-bar");
+            if (!nav) return {panelOpen: false};
+            // 锚定唯一的吸顶导航条，向上找它所在的滚动容器与对话体
+            const dlgBody = nav.closest(".b3-dialog__body") ?? nav.closest(".b3-dialog__content");
+            const root = nav.closest(".xlc-settings");
+            const prefsSection = document.querySelector("#xlc-settings-prefs") ?? root?.lastElementChild;
+            prefsSection?.scrollIntoView({block: "start"});
+            await new Promise((r) => setTimeout(r, 350));
+            const navTop = nav.getBoundingClientRect().top;
+            const bodyTop = dlgBody?.getBoundingClientRect().top ?? -1;
+            const csBody = dlgBody ? getComputedStyle(dlgBody) : null;
+            const csNav = getComputedStyle(nav);
+            // 从 nav 向上找真正滚动的祖先
+            const scrollers = [];
+            let el = nav.parentElement;
+            for (let i = 0; i < 8 && el; i++) {
+                const cs = getComputedStyle(el);
+                if (el.scrollHeight > el.clientHeight + 4) {
+                    scrollers.push({cls: (el.className ?? "").toString().slice(0, 60), overflowY: cs.overflowY, scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight});
+                }
+                el = el.parentElement;
+            }
+            const navFlush = Math.abs(navTop - bodyTop) <= 3;
+            // 2) 导航跳转落点补偿：点击胶囊后目标章节标题不得被吸顶条盖住
+            const pills = Array.from(document.querySelectorAll(".xlc-settings-nav-pill"));
+            const extPill = pills.find((b) => (b.textContent ?? "").includes("外部联动")) ?? pills[pills.length - 1];
+            const targetId = extPill?.getAttribute("aria-controls") ?? "";
+            extPill?.click();
+            await new Promise((r) => setTimeout(r, 900));
+            const target = document.getElementById(targetId);
+            const navBottom = nav.getBoundingClientRect().bottom;
+            const targetTop = target?.getBoundingClientRect().top ?? -1;
+            const jumpNotCovered = targetTop < 0 || targetTop >= navBottom - 4;
+            // 3) 热力图口径：有使用记录时标题必须是「窗口内」而非「累计」
+            const totalUsage = Object.values(p.state.usage ?? {}).reduce((s, u) => s + (u.count || 0), 0);
+            const heatmapTitle = document.querySelector(".xlc-heatmap-title")?.textContent ?? "";
+            return {
+                panelOpen: true,
+                navFlush,
+                gapPx: Number((navTop - bodyTop).toFixed(1)),
+                bodyCls: (dlgBody?.className ?? "").slice(0, 40),
+                bodyPaddingTop: csBody ? csBody.paddingTop : "(no body)",
+                navPosition: csNav.position,
+                navTopCss: csNav.top,
+                scrollers,
+                jumpNotCovered,
+                totalUsage,
+                heatmapTitle: heatmapTitle.slice(0, 40),
+                heatmapWordingOk: totalUsage === 0 ? true : (heatmapTitle.includes("窗口内") && !heatmapTitle.includes("累计")),
+            };
+        });
+        check("步骤 10a：设置面板 sticky 导航贴顶无缝、胶囊跳转落点不被盖、热力图「窗口内」口径",
+            settingsR431.panelOpen && settingsR431.navFlush && settingsR431.jumpNotCovered && settingsR431.heatmapWordingOk,
+            JSON.stringify(settingsR431));
 
         // ══════════ 第 10 步进阶：剪贴板条目一键沉淀转正（智能注解自动剥离入库） ══════════
         await page.evaluate(() => {
