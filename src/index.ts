@@ -1241,16 +1241,19 @@ export default class XiaolvCommonPlugin extends Plugin {
                 title: `${this.i18nFn()("openSearch")} (Alt+Shift+N / Alt+Shift+V)`,
                 callback: () => this.openSearch(),
                 position: "right",
+                // 官方 contextMenu 通道：右键「快捷访问面板」并入思源原生顶栏条目菜单，
+                // 不再自建 contextmenu 监听拦截原生菜单（3.8.x 的固定/隐藏条目管理得以保留）
+                contextMenu: (menu) => {
+                    if (!menu || typeof menu.addItem !== "function") return;
+                    menu.addItem({
+                        iconHTML: "",
+                        label: "⚡ 常用快捷访问面板",
+                        click: () => void this.openQuickAccessPopover(),
+                    });
+                },
             });
             this.topBarElement = topBarEl;
             this.syncLaunchpadRegistry();
-            if (topBarEl && typeof topBarEl.addEventListener === "function") {
-                topBarEl.addEventListener("contextmenu", (e: MouseEvent) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void this.openQuickAccessPopover(e);
-                });
-            }
         } catch {
             // 旧宿主无此 API：命令面板仍可用
         }
@@ -2019,7 +2022,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     /** 顶栏图标右键极速气泡卡片（Top 5 收藏与高频项秒取 · CAND-008 / TODO-FEAT-007） */
-    private async openQuickAccessPopover(e: MouseEvent): Promise<void> {
+    private async openQuickAccessPopover(e?: MouseEvent): Promise<void> {
         this.closeQuickAccessPopover();
         const prevFocused = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
         const existing = typeof document !== "undefined" ? document.querySelector(".xlc-quick-popover") : null;
@@ -2055,10 +2058,13 @@ export default class XiaolvCommonPlugin extends Plugin {
             popover.setAttribute("aria-label", "小驴常用极速气泡卡片");
         }
 
-        const rect = (e.currentTarget as HTMLElement | null)?.getBoundingClientRect?.() ?? {
-            left: e.clientX,
-            bottom: e.clientY + 8,
-            right: e.clientX + 220,
+        // 锚点优先级：右键事件目标 > 顶栏按钮（官方 contextMenu 通道无鼠标事件）> 视口左上角兜底
+        const anchorRect = (e?.currentTarget as HTMLElement | null)?.getBoundingClientRect?.()
+            ?? (this.topBarElement as HTMLElement | null)?.getBoundingClientRect?.();
+        const rect = anchorRect ?? {
+            left: e?.clientX ?? 0,
+            bottom: (e?.clientY ?? 0) + 8,
+            right: (e?.clientX ?? 0) + 220,
         };
         const posX = typeof window !== "undefined" ? Math.max(12, Math.min(rect.right - 240, window.innerWidth - 260)) : 100;
         const posY = typeof window !== "undefined" ? Math.min(rect.bottom + 6, window.innerHeight - 280) : 100;
@@ -2066,7 +2072,13 @@ export default class XiaolvCommonPlugin extends Plugin {
         popover.style.position = "fixed";
         popover.style.left = `${posX}px`;
         popover.style.top = `${posY}px`;
-        popover.style.zIndex = "9999";
+        // 动态层级：跟随思源递增的 window.siyuan.zIndex，保证盖过内容流但不压住原生 dialog/搜索
+        try {
+            const currentZ = (window as any).siyuan?.zIndex;
+            popover.style.zIndex = String(typeof currentZ === "number" ? Math.max(300, currentZ + 20) : 300);
+        } catch {
+            popover.style.zIndex = "300";
+        }
 
         const head = document.createElement("div");
         head.className = "xlc-quick-popover-head";

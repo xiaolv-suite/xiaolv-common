@@ -3406,7 +3406,13 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                     popover.style.top = "42px";
                     popover.style.right = "16px";
                 }
-                popover.style.zIndex = "9999";
+                // 动态层级：跟随思源递增的 window.siyuan.zIndex，保证盖过内容流但不压住原生 dialog/搜索
+                try {
+                    const currentZ = typeof window !== "undefined" && (window as any).siyuan?.zIndex;
+                    popover.style.zIndex = String(typeof currentZ === "number" ? Math.max(300, currentZ + 20) : 300);
+                } catch {
+                    popover.style.zIndex = "300";
+                }
             }
         } catch { /* ignore */ }
     };
