@@ -2,7 +2,7 @@
 // 核心使命：剪贴板里闪现的好代码好文案，一键"转正"为永久常用片段——进入 frecency 排序与 :简码 直达
 import {Dialog} from "siyuan";
 import {lvLaunchpad, lvSurfaceStack} from "../libs/lv-notice-kit";
-import {cleanShortcode} from "../model/item";
+import {cleanShortcode, parseSnippetAnnotations} from "../model/item";
 import {SearchEntry} from "../model/search";
 import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
@@ -90,7 +90,10 @@ export function openPromoteClipDialog(options: PromoteClipDialogOptions): Dialog
     contentLabel.appendChild(contentTitle);
 
     const rawText = options.entry.content || options.entry.summary || options.entry.title || "";
-    const normalizedText = normalizePromoteContent(rawText);
+    // R432 真机实证：剪贴板原文带尾部注解（如 18988889999@紧急报障电话）时，
+    // 预填必须先过注解剥离，否则纯净正文承诺落空、库内出现带注解的脏条目
+    const annotationParsed = parseSnippetAnnotations(rawText);
+    const normalizedText = normalizePromoteContent(annotationParsed.cleanText);
     const textarea = document.createElement("textarea");
     textarea.className = "b3-text-field xlc-promote-content";
     textarea.rows = 4;

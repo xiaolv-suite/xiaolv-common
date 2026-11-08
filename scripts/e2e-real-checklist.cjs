@@ -595,9 +595,20 @@ function check(name, ok, detail = "") {
             const btnText = saveBtn?.textContent?.trim() ?? "";
             return {title, summary, btnText};
         });
-        // 点击 ⭐ 一键沉淀为常用语
+        // 点击 ⭐ 打开转正微弹窗（预填纯净正文），再点「转正保存」完成入库（R432：步骤与真实交互对齐）
         await page.locator(".xlc-list .xlc-row[data-xlc-index='0'] [data-xlc-control='item.save-to-common']").click();
-        await sleep(500);
+        await page.waitForSelector("[data-xlc-control='promote.submit']", {timeout: 8000});
+        const prefilled = await page.evaluate(() => {
+            const content = document.querySelector("[data-xlc-control='promote.content']");
+            return {contentPrefilled: (content?.value ?? "").trim() === "18988889999"};
+        });
+        await page.locator("[data-xlc-control='promote.submit']").click();
+        // 等转正完成（成功后 promote 弹窗自毁、行按钮变 ✓ 禁用）；超时也继续取实际状态供诊断
+        await page.waitForFunction(() => {
+            const row = document.querySelector(".xlc-list .xlc-row[data-xlc-index='0'] [data-xlc-control='item.save-to-common']");
+            return row?.textContent?.trim() === "✓" && row?.disabled === true;
+        }, null, {timeout: 8000}).catch(() => {});
+        await sleep(300);
         const clipPromoteCheck = await page.evaluate(async () => {
             const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
             const row = document.querySelector(".xlc-list .xlc-row[data-xlc-index='0']");
@@ -620,8 +631,21 @@ function check(name, ok, detail = "") {
         });
         check("步骤 10b：剪贴板条目一键沉淀为常用语，智能剥离尾部注解、提取纯净正文与标题标签",
             clipRowVerify.title.includes("紧急报障电话") && clipRowVerify.summary.includes("18988889999") && clipRowVerify.btnText === "⭐"
+            && prefilled.contentPrefilled
             && clipPromoteCheck.btnAfter === "✓" && clipPromoteCheck.btnDisabled && clipPromoteCheck.hasItem && clipPromoteCheck.isCleanNumber,
-            JSON.stringify({clipRowVerify, clipPromoteCheck}));
+            JSON.stringify({clipRowVerify, prefilled, clipPromoteCheck}));
+
+        // R432：转正验收完成后真删该条目还原库状态——否则这个 frecency 最新条目会占据
+        // 空查询第一行，打破后续步骤对列表首行条目的隐含假设（真机两轮实证）
+        const promoteCleanup = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const idx = await p.library.ensureIndex(0);
+            const savedItem = idx.entries.find((e) => e.title === "紧急报障电话" || e.summary.includes("18988889999"));
+            if (!savedItem) return {deleted: false};
+            const res = await p.library.removeItem(savedItem.id);
+            return {deleted: res.ok, id: savedItem.id};
+        });
+        check("步骤 10b-cleanup：转正条目验收后真删还原库状态", promoteCleanup.deleted, JSON.stringify(promoteCleanup));
 
         // ══════════ 第 11 步：收尾批验证（Alt+H 真实路径、Alt+Shift+M 多选、QuickLook 双态与上下键同步、420px 窄窗不溢出） ══════════
         await page.evaluate(() => {
