@@ -149,6 +149,7 @@ export interface LvLaunchpadItem {
     badge?: string;
     badgeType?: "primary" | "warn" | "error" | "success";
     actions?: string[];
+    topBarElement?: HTMLElement | null;
     onClick: () => void;
     onAction?: (actionName: string) => void;
 }
@@ -2241,17 +2242,19 @@ export const lvEcosystem = {
 /* ========================================================================= */
 
 const launchpadRegistry = new Map<string, LvLaunchpadItem>();
+let memoryLaunchpadStates: Record<string, "pinned" | "docked" | "hidden"> = {};
 
 function getLaunchpadStates(): Record<string, "pinned" | "docked" | "hidden"> {
-    if (typeof localStorage === "undefined") return {};
+    if (typeof localStorage === "undefined") return { ...memoryLaunchpadStates };
     try {
         const raw = localStorage.getItem(LAUNCHPAD_STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
+        if (raw) return { ...memoryLaunchpadStates, ...JSON.parse(raw) };
     } catch { /* ignore */ }
-    return {};
+    return { ...memoryLaunchpadStates };
 }
 
 function saveLaunchpadStates(states: Record<string, "pinned" | "docked" | "hidden">): void {
+    memoryLaunchpadStates = { ...states };
     if (typeof localStorage === "undefined") return;
     try {
         localStorage.setItem(LAUNCHPAD_STORAGE_KEY, JSON.stringify(states));
@@ -2294,8 +2297,10 @@ function getLaunchpadHub(): LvLaunchpadHub {
         register(item: LvLaunchpadItem): () => void {
             launchpadRegistry.set(item.id, item);
             maybeShowOnboardingCard();
+            syncTopBarConvergence();
             return () => {
                 launchpadRegistry.delete(item.id);
+                syncTopBarConvergence();
             };
         },
 
@@ -2311,6 +2316,7 @@ function getLaunchpadHub(): LvLaunchpadHub {
             const states = getLaunchpadStates();
             states[id] = state;
             saveLaunchpadStates(states);
+            syncTopBarConvergence();
         },
 
         executeAction(id: string, actionName: string): boolean {
@@ -2960,11 +2966,53 @@ function ensureMobileEntry(): MobileEntryCleanup {
 const desktopEntryOwners = new Set<string>();
 let desktopEntryRetryTimers: number[] = [];
 
+/**
+ * 桌面端顶栏收敛调度引擎（Convergence Engine · Protocol v1.7.5）：
+ * 1. 当已注册的小驴插件 >= 2 个时：
+ *    - 自动挂载桌面端统一罗盘图标 #lvLaunchpadDesktopEntry；
+ *    - 将未明确置顶（state !== 'pinned'）的插件原生 topBarElement 自动设为 display: none；
+ *    - 若用户在罗盘内将某插件设为 'pinned'（置顶），则显示其原生按钮；
+ * 2. 当小驴插件仅有 1 个时：
+ *    - 保留该插件原生图标正常显示（零干扰）；
+ * 3. 插件全部卸载或注销时，自动恢复原生显示。
+ */
+export function syncTopBarConvergence(): void {
+    if (typeof document === "undefined" || isMobileFrontend()) return;
+    try {
+        const hub = getLaunchpadHub();
+        const items = hub.getItems();
+        const activeItems = items.filter(it => it.state !== "hidden");
+        const needConverge = activeItems.length >= 2;
+
+        const compassBtn = document.getElementById(DESKTOP_ENTRY_ID);
+        if (compassBtn) {
+            compassBtn.style.display = needConverge ? "inline-flex" : "none";
+            refreshEntryBadgeDot();
+        }
+
+        for (const item of items) {
+            if (item.topBarElement && typeof item.topBarElement === "object" && "style" in item.topBarElement) {
+                if (needConverge) {
+                    if (item.state === "pinned") {
+                        item.topBarElement.style.display = "";
+                    } else {
+                        item.topBarElement.style.display = "none";
+                    }
+                } else {
+                    item.topBarElement.style.display = item.state === "hidden" ? "none" : "";
+                }
+            }
+        }
+    } catch (err) {
+        console.warn("[LvLaunchpad] 顶栏收敛同步异常:", err);
+    }
+}
+
 function buildDesktopEntryButton(): boolean {
     if (typeof document === "undefined" || isMobileFrontend()) return false;
     const toolbar = document.getElementById("toolbar");
     if (!toolbar) return false;
-    if (document.getElementById(DESKTOP_ENTRY_ID)) { refreshEntryBadgeDot(); return true; }
+    if (document.getElementById(DESKTOP_ENTRY_ID)) { refreshEntryBadgeDot(); syncTopBarConvergence(); return true; }
 
     const btn = document.createElement("button");
     btn.type = "button";
@@ -2978,7 +3026,6 @@ function buildDesktopEntryButton(): boolean {
     btn.addEventListener("click", () => {
         const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
         if (items.length === 1) {
-            // 只有 1 个插件时：左键点击直接穿透触发该插件原生主入口（零多余层级，极致效率）
             try { items[0].onClick(); } catch (err) { console.warn("[LvLaunchpad] 桌面单插件直达失败:", err); }
             return;
         }
@@ -2987,12 +3034,12 @@ function buildDesktopEntryButton(): boolean {
 
     btn.addEventListener("contextmenu", (e) => {
         e.preventDefault();
-        // 右键一律呼出小驴罗盘完整弹射坞（含二级行动直达与生态状态）
         openMobileSheet();
     });
 
     toolbar.appendChild(btn);
     refreshEntryBadgeDot();
+    syncTopBarConvergence();
     return true;
 }
 

@@ -551,9 +551,9 @@ export default class XiaolvCommonPlugin extends Plugin {
         // 小驴罗盘 · 注册插件入口与二级行动直达 (Epoch 7 Phase 5)
         this.syncLaunchpadRegistry();
 
-        // 小驴罗盘 · 移动端统一收敛入口挂载 (Protocol v1.6.0 Mobile)
+        // 小驴罗盘 · 全端统一收敛入口挂载 (Protocol v1.7 Unified Entry)
         try {
-            this.mobileEntryCleaner = lvLaunchpad.ensureMobileEntry();
+            this.mobileEntryCleaner = lvLaunchpad.ensureUnifiedEntry();
         } catch {
             // 环境防御
         }
@@ -1240,6 +1240,8 @@ export default class XiaolvCommonPlugin extends Plugin {
                 callback: () => this.openSearch(),
                 position: "right",
             });
+            this.topBarElement = topBarEl;
+            this.syncLaunchpadRegistry();
             if (topBarEl && typeof topBarEl.addEventListener === "function") {
                 topBarEl.addEventListener("contextmenu", (e: MouseEvent) => {
                     e.preventDefault();
@@ -1757,6 +1759,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 badge,
                 badgeType: "primary",
                 actions: ["打开片段搜索", "复制置顶片段", "从剪贴板保存片段", "查看剪贴板历史"],
+                topBarElement: this.topBarElement,
                 onClick: () => this.openCommonPanel(),
                 onAction: (action) => this.handleQuickAction(action),
             });
