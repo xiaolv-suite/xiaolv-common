@@ -514,44 +514,94 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
         }
     });
 
-    await t.test("8. 顶栏挂载锚点安全性：必须在系统窗口控制区之前插入，绝不置于关闭按钮右侧", () => {
-        let insertedBefore = null;
-        let appendChildCalled = false;
+    await t.test("8. 顶栏挂载锚点安全性：思源 3.8.x 优先锚定 #barMore，旧版回退 windowControls，绝不置于关闭按钮右侧", () => {
+        // 场景 A：思源 3.8.x —— #barMore（「更多」溢出锚点）存在，罗盘必须锚定它
+        {
+            let insertedBefore = null;
+            let appendChildCalled = false;
+            const barMore = { id: "barMore", parentElement: null };
+            const windowControls = { id: "windowControls", parentElement: null };
+            const toolbar = {
+                id: "toolbar",
+                querySelector(sel) {
+                    if (sel.includes("barMore")) return barMore;
+                    if (sel.includes("windowControls")) return windowControls;
+                    return null;
+                },
+                insertBefore(newNode, refNode) {
+                    insertedBefore = refNode;
+                },
+                appendChild() {
+                    appendChildCalled = true;
+                },
+            };
+            barMore.parentElement = toolbar;
+            windowControls.parentElement = toolbar;
 
-        const windowControls = { id: "windowControls", parentElement: null };
-        const toolbar = {
-            id: "toolbar",
-            querySelector(sel) {
-                if (sel.includes("windowControls")) return windowControls;
-                return null;
-            },
-            insertBefore(newNode, refNode) {
-                insertedBefore = refNode;
-            },
-            appendChild() {
-                appendChildCalled = true;
-            },
-        };
-        windowControls.parentElement = toolbar;
+            const prevDoc = globalThis.document;
+            const capturedAttrs = {};
+            globalThis.document = {
+                getElementById(id) {
+                    if (id === "toolbar") return toolbar;
+                    return null;
+                },
+                createElement: () => ({
+                    setAttribute: (k, v) => { capturedAttrs[k] = v; },
+                    querySelector: () => null,
+                    style: {},
+                    addEventListener: () => {},
+                }),
+            };
 
-        const prevDoc = globalThis.document;
-        globalThis.document = {
-            getElementById(id) {
-                if (id === "toolbar") return toolbar;
-                if (id === "lvLaunchpadDesktopEntry") return null;
-                return null;
-            },
-            createElement: () => ({ setAttribute: () => {}, querySelector: () => null, style: {}, addEventListener: () => {} }),
-        };
+            try {
+                const cleanup = lvLaunchpad.ensureDesktopEntry();
+                assert.equal(insertedBefore, barMore, "罗盘图标必须锚定在思源 3.8.x 的 #barMore 之前（条目重排锚点）");
+                assert.equal(appendChildCalled, false, "严禁将罗盘 appendChild 至窗口控制区后面");
+                assert.equal(capturedAttrs["data-topbar-entry"], "lv-launchpad", "罗盘必须持有 data-topbar-entry 才能参与思源条目排序持久化");
+                assert.equal(capturedAttrs["data-location"], "right", "罗盘 data-location 必须与官方 addTopBar position:\"right\" 对齐");
+                cleanup();
+            } finally {
+                globalThis.document = prevDoc;
+            }
+        }
 
-        try {
-            const cleanup = lvLaunchpad.ensureDesktopEntry();
-            // 验证必须调用 insertBefore 在 windowControls 之前插入，而不能直接 appendChild 到末尾
-            assert.equal(insertedBefore, windowControls, "罗盘图标必须插在 windowControls 之前");
-            assert.equal(appendChildCalled, false, "严禁将罗盘 appendChild 至窗口控制区后面");
-            cleanup();
-        } finally {
-            globalThis.document = prevDoc;
+        // 场景 B：旧版思源 —— 无 #barMore，回退锚定 windowControls，同样绝不 appendChild
+        {
+            let insertedBefore = null;
+            let appendChildCalled = false;
+            const windowControls = { id: "windowControls", parentElement: null };
+            const toolbar = {
+                id: "toolbar",
+                querySelector(sel) {
+                    if (sel.includes("windowControls")) return windowControls;
+                    return null;
+                },
+                insertBefore(newNode, refNode) {
+                    insertedBefore = refNode;
+                },
+                appendChild() {
+                    appendChildCalled = true;
+                },
+            };
+            windowControls.parentElement = toolbar;
+
+            const prevDoc = globalThis.document;
+            globalThis.document = {
+                getElementById(id) {
+                    if (id === "toolbar") return toolbar;
+                    return null;
+                },
+                createElement: () => ({ setAttribute: () => {}, querySelector: () => null, style: {}, addEventListener: () => {} }),
+            };
+
+            try {
+                const cleanup = lvLaunchpad.ensureDesktopEntry();
+                assert.equal(insertedBefore, windowControls, "无 #barMore 时罗盘必须插在 windowControls 之前");
+                assert.equal(appendChildCalled, false, "严禁将罗盘 appendChild 至窗口控制区后面");
+                cleanup();
+            } finally {
+                globalThis.document = prevDoc;
+            }
         }
     });
 });

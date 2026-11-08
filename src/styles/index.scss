@@ -6560,9 +6560,10 @@
   }
 }
 
-// 侧边栏专属快捷上下文菜单
+// 侧边栏专属快捷上下文菜单（层级压回 260：高于常规内容流与 dock 面板，低于思源弹窗/dialog，
+// 避免覆盖原生确认框与搜索等系统级弹层）
 .xlc-dock-menu {
-  z-index: 9999;
+  z-index: 260;
   padding: 4px;
   border: 1px solid var(--xlc-line);
   border-radius: var(--xlc-radius-sm);

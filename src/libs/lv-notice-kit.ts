@@ -107,7 +107,7 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 175; // 1.7.5 (Phase 8: Mobile Compass, Focus Mode, TopBar Convergence & Bento Popover)
+const PROTOCOL_VERSION = 176; // 1.7.6 (Phase 9: SiYuan 3.8.x native topbar entry citizenship · #barMore anchored compass · closeguard Esc yield · zIndex lift · mute expiry cleanup)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
 const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
@@ -945,6 +945,10 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                 id: "lv-notice-active-card",
                 type: "card",
                 dismiss: () => {
+                    // 若当前存在关闭守卫浮层，优先让路给关闭守卫自身处理 Esc，通知层不抢占截断
+                    if (typeof document !== "undefined" && document.querySelector(".lvct-closeguard")) {
+                        return false;
+                    }
                     const top = activePackets[activePackets.length - 1];
                     if (top) {
                         hub.dismiss(top.id);
@@ -962,6 +966,13 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
     function render() {
         syncNoticeSurface();
         if (!hostEl) return;
+        // 动态提升 z-index，避免在长会话或多弹窗后被思源递增的 window.siyuan.zIndex 反盖
+        try {
+            const currentZ = typeof window !== "undefined" && (window as any).siyuan?.zIndex;
+            if (typeof currentZ === "number" && currentZ > 200) {
+                hostEl.style.zIndex = String(Math.max(999, currentZ + 20));
+            }
+        } catch { /* ignore */ }
         hostEl.innerHTML = "";
 
         const visible = activePackets.slice(-3);
@@ -1158,6 +1169,15 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
             if (!category || typeof localStorage === "undefined") return;
             try {
                 const key = `${STORAGE_PREFIX}${getTodayKey()}`;
+                // 清理往日过期的 mute key，防止 localStorage 无限累积
+                try {
+                    for (let i = localStorage.length - 1; i >= 0; i--) {
+                        const k = localStorage.key(i);
+                        if (k && k.startsWith(STORAGE_PREFIX) && k !== key) {
+                            localStorage.removeItem(k);
+                        }
+                    }
+                } catch { /* ignore */ }
                 const raw = localStorage.getItem(key) || "[]";
                 const list = JSON.parse(raw);
                 if (!list.includes(category)) {
@@ -2612,7 +2632,17 @@ function buildMobileEntryButton(): boolean {
         e.preventDefault();
         openMobileSheet();
     });
-    topBar.appendChild(btn);
+    // 与原生按钮按 DOM 序并列：插在最后一个原生按钮之前，绝不追加到思源「更多」等系统按钮之后
+    let inserted = false;
+    try {
+        const nativeButtons = topBar.querySelectorAll(":scope > .toolbar__button");
+        const last = nativeButtons.length ? nativeButtons[nativeButtons.length - 1] : null;
+        if (last && last.parentElement === topBar && typeof topBar.insertBefore === "function") {
+            topBar.insertBefore(btn, last);
+            inserted = true;
+        }
+    } catch { /* ignore */ }
+    if (!inserted) topBar.appendChild(btn);
     refreshEntryBadgeDot();
     return true;
 }
@@ -3032,6 +3062,11 @@ function findPluginTopBarElementInToolbar(item: LvLaunchpadItem): HTMLElement | 
             if (!el || el.id === DESKTOP_ENTRY_ID) continue;
             // 严格排除思源原生功能按钮与窗口拖拽控制区
             if (el.id && SIYUAN_NATIVE_BUTTON_IDS.has(el.id)) continue;
+            // 思源 3.8.x：窗口控制区（.toolbar__window / #windowControls / data-window-topbar-entry）内的按钮绝不参与插件探测
+            if (el.closest && typeof el.closest === "function" &&
+                (el.closest(".toolbar__window") || el.closest("#windowControls") || el.hasAttribute("data-window-topbar-entry"))) {
+                continue;
+            }
             if (el.classList && typeof el.classList.contains === "function") {
                 if (el.classList.contains("toolbar__item--drag") || el.classList.contains("toolbar__window-control")) {
                     continue;
@@ -3628,8 +3663,10 @@ export function toggleDesktopLaunchpadPopover(anchorEl?: HTMLElement | null): vo
 function insertDesktopEntryButton(toolbar: HTMLElement, btn: HTMLElement): void {
     if (typeof toolbar.querySelector === "function" && typeof toolbar.insertBefore === "function") {
         try {
-            // 优先在插件集管理、命令面板、全局搜索或设置/窗口控制之前插入，与插件图标整齐并列在插件区末尾，绝不插在最右侧窗口控制区
-            const anchor = toolbar.querySelector("#barPlugins, #barCommand, #barSearch, #barDockR, #barSetting, #barSettings, #barHelp, .toolbar__window-control, #windowControls");
+            // 思源 3.8.x 顶栏条目重排规则：所有带 data-topbar-entry 的条目会被思源按保存顺序重插到 #barMore 之前。
+            // 罗盘锚定 #barMore（原生「更多」溢出锚点）才能稳定驻留在插件区末尾，既不漂移也绝不落入 #windowControls 窗口控制区；
+            // 旧版本思源无 #barMore 时逐级回退到插件/命令/搜索/停靠锚点。
+            const anchor = toolbar.querySelector("#barMore, #barPlugins, #barCommand, #barSearch, #barDockR, #barSetting, #barSettings, #barHelp, #windowControls");
             if (anchor && anchor.parentElement === toolbar) {
                 toolbar.insertBefore(btn, anchor);
                 return;
@@ -3649,6 +3686,10 @@ function buildDesktopEntryButton(): boolean {
     btn.type = "button";
     btn.id = DESKTOP_ENTRY_ID;
     btn.className = "toolbar__item ariaLabel";
+    // 思源 3.8.x 原生条目公民身份：data-topbar-entry 让罗盘参与顶栏条目排序持久化与 ye() 重排恢复，
+    // data-location 与官方 addTopBar position:"right" 对齐，避免被思源条目体系视为异物
+    btn.setAttribute("data-topbar-entry", "lv-launchpad");
+    btn.setAttribute("data-location", "right");
     btn.setAttribute("aria-label", "小驴罗盘");
     btn.setAttribute("title", "小驴罗盘 · 全家桶极速直达 (左键展开 · 快捷键 1~8)");
     btn.style.position = "relative";
