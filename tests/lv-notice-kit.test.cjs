@@ -729,3 +729,38 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 7 标准�
         assert.equal(afterUnreg.length, 0, "注销后检索结果应为空");
     });
 });
+
+test("R434 安全契约：罗盘 popover 注册数据（名称/描述/徽标/ID）一律转义后进 innerHTML", () => {
+    const {buildLaunchpadPopoverHtml} = lvNoticeKit;
+    const evil = (over = {}) => ({
+        id: "xlc-evil\"><img src=x onerror=whatever>",
+        name: "<img src=x onerror=alert(1)>恶意插件",
+        fullName: "<script>evil()</script>",
+        svgIcon: "iconX",
+        desc: "</span><script>evil2()</script>",
+        badge: "<b>爆炸</b>",
+        badgeType: "primary",
+        color: "red;position:fixed;left:0;top:0;width:999px",
+        state: "docked",
+        onClick: () => {},
+        ...over,
+    });
+    const html = buildLaunchpadPopoverHtml([evil()] , false);
+
+    // 恶意载荷必须以文本实体形态出现，绝不能成为真实元素/属性逃逸
+    assert.ok(!html.includes("<img src=x"), "img 载荷必须被转义");
+    assert.ok(!html.includes("<script>"), "script 载荷必须被转义");
+    assert.ok(!html.includes("</span><script"), "描述闭合逃逸必须被转义");
+    assert.ok(!html.includes("<b>爆炸</b>"), "徽标 HTML 必须被转义");
+    assert.ok(html.includes("&lt;img src=x"), "转义实体应出现在输出中");
+
+    // 颜色白名单：非法 CSS 注入色必须回落到主题令牌
+    assert.ok(!html.includes("position:fixed"), "颜色 style 注入必须被拦截");
+    assert.ok(html.includes("color:var(--b3-theme-primary)"), "非法颜色回落到主题令牌");
+
+    // 合法 hex 颜色保留
+    const ok = buildLaunchpadPopoverHtml([evil({color: "#14b8a6", id: "xlc-ok000001", name: "小驴常用", desc: "正常描述", badge: "常用 18 项"})], true);
+    assert.ok(ok.includes("color:#14b8a6"), "合法 hex 品牌色保留");
+    assert.ok(ok.includes("小驴常用"), "正常名称原样保留");
+    assert.ok(ok.includes("常用 18 项"), "正常徽标原样保留");
+});

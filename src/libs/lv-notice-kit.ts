@@ -3265,6 +3265,78 @@ export function closeDesktopLaunchpadPopover(): void {
     }, 150);
 }
 
+/**
+ * R434：罗盘 popover HTML 构建（纯函数，供单测直验转义契约）。
+ * 注册数据（名称/描述/徽标/颜色/ID 来自兄弟插件 register 调用，非本插件可信输入）
+ * 一律 escapeHtml 后再进模板；颜色额外白名单校验防止 style 属性内 CSS 注入。
+ */
+export function buildLaunchpadPopoverHtml(
+    items: ReadonlyArray<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }>,
+    allPinned: boolean,
+): string {
+    const toggleAllTitle = allPinned ? "收敛全部到小驴罗盘 (新版极简模式)" : "平铺全部独立图标到顶栏 (恢复老版布局)";
+    const toggleAllText = allPinned ? "🧭 收敛全部" : "📌 平铺顶栏";
+
+    const headerHtml = `
+      <div class="lv-pop-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;border-bottom:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08));">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:16px;">🧭</span>
+          <span style="font-weight:600;font-size:13px;color:var(--b3-theme-on-background,#333);">小驴罗盘中枢</span>
+          <span style="font-size:11px;padding:1px 6px;border-radius:999px;background:var(--b3-theme-primary-light,rgba(53,118,199,0.1));color:var(--b3-theme-primary,#3576c7);">${items.length} 插件已联结</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button type="button" class="lv-pop-toggle-all-btn" title="${toggleAllTitle}" style="background:transparent;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.15));border-radius:4px;cursor:pointer;font-size:10px;padding:2px 6px;color:var(--b3-theme-primary,#3576c7);user-select:none;">${toggleAllText}</button>
+          <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">1~${items.length}</span>
+        </div>
+      </div>
+    `;
+
+    let gridHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;max-height:420px;overflow-y:auto;">`;
+
+    items.forEach((item, idx) => {
+        const digit = idx + 1;
+        const isPinned = item.state === "pinned";
+        const pinIcon = isPinned ? "📌" : "📍";
+        const pinTitle = isPinned ? "已置顶在顶栏 (点击收敛回罗盘)" : "置顶到顶栏独立显示";
+        const badgeClass = item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary";
+        const safeName = escapeHtml(item.name);
+        const safeDesc = escapeHtml(item.desc || item.fullName);
+        const safeBadge = escapeHtml(String(item.badge ?? ""));
+        const safeId = escapeHtml(item.id);
+        const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(item.color ?? "") ? item.color : "var(--b3-theme-primary)";
+        const badgeHtml = item.badge ? `<span class="lv-pop-badge ${escapeHtml(badgeClass)}">${safeBadge}</span>` : "";
+
+        gridHtml += `
+          <div class="lv-pop-tile" data-idx="${idx}" data-id="${safeId}" style="position:relative;display:flex;flex-direction:column;padding:10px;border-radius:10px;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-surface,#fff);cursor:pointer;user-select:none;transition:all 0.15s ease;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="lv-pop-icon" style="color:${safeColor};display:flex;align-items:center;">
+                  <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span style="font-weight:600;font-size:13px;">${safeName}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button type="button" class="lv-pop-pin-btn" data-pin-id="${safeId}" title="${pinTitle}" style="background:transparent;border:none;cursor:pointer;font-size:12px;opacity:${isPinned ? '1' : '0.3'};padding:1px 3px;border-radius:4px;">${pinIcon}</button>
+                <span style="font-size:10px;font-family:monospace;padding:1px 4px;border-radius:3px;background:var(--b3-theme-background,#f0f0f0);color:var(--b3-theme-on-surface-light,#888);">${digit}</span>
+              </div>
+            </div>
+            <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeDesc}</span>
+            ${badgeHtml}
+          </div>
+        `;
+    });
+    gridHtml += `</div>`;
+
+    const footerHtml = `
+      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-background-light,rgba(0,0,0,0.02));border-radius:0 0 14px 14px;">
+        <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">快捷键: 方向键/1~${items.length} · Enter 执行 · P 置顶</span>
+        <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--b3-theme-primary,#3576c7);">Esc 关闭</button>
+      </div>
+    `;
+
+    return headerHtml + gridHtml + footerHtml;
+}
+
 export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initialFocusIndex = 0): void {
     if (typeof document === "undefined") return;
     closeDesktopLaunchpadPopover();
@@ -3316,62 +3388,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
     }
 
     const allPinned = items.length > 0 && items.every(it => it.state === "pinned");
-    const toggleAllTitle = allPinned ? "收敛全部到小驴罗盘 (新版极简模式)" : "平铺全部独立图标到顶栏 (恢复老版布局)";
-    const toggleAllText = allPinned ? "🧭 收敛全部" : "📌 平铺顶栏";
-
-    const headerHtml = `
-      <div class="lv-pop-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;border-bottom:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08));">
-        <div style="display:flex;align-items:center;gap:6px;">
-          <span style="font-size:16px;">🧭</span>
-          <span style="font-weight:600;font-size:13px;color:var(--b3-theme-on-background,#333);">小驴罗盘中枢</span>
-          <span style="font-size:11px;padding:1px 6px;border-radius:999px;background:var(--b3-theme-primary-light,rgba(53,118,199,0.1));color:var(--b3-theme-primary,#3576c7);">${items.length} 插件已联结</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <button type="button" class="lv-pop-toggle-all-btn" title="${toggleAllTitle}" style="background:transparent;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.15));border-radius:4px;cursor:pointer;font-size:10px;padding:2px 6px;color:var(--b3-theme-primary,#3576c7);user-select:none;">${toggleAllText}</button>
-          <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">1~${items.length}</span>
-        </div>
-      </div>
-    `;
-
-    let gridHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;max-height:420px;overflow-y:auto;">`;
-
-    items.forEach((item, idx) => {
-        const digit = idx + 1;
-        const isPinned = item.state === "pinned";
-        const pinIcon = isPinned ? "📌" : "📍";
-        const pinTitle = isPinned ? "已置顶在顶栏 (点击收敛回罗盘)" : "置顶到顶栏独立显示";
-        const badgeClass = item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary";
-        const badgeHtml = item.badge ? `<span class="lv-pop-badge ${badgeClass}">${item.badge}</span>` : "";
-
-        gridHtml += `
-          <div class="lv-pop-tile" data-idx="${idx}" data-id="${item.id}" style="position:relative;display:flex;flex-direction:column;padding:10px;border-radius:10px;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-surface,#fff);cursor:pointer;user-select:none;transition:all 0.15s ease;">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span class="lv-pop-icon" style="color:${item.color || "var(--b3-theme-primary)"};display:flex;align-items:center;">
-                  <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </span>
-                <span style="font-weight:600;font-size:13px;">${item.name}</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:4px;">
-                <button type="button" class="lv-pop-pin-btn" data-pin-id="${item.id}" title="${pinTitle}" style="background:transparent;border:none;cursor:pointer;font-size:12px;opacity:${isPinned ? '1' : '0.3'};padding:1px 3px;border-radius:4px;">${pinIcon}</button>
-                <span style="font-size:10px;font-family:monospace;padding:1px 4px;border-radius:3px;background:var(--b3-theme-background,#f0f0f0);color:var(--b3-theme-on-surface-light,#888);">${digit}</span>
-              </div>
-            </div>
-            <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.desc || item.fullName}</span>
-            ${badgeHtml}
-          </div>
-        `;
-    });
-    gridHtml += `</div>`;
-
-    const footerHtml = `
-      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-background-light,rgba(0,0,0,0.02));border-radius:0 0 14px 14px;">
-        <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">快捷键: 方向键/1~${items.length} · Enter 执行 · P 置顶</span>
-        <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--b3-theme-primary,#3576c7);">Esc 关闭</button>
-      </div>
-    `;
-
-    popover.innerHTML = headerHtml + gridHtml + footerHtml;
+    popover.innerHTML = buildLaunchpadPopoverHtml(items, allPinned);
 
     // 动态徽标异步探针自动刷新
     items.forEach((item) => {
