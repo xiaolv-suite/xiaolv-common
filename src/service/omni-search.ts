@@ -165,12 +165,14 @@ export function deriveOmniItemMetadata(entry: SearchEntry): { category: string; 
     };
 }
 
-/** 清除思源搜索结果中的高亮 <mark> 标签并还原常见 HTML 转义字符 */
+/** 清除思源搜索结果中的高亮 <mark> / <span data-type="search-mark"> / <br> 标签并还原常见 HTML 转义字符 */
 export function cleanSearchHighlight(raw: string): string {
     if (!raw) return "";
     return raw
-        .replace(/<mark>/gi, "")
-        .replace(/<\/mark>/gi, "")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<wbr\s*\/?>/gi, "")
+        .replace(/<\/?(?:mark|span)\b[^>]*>/gi, "")
+        .replace(/&nbsp;/gi, " ")
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&amp;/g, "&")

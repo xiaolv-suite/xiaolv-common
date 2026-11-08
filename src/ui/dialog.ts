@@ -1475,7 +1475,7 @@ export class CommonSearchDialog {
         guide.type = "button";
         guide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-guide";
         guide.dataset.xlcControl = "footer.help";
-        guide.textContent = "ⓘ " + this.deps.t("usageGuideBtn");
+        guide.textContent = isMobile ? "ⓘ 帮助" : ("ⓘ " + this.deps.t("usageGuideBtn"));
         guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
         guide.addEventListener("click", () => this.openUsageGuide());
         footer.appendChild(guide);
@@ -1524,7 +1524,7 @@ export class CommonSearchDialog {
         gear.type = "button";
         gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";
         gear.dataset.xlcControl = "footer.settings";
-        gear.textContent = "⚙ " + this.deps.t("openSettings");
+        gear.textContent = isMobile ? "⚙ 设置" : ("⚙ " + this.deps.t("openSettings"));
         gear.setAttribute("aria-label", this.deps.t("openSettings"));
         gear.addEventListener("click", () => {
             this.destroy();
@@ -3025,8 +3025,9 @@ export class CommonSearchDialog {
         const meta = document.createElement("div");
         meta.className = "xlc-row-meta";
 
-        // 全域条目显示精细面包屑路径
-        if (entry.isOmni && entry.category) {
+        // 全域条目显示精细面包屑路径（手机端已有分组标题头，省略行内重复路径避免挤占摘要）
+        const isMobileRow = this.deps.isMobile();
+        if (entry.isOmni && entry.category && !isMobileRow) {
             const breadcrumb = document.createElement("span");
             breadcrumb.className = "xlc-row-breadcrumb";
             const cleanPath = entry.category.replace(/^\/+/, "").replace(/\.sy$/, "");
@@ -3037,7 +3038,7 @@ export class CommonSearchDialog {
         }
 
         const currentFilters = this.deps.getFilters();
-        const cleanTags = entry.tags.filter(Boolean);
+        const cleanTags = entry.tags.filter((tg) => Boolean(tg) && !(isMobileRow && entry.isOmni && (tg === "全库块" || tg === "当前文档")));
         const shownTags = cleanTags.slice(0, 3);
         if (shownTags.length > 0) {
             const tagsWrapper = document.createElement("span");
