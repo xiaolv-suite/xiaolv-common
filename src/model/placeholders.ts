@@ -41,11 +41,11 @@ import {extractUrlComponent, prefixLines, suffixLines, csvToList, buildUrlQuery}
 // {{xlc:cursor}} 与 {{xlc:ask:…}} 不在本模型：分别见 variables.ts（插入路径专用）。
 // 替换时机：插入/复制时（executor 输出载荷）；条目存储内容永远保留模板原文。
 
-export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "nanoid" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats" | "radix" | "kv" | "match" | "valid" | "template" | "obfuscate" | "scramble" | "thousands" | "checksum" | "pad" | "seq" | "fingerprint" | "randomcolor" | "btruncate" | "initials" | "plural" | "escape" | "repeat" | "center" | "slash" | "revwords" | "randomname" | "if" | "smask" | "censor" | "shuffle" | "progress" | "json" | "line" | "csv";
+export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" | "quarter" | "month" | "day" | "hour" | "minute" | "title" | "path" | "doc" | "random" | "uuid" | "id" | "nanoid" | "password" | "count" | "case" | "calc" | "selection" | "regex" | "timestamp" | "week" | "greeting" | "url" | "base64" | "html" | "hash" | "number" | "truncate" | "mask" | "currency" | "filesize" | "reverse" | "cron" | "timeago" | "summary" | "lunar" | "choose" | "words" | "color" | "stats" | "radix" | "kv" | "match" | "valid" | "template" | "obfuscate" | "scramble" | "thousands" | "checksum" | "pad" | "seq" | "fingerprint" | "randomcolor" | "btruncate" | "initials" | "plural" | "escape" | "repeat" | "center" | "slash" | "revwords" | "randomname" | "if" | "smask" | "censor" | "shuffle" | "progress" | "json" | "line" | "csv" | "achievement" | "home_board" | "review_card" | "exam_scorecard" | "reading_digest" | "meeting_brief";
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
+export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|achievement|home_board|review_card|exam_scorecard|reading_digest|meeting_brief|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -2478,6 +2478,70 @@ export function resolvePlaceholder(
     if (kind === "json") return arg ? resolveJsonArg(arg, subAction) : null;
     if (kind === "line") return arg ? resolveLineArg(arg, subAction) : null;
     if (kind === "csv") return arg ? resolveCsvArg(arg, subAction) : null;
+    if (kind === "achievement") {
+        const today = formatLocalDate(now);
+        return [
+            `> 🌅 **今日自律成就卡 · ${today}**`,
+            `> 达成率: **0%** (0/3) · 连续 1 天🔥`,
+            `>`,
+            `> - [ ] **晨间阅读 30 分钟** \`⚪ 保底\` ⚡+2`,
+            `> - [ ] **核心技能刻意练习** \`🟢 达标\` ⚡+3`,
+            `> - [ ] **晚间复盘总结** \`🔥 突破\` ⚡+5`,
+            `{: custom-type="daily-achievement" custom-checkin-card="true" }`,
+        ].join("\n");
+    }
+    if (kind === "home_board") {
+        const today = formatLocalDate(now);
+        return [
+            `> 🏠 **今日家庭生活备忘与到期预警 · ${today}**`,
+            `> 待处理: **0** 项 (🔴 逾期: **0** · 🟠 7天内: **0** · 🟡 预警期: **0**)`,
+            `>`,
+            `> - 🟢 今日家庭资产与证件状态安全，无临期到期事项`,
+            `{: custom-type="home-alert-board" custom-home-summary="true" }`,
+        ].join("\n");
+    }
+    if (kind === "review_card") {
+        const today = formatLocalDate(now);
+        return [
+            `> 🗂️ **今日闪卡复习战报 · ${today}**`,
+            `> 复习完成: **0** 张 · 掌握率: **100%** (🟢 熟练: 0 · 🟡 勉强: 0 · 🔴 遗忘: 0)`,
+            `>`,
+            `> - ⏱️ **专注用时**: 0 分钟`,
+            `{: custom-type="flashcard-review-summary" custom-cards-reviewed="0" custom-retention="100" }`,
+        ].join("\n");
+    }
+    if (kind === "exam_scorecard") {
+        const title = arg ? arg.replace(/[\r\n]+/g, " ").trim() : "综合专项测验";
+        return [
+            `> 📝 **今日测评战报 · ${title}**`,
+            `> 成绩: **100/100** (100%) · 🟢 通过 · 订正待办: **0** 项`,
+            `>`,
+            `> - ⏱️ **考场状态与节奏**: 🌊 认知心流平稳`,
+            `{: custom-type="exam-scorecard" custom-score="100" custom-pass="true" }`,
+        ].join("\n");
+    }
+    if (kind === "reading_digest") {
+        const today = formatLocalDate(now);
+        return [
+            `> 📖 **今日阅读拾遗轨迹 · ${today}**`,
+            `> 今日完成阅读: **0** 篇 · ⏱️ 累计阅读 **0** 分钟`,
+            `>`,
+            `> - 💡 暂无今日新增剪藏已读条目，保持好奇心继续探索`,
+            `{: custom-type="glean-reading-digest" custom-reading-count="0" }`,
+        ].join("\n");
+    }
+    if (kind === "meeting_brief") {
+        const person = arg ? arg.replace(/[\r\n]+/g, " ").trim() : "联系人";
+        return [
+            `> 🤝 **与 ${person} 的会前 30 秒破冰速览**`,
+            `> 圈层: **核心圈** · 关系温度: **🟢 密切**`,
+            `>`,
+            `> - 💬 **上次聊了什么**: 近期重点交流与事务协同`,
+            `> - ❤️ **喜好习惯**: 偏好直接务实沟通`,
+            `> - ⚠️ **敏感雷区**: 避免无准备长会`,
+            `{: custom-type="meeting-brief" custom-person="${person}" }`,
+        ].join("\n");
+    }
     if (kind === "path") {
         if (!arg && !subAction) return doc?.path ?? "";
         return resolvePathArg(arg, subAction, doc?.path ?? "");
