@@ -98,4 +98,72 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             globalThis.window = prevWin;
         }
     });
+
+    await t.test("2. 桌面端吸附式 Bento Popover 弹射坞开启、关闭与状态查询契约", () => {
+        const {
+            openDesktopLaunchpadPopover,
+            closeDesktopLaunchpadPopover,
+            isDesktopPopoverOpen,
+            toggleDesktopLaunchpadPopover,
+        } = require("../src/libs/lv-notice-kit.ts");
+
+        let bodyChildren = [];
+        let createdElement = null;
+
+        const prevDoc = globalThis.document;
+        const prevWin = globalThis.window;
+
+        globalThis.document = {
+            getElementById(id) {
+                if (id === "lv-desktop-launchpad-popover") return createdElement;
+                if (id === "lvLaunchpadDesktopEntry") return { getBoundingClientRect: () => ({ top: 0, bottom: 32, right: 100 }) };
+                return null;
+            },
+            createElement(tag) {
+                createdElement = {
+                    tagName: tag,
+                    id: "",
+                    style: {},
+                    classList: { add() {} },
+                    setAttribute() {},
+                    addEventListener() {},
+                    remove() { createdElement = null; },
+                };
+                return createdElement;
+            },
+            body: {
+                appendChild(el) { bodyChildren.push(el); },
+            },
+        };
+
+        globalThis.window = {
+            innerWidth: 1920,
+            addEventListener() {},
+            removeEventListener() {},
+        };
+
+        try {
+            assert.equal(isDesktopPopoverOpen(), false);
+
+            // 注册一个测试插件以供 popover 渲染
+            const unregister = lvLaunchpad.register({
+                id: "test-plugin",
+                name: "测试",
+                fullName: "测试插件",
+                svgIcon: "icon",
+                onClick: () => {},
+            });
+
+            openDesktopLaunchpadPopover();
+            assert.equal(isDesktopPopoverOpen(), true, "打开后状态应为 true");
+            assert.equal(createdElement.id, "lv-desktop-launchpad-popover");
+
+            closeDesktopLaunchpadPopover();
+            // close 触发带 150ms 动画
+            unregister();
+        } finally {
+            globalThis.document = prevDoc;
+            globalThis.window = prevWin;
+        }
+    });
 });

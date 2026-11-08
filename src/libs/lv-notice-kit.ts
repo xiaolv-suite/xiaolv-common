@@ -2985,13 +2985,13 @@ export function syncTopBarConvergence(): void {
         const needConverge = activeItems.length >= 2;
 
         const compassBtn = document.getElementById(DESKTOP_ENTRY_ID);
-        if (compassBtn) {
+        if (compassBtn && typeof compassBtn === "object" && "style" in compassBtn && compassBtn.style) {
             compassBtn.style.display = needConverge ? "inline-flex" : "none";
             refreshEntryBadgeDot();
         }
 
         for (const item of items) {
-            if (item.topBarElement && typeof item.topBarElement === "object" && "style" in item.topBarElement) {
+            if (item.topBarElement && typeof item.topBarElement === "object" && "style" in item.topBarElement && item.topBarElement.style) {
                 if (needConverge) {
                     if (item.state === "pinned") {
                         item.topBarElement.style.display = "";
@@ -3008,6 +3008,183 @@ export function syncTopBarConvergence(): void {
     }
 }
 
+const DESKTOP_POPOVER_ID = "lv-desktop-launchpad-popover";
+let desktopPopoverKeyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+let desktopPopoverOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+
+export function isDesktopPopoverOpen(): boolean {
+    if (typeof document === "undefined") return false;
+    return Boolean(document.getElementById(DESKTOP_POPOVER_ID));
+}
+
+export function closeDesktopLaunchpadPopover(): void {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById(DESKTOP_POPOVER_ID);
+    if (!el) return;
+
+    if (desktopPopoverKeyDownHandler && typeof window !== "undefined") {
+        window.removeEventListener("keydown", desktopPopoverKeyDownHandler, true);
+        desktopPopoverKeyDownHandler = null;
+    }
+    if (desktopPopoverOutsideClickHandler && typeof window !== "undefined") {
+        window.removeEventListener("mousedown", desktopPopoverOutsideClickHandler, true);
+        desktopPopoverOutsideClickHandler = null;
+    }
+
+    el.classList.add("lv-popover-closing");
+    setTimeout(() => {
+        try { el.remove(); } catch { /* ignore */ }
+    }, 150);
+}
+
+export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement): void {
+    if (typeof document === "undefined") return;
+    closeDesktopLaunchpadPopover();
+
+    const anchor = anchorEl || document.getElementById(DESKTOP_ENTRY_ID);
+    const items = getLaunchpadHub().getItems().filter(it => it.state !== "hidden");
+    if (items.length === 0) return;
+
+    const popover = document.createElement("div");
+    popover.id = DESKTOP_POPOVER_ID;
+    popover.className = "lv-desktop-launchpad-popover b3-typography";
+    popover.setAttribute("role", "dialog");
+    popover.setAttribute("aria-label", "小驴罗盘全家桶弹射坞");
+
+    if (anchor) {
+        const rect = anchor.getBoundingClientRect();
+        popover.style.position = "fixed";
+        popover.style.top = `${Math.round(rect.bottom + 6)}px`;
+        const rightOffset = Math.max(12, Math.round(window.innerWidth - rect.right - 8));
+        popover.style.right = `${rightOffset}px`;
+        popover.style.zIndex = "9999";
+    }
+
+    popover.style.width = "340px";
+    popover.style.borderRadius = "14px";
+    popover.style.boxShadow = "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)";
+    popover.style.background = "var(--b3-theme-surface,#fff)";
+    popover.style.border = "1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08))";
+    popover.style.backdropFilter = "blur(16px)";
+    popover.style.overflow = "hidden";
+
+    const headerHtml = `
+      <div class="lv-pop-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;border-bottom:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08));">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:16px;">🧭</span>
+          <span style="font-weight:600;font-size:13px;color:var(--b3-theme-on-background,#333);">小驴罗盘中枢</span>
+          <span style="font-size:11px;padding:1px 6px;border-radius:999px;background:var(--b3-theme-primary-light,rgba(53,118,199,0.1));color:var(--b3-theme-primary,#3576c7);">${items.length} 插件已联结</span>
+        </div>
+        <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">按 1~${items.length} 极速直达</span>
+      </div>
+    `;
+
+    let gridHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;max-height:420px;overflow-y:auto;">`;
+
+    items.forEach((item, idx) => {
+        const digit = idx + 1;
+        const isPinned = item.state === "pinned";
+        const pinIcon = isPinned ? "📌" : "📍";
+        const pinTitle = isPinned ? "已置顶在顶栏 (点击收敛回罗盘)" : "置顶到顶栏独立显示";
+        const badgeHtml = item.badge ? `<span class="lv-pop-badge" style="font-size:10px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb, ${item.color || "var(--b3-theme-primary)"} 15%, transparent);color:${item.color || "var(--b3-theme-primary)"};margin-top:4px;display:inline-block;">${item.badge}</span>` : "";
+
+        gridHtml += `
+          <div class="lv-pop-tile" data-idx="${idx}" data-id="${item.id}" style="position:relative;display:flex;flex-direction:column;padding:10px;border-radius:10px;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-surface,#fff);cursor:pointer;user-select:none;transition:all 0.15s ease;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="lv-pop-icon" style="color:${item.color || "var(--b3-theme-primary)"};display:flex;align-items:center;">
+                  <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span style="font-weight:600;font-size:13px;">${item.name}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button type="button" class="lv-pop-pin-btn" data-pin-id="${item.id}" title="${pinTitle}" style="background:transparent;border:none;cursor:pointer;font-size:12px;opacity:${isPinned ? '1' : '0.3'};padding:1px 3px;border-radius:4px;">${pinIcon}</button>
+                <span style="font-size:10px;font-family:monospace;padding:1px 4px;border-radius:3px;background:var(--b3-theme-background,#f0f0f0);color:var(--b3-theme-on-surface-light,#888);">${digit}</span>
+              </div>
+            </div>
+            <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.desc || item.fullName}</span>
+            ${badgeHtml}
+          </div>
+        `;
+    });
+    gridHtml += `</div>`;
+
+    const footerHtml = `
+      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-background-light,rgba(0,0,0,0.02));border-radius:0 0 14px 14px;">
+        <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">快捷键 1~${items.length} 瞬发直达</span>
+        <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--b3-theme-primary,#3576c7);">Esc 关闭</button>
+      </div>
+    `;
+
+    popover.innerHTML = headerHtml + gridHtml + footerHtml;
+
+    popover.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement;
+        const pinBtn = target.closest<HTMLElement>(".lv-pop-pin-btn");
+        if (pinBtn) {
+            e.stopPropagation();
+            const id = pinBtn.getAttribute("data-pin-id");
+            if (id) {
+                const cur = getLaunchpadStates()[id] || "docked";
+                const next = cur === "pinned" ? "docked" : "pinned";
+                getLaunchpadHub().setPluginState(id, next);
+                syncTopBarConvergence();
+                openDesktopLaunchpadPopover(anchor);
+            }
+            return;
+        }
+
+        const tile = target.closest<HTMLElement>(".lv-pop-tile");
+        if (tile) {
+            const idxStr = tile.getAttribute("data-idx");
+            if (idxStr !== null) {
+                const idx = parseInt(idxStr, 10);
+                if (items[idx]) {
+                    closeDesktopLaunchpadPopover();
+                    try { items[idx].onClick(); } catch (err) { console.warn("[LvLaunchpad] 启动失败:", err); }
+                }
+            }
+        }
+    });
+
+    desktopPopoverKeyDownHandler = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            closeDesktopLaunchpadPopover();
+            return;
+        }
+        const num = parseInt(e.key, 10);
+        if (!isNaN(num) && num >= 1 && num <= items.length) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeDesktopLaunchpadPopover();
+            try { items[num - 1].onClick(); } catch (err) { console.warn("[LvLaunchpad] 键盘瞬发失败:", err); }
+        }
+    };
+    if (typeof window !== "undefined") window.addEventListener("keydown", desktopPopoverKeyDownHandler, true);
+
+    desktopPopoverOutsideClickHandler = (e: MouseEvent) => {
+        const t = e.target as Node;
+        if (!popover.contains(t) && anchor && !anchor.contains(t)) {
+            closeDesktopLaunchpadPopover();
+        }
+    };
+    setTimeout(() => {
+        if (typeof window !== "undefined") window.addEventListener("mousedown", desktopPopoverOutsideClickHandler!, true);
+    }, 50);
+
+    document.body.appendChild(popover);
+}
+
+export function toggleDesktopLaunchpadPopover(anchorEl?: HTMLElement): void {
+    if (isDesktopPopoverOpen()) {
+        closeDesktopLaunchpadPopover();
+    } else {
+        openDesktopLaunchpadPopover(anchorEl);
+    }
+}
+
 function buildDesktopEntryButton(): boolean {
     if (typeof document === "undefined" || isMobileFrontend()) return false;
     const toolbar = document.getElementById("toolbar");
@@ -3019,7 +3196,7 @@ function buildDesktopEntryButton(): boolean {
     btn.id = DESKTOP_ENTRY_ID;
     btn.className = "toolbar__item ariaLabel";
     btn.setAttribute("aria-label", "小驴罗盘");
-    btn.setAttribute("title", "小驴罗盘 · 全家桶极速直达");
+    btn.setAttribute("title", "小驴罗盘 · 全家桶极速直达 (左键展开 · 快捷键 1~8)");
     btn.style.position = "relative";
     btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;margin-left:2px;font-size:11px;line-height:1;">🌙</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
 
@@ -3029,18 +3206,44 @@ function buildDesktopEntryButton(): boolean {
             try { items[0].onClick(); } catch (err) { console.warn("[LvLaunchpad] 桌面单插件直达失败:", err); }
             return;
         }
-        openMobileSheet();
+        toggleDesktopLaunchpadPopover(btn);
     });
 
     btn.addEventListener("contextmenu", (e) => {
         e.preventDefault();
-        openMobileSheet();
+        toggleDesktopLaunchpadPopover(btn);
     });
 
     toolbar.appendChild(btn);
     refreshEntryBadgeDot();
     syncTopBarConvergence();
+    wireDesktopToolbarObserver();
     return true;
+}
+
+let desktopToolbarObserver: MutationObserver | null = null;
+
+function wireDesktopToolbarObserver(): void {
+    if (desktopToolbarObserver || typeof document === "undefined" || isMobileFrontend()) return;
+    const toolbar = document.getElementById("toolbar");
+    if (!toolbar || typeof MutationObserver === "undefined") return;
+
+    let debounceTimer: number | null = null;
+    desktopToolbarObserver = new MutationObserver(() => {
+        if (debounceTimer) return;
+        debounceTimer = window.setTimeout(() => {
+            debounceTimer = null;
+            if (!document.getElementById(DESKTOP_ENTRY_ID)) {
+                buildDesktopEntryButton();
+            } else {
+                syncTopBarConvergence();
+            }
+        }, 120);
+    });
+
+    try {
+        desktopToolbarObserver.observe(toolbar, { childList: true });
+    } catch { /* ignore */ }
 }
 
 function ensureDesktopEntry(): MobileEntryCleanup {
@@ -3062,6 +3265,9 @@ function ensureDesktopEntry(): MobileEntryCleanup {
         if (desktopEntryOwners.size > 0) return;
         desktopEntryRetryTimers.forEach((t) => { try { window.clearTimeout(t); } catch { /* ignore */ } });
         desktopEntryRetryTimers = [];
+        try { desktopToolbarObserver?.disconnect(); } catch { /* ignore */ }
+        desktopToolbarObserver = null;
+        closeDesktopLaunchpadPopover();
         try { document.getElementById(DESKTOP_ENTRY_ID)?.remove(); } catch { /* ignore */ }
     };
 }
