@@ -31,6 +31,8 @@ export function openShareCardDialog(
         content: "",
         width: "min(560px, 92vw)",
     });
+    // 令牌作用域：与套件市场同源问题，缺 host 类时 --xlc-* 全部失效
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host");
 
     mountPlatformDialogTitleWrap(dialog.element, deps.t("shareCardTitle") || "常用条目便携分享卡片");
 

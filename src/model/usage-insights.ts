@@ -117,6 +117,18 @@ export function calculateUsageInsights(
     };
 }
 
+/**
+ * 过滤 Top 榜中已不在库内的幽灵条目（R431）：
+ * 条目被删除后侧车 usage 仍保留其调用记录，meta 缺失时标题兜底为裸块 ID（xlc-xxxx），
+ * 且「点击直接复制」必然静默失败——榜单只展示仍存在的资产。
+ */
+export function filterKnownTopItems(
+    topItems: readonly UsageInsightItem[],
+    knownIds: ReadonlySet<string>,
+): UsageInsightItem[] {
+    return topItems.filter((item) => knownIds.has(item.id));
+}
+
 export interface HeatmapDay {
     /** 日期，格式 YYYY-MM-DD */
     date: string;

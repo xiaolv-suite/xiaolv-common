@@ -31,6 +31,8 @@ export function openPinboardDialog(
         content: "",
         width: "min(640px, 92vw)",
     });
+    // 令牌作用域：与套件市场同源问题，缺 host 类时 --xlc-* 全部失效
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host");
 
     mountPlatformDialogTitleWrap(dialog.element, title || "连环取用拼板");
 

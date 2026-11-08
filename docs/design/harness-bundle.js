@@ -140,15 +140,15 @@
     const historyList = [];
     const timers = /* @__PURE__ */ new Map();
     const pluginRegistry = /* @__PURE__ */ new Map();
-    let unregisterSurface = null;
-    function syncSurfaceStack() {
-      const hasCard = activePackets.some((p) => p.mode === "card");
-      if (hasCard && !unregisterSurface) {
-        unregisterSurface = lvSurfaceStack.push({
+    let unregisterNoticeSurface = null;
+    function syncNoticeSurface() {
+      const hasVisible = activePackets.length > 0;
+      if (hasVisible && !unregisterNoticeSurface) {
+        unregisterNoticeSurface = lvSurfaceStack.push({
           id: "lv-notice-active-card",
           type: "card",
           dismiss: () => {
-            const top = activePackets.slice().reverse().find((p) => p.mode === "card");
+            const top = activePackets[activePackets.length - 1];
             if (top) {
               hub.dismiss(top.id);
               return true;
@@ -156,13 +156,13 @@
             return false;
           }
         });
-      } else if (!hasCard && unregisterSurface) {
-        unregisterSurface();
-        unregisterSurface = null;
+      } else if (!hasVisible && unregisterNoticeSurface) {
+        unregisterNoticeSurface();
+        unregisterNoticeSurface = null;
       }
     }
     function render() {
-      syncSurfaceStack();
+      syncNoticeSurface();
       if (!hostEl) return;
       hostEl.innerHTML = "";
       const visible = activePackets.slice(-3);
@@ -173,10 +173,29 @@
         card.dataset.id = packet.id;
         card.dataset.level = packet.level || "info";
         if (packet.mode === "capsule") {
+          const actionHtml = packet.action ? `
+                    <button type="button" class="lv-notice-capsule-action" data-role="capsule-action">
+                        ${escapeHtml(packet.action.label)}
+                    </button>
+                ` : "";
           card.innerHTML = `
                     <span class="lv-notice-source-badge">${escapeHtml(packet.source || "\u63D0\u793A")}</span>
                     <span>${escapeHtml(packet.message)}</span>
+                    ${actionHtml}
                 `;
+          if (packet.action) {
+            const actBtn = card.querySelector("[data-role='capsule-action']");
+            actBtn == null ? void 0 : actBtn.addEventListener("click", async (e) => {
+              var _a2, _b2;
+              e.stopPropagation();
+              try {
+                await ((_b2 = (_a2 = packet.action) == null ? void 0 : _a2.onClick) == null ? void 0 : _b2.call(_a2));
+              } catch (err) {
+                console.error("[LvNotice] capsule action error", err);
+              }
+              hub.dismiss(packet.id);
+            });
+          }
         } else {
           const actionsHtml = (packet.actions || []).map((act, idx) => `
                     <button type="button" class="lv-notice-btn ${act.primary ? "lv-notice-btn--primary" : ""}" data-action-idx="${idx}">
@@ -198,6 +217,12 @@
                     <div class="lv-notice-body">${escapeHtml(packet.message)}</div>
                     ${actionsHtml || snoozeHtml ? `<div class="lv-notice-actions">${actionsHtml}${snoozeHtml}</div>` : ""}
                 `;
+          if (!actionsHtml && !snoozeHtml) {
+            const bodyEl = card.querySelector(".lv-notice-body");
+            bodyEl == null ? void 0 : bodyEl.addEventListener("click", () => {
+              bodyEl.classList.toggle("lv-notice-body--expanded");
+            });
+          }
           (_b = card.querySelector('[data-role="close"]')) == null ? void 0 : _b.addEventListener("click", () => {
             hub.dismiss(packet.id);
           });
@@ -257,7 +282,9 @@
         if (packet.category && this.isMutedToday(packet.category)) {
           return;
         }
-        if (packet.mode === "silent") {
+        const focusOn = isNotifyFocusActive();
+        const effectiveMode = focusOn && (packet.mode === "card" || packet.mode === "capsule") ? "silent" : packet.mode;
+        if (effectiveMode === "silent") {
           historyList.unshift(packet);
           if (historyList.length > 100) historyList.pop();
           return;
@@ -294,7 +321,15 @@
             timers.delete(id);
           }
           (_a = removed == null ? void 0 : removed.onDismiss) == null ? void 0 : _a.call(removed);
-          render();
+          const cardEl = hostEl == null ? void 0 : hostEl.querySelector(`[data-id="${id}"]`);
+          if (cardEl) {
+            try {
+              cardEl.remove();
+            } catch {
+            }
+          } else {
+            render();
+          }
         }
       },
       snooze(id, durationMs) {
@@ -361,8 +396,10 @@
         }
       },
       destroy() {
-        unregisterSurface == null ? void 0 : unregisterSurface();
-        unregisterSurface = null;
+        if (unregisterNoticeSurface) {
+          unregisterNoticeSurface();
+          unregisterNoticeSurface = null;
+        }
         timers.forEach((t) => clearTimeout(t));
         timers.clear();
         hostEl == null ? void 0 : hostEl.remove();
@@ -433,7 +470,7 @@
     return hub;
   }
   function getSurfaceStack() {
-    if (typeof window === "undefined") return nodeSurfaceStack;
+    if (typeof window === "undefined") return [];
     if (!window.__LV_SURFACE_STACK__) {
       window.__LV_SURFACE_STACK__ = [];
       window.addEventListener("keydown", (e) => {
@@ -448,8 +485,7 @@
             e.preventDefault();
             e.stopPropagation();
             if (handled !== "keep") {
-              const idx = stack.indexOf(item);
-              if (idx >= 0) stack.splice(idx, 1);
+              stack.splice(i, 1);
             }
             break;
           }
@@ -458,6 +494,128 @@
     }
     return window.__LV_SURFACE_STACK__;
   }
+  function getNodeTicker(callerPlugin) {
+    if (!nodeTickerInstance) {
+      nodeTickerInstance = {
+        version: PROTOCOL_VERSION,
+        hostPlugin: callerPlugin,
+        subscribe() {
+          return () => {
+          };
+        },
+        onDateCross() {
+          return () => {
+          };
+        },
+        destroy() {
+          nodeTickerInstance = void 0;
+        }
+      };
+    }
+    return nodeTickerInstance;
+  }
+  function getTicker(callerPlugin = "\u5C0F\u9A74") {
+    if (typeof window === "undefined") {
+      return getNodeTicker(callerPlugin);
+    }
+    if (window.__LV_TICKER__ && window.__LV_TICKER__.version >= PROTOCOL_VERSION) {
+      return window.__LV_TICKER__;
+    }
+    const subscribers = /* @__PURE__ */ new Map();
+    const dateCrossSubscribers = /* @__PURE__ */ new Map();
+    let lastDateKey = getTodayKey();
+    let timerId = null;
+    let baseIntervalMs = 1e4;
+    function tick() {
+      const now = /* @__PURE__ */ new Date();
+      const today = getTodayKey(now);
+      if (today !== lastDateKey) {
+        lastDateKey = today;
+        dateCrossSubscribers.forEach((cb) => {
+          try {
+            cb(today);
+          } catch (e) {
+            console.error("[LvTicker] DateCross error:", e);
+          }
+        });
+      }
+      const nowTs = now.getTime();
+      subscribers.forEach((sub) => {
+        if (nowTs - sub.lastRun >= sub.intervalMs - 500) {
+          sub.lastRun = nowTs;
+          try {
+            void sub.callback(now);
+          } catch (err) {
+            console.error(`[LvTicker] Subscriber ${sub.plugin}/${sub.id} error:`, err);
+          }
+        }
+      });
+    }
+    function setupTimer(interval) {
+      if (timerId !== null) clearInterval(timerId);
+      baseIntervalMs = interval;
+      timerId = window.setInterval(tick, baseIntervalMs);
+    }
+    setupTimer(1e4);
+    const onVisibilityChange = () => {
+      if (typeof document === "undefined") return;
+      if (document.hidden) {
+        setupTimer(6e4);
+      } else {
+        setupTimer(1e4);
+        tick();
+      }
+    };
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    const tickerHub = {
+      version: PROTOCOL_VERSION,
+      hostPlugin: callerPlugin,
+      subscribe(plugin, intervalMs, cb) {
+        const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        subscribers.set(id, {
+          id,
+          plugin,
+          intervalMs: Math.max(5e3, intervalMs),
+          lastRun: Date.now(),
+          callback: cb
+        });
+        return () => {
+          subscribers.delete(id);
+          if (subscribers.size === 0 && dateCrossSubscribers.size === 0) {
+            this.destroy();
+          }
+        };
+      },
+      onDateCross(plugin, cb) {
+        const id = `dc_${plugin}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        dateCrossSubscribers.set(id, cb);
+        return () => {
+          dateCrossSubscribers.delete(id);
+          if (subscribers.size === 0 && dateCrossSubscribers.size === 0) {
+            this.destroy();
+          }
+        };
+      },
+      destroy() {
+        if (timerId !== null) {
+          clearInterval(timerId);
+          timerId = null;
+        }
+        if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+          document.removeEventListener("visibilitychange", onVisibilityChange);
+        }
+        subscribers.clear();
+        dateCrossSubscribers.clear();
+        if (window.__LV_TICKER__ === this) {
+          delete window.__LV_TICKER__;
+        }
+      }
+    };
+    window.__LV_TICKER__ = tickerHub;
+    return tickerHub;
+  }
   function getDocLockMap() {
     if (typeof window === "undefined") return nodeDocLockMap;
     if (!window.__LV_DOC_LOCKS__) {
@@ -465,25 +623,75 @@
     }
     return window.__LV_DOC_LOCKS__;
   }
-  async function withDocLock(docId, task) {
+  async function withDocLock(docId, task, timeoutMs = 2e4) {
     if (!docId) return task();
     const map = getDocLockMap();
     const prev = map.get(docId) || Promise.resolve();
     let release;
-    const waiter = new Promise((resolve) => {
+    const current = new Promise((resolve) => {
       release = resolve;
     });
-    const chain = prev.then(() => waiter, () => waiter);
-    map.set(docId, chain);
+    const chained = prev.then(() => current, () => current);
+    map.set(docId, chained);
+    let timer = null;
     try {
       await prev;
-      return await task();
+      const taskPromise = task();
+      if (timeoutMs > 0 && typeof setTimeout === "function") {
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`[withDocLock] \u5199\u5165\u4EFB\u52A1\u8D85\u65F6 (${timeoutMs}ms) \u5F3A\u5236\u91CA\u653E: ${docId}`));
+          }, timeoutMs);
+        });
+        return await Promise.race([taskPromise, timeoutPromise]);
+      }
+      return await taskPromise;
     } finally {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
       release();
-      if (map.get(docId) === chain) {
+      if (map.get(docId) === chained) {
         map.delete(docId);
       }
     }
+  }
+  function getNotifyFocusUntil() {
+    if (typeof localStorage === "undefined") return 0;
+    try {
+      const n = Number(localStorage.getItem(NOTIFY_FOCUS_KEY));
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+  function isNotifyFocusActive() {
+    return getNotifyFocusUntil() > Date.now();
+  }
+  function refreshEntryFocusState() {
+    if (typeof document === "undefined") return;
+    const focus = isNotifyFocusActive();
+    for (const root of [document.getElementById(MOBILE_ENTRY_ID), document.getElementById(MOBILE_BALL_ID)]) {
+      if (!root) continue;
+      const moon = root.querySelector(".lv-entry-moon");
+      if (moon) moon.style.display = focus ? "inline-block" : "none";
+    }
+  }
+  function setNotifyFocusUntil(ts) {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(NOTIFY_FOCUS_KEY, String(Math.max(0, Math.round(ts))));
+    } catch {
+    }
+    refreshEntryFocusState();
+  }
+  function clearNotifyFocus() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.removeItem(NOTIFY_FOCUS_KEY);
+    } catch {
+    }
+    refreshEntryFocusState();
   }
   function getAiHub() {
     if (typeof window === "undefined") {
@@ -509,37 +717,39 @@
       if (!next) return;
       activeCount++;
       next.execute().finally(() => {
-        activeCount--;
+        activeCount = Math.max(0, activeCount - 1);
         processQueue();
       });
     }
     async function executeChatRequest(cfg, opts) {
-      var _a, _b, _c, _d, _e, _f, _g;
-      if (!cfg || !cfg.apiKey) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      const apiKey = opts.apiKey || (cfg == null ? void 0 : cfg.apiKey);
+      if (!apiKey) {
         throw new Error("[LvAiGateway] \u672A\u914D\u7F6E\u5171\u4EAB API Key\uFF08\u8BF7\u5728\u4EFB\u610F\u5C0F\u9A74\u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u914D\u7F6E\uFF09");
       }
-      const endpoint = (cfg.endpoint || "https://api.deepseek.com/v1").replace(/\/+$/, "");
+      const rawEndpoint = opts.endpoint || (cfg == null ? void 0 : cfg.endpoint) || "https://api.deepseek.com/v1";
+      const endpoint = rawEndpoint.replace(/\/+$/, "");
       const targetUrl = endpoint.endsWith("/chat/completions") ? endpoint : `${endpoint}/chat/completions`;
-      const model = opts.model || cfg.model || "deepseek-chat";
+      const model = opts.model || (cfg == null ? void 0 : cfg.model) || "deepseek-chat";
       let retries = 0;
-      const maxRetries = 3;
+      const maxRetries = (_a = opts.maxRetries) != null ? _a : 0;
       while (true) {
         try {
           const response = await fetch(targetUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${cfg.apiKey}`
+              Authorization: `Bearer ${apiKey}`
             },
             body: JSON.stringify({
               model,
               messages: opts.messages,
-              temperature: (_b = (_a = opts.temperature) != null ? _a : cfg.temperature) != null ? _b : 0.7,
-              max_tokens: cfg.maxTokens
+              temperature: (_c = (_b = opts.temperature) != null ? _b : cfg == null ? void 0 : cfg.temperature) != null ? _c : 0.7,
+              max_tokens: cfg == null ? void 0 : cfg.maxTokens
             }),
             signal: opts.signal
           });
-          if (response.status === 429 && retries < maxRetries) {
+          if (response.status === 429 && retries < ((_d = opts.maxRetries) != null ? _d : 2)) {
             retries++;
             const backoffMs = Math.pow(2, retries) * 1e3;
             console.warn(`[LvAiGateway] \u9047\u5230 429 \u9650\u6D41\uFF0C\u5C06\u5728 ${backoffMs}ms \u540E\u9000\u907F\u91CD\u8BD5 (\u7B2C ${retries} \u6B21)...`);
@@ -551,15 +761,18 @@
             throw new Error(`[LvAiGateway] HTTP ${response.status}: ${errBody}`);
           }
           const data = await response.json();
-          const content = (_f = (_e = (_d = (_c = data.choices) == null ? void 0 : _c[0]) == null ? void 0 : _d.message) == null ? void 0 : _e.content) != null ? _f : "";
-          const totalTokens = (_g = data.usage) == null ? void 0 : _g.total_tokens;
+          const content = (_h = (_g = (_f = (_e = data.choices) == null ? void 0 : _e[0]) == null ? void 0 : _f.message) == null ? void 0 : _g.content) != null ? _h : "";
+          const totalTokens = (_i = data.usage) == null ? void 0 : _i.total_tokens;
           return {
             content,
             model: data.model || model,
             totalTokens
           };
         } catch (err) {
-          if (retries < maxRetries && err instanceof Error && !err.name.includes("Abort")) {
+          if (err instanceof Error && (err.name.includes("Abort") || opts.signal && opts.signal.aborted)) {
+            throw err;
+          }
+          if (retries < maxRetries && err instanceof Error) {
             retries++;
             const backoffMs = Math.pow(2, retries) * 1e3;
             await new Promise((r) => setTimeout(r, backoffMs));
@@ -590,20 +803,62 @@
         return null;
       },
       chat(opts) {
+        var _a;
+        if ((_a = opts.signal) == null ? void 0 : _a.aborted) {
+          return Promise.reject(new DOMException("The operation was aborted", "AbortError"));
+        }
         return new Promise((resolve, reject) => {
-          var _a;
+          var _a2;
           const cfg = this.getConfig();
+          let settled = false;
+          const cleanupAbort = () => {
+            var _a3;
+            (_a3 = opts.signal) == null ? void 0 : _a3.removeEventListener("abort", onAbort);
+          };
+          const onAbort = () => {
+            if (settled) return;
+            settled = true;
+            const idx = requestQueue.findIndex((q) => q.task === task);
+            if (idx >= 0) requestQueue.splice(idx, 1);
+            reject(new DOMException("The operation was aborted", "AbortError"));
+          };
+          if (opts.signal) {
+            opts.signal.addEventListener("abort", onAbort, { once: true });
+          }
           const task = async () => {
+            var _a3;
+            if (settled || ((_a3 = opts.signal) == null ? void 0 : _a3.aborted)) {
+              if (!settled) {
+                settled = true;
+                cleanupAbort();
+                reject(new DOMException("The operation was aborted", "AbortError"));
+              }
+              return;
+            }
             try {
-              const res = await executeChatRequest(cfg, opts);
-              resolve(res);
+              const raceAbort = opts.signal ? new Promise((_, rej) => {
+                if (opts.signal.aborted) rej(new DOMException("The operation was aborted", "AbortError"));
+                opts.signal.addEventListener("abort", () => rej(new DOMException("The operation was aborted", "AbortError")), { once: true });
+              }) : null;
+              const execPromise = executeChatRequest(cfg, opts);
+              const res = raceAbort ? await Promise.race([execPromise, raceAbort]) : await execPromise;
+              if (!settled) {
+                settled = true;
+                cleanupAbort();
+                resolve(res);
+              }
             } catch (e) {
-              reject(e);
+              if (!settled) {
+                settled = true;
+                cleanupAbort();
+                reject(e);
+              }
             }
           };
           requestQueue.push({
             execute: task,
-            priority: (_a = opts.priority) != null ? _a : "high"
+            task,
+            priority: (_a2 = opts.priority) != null ? _a2 : "high"
           });
           processQueue();
         });
@@ -638,15 +893,25 @@
     const todayActivities = [];
     const listeners = /* @__PURE__ */ new Set();
     let lastDateKey = getTodayKey();
+    const checkAndResetDay = () => {
+      const today = getTodayKey();
+      if (today !== lastDateKey) {
+        lastDateKey = today;
+        todayActivities.length = 0;
+      }
+    };
+    try {
+      lvTicker.onDateCross("lv-activity", (newDay) => {
+        lastDateKey = newDay;
+        todayActivities.length = 0;
+      });
+    } catch {
+    }
     const activityHub = {
       version: PROTOCOL_VERSION,
       record(item) {
         const now = /* @__PURE__ */ new Date();
-        const today = getTodayKey(now);
-        if (today !== lastDateKey) {
-          lastDateKey = today;
-          todayActivities.length = 0;
-        }
+        checkAndResetDay();
         const record = {
           ...item,
           id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
@@ -654,6 +919,7 @@
           timeStr: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
         };
         todayActivities.push(record);
+        if (todayActivities.length > 1e3) todayActivities.shift();
         listeners.forEach((cb) => {
           try {
             cb(record);
@@ -663,6 +929,7 @@
         });
       },
       getTodayRecords() {
+        checkAndResetDay();
         return [...todayActivities];
       },
       onActivity(cb) {
@@ -670,9 +937,11 @@
         return () => listeners.delete(cb);
       },
       formatAsMarkdown() {
+        checkAndResetDay();
         return formatActivityMarkdown(todayActivities);
       },
       getDailyStats() {
+        checkAndResetDay();
         const stats = { total: todayActivities.length };
         todayActivities.forEach((r) => {
           stats[r.category] = (stats[r.category] || 0) + 1;
@@ -699,21 +968,2191 @@
     };
     const lines = ["### \u{1F434} \u5C0F\u9A74\u5168\u5BB6\u6876 \xB7 \u4ECA\u65E5\u6D3B\u52A8\u6C47\u7F16", ""];
     records.forEach((r) => {
+      var _a, _b;
       const icon = categoryIcons[r.category] || "\u{1F539}";
       const link = r.linkBlockId ? ` (([\u94FE\u63A5](siyuan://blocks/${r.linkBlockId})))` : "";
-      const detail = r.detail ? ` \u2014 *${r.detail}*` : "";
-      lines.push(`- **${r.timeStr}** [${r.source}] ${icon} ${r.title}${detail}${link}`);
+      const safeTitle = String((_a = r.title) != null ? _a : "").replace(/[\r\n]+/g, " ").trim();
+      const safeDetail = String((_b = r.detail) != null ? _b : "").replace(/[\r\n]+/g, " ").trim();
+      lines.push(`- **${r.timeStr}** [${r.source}] ${icon} ${safeTitle}${safeDetail ? ` \u2014 *${safeDetail}*` : ""}${link}`);
     });
     return lines.join("\n");
   }
-  var PROTOCOL_VERSION, STORAGE_PREFIX, AI_STORAGE_KEY, STYLES, nodeHistoryList, nodeHubInstance, nodeSurfaceStack, lvSurfaceStack, nodeDocLockMap, lvNotify, fallbackAiConfig, lvAi, fallbackActivities, lvActivity, backupRegistry, lvEcosystem;
+  function getLaunchpadStates() {
+    if (typeof localStorage === "undefined") return { ...memoryLaunchpadStates };
+    try {
+      const raw = localStorage.getItem(LAUNCHPAD_STORAGE_KEY);
+      if (raw) return { ...memoryLaunchpadStates, ...JSON.parse(raw) };
+    } catch {
+    }
+    return { ...memoryLaunchpadStates };
+  }
+  function saveLaunchpadStates(states) {
+    memoryLaunchpadStates = { ...states };
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(LAUNCHPAD_STORAGE_KEY, JSON.stringify(states));
+    } catch {
+    }
+  }
+  function getLaunchpadHub() {
+    if (typeof window === "undefined") {
+      return {
+        version: PROTOCOL_VERSION,
+        register: (item) => {
+          launchpadRegistry.set(item.id, item);
+          return () => launchpadRegistry.delete(item.id);
+        },
+        getItems: () => {
+          const states = getLaunchpadStates();
+          return Array.from(launchpadRegistry.values()).map((item) => ({
+            ...item,
+            state: states[item.id] || "docked"
+          }));
+        },
+        setPluginState: (id, state) => {
+          const states = getLaunchpadStates();
+          states[id] = state;
+          saveLaunchpadStates(states);
+        },
+        updateItem: (id, patch) => {
+          const item = launchpadRegistry.get(id);
+          if (item) {
+            Object.assign(item, patch);
+            refreshEntryBadgeDot();
+            syncTopBarConvergence();
+          }
+        },
+        executeAction: () => false,
+        open: () => {
+        },
+        close: () => {
+        }
+      };
+    }
+    if (window.__LV_LAUNCHPAD__ && window.__LV_LAUNCHPAD__.version >= PROTOCOL_VERSION) {
+      return window.__LV_LAUNCHPAD__;
+    }
+    const hub = {
+      version: PROTOCOL_VERSION,
+      register(item) {
+        launchpadRegistry.set(item.id, item);
+        maybeShowOnboardingCard();
+        syncTopBarConvergence();
+        return () => {
+          launchpadRegistry.delete(item.id);
+          syncTopBarConvergence();
+        };
+      },
+      getItems() {
+        const states = getLaunchpadStates();
+        return Array.from(launchpadRegistry.values()).map((item) => ({
+          ...item,
+          state: states[item.id] || "docked"
+        }));
+      },
+      setPluginState(id, state) {
+        const states = getLaunchpadStates();
+        states[id] = state;
+        saveLaunchpadStates(states);
+        syncTopBarConvergence();
+      },
+      updateItem(id, patch) {
+        const item = launchpadRegistry.get(id);
+        if (item) {
+          Object.assign(item, patch);
+          refreshEntryBadgeDot();
+          syncTopBarConvergence();
+        }
+      },
+      executeAction(id, actionName) {
+        const item = launchpadRegistry.get(id);
+        if (!item) return false;
+        if (item.onAction) {
+          item.onAction(actionName);
+          return true;
+        }
+        item.onClick();
+        return true;
+      },
+      open(_mode) {
+        window.dispatchEvent(new CustomEvent("lv:launchpad:open", { detail: { mode: _mode || "popover" } }));
+        openMobileSheet();
+      },
+      close() {
+        window.dispatchEvent(new CustomEvent("lv:launchpad:close"));
+        closeMobileSheet();
+      },
+      checkBedlineReminder(now) {
+        return checkAndTriggerBedline(now);
+      }
+    };
+    window.__LV_LAUNCHPAD__ = hub;
+    return hub;
+  }
+  function isMobileFrontend() {
+    var _a;
+    if (typeof document === "undefined") return false;
+    if (document.getElementById("mobileTopBar")) return true;
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+    if (/Macintosh/i.test(ua) && ((_a = navigator.maxTouchPoints) != null ? _a : 0) > 1) return true;
+    return false;
+  }
+  function hapticFeedback(durationMs = 10) {
+    try {
+      const nav = navigator;
+      if (typeof (nav == null ? void 0 : nav.vibrate) === "function") nav.vibrate(durationMs);
+    } catch {
+    }
+  }
+  function getMobileEntryMode() {
+    if (typeof localStorage === "undefined") return "both";
+    try {
+      const raw = localStorage.getItem(MOBILE_ENTRY_MODE_KEY);
+      if (raw === "topbar" || raw === "ball" || raw === "both" || raw === "none") return raw;
+    } catch {
+    }
+    return "both";
+  }
+  function setMobileEntryMode(mode) {
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(MOBILE_ENTRY_MODE_KEY, mode);
+      } catch {
+      }
+    }
+    syncMobileEntryDom();
+  }
+  function normalizeBallPosition(raw) {
+    const obj = raw && typeof raw === "object" ? raw : {};
+    const edge = obj.edge === "right" ? "right" : "left";
+    const y = typeof obj.yRatio === "number" && Number.isFinite(obj.yRatio) ? obj.yRatio : 0.5;
+    return { edge, yRatio: Math.min(0.85, Math.max(0.15, y)), immersive: obj.immersive === true };
+  }
+  function clampBallYRatio(v) {
+    return Math.min(0.85, Math.max(0.15, v));
+  }
+  function refreshEntryBadgeDot() {
+    if (typeof document === "undefined") return;
+    try {
+      const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+      const hasBadge = items.some((it) => Boolean(it.badge));
+      const hasUrgent = items.some((it) => Boolean(it.badge) && (it.badgeType === "error" || it.badgeType === "warn"));
+      const focus = isNotifyFocusActive();
+      for (const root of [document.getElementById(MOBILE_ENTRY_ID), document.getElementById(MOBILE_BALL_ID), document.getElementById(DESKTOP_ENTRY_ID)]) {
+        if (!root) continue;
+        const dot = root.querySelector(".lv-entry-dot");
+        if (dot && typeof dot === "object" && "style" in dot && dot.style) {
+          dot.style.display = hasBadge ? "block" : "none";
+          dot.style.background = hasUrgent ? "var(--b3-theme-error, #ef4444)" : "var(--b3-theme-primary, #3576c7)";
+        }
+        const moon = root.querySelector(".lv-entry-moon");
+        if (moon && typeof moon === "object" && "style" in moon && moon.style) {
+          moon.style.display = focus ? "inline-block" : "none";
+        }
+        if (items.length === 1) {
+          const single = items[0];
+          if (single) {
+            const singleName = single.fullName || single.name;
+            root.setAttribute("aria-label", `${singleName} \xB7 \u5C0F\u9A74\u7F57\u76D8`);
+            root.setAttribute("title", `${singleName} (\u5DE6\u952E\u76F4\u8FBE \xB7 \u53F3\u952E\u5C0F\u9A74\u7F57\u76D8)`);
+          }
+        } else if (items.length > 1) {
+          root.setAttribute("aria-label", "\u5C0F\u9A74\u7F57\u76D8");
+          root.setAttribute("title", `\u5C0F\u9A74\u7F57\u76D8 \xB7 \u5168\u5BB6\u6876\u6781\u901F\u76F4\u8FBE (${items.length} \u63D2\u4EF6\u5DF2\u8054\u7ED3 \xB7 \u5FEB\u6377\u952E 1~${items.length})`);
+        }
+      }
+    } catch {
+    }
+  }
+  function buildMobileEntryButton() {
+    if (typeof document === "undefined") return false;
+    const topBar = document.getElementById("mobileTopBar");
+    if (!topBar) return false;
+    if (document.getElementById(MOBILE_ENTRY_ID)) {
+      refreshEntryBadgeDot();
+      return true;
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = MOBILE_ENTRY_ID;
+    btn.className = "toolbar__button";
+    btn.setAttribute("aria-label", "\u5C0F\u9A74\u7F57\u76D8");
+    btn.setAttribute("title", "\u5C0F\u9A74\u7F57\u76D8 \xB7 \u5168\u5BB6\u6876\u6781\u901F\u76F4\u8FBE");
+    btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;margin-left:2px;font-size:11px;line-height:1;">\u{1F319}</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
+    btn.addEventListener("click", () => {
+      hapticFeedback(8);
+      const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+      if (items.length === 1) {
+        const single = items[0];
+        if (single) {
+          try {
+            single.onClick();
+          } catch (e) {
+            console.warn("[LvLaunchpad] \u79FB\u52A8\u7AEF\u5355\u63D2\u4EF6\u76F4\u8FBE\u5931\u8D25:", e);
+          }
+        }
+        return;
+      }
+      openMobileSheet();
+    });
+    btn.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openMobileSheet();
+    });
+    topBar.appendChild(btn);
+    refreshEntryBadgeDot();
+    return true;
+  }
+  function applyBallPosition(ball, pos, idle) {
+    ballCurrentPos = pos;
+    try {
+      const vw = typeof window !== "undefined" && Number.isFinite(window.innerWidth) ? window.innerWidth : 390;
+      const vh = typeof window !== "undefined" && Number.isFinite(window.innerHeight) ? window.innerHeight : 800;
+      const top = Math.min(vh - 88, Math.max(56, Math.round(pos.yRatio * vh)));
+      ball.style.top = `${top}px`;
+      ball.style.left = pos.edge === "right" ? `${Math.max(8, vw - 56)}px` : "10px";
+      ball.classList.remove("lv-ball-edge-left", "lv-ball-edge-right");
+      ball.classList.add(pos.edge === "right" ? "lv-ball-edge-right" : "lv-ball-edge-left");
+      ball.classList.toggle("lv-ball-immersive", pos.immersive);
+      ball.classList.toggle("lv-ball-idle", idle && !pos.immersive);
+    } catch {
+    }
+  }
+  function persistBallPosition(pos) {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(MOBILE_BALL_POS_KEY, JSON.stringify(pos));
+    } catch {
+    }
+  }
+  function scheduleBallIdle(ball, pos) {
+    if (ballIdleTimer !== void 0) {
+      try {
+        window.clearTimeout(ballIdleTimer);
+      } catch {
+      }
+    }
+    ballIdleTimer = window.setTimeout(() => {
+      ballIdleTimer = void 0;
+      applyBallPosition(ball, pos, true);
+    }, MOBILE_BALL_IDLE_MS);
+  }
+  function buildMobileBallButton() {
+    if (typeof document === "undefined" || !document.body) return false;
+    const existing = document.getElementById(MOBILE_BALL_ID);
+    if (existing) {
+      refreshEntryBadgeDot();
+      return true;
+    }
+    const ball = document.createElement("button");
+    ball.type = "button";
+    ball.id = MOBILE_BALL_ID;
+    ball.className = "lv-ball";
+    ball.setAttribute("aria-label", "\u5C0F\u9A74\u7F57\u76D8\u60AC\u6D6E\u7403 \xB7 \u70B9\u51FB\u6253\u5F00\u5168\u5BB6\u6876\uFF0C\u62D6\u62FD\u79FB\u52A8\uFF0C\u957F\u6309\u5207\u6362\u6C89\u6D78");
+    ball.setAttribute("title", "\u5C0F\u9A74\u7F57\u76D8");
+    ball.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;position:absolute;top:-3px;left:-3px;font-size:12px;line-height:1;">\u{1F319}</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);box-shadow:0 0 0 2px var(--b3-theme-surface,#fff);"></span>`;
+    let pos = normalizeBallPosition(void 0);
+    try {
+      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(MOBILE_BALL_POS_KEY) : null;
+      if (raw) pos = normalizeBallPosition(JSON.parse(raw));
+    } catch {
+    }
+    applyBallPosition(ball, pos, false);
+    let startX = 0, startY = 0, moved = false, dragging = false, suppressClick = false;
+    let longPressTimer;
+    const clearLongPress = () => {
+      if (longPressTimer !== void 0) {
+        try {
+          window.clearTimeout(longPressTimer);
+        } catch {
+        }
+        longPressTimer = void 0;
+      }
+    };
+    const pressStart = (x, y) => {
+      startX = x;
+      startY = y;
+      moved = false;
+      dragging = false;
+      suppressClick = false;
+      ball.classList.remove("lv-ball-idle");
+      clearLongPress();
+      longPressTimer = window.setTimeout(() => {
+        longPressTimer = void 0;
+        if (moved) return;
+        pos = { ...pos, immersive: !pos.immersive };
+        persistBallPosition(pos);
+        applyBallPosition(ball, pos, false);
+        hapticFeedback(12);
+      }, MOBILE_BALL_LONG_PRESS_MS);
+      scheduleBallIdle(ball, pos);
+    };
+    const pressMove = (x, y) => {
+      const dx = x - startX, dy = y - startY;
+      if (!moved && Math.hypot(dx, dy) > MOBILE_BALL_DRAG_SLOP_PX) {
+        moved = true;
+        dragging = true;
+        clearLongPress();
+        ball.classList.add("lv-ball-dragging");
+      }
+      if (!dragging) return;
+      try {
+        const vw = typeof window !== "undefined" && Number.isFinite(window.innerWidth) ? window.innerWidth : 390;
+        const vh = typeof window !== "undefined" && Number.isFinite(window.innerHeight) ? window.innerHeight : 800;
+        const top = Math.min(vh - 88, Math.max(56, y));
+        ball.style.top = `${top}px`;
+        pos = { ...pos, edge: x < vw / 2 ? "left" : "right", yRatio: clampBallYRatio(top / vh) };
+        ball.style.left = pos.edge === "right" ? `${Math.max(8, vw - 56)}px` : "10px";
+        ball.classList.remove("lv-ball-edge-left", "lv-ball-edge-right");
+        ball.classList.add(pos.edge === "right" ? "lv-ball-edge-right" : "lv-ball-edge-left");
+      } catch {
+      }
+    };
+    const pressEnd = () => {
+      clearLongPress();
+      if (dragging) {
+        dragging = false;
+        suppressClick = true;
+        ball.classList.remove("lv-ball-dragging");
+        persistBallPosition(pos);
+        applyBallPosition(ball, pos, false);
+        hapticFeedback(6);
+        scheduleBallIdle(ball, pos);
+        try {
+          window.dispatchEvent(new CustomEvent("lv:launchpad:ball-moved", { detail: { edge: pos.edge, yRatio: pos.yRatio } }));
+        } catch {
+        }
+        return;
+      }
+      scheduleBallIdle(ball, pos);
+    };
+    const pressCancel = () => {
+      clearLongPress();
+      dragging = false;
+      ball.classList.remove("lv-ball-dragging");
+    };
+    const supportsPointer = typeof window !== "undefined" && typeof window.PointerEvent === "function";
+    if (supportsPointer) {
+      ball.addEventListener("pointerdown", (ev) => {
+        var _a;
+        if (ev.pointerType === "mouse" && ev.button !== 0) return;
+        try {
+          (_a = ball.setPointerCapture) == null ? void 0 : _a.call(ball, ev.pointerId);
+        } catch {
+        }
+        pressStart(ev.clientX, ev.clientY);
+      });
+      ball.addEventListener("pointermove", (ev) => {
+        if (!dragging && ev.buttons === 0 && ev.pointerType === "mouse") return;
+        pressMove(ev.clientX, ev.clientY);
+      });
+      ball.addEventListener("pointerup", () => pressEnd());
+      ball.addEventListener("pointercancel", () => pressCancel());
+    } else {
+      ball.addEventListener("touchstart", (ev) => {
+        const t = ev.touches[0];
+        if (!t) return;
+        pressStart(t.clientX, t.clientY);
+      }, { passive: true });
+      ball.addEventListener("touchmove", (ev) => {
+        const t = ev.touches[0];
+        if (!t) return;
+        pressMove(t.clientX, t.clientY);
+      }, { passive: true });
+      ball.addEventListener("touchend", () => pressEnd(), { passive: true });
+      ball.addEventListener("touchcancel", () => pressCancel(), { passive: true });
+    }
+    ball.addEventListener("click", () => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
+      hapticFeedback(8);
+      const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+      if (items.length === 1) {
+        const single = items[0];
+        if (single) {
+          try {
+            single.onClick();
+          } catch (e) {
+            console.warn("[LvLaunchpad] \u60AC\u6D6E\u7403\u5355\u63D2\u4EF6\u76F4\u8FBE\u5931\u8D25:", e);
+          }
+        }
+        scheduleBallIdle(ball, pos);
+        return;
+      }
+      openMobileSheet();
+      scheduleBallIdle(ball, pos);
+    });
+    ball.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openMobileSheet();
+    });
+    document.body.appendChild(ball);
+    refreshEntryBadgeDot();
+    scheduleBallIdle(ball, pos);
+    wireViewportWatch();
+    return true;
+  }
+  function wireViewportWatch() {
+    if (ballResizeHandler || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+    ballResizeHandler = () => {
+      if (ballResizeTimer !== void 0) {
+        try {
+          window.clearTimeout(ballResizeTimer);
+        } catch {
+        }
+      }
+      ballResizeTimer = window.setTimeout(() => {
+        ballResizeTimer = void 0;
+        const ball = typeof document !== "undefined" ? document.getElementById(MOBILE_BALL_ID) : null;
+        if (ball && ballCurrentPos) applyBallPosition(ball, ballCurrentPos, false);
+      }, 150);
+    };
+    window.addEventListener("resize", ballResizeHandler);
+    window.addEventListener("orientationchange", ballResizeHandler);
+  }
+  function unwireViewportWatch() {
+    if (ballResizeHandler && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+      try {
+        window.removeEventListener("resize", ballResizeHandler);
+        window.removeEventListener("orientationchange", ballResizeHandler);
+      } catch {
+      }
+    }
+    ballResizeHandler = void 0;
+    if (ballResizeTimer !== void 0) {
+      try {
+        window.clearTimeout(ballResizeTimer);
+      } catch {
+      }
+      ballResizeTimer = void 0;
+    }
+  }
+  function syncMobileEntryDom() {
+    var _a, _b;
+    if (typeof document === "undefined" || !isMobileFrontend()) return;
+    const mode = getMobileEntryMode();
+    if (mode === "topbar" || mode === "both") {
+      buildMobileEntryButton();
+    } else {
+      try {
+        (_a = document.getElementById(MOBILE_ENTRY_ID)) == null ? void 0 : _a.remove();
+      } catch {
+      }
+    }
+    if (!mobileEntryFullyApplied()) {
+      for (const delay of [1200, 4e3]) {
+        window.setTimeout(() => syncMobileEntryDom(), delay);
+      }
+    }
+    if (mode === "ball" || mode === "both") {
+      buildMobileBallButton();
+    } else {
+      try {
+        (_b = document.getElementById(MOBILE_BALL_ID)) == null ? void 0 : _b.remove();
+      } catch {
+      }
+    }
+    refreshEntryBadgeDot();
+  }
+  function mobileEntryFullyApplied() {
+    const mode = getMobileEntryMode();
+    const wantTopbar = mode === "topbar" || mode === "both";
+    const wantBall = mode === "ball" || mode === "both";
+    const topbarOk = !wantTopbar || Boolean(document.getElementById(MOBILE_ENTRY_ID));
+    const ballOk = !wantBall || Boolean(document.getElementById(MOBILE_BALL_ID));
+    return topbarOk && ballOk;
+  }
+  function maybeShowOnboardingCard() {
+    if (typeof localStorage === "undefined" || typeof document === "undefined") return;
+    try {
+      if (localStorage.getItem(ONBOARDING_KEY) === "1") return;
+    } catch {
+    }
+    const items = getLaunchpadHub().getItems();
+    if (items.length < 3) return;
+    try {
+      localStorage.setItem(ONBOARDING_KEY, "1");
+    } catch {
+    }
+    lvNotify.card({
+      source: "\u7F57\u76D8",
+      title: "\u{1F44B} \u6B22\u8FCE\u4F7F\u7528\u5C0F\u9A74\u7F57\u76D8",
+      message: `\u5DF2\u4E3A\u4F60\u6536\u655B ${items.length} \u4E2A\u63D2\u4EF6\u7684\u5165\u53E3\uFF1A\u70B9\u78C1\u8D34\u76F4\u8FBE\u4E3B\u754C\u9762\u3001\u957F\u6309\u78C1\u8D34\u5C55\u5F00\u5FEB\u6377\u884C\u52A8\u3001\u9876\u90E8\u641C\u7D22\u7A7F\u900F\u5168\u5BB6\u6876\u3001\u{1F319} \u4E00\u952E\u4E13\u6CE8\u9759\u97F3\u3002\u53EF\u5728\u5404\u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u81EA\u5B9A\u4E49\u3002`,
+      level: "info",
+      duration: 0,
+      actions: [
+        { label: "\u77E5\u9053\u4E86", primary: true }
+      ]
+    });
+  }
+  function bedlineDue(now) {
+    let threshold = "22:30";
+    try {
+      if (typeof localStorage !== "undefined") {
+        const forced = localStorage.getItem(BEDLINE_FORCE_KEY);
+        if (forced && /^\d{2}:\d{2}$/.test(forced)) threshold = forced;
+      }
+    } catch {
+    }
+    const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    return hhmm >= threshold;
+  }
+  function bedlineEnabled() {
+    try {
+      return (typeof localStorage !== "undefined" ? localStorage.getItem(BEDLINE_KEY) : null) !== "off";
+    } catch {
+      return true;
+    }
+  }
+  function checkAndTriggerBedline(now = /* @__PURE__ */ new Date()) {
+    var _a;
+    if (!bedlineEnabled() || !bedlineDue(now) || isNotifyFocusActive()) return false;
+    if (now.getHours() < 20) return false;
+    const stats = lvActivity.getDailyStats();
+    const total = Number((_a = stats == null ? void 0 : stats.total) != null ? _a : 0);
+    if (total <= 0) return false;
+    const today = now.toDateString();
+    try {
+      if (typeof localStorage !== "undefined") {
+        if (localStorage.getItem(BEDLINE_LAST_KEY) === today) return false;
+        localStorage.setItem(BEDLINE_LAST_KEY, today);
+      }
+    } catch {
+    }
+    lvNotify.card({
+      source: "\u7F57\u76D8",
+      title: "\u{1F319} \u4ECA\u65E5\u56DE\u987E",
+      message: `\u4ECA\u5929\u5171 ${total} \u9879\u751F\u6001\u6D3B\u52A8\uFF0C\u82B1\u4E00\u5206\u949F\u5199\u8FDB\u65E5\u8BB0\u5427\u2014\u2014\u660E\u5929\u7FFB\u5F00\u5C31\u662F\u5B8C\u6574\u7684\u81EA\u5DF1\u3002`,
+      level: "info",
+      duration: 0,
+      category: "bedline",
+      actions: [
+        { label: "\u7ACB\u5373\u5199\u5165", primary: true, onClick: async () => {
+          try {
+            const md = lvActivity.formatAsMarkdown();
+            if (!md || !md.trim()) {
+              lvNotify.capsule({ source: "\u7F57\u76D8", message: "\u4ECA\u65E5\u6682\u65E0\u751F\u6001\u6D3B\u52A8\u8BB0\u5F55", duration: 2500 });
+              return;
+            }
+            try {
+              await navigator.clipboard.writeText(md);
+              lvNotify.capsule({ source: "\u7F57\u76D8", message: "\u5DF2\u590D\u5236\u4ECA\u65E5\u56DE\u987E\uFF0C\u53EF\u76F4\u63A5\u7C98\u8D34\u8FDB\u65E5\u8BB0", duration: 3e3 });
+            } catch {
+              lvNotify.capsule({ source: "\u7F57\u76D8", message: "\u4ECA\u65E5\u56DE\u987E\u5DF2\u5C31\u7EEA", duration: 2500 });
+            }
+          } catch {
+          }
+        } },
+        { label: "\u660E\u5929\u518D\u8BF4" }
+      ]
+    });
+    return true;
+  }
+  function maybeStartBedlineReminder() {
+    if (typeof window === "undefined" || window.__LV_BEDLINE_TICKER__) return;
+    window.__LV_BEDLINE_TICKER__ = true;
+    lvTicker.onMinute("lv-launchpad", (now) => {
+      checkAndTriggerBedline(now);
+    });
+  }
+  function ensureMobileEntry() {
+    if (typeof document === "undefined") return () => {
+    };
+    if (!isMobileFrontend()) return () => {
+    };
+    const owner = `owner_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    mobileEntryOwners.add(owner);
+    const firstOwner = mobileEntryOwners.size === 1;
+    mobileEntryRetryTimers.forEach((t) => {
+      try {
+        window.clearTimeout(t);
+      } catch {
+      }
+    });
+    mobileEntryRetryTimers = [];
+    syncMobileEntryDom();
+    if (firstOwner) {
+      wireMobileSuppression();
+      maybeStartBedlineReminder();
+    }
+    if (!mobileEntryFullyApplied()) {
+      for (const delay of [800, 1500, 4e3, 1e4]) {
+        const tid = window.setTimeout(() => {
+          if (!mobileEntryFullyApplied()) syncMobileEntryDom();
+        }, delay);
+        mobileEntryRetryTimers.push(tid);
+      }
+    }
+    return () => {
+      var _a, _b;
+      mobileEntryOwners.delete(owner);
+      if (mobileEntryOwners.size > 0) return;
+      mobileEntryRetryTimers.forEach((t) => {
+        try {
+          window.clearTimeout(t);
+        } catch {
+        }
+      });
+      mobileEntryRetryTimers = [];
+      if (ballIdleTimer !== void 0) {
+        try {
+          window.clearTimeout(ballIdleTimer);
+        } catch {
+        }
+        ballIdleTimer = void 0;
+      }
+      unwireMobileSuppression();
+      unwireViewportWatch();
+      ballCurrentPos = void 0;
+      try {
+        (_a = document.getElementById(MOBILE_ENTRY_ID)) == null ? void 0 : _a.remove();
+      } catch {
+      }
+      try {
+        (_b = document.getElementById(MOBILE_BALL_ID)) == null ? void 0 : _b.remove();
+      } catch {
+      }
+    };
+  }
+  function findPluginTopBarElementInToolbar(item) {
+    if (typeof document === "undefined") return null;
+    const toolbar = document.getElementById("toolbar");
+    if (!toolbar) return null;
+    if (item.topBarElement && item.topBarElement.isConnected) {
+      return item.topBarElement;
+    }
+    if (typeof toolbar.querySelectorAll !== "function") {
+      return null;
+    }
+    try {
+      const candidates = Array.from(toolbar.querySelectorAll(".toolbar__item, button"));
+      for (const el of candidates) {
+        if (!el || el.id === DESKTOP_ENTRY_ID) continue;
+        if (el.id && SIYUAN_NATIVE_BUTTON_IDS.has(el.id)) continue;
+        if (el.classList && typeof el.classList.contains === "function") {
+          if (el.classList.contains("toolbar__item--drag") || el.classList.contains("toolbar__window-control")) {
+            continue;
+          }
+        }
+        if (el.id === item.id || typeof el.getAttribute === "function" && el.getAttribute("data-plugin-id") === item.id) {
+          return el;
+        }
+        const ariaLabel = (typeof el.getAttribute === "function" ? el.getAttribute("aria-label") : "") || "";
+        const title = (typeof el.getAttribute === "function" ? el.getAttribute("title") : "") || "";
+        if (item.fullName && (ariaLabel.includes(item.fullName) || title.includes(item.fullName))) {
+          return el;
+        }
+        if (item.name && (ariaLabel.includes(item.name) || title.includes(item.name))) {
+          if (item.svgIcon) {
+            const useEl = typeof el.querySelector === "function" ? el.querySelector("use") : null;
+            const href = useEl && typeof useEl.getAttribute === "function" ? useEl.getAttribute("xlink:href") || useEl.getAttribute("href") || "" : "";
+            if (href && href.includes(item.svgIcon)) {
+              return el;
+            }
+            if (typeof el.innerHTML === "string" && el.innerHTML.includes(item.svgIcon)) {
+              return el;
+            }
+          }
+        }
+      }
+    } catch {
+    }
+    return null;
+  }
+  function maybeShowDesktopConvergenceOnboarding(itemCount) {
+    if (typeof localStorage === "undefined" || typeof document === "undefined") return;
+    try {
+      if (localStorage.getItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY) === "1") return;
+    } catch {
+    }
+    try {
+      localStorage.setItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY, "1");
+    } catch {
+    }
+    lvNotify.card({
+      source: "\u5C0F\u9A74\u7F57\u76D8",
+      title: "\u{1F9ED} \u9876\u680F\u5DF2\u5347\u7EA7\u4E3A\u5C0F\u9A74\u7F57\u76D8\u4E2D\u67A2",
+      message: `\u5DF2\u4E3A\u60A8\u5C06 ${itemCount} \u4E2A\u63D2\u4EF6\u81EA\u52A8\u6536\u655B\u81F3\u9876\u680F\u7F57\u76D8\u56FE\u6807\uFF0C\u544A\u522B\u9876\u680F\u62E5\u6324\u3002\u70B9\u51FB\u7F57\u76D8\u53EF\u76F4\u8FBE\u6240\u6709\u63D2\u4EF6\uFF1B\u82E5\u4E60\u60EF\u8001\u7248\u72EC\u7ACB\u56FE\u6807\uFF0C\u5728\u7F57\u76D8\u5185\u70B9\u51FB \u{1F4CC} \u5373\u53EF\u968F\u65F6\u56FA\u5B9A\u5728\u9876\u680F\uFF01`,
+      level: "info",
+      duration: 9e3
+    });
+  }
+  function syncTopBarConvergence() {
+    if (typeof document === "undefined" || isMobileFrontend()) return;
+    try {
+      const hub = getLaunchpadHub();
+      const items = hub.getItems();
+      const activeItems = items.filter((it) => it.state !== "hidden");
+      const needConverge = activeItems.length >= 2;
+      const compassBtn = document.getElementById(DESKTOP_ENTRY_ID);
+      if (compassBtn && typeof compassBtn === "object" && "style" in compassBtn && compassBtn.style) {
+        compassBtn.style.display = needConverge ? "inline-flex" : "none";
+        refreshEntryBadgeDot();
+        if (needConverge) {
+          maybeShowDesktopConvergenceOnboarding(activeItems.length);
+        }
+      }
+      for (const item of items) {
+        let el = item.topBarElement;
+        if ((!el || !el.isConnected) && typeof document.getElementById === "function") {
+          const found = findPluginTopBarElementInToolbar(item);
+          if (found) {
+            el = found;
+            item.topBarElement = found;
+          }
+        }
+        if (el && typeof el === "object" && "style" in el && el.style) {
+          if (needConverge) {
+            if (item.state === "pinned") {
+              el.style.display = "";
+            } else {
+              el.style.display = "none";
+            }
+          } else {
+            el.style.display = item.state === "hidden" ? "none" : "";
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[LvLaunchpad] \u9876\u680F\u6536\u655B\u540C\u6B65\u5F02\u5E38:", err);
+    }
+  }
+  function ensureDesktopStyles() {
+    if (typeof document === "undefined" || !document.head || typeof document.createElement !== "function") return;
+    if (document.getElementById("lv-launchpad-desktop-styles")) return;
+    try {
+      const style = document.createElement("style");
+      style.id = "lv-launchpad-desktop-styles";
+      style.textContent = `
+.lv-desktop-launchpad-popover {
+  font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  color: var(--b3-theme-on-background, #333);
+  background: var(--b3-theme-surface, #fff);
+  border: 1px solid var(--b3-border-color-trans, rgba(0, 0, 0, 0.08));
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: lvPopoverEnter 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+@keyframes lvPopoverEnter {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.lv-desktop-launchpad-popover.lv-popover-closing {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  pointer-events: none;
+}
+.lv-pop-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--b3-border-color-trans, rgba(0, 0, 0, 0.06));
+  background: var(--b3-theme-surface, #fff);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  outline: none;
+}
+.lv-pop-tile:hover,
+.lv-pop-tile.lv-pop-tile-focused {
+  background: var(--b3-theme-surface-lighter, var(--b3-theme-background-light, rgba(0, 0, 0, 0.03)));
+  border-color: var(--b3-theme-primary-light, rgba(53, 118, 199, 0.3));
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+}
+.lv-pop-tile.lv-pop-tile-focused {
+  border-color: var(--b3-theme-primary, #3576c7);
+  box-shadow: 0 0 0 1.5px var(--b3-theme-primary, #3576c7);
+}
+.lv-pop-pin-btn {
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.lv-pop-pin-btn:hover {
+  opacity: 1 !important;
+  transform: scale(1.15);
+}
+.lv-pop-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+  margin-top: 5px;
+  line-height: 1.4;
+}
+.lv-pop-badge.lv-badge-primary {
+  background: var(--b3-theme-primary-light, rgba(53, 118, 199, 0.12));
+  color: var(--b3-theme-primary, #3576c7);
+}
+.lv-pop-badge.lv-badge-warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+}
+.lv-pop-badge.lv-badge-error {
+  background: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
+}
+.lv-pop-badge.lv-badge-success {
+  background: rgba(16, 185, 129, 0.14);
+  color: #059669;
+}
+`;
+      document.head.appendChild(style);
+    } catch {
+    }
+  }
+  function isDesktopPopoverOpen() {
+    if (typeof document === "undefined") return false;
+    return Boolean(document.getElementById(DESKTOP_POPOVER_ID));
+  }
+  function closeDesktopLaunchpadPopover() {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById(DESKTOP_POPOVER_ID);
+    if (!el) return;
+    if (desktopPopoverKeyDownHandler && typeof window !== "undefined") {
+      window.removeEventListener("keydown", desktopPopoverKeyDownHandler, true);
+      desktopPopoverKeyDownHandler = null;
+    }
+    if (desktopPopoverOutsideClickHandler && typeof window !== "undefined") {
+      window.removeEventListener("mousedown", desktopPopoverOutsideClickHandler, true);
+      desktopPopoverOutsideClickHandler = null;
+    }
+    if (desktopPopoverResizeHandler && typeof window !== "undefined") {
+      window.removeEventListener("resize", desktopPopoverResizeHandler);
+      desktopPopoverResizeHandler = null;
+    }
+    if (el.classList && typeof el.classList.add === "function") {
+      el.classList.add("lv-popover-closing");
+    }
+    setTimeout(() => {
+      try {
+        el.remove();
+      } catch {
+      }
+    }, 150);
+  }
+  function openDesktopLaunchpadPopover(anchorEl, initialFocusIndex = 0) {
+    if (typeof document === "undefined") return;
+    closeDesktopLaunchpadPopover();
+    ensureDesktopStyles();
+    const anchor = anchorEl || document.getElementById(DESKTOP_ENTRY_ID);
+    const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+    if (items.length === 0) return;
+    const popover = document.createElement("div");
+    popover.id = DESKTOP_POPOVER_ID;
+    popover.className = "lv-desktop-launchpad-popover b3-typography";
+    popover.setAttribute("role", "dialog");
+    popover.setAttribute("aria-label", "\u5C0F\u9A74\u7F57\u76D8\u5168\u5BB6\u6876\u5F39\u5C04\u575E");
+    if ("tabIndex" in popover) popover.tabIndex = -1;
+    const reposition = () => {
+      if (!anchor || typeof anchor.getBoundingClientRect !== "function") return;
+      try {
+        const rect = anchor.getBoundingClientRect();
+        if (popover && popover.style) {
+          popover.style.position = "fixed";
+          if (rect && typeof rect.bottom === "number" && rect.bottom > 0) {
+            popover.style.top = `${Math.round(rect.bottom + 6)}px`;
+            const winW = typeof window !== "undefined" && typeof window.innerWidth === "number" ? window.innerWidth : 1200;
+            const rightOffset = Math.max(12, Math.round(winW - (rect.right || 0) - 8));
+            popover.style.right = `${rightOffset}px`;
+            const winH = typeof window !== "undefined" && typeof window.innerHeight === "number" ? window.innerHeight : 800;
+            const availableHeight = Math.max(220, winH - rect.bottom - 24);
+            popover.style.maxHeight = `${availableHeight}px`;
+          } else {
+            popover.style.top = "42px";
+            popover.style.right = "16px";
+          }
+          popover.style.zIndex = "9999";
+        }
+      } catch {
+      }
+    };
+    reposition();
+    if (popover.style) {
+      popover.style.width = "340px";
+      popover.style.borderRadius = "14px";
+      popover.style.boxShadow = "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)";
+      popover.style.background = "var(--b3-theme-surface,#fff)";
+      popover.style.border = "1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08))";
+      popover.style.backdropFilter = "blur(16px)";
+      popover.style.overflow = "hidden";
+    }
+    const allPinned = items.length > 0 && items.every((it) => it.state === "pinned");
+    const toggleAllTitle = allPinned ? "\u6536\u655B\u5168\u90E8\u5230\u5C0F\u9A74\u7F57\u76D8 (\u65B0\u7248\u6781\u7B80\u6A21\u5F0F)" : "\u5E73\u94FA\u5168\u90E8\u72EC\u7ACB\u56FE\u6807\u5230\u9876\u680F (\u6062\u590D\u8001\u7248\u5E03\u5C40)";
+    const toggleAllText = allPinned ? "\u{1F9ED} \u6536\u655B\u5168\u90E8" : "\u{1F4CC} \u5E73\u94FA\u9876\u680F";
+    const headerHtml = `
+      <div class="lv-pop-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;border-bottom:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08));">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:16px;">\u{1F9ED}</span>
+          <span style="font-weight:600;font-size:13px;color:var(--b3-theme-on-background,#333);">\u5C0F\u9A74\u7F57\u76D8\u4E2D\u67A2</span>
+          <span style="font-size:11px;padding:1px 6px;border-radius:999px;background:var(--b3-theme-primary-light,rgba(53,118,199,0.1));color:var(--b3-theme-primary,#3576c7);">${items.length} \u63D2\u4EF6\u5DF2\u8054\u7ED3</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button type="button" class="lv-pop-toggle-all-btn" title="${toggleAllTitle}" style="background:transparent;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.15));border-radius:4px;cursor:pointer;font-size:10px;padding:2px 6px;color:var(--b3-theme-primary,#3576c7);user-select:none;">${toggleAllText}</button>
+          <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">1~${items.length}</span>
+        </div>
+      </div>
+    `;
+    let gridHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;max-height:420px;overflow-y:auto;">`;
+    items.forEach((item, idx) => {
+      const digit = idx + 1;
+      const isPinned = item.state === "pinned";
+      const pinIcon = isPinned ? "\u{1F4CC}" : "\u{1F4CD}";
+      const pinTitle = isPinned ? "\u5DF2\u7F6E\u9876\u5728\u9876\u680F (\u70B9\u51FB\u6536\u655B\u56DE\u7F57\u76D8)" : "\u7F6E\u9876\u5230\u9876\u680F\u72EC\u7ACB\u663E\u793A";
+      const badgeClass = item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary";
+      const badgeHtml = item.badge ? `<span class="lv-pop-badge ${badgeClass}">${item.badge}</span>` : "";
+      gridHtml += `
+          <div class="lv-pop-tile" data-idx="${idx}" data-id="${item.id}" style="position:relative;display:flex;flex-direction:column;padding:10px;border-radius:10px;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-surface,#fff);cursor:pointer;user-select:none;transition:all 0.15s ease;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="lv-pop-icon" style="color:${item.color || "var(--b3-theme-primary)"};display:flex;align-items:center;">
+                  <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span style="font-weight:600;font-size:13px;">${item.name}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button type="button" class="lv-pop-pin-btn" data-pin-id="${item.id}" title="${pinTitle}" style="background:transparent;border:none;cursor:pointer;font-size:12px;opacity:${isPinned ? "1" : "0.3"};padding:1px 3px;border-radius:4px;">${pinIcon}</button>
+                <span style="font-size:10px;font-family:monospace;padding:1px 4px;border-radius:3px;background:var(--b3-theme-background,#f0f0f0);color:var(--b3-theme-on-surface-light,#888);">${digit}</span>
+              </div>
+            </div>
+            <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.desc || item.fullName}</span>
+            ${badgeHtml}
+          </div>
+        `;
+    });
+    gridHtml += `</div>`;
+    const footerHtml = `
+      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-background-light,rgba(0,0,0,0.02));border-radius:0 0 14px 14px;">
+        <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">\u5FEB\u6377\u952E: \u65B9\u5411\u952E/1~${items.length} \xB7 Enter \u6267\u884C \xB7 P \u7F6E\u9876</span>
+        <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--b3-theme-primary,#3576c7);">Esc \u5173\u95ED</button>
+      </div>
+    `;
+    popover.innerHTML = headerHtml + gridHtml + footerHtml;
+    items.forEach((item) => {
+      if (typeof item.badgeProvider === "function") {
+        try {
+          const res = item.badgeProvider();
+          if (res instanceof Promise) {
+            res.then((dynamicBadge) => {
+              if (dynamicBadge && typeof dynamicBadge === "string") {
+                item.badge = dynamicBadge;
+                if (typeof popover.querySelector === "function") {
+                  const tileEl = popover.querySelector(`[data-id="${item.id}"]`);
+                  if (tileEl) {
+                    let bEl = tileEl.querySelector(".lv-pop-badge");
+                    if (!bEl) {
+                      bEl = document.createElement("span");
+                      bEl.className = `lv-pop-badge ${item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary"}`;
+                      tileEl.appendChild(bEl);
+                    }
+                    bEl.textContent = dynamicBadge;
+                  }
+                }
+                refreshEntryBadgeDot();
+              }
+            }).catch(() => {
+            });
+          } else if (res && typeof res === "string") {
+            item.badge = res;
+          }
+        } catch {
+        }
+      }
+    });
+    let currentFocusIndex = Math.max(0, Math.min(initialFocusIndex, items.length - 1));
+    const updateFocusHighlight = () => {
+      if (typeof popover.querySelectorAll !== "function") return;
+      try {
+        const tiles = popover.querySelectorAll(".lv-pop-tile");
+        tiles.forEach((t, i) => {
+          if (i === currentFocusIndex) {
+            if (t.classList && typeof t.classList.add === "function") t.classList.add("lv-pop-tile-focused");
+            if (typeof t.scrollIntoView === "function") {
+              try {
+                t.scrollIntoView({ block: "nearest" });
+              } catch {
+              }
+            }
+          } else {
+            if (t.classList && typeof t.classList.remove === "function") t.classList.remove("lv-pop-tile-focused");
+          }
+        });
+      } catch {
+      }
+    };
+    updateFocusHighlight();
+    if (typeof popover.addEventListener === "function") {
+      popover.addEventListener("click", (e) => {
+        const target = e.target;
+        if (!target || typeof target.closest !== "function") return;
+        const toggleAllBtn = target.closest(".lv-pop-toggle-all-btn");
+        if (toggleAllBtn) {
+          e.stopPropagation();
+          const nextState = allPinned ? "docked" : "pinned";
+          for (const it of items) {
+            getLaunchpadHub().setPluginState(it.id, nextState);
+          }
+          syncTopBarConvergence();
+          openDesktopLaunchpadPopover(anchor, currentFocusIndex);
+          return;
+        }
+        const pinBtn = target.closest(".lv-pop-pin-btn");
+        if (pinBtn) {
+          e.stopPropagation();
+          const id = pinBtn.getAttribute("data-pin-id");
+          if (id) {
+            const cur = getLaunchpadStates()[id] || "docked";
+            const next = cur === "pinned" ? "docked" : "pinned";
+            getLaunchpadHub().setPluginState(id, next);
+            syncTopBarConvergence();
+            openDesktopLaunchpadPopover(anchor, currentFocusIndex);
+          }
+          return;
+        }
+        const closeBtn = target.closest(".lv-pop-close-btn");
+        if (closeBtn) {
+          e.stopPropagation();
+          closeDesktopLaunchpadPopover();
+          return;
+        }
+        const tile = target.closest(".lv-pop-tile");
+        if (tile) {
+          const idxStr = tile.getAttribute("data-idx");
+          if (idxStr !== null) {
+            const idx = parseInt(idxStr, 10);
+            if (items[idx]) {
+              closeDesktopLaunchpadPopover();
+              try {
+                items[idx].onClick();
+              } catch (err) {
+                console.warn("[LvLaunchpad] \u542F\u52A8\u5931\u8D25:", err);
+              }
+            }
+          }
+        }
+      });
+      popover.addEventListener("mousemove", (e) => {
+        const target = e.target;
+        if (!target || typeof target.closest !== "function") return;
+        const tile = target.closest(".lv-pop-tile");
+        if (tile) {
+          const idxStr = tile.getAttribute("data-idx");
+          if (idxStr !== null) {
+            const idx = parseInt(idxStr, 10);
+            if (idx >= 0 && idx < items.length && idx !== currentFocusIndex) {
+              currentFocusIndex = idx;
+              updateFocusHighlight();
+            }
+          }
+        }
+      });
+    }
+    desktopPopoverKeyDownHandler = (e) => {
+      if (!e || typeof e.key !== "string") return;
+      if (e.key === "Escape") {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {
+        }
+        closeDesktopLaunchpadPopover();
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {
+        }
+        if (currentFocusIndex + 2 < items.length) {
+          currentFocusIndex += 2;
+        } else if (currentFocusIndex + 1 < items.length) {
+          currentFocusIndex += 1;
+        }
+        updateFocusHighlight();
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {
+        }
+        if (currentFocusIndex - 2 >= 0) {
+          currentFocusIndex -= 2;
+        } else if (currentFocusIndex - 1 >= 0) {
+          currentFocusIndex -= 1;
+        }
+        updateFocusHighlight();
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {
+        }
+        currentFocusIndex = (currentFocusIndex + 1) % items.length;
+        updateFocusHighlight();
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {
+        }
+        currentFocusIndex = (currentFocusIndex - 1 + items.length) % items.length;
+        updateFocusHighlight();
+        return;
+      }
+      if (e.key === "Enter" || e.key === " ") {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {
+        }
+        const item = items[currentFocusIndex];
+        if (item) {
+          closeDesktopLaunchpadPopover();
+          try {
+            item.onClick();
+          } catch (err) {
+            console.warn("[LvLaunchpad] \u952E\u76D8\u542F\u52A8\u5931\u8D25:", err);
+          }
+        }
+        return;
+      }
+      if (e.key === "p" || e.key === "P") {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {
+        }
+        const item = items[currentFocusIndex];
+        if (item) {
+          const cur = getLaunchpadStates()[item.id] || "docked";
+          const next = cur === "pinned" ? "docked" : "pinned";
+          getLaunchpadHub().setPluginState(item.id, next);
+          syncTopBarConvergence();
+          openDesktopLaunchpadPopover(anchor, currentFocusIndex);
+        }
+        return;
+      }
+      const num = parseInt(e.key, 10);
+      if (!isNaN(num) && num >= 1 && num <= items.length) {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {
+        }
+        closeDesktopLaunchpadPopover();
+        const target = items[num - 1];
+        if (target) {
+          try {
+            target.onClick();
+          } catch (err) {
+            console.warn("[LvLaunchpad] \u952E\u76D8\u77AC\u53D1\u5931\u8D25:", err);
+          }
+        }
+        return;
+      }
+    };
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("keydown", desktopPopoverKeyDownHandler, true);
+    }
+    desktopPopoverOutsideClickHandler = (e) => {
+      const t = e.target;
+      if (typeof popover.contains === "function" && !popover.contains(t) && anchor) {
+        if (typeof anchor.contains === "function" && !anchor.contains(t)) {
+          closeDesktopLaunchpadPopover();
+        }
+      }
+    };
+    setTimeout(() => {
+      if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("mousedown", desktopPopoverOutsideClickHandler, true);
+      }
+    }, 50);
+    desktopPopoverResizeHandler = reposition;
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("resize", desktopPopoverResizeHandler);
+    }
+    if (document.body && typeof document.body.appendChild === "function") {
+      document.body.appendChild(popover);
+    }
+  }
+  function toggleDesktopLaunchpadPopover(anchorEl) {
+    if (isDesktopPopoverOpen()) {
+      closeDesktopLaunchpadPopover();
+    } else {
+      openDesktopLaunchpadPopover(anchorEl);
+    }
+  }
+  function insertDesktopEntryButton(toolbar, btn) {
+    if (typeof toolbar.querySelector === "function" && typeof toolbar.insertBefore === "function") {
+      try {
+        const anchor = toolbar.querySelector("#barPlugins, #barCommand, #barSearch, #barDockR, #barSetting, #barSettings, #barHelp, .toolbar__window-control, #windowControls");
+        if (anchor && anchor.parentElement === toolbar) {
+          toolbar.insertBefore(btn, anchor);
+          return;
+        }
+      } catch {
+      }
+    }
+    toolbar.appendChild(btn);
+  }
+  function buildDesktopEntryButton() {
+    if (typeof document === "undefined" || isMobileFrontend()) return false;
+    const toolbar = document.getElementById("toolbar");
+    if (!toolbar) return false;
+    if (document.getElementById(DESKTOP_ENTRY_ID)) {
+      refreshEntryBadgeDot();
+      syncTopBarConvergence();
+      return true;
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = DESKTOP_ENTRY_ID;
+    btn.className = "toolbar__item ariaLabel";
+    btn.setAttribute("aria-label", "\u5C0F\u9A74\u7F57\u76D8");
+    btn.setAttribute("title", "\u5C0F\u9A74\u7F57\u76D8 \xB7 \u5168\u5BB6\u6876\u6781\u901F\u76F4\u8FBE (\u5DE6\u952E\u5C55\u5F00 \xB7 \u5FEB\u6377\u952E 1~8)");
+    btn.style.position = "relative";
+    btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;margin-left:2px;font-size:11px;line-height:1;">\u{1F319}</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
+    btn.addEventListener("click", () => {
+      const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+      if (items.length === 1) {
+        const first = items[0];
+        if (first) {
+          try {
+            first.onClick();
+          } catch (err) {
+            console.warn("[LvLaunchpad] \u684C\u9762\u5355\u63D2\u4EF6\u76F4\u8FBE\u5931\u8D25:", err);
+          }
+        }
+        return;
+      }
+      toggleDesktopLaunchpadPopover(btn);
+    });
+    btn.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      toggleDesktopLaunchpadPopover(btn);
+    });
+    insertDesktopEntryButton(toolbar, btn);
+    refreshEntryBadgeDot();
+    syncTopBarConvergence();
+    wireDesktopToolbarObserver();
+    return true;
+  }
+  function wireDesktopToolbarObserver() {
+    if (typeof document === "undefined" || isMobileFrontend()) return;
+    const toolbar = document.getElementById("toolbar");
+    if (!toolbar || typeof MutationObserver === "undefined") return;
+    if (!desktopToolbarObserver) {
+      let debounceTimer = null;
+      desktopToolbarObserver = new MutationObserver(() => {
+        if (debounceTimer) return;
+        debounceTimer = window.setTimeout(() => {
+          debounceTimer = null;
+          if (!document.getElementById(DESKTOP_ENTRY_ID)) {
+            buildDesktopEntryButton();
+          } else {
+            syncTopBarConvergence();
+          }
+        }, 100);
+      });
+      try {
+        desktopToolbarObserver.observe(toolbar, { childList: true, subtree: true });
+      } catch {
+      }
+    }
+    if (!desktopThemeObserver && document.documentElement) {
+      let themeDebounce = null;
+      desktopThemeObserver = new MutationObserver(() => {
+        if (themeDebounce) return;
+        themeDebounce = window.setTimeout(() => {
+          themeDebounce = null;
+          syncTopBarConvergence();
+        }, 120);
+      });
+      try {
+        desktopThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+      } catch {
+      }
+    }
+  }
+  function ensureDesktopEntry() {
+    if (typeof document === "undefined") return () => {
+    };
+    if (isMobileFrontend()) return () => {
+    };
+    const owner = `owner_desktop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    desktopEntryOwners.add(owner);
+    desktopEntryRetryTimers.forEach((t) => {
+      try {
+        if (typeof window !== "undefined") window.clearTimeout(t);
+        else clearTimeout(t);
+      } catch {
+      }
+    });
+    desktopEntryRetryTimers = [];
+    buildDesktopEntryButton();
+    for (const delay of [800, 2e3, 5e3]) {
+      const scheduleFn = typeof window !== "undefined" ? window.setTimeout : setTimeout;
+      const tid = Number(scheduleFn(() => {
+        if (!document.getElementById(DESKTOP_ENTRY_ID)) buildDesktopEntryButton();
+      }, delay));
+      desktopEntryRetryTimers.push(tid);
+    }
+    return () => {
+      var _a;
+      desktopEntryOwners.delete(owner);
+      if (desktopEntryOwners.size > 0) return;
+      desktopEntryRetryTimers.forEach((t) => {
+        try {
+          if (typeof window !== "undefined") window.clearTimeout(t);
+          else clearTimeout(t);
+        } catch {
+        }
+      });
+      desktopEntryRetryTimers = [];
+      try {
+        desktopToolbarObserver == null ? void 0 : desktopToolbarObserver.disconnect();
+      } catch {
+      }
+      desktopToolbarObserver = null;
+      try {
+        desktopThemeObserver == null ? void 0 : desktopThemeObserver.disconnect();
+      } catch {
+      }
+      desktopThemeObserver = null;
+      closeDesktopLaunchpadPopover();
+      try {
+        (_a = document.getElementById(DESKTOP_ENTRY_ID)) == null ? void 0 : _a.remove();
+      } catch {
+      }
+    };
+  }
+  function updateBallSuppression() {
+    if (typeof document === "undefined") return;
+    const ball = document.getElementById(MOBILE_BALL_ID);
+    if (ball) ball.classList.toggle("lv-ball-suppressed", ballDialogOpen || ballInputFocused);
+  }
+  function recomputeBallSuppression() {
+    let open = false;
+    try {
+      open = Boolean(document.querySelector(".b3-dialog--container, .b3-dialog__container"));
+    } catch {
+    }
+    if (open !== ballDialogOpen) ballDialogOpen = open;
+    const el = document.activeElement;
+    ballInputFocused = Boolean(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable === true);
+    updateBallSuppression();
+  }
+  function wireMobileSuppression() {
+    if (ballDialogObserver || typeof document === "undefined") return;
+    if (typeof MutationObserver === "function") {
+      ballDialogObserver = new MutationObserver(() => recomputeBallSuppression());
+      try {
+        ballDialogObserver.observe(document.body, { childList: true });
+      } catch {
+      }
+    }
+    if (typeof document.addEventListener === "function") {
+      ballFocusHandler = () => recomputeBallSuppression();
+      document.addEventListener("focusin", ballFocusHandler, true);
+    }
+  }
+  function unwireMobileSuppression() {
+    try {
+      ballDialogObserver == null ? void 0 : ballDialogObserver.disconnect();
+    } catch {
+    }
+    ballDialogObserver = void 0;
+    if (ballFocusHandler && typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+      try {
+        document.removeEventListener("focusin", ballFocusHandler, true);
+      } catch {
+      }
+    }
+    ballFocusHandler = void 0;
+    ballDialogOpen = false;
+    ballInputFocused = false;
+  }
+  function armSheetHistory() {
+    if (sheetHistoryArmed || typeof window === "undefined") return;
+    try {
+      const hist = window.history;
+      if (!hist || typeof hist.pushState !== "function") return;
+      hist.pushState({ lvSheet: true }, "");
+      sheetHistoryArmed = true;
+      sheetPopHandler = () => {
+        sheetHistoryArmed = false;
+        sheetPopHandler = void 0;
+        closeMobileSheet();
+      };
+      if (typeof window.addEventListener === "function") window.addEventListener("popstate", sheetPopHandler);
+    } catch {
+    }
+  }
+  function disarmSheetHistory() {
+    var _a;
+    const hadHandler = Boolean(sheetPopHandler) && typeof window !== "undefined" && typeof window.removeEventListener === "function";
+    if (hadHandler && sheetPopHandler) {
+      try {
+        window.removeEventListener("popstate", sheetPopHandler);
+      } catch {
+      }
+    }
+    sheetPopHandler = void 0;
+    if (sheetHistoryArmed && typeof window !== "undefined") {
+      sheetHistoryArmed = false;
+      try {
+        const hist = window.history;
+        if (((_a = hist == null ? void 0 : hist.state) == null ? void 0 : _a.lvSheet) && typeof hist.back === "function") hist.back();
+      } catch {
+      }
+    }
+  }
+  function closeMobileSheet() {
+    if (typeof document === "undefined") return;
+    disarmSheetHistory();
+    const mask = document.getElementById(MOBILE_SHEET_ID);
+    if (!mask) return;
+    if (mask.classList.contains("lv-sheet-closing")) return;
+    try {
+      lvSurfaceStack.pop("lv-launchpad-mobile-sheet");
+    } catch {
+    }
+    refreshEntryBadgeDot();
+    recomputeBallSuppression();
+    const reduceMotion = typeof globalThis.matchMedia === "function" && globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      try {
+        mask.remove();
+      } catch {
+      }
+      return;
+    }
+    mask.classList.add("lv-sheet-closing");
+    if (sheetCloseTimer !== void 0) {
+      try {
+        window.clearTimeout(sheetCloseTimer);
+      } catch {
+      }
+    }
+    sheetCloseTimer = window.setTimeout(() => {
+      sheetCloseTimer = void 0;
+      const current = document.getElementById(MOBILE_SHEET_ID);
+      if (current === mask) {
+        try {
+          mask.remove();
+        } catch {
+        }
+      }
+    }, 190);
+  }
+  function getSearchHistory() {
+    var _a;
+    if (typeof localStorage === "undefined") return [];
+    try {
+      const list = JSON.parse((_a = localStorage.getItem(MOBILE_SEARCH_HISTORY_KEY)) != null ? _a : "[]");
+      return Array.isArray(list) ? list.filter((x) => typeof x === "string" && x.trim() !== "") : [];
+    } catch {
+      return [];
+    }
+  }
+  function pushSearchHistory(kw) {
+    const k = kw.trim();
+    if (typeof localStorage === "undefined" || !k) return;
+    try {
+      const next = [k, ...getSearchHistory().filter((x) => x !== k)].slice(0, MOBILE_SEARCH_HISTORY_MAX);
+      localStorage.setItem(MOBILE_SEARCH_HISTORY_KEY, JSON.stringify(next));
+    } catch {
+    }
+  }
+  function getRecentTileIds() {
+    if (typeof localStorage === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(MOBILE_RECENT_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+  function pushRecentTileId(id) {
+    if (typeof localStorage === "undefined" || !id) return;
+    try {
+      const next = [id, ...getRecentTileIds().filter((x) => x !== id)].slice(0, MOBILE_RECENT_MAX);
+      localStorage.setItem(MOBILE_RECENT_KEY, JSON.stringify(next));
+    } catch {
+    }
+  }
+  function iconIdCandidates(svgIcon) {
+    const id = (svgIcon || "").trim();
+    if (!id) return [];
+    const camel = id.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+    const list = [id, camel];
+    if (!/^icon/i.test(id)) {
+      const pascal = camel.charAt(0).toUpperCase() + camel.slice(1);
+      list.push(`icon${pascal}`);
+    }
+    return Array.from(new Set(list));
+  }
+  function resolveIconHref(svgIcon) {
+    if (!svgIcon || typeof document === "undefined") return null;
+    for (const id of iconIdCandidates(svgIcon)) {
+      try {
+        if (document.getElementById(id)) return `#${id}`;
+      } catch {
+      }
+    }
+    try {
+      const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const wanted = new Set(iconIdCandidates(svgIcon).map(normalize));
+      const symbols = document.querySelectorAll("symbol[id]");
+      for (const s of Array.from(symbols)) {
+        if (wanted.has(normalize(s.id))) return `#${s.id}`;
+      }
+    } catch {
+    }
+    return null;
+  }
+  function buildSheetTile(item) {
+    if (typeof document === "undefined") return null;
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "lv-sheet-tile";
+    tile.setAttribute("aria-label", item.fullName || item.name);
+    tile.setAttribute("aria-expanded", "false");
+    const iconHref = resolveIconHref(item.svgIcon);
+    if (iconHref) {
+      const iconWrap = document.createElement("span");
+      iconWrap.className = "lv-sheet-tile-icon";
+      if (item.color) iconWrap.style.color = item.color;
+      iconWrap.innerHTML = `<svg aria-hidden="true"><use xlink:href="${iconHref}" href="${iconHref}"></use></svg>`;
+      tile.appendChild(iconWrap);
+    } else {
+      const dot = document.createElement("span");
+      dot.className = "lv-sheet-tile-dot";
+      if (item.color) dot.style.background = item.color;
+      tile.appendChild(dot);
+    }
+    const name = document.createElement("span");
+    name.className = "lv-sheet-tile-name";
+    name.textContent = item.fullName || item.name;
+    tile.appendChild(name);
+    const desc = document.createElement("span");
+    desc.className = "lv-sheet-tile-desc";
+    desc.textContent = item.desc || "";
+    tile.appendChild(desc);
+    if (item.badge) {
+      const pill = document.createElement("span");
+      pill.className = "lv-sheet-tile-badge";
+      if (item.badgeType === "success") pill.classList.add("lv-sheet-tile-badge--success");
+      else if (item.badgeType === "warn" || item.badgeType === "error") pill.classList.add("lv-sheet-tile-badge--warn");
+      pill.textContent = item.badge;
+      tile.appendChild(pill);
+    }
+    tile.addEventListener("click", () => {
+      hapticFeedback(8);
+      pushRecentTileId(item.id);
+      closeMobileSheet();
+      try {
+        item.onClick();
+      } catch (e) {
+        console.warn("[LvLaunchpad] \u78C1\u8D34\u5524\u8D77\u5931\u8D25:", e);
+      }
+    });
+    const expandTile = () => {
+      hapticFeedback(14);
+      const mask = document.getElementById(MOBILE_SHEET_ID);
+      if (!mask) return;
+      mask.querySelectorAll(".lv-sheet-tile--expanded").forEach((el) => {
+        el.classList.remove("lv-sheet-tile--expanded");
+        el.setAttribute("aria-expanded", "false");
+      });
+      tile.classList.add("lv-sheet-tile--expanded");
+      tile.setAttribute("aria-expanded", "true");
+      mask.querySelectorAll(".lv-sheet-tile-actions").forEach((el) => el.remove());
+      const actWrap = document.createElement("span");
+      actWrap.className = "lv-sheet-tile-actions";
+      for (const actName of item.actions || []) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "lv-sheet-action-chip";
+        chip.textContent = actName;
+        chip.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          hapticFeedback(8);
+          pushRecentTileId(item.id);
+          closeMobileSheet();
+          try {
+            getLaunchpadHub().executeAction(item.id, actName);
+          } catch (e) {
+            console.warn("[LvLaunchpad] \u884C\u52A8\u76F4\u8FBE\u5931\u8D25:", e);
+          }
+        });
+        actWrap.appendChild(chip);
+      }
+      tile.appendChild(actWrap);
+    };
+    tile.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      expandTile();
+    });
+    let pressTimer;
+    tile.addEventListener("touchstart", () => {
+      pressTimer = window.setTimeout(() => {
+        pressTimer = void 0;
+        expandTile();
+      }, 500);
+    }, { passive: true });
+    tile.addEventListener("touchend", () => {
+      if (pressTimer !== void 0) {
+        window.clearTimeout(pressTimer);
+        pressTimer = void 0;
+      }
+    }, { passive: true });
+    tile.addEventListener("touchmove", () => {
+      if (pressTimer !== void 0) {
+        window.clearTimeout(pressTimer);
+        pressTimer = void 0;
+      }
+    }, { passive: true });
+    return tile;
+  }
+  function openMobileSheet() {
+    if (typeof document === "undefined") return;
+    const existing = document.getElementById(MOBILE_SHEET_ID);
+    if (existing) {
+      if (existing.classList.contains("lv-sheet-closing")) {
+        try {
+          existing.remove();
+        } catch {
+        }
+        if (sheetCloseTimer !== void 0) {
+          try {
+            window.clearTimeout(sheetCloseTimer);
+          } catch {
+          }
+          sheetCloseTimer = void 0;
+        }
+      } else {
+        return;
+      }
+    }
+    ensureStyles();
+    const mask = document.createElement("div");
+    mask.id = MOBILE_SHEET_ID;
+    mask.setAttribute("role", "dialog");
+    mask.setAttribute("aria-modal", "true");
+    mask.setAttribute("aria-label", "\u5C0F\u9A74\u7F57\u76D8\u5F39\u5C04\u575E");
+    const sheet = document.createElement("div");
+    sheet.className = "lv-sheet";
+    mask.appendChild(sheet);
+    const handle = document.createElement("div");
+    handle.className = "lv-sheet-handle";
+    handle.setAttribute("aria-hidden", "true");
+    sheet.appendChild(handle);
+    const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
+    items.sort((a, b) => (a.state === "pinned" ? 0 : 1) - (b.state === "pinned" ? 0 : 1));
+    const head = document.createElement("div");
+    head.className = "lv-sheet-head";
+    const title = document.createElement("span");
+    title.className = "lv-sheet-title";
+    title.textContent = "\u{1F434} \u5C0F\u9A74\u7F57\u76D8";
+    head.appendChild(title);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "lv-sheet-close";
+    closeBtn.setAttribute("aria-label", "\u5173\u95ED");
+    closeBtn.textContent = "\u2715";
+    closeBtn.addEventListener("click", () => closeMobileSheet());
+    head.appendChild(closeBtn);
+    const moonBtn = document.createElement("button");
+    moonBtn.type = "button";
+    moonBtn.className = "lv-sheet-moon";
+    moonBtn.setAttribute("aria-label", "\u4E13\u6CE8\u6A21\u5F0F\u5F00\u5173");
+    const syncMoon = () => {
+      const active2 = isNotifyFocusActive();
+      const until = getNotifyFocusUntil();
+      moonBtn.textContent = active2 ? `\u{1F319} \u81F3 ${new Date(until).toTimeString().slice(0, 5)}` : "\u{1F319}";
+      moonBtn.setAttribute("aria-pressed", String(active2));
+      moonBtn.title = active2 ? "\u70B9\u51FB\u9000\u51FA\u4E13\u6CE8\u6A21\u5F0F" : "\u5F00\u542F\u4E13\u6CE8\u6A21\u5F0F\uFF08\u5168\u751F\u6001\u9759\u97F3\u81F3\u4ECA\u665A\uFF09";
+    };
+    syncMoon();
+    moonBtn.addEventListener("click", () => {
+      if (isNotifyFocusActive()) {
+        clearNotifyFocus();
+        hapticFeedback(8);
+        lvNotify.capsule({ source: "\u7F57\u76D8", message: "\u5DF2\u9000\u51FA\u4E13\u6CE8\u6A21\u5F0F", duration: 2e3 });
+      } else {
+        const now = /* @__PURE__ */ new Date();
+        const until = new Date(now);
+        until.setHours(23, 0, 0, 0);
+        if (until.getTime() <= now.getTime()) until.setTime(now.getTime() + 2 * 36e5);
+        setNotifyFocusUntil(until.getTime());
+        hapticFeedback(10);
+        lvNotify.capsule({ source: "\u7F57\u76D8", message: `\u5DF2\u5F00\u542F\u4E13\u6CE8\u6A21\u5F0F\u81F3 ${until.toTimeString().slice(0, 5)}\uFF0C\u901A\u77E5\u5C06\u9759\u97F3\u7559\u6863`, duration: 2600 });
+      }
+      syncMoon();
+      refreshEntryBadgeDot();
+    });
+    head.appendChild(moonBtn);
+    sheet.appendChild(head);
+    const todayItems = items.map((it) => {
+      var _a;
+      return { it, m: /(\d+)/.exec((_a = it.badge) != null ? _a : "") };
+    }).filter((x) => x.m !== null && Number(x.m[1]) > 0).slice(0, 5);
+    if (todayItems.length > 0) {
+      const today = document.createElement("div");
+      today.className = "lv-sheet-today";
+      const todayLabel = document.createElement("span");
+      todayLabel.className = "lv-sheet-today-label";
+      todayLabel.textContent = "\u4ECA\u65E5";
+      today.appendChild(todayLabel);
+      for (const { it, m } of todayItems) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "lv-sheet-today-chip";
+        chip.setAttribute("aria-label", `\u4ECA\u65E5\u5F85\u529E\u76F4\u8FBE ${it.fullName || it.name}`);
+        const cDot = document.createElement("span");
+        cDot.className = "lv-sheet-today-dot";
+        if (it.color) cDot.style.background = it.color;
+        chip.appendChild(cDot);
+        const cText = document.createElement("span");
+        cText.textContent = `${it.name} ${m[1]}`;
+        chip.appendChild(cText);
+        chip.addEventListener("click", () => {
+          hapticFeedback(8);
+          pushRecentTileId(it.id);
+          closeMobileSheet();
+          try {
+            it.onClick();
+          } catch (e) {
+            console.warn("[LvLaunchpad] \u4ECA\u65E5\u76F4\u8FBE\u5931\u8D25:", e);
+          }
+        });
+        today.appendChild(chip);
+      }
+      sheet.appendChild(today);
+    }
+    const search = document.createElement("input");
+    search.type = "text";
+    search.className = "lv-sheet-search b3-text-field";
+    search.placeholder = "\u7A7F\u900F\u641C\u7D22\u5168\u5BB6\u6876\uFF1A\u4E60\u60EF / \u5207\u7247 / \u8D44\u4EA7 / \u8054\u7CFB\u4EBA\u2026";
+    search.setAttribute("aria-label", "\u5168\u751F\u6001\u7A7F\u900F\u641C\u7D22");
+    sheet.appendChild(search);
+    const results = document.createElement("div");
+    results.className = "lv-sheet-results";
+    sheet.appendChild(results);
+    const histRow = document.createElement("div");
+    histRow.className = "lv-sheet-histrow";
+    const renderHistory = () => {
+      histRow.textContent = "";
+      const kws = getSearchHistory();
+      if (!kws.length) {
+        histRow.style.display = "none";
+        return;
+      }
+      histRow.style.display = "flex";
+      const label = document.createElement("span");
+      label.className = "lv-sheet-histrow-label";
+      label.textContent = "\u6700\u8FD1\u641C\u7D22";
+      histRow.appendChild(label);
+      for (const kw of kws.slice(0, 5)) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "lv-sheet-histrow-chip";
+        chip.textContent = kw;
+        chip.addEventListener("click", () => {
+          hapticFeedback(6);
+          search.value = kw;
+          search.dispatchEvent(new Event("input"));
+          search.focus({ preventScroll: true });
+        });
+        histRow.appendChild(chip);
+      }
+    };
+    renderHistory();
+    sheet.appendChild(histRow);
+    const ecoRow = document.createElement("div");
+    ecoRow.className = "lv-sheet-eco-row";
+    const ecoDefs = [
+      {
+        label: "\u{1F4DD} \u4ECA\u65E5\u56DE\u987E\u5165\u65E5\u8BB0",
+        action: async () => {
+          const md = lvActivity.formatAsMarkdown();
+          if (!md || !md.trim()) {
+            lvNotify.capsule({ source: "\u7F57\u76D8", message: "\u4ECA\u65E5\u6682\u65E0\u751F\u6001\u6D3B\u52A8\u8BB0\u5F55", duration: 2500 });
+            return;
+          }
+          let written = false;
+          try {
+            const host = window.siyuanCheckin || window.LvHome;
+            if (host && typeof host.appendDailyNote === "function") {
+              await host.appendDailyNote(md);
+              written = true;
+            }
+          } catch {
+          }
+          if (written) {
+            lvNotify.capsule({ source: "\u7F57\u76D8", message: "\u5DF2\u5C06\u4ECA\u65E5\u56DE\u987E\u5199\u5165\u65E5\u8BB0", duration: 2500 });
+          } else {
+            try {
+              await navigator.clipboard.writeText(md);
+              lvNotify.capsule({ source: "\u7F57\u76D8", message: "\u5DF2\u590D\u5236\u4ECA\u65E5\u56DE\u987E\uFF0C\u53EF\u7C98\u8D34\u81F3\u65E5\u8BB0", duration: 3e3 });
+            } catch {
+              lvNotify.capsule({ source: "\u7F57\u76D8", message: "\u4ECA\u65E5\u56DE\u987E\u5DF2\u5C31\u7EEA", duration: 2500 });
+            }
+          }
+        }
+      },
+      {
+        label: "\u26A1 \u6253\u5F00\u96F7\u5207\u753B\u677F",
+        action: () => {
+          const ok2 = getLaunchpadHub().executeAction("siyuan-speed-switch", "\u6253\u5F00\u5207\u7247\u5E93");
+          if (!ok2) {
+            const host = window.siyuanSpeedSwitch;
+            if (host && typeof host.showSwitcher === "function") {
+              host.showSwitcher(true);
+            }
+          }
+        }
+      }
+    ];
+    for (const def of ecoDefs) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "lv-sheet-eco-chip";
+      btn.textContent = def.label;
+      btn.addEventListener("click", () => {
+        hapticFeedback(8);
+        try {
+          void def.action();
+        } catch (err) {
+          console.warn("[LvLaunchpad] eco action failed", err);
+        }
+        closeMobileSheet();
+      });
+      ecoRow.appendChild(btn);
+    }
+    sheet.appendChild(ecoRow);
+    let searchSeq = 0;
+    search.addEventListener("input", () => {
+      const seq = ++searchSeq;
+      const kw = search.value.trim();
+      results.textContent = "";
+      if (!kw) {
+        renderHistory();
+        return;
+      }
+      histRow.style.display = "none";
+      void lvOmnisearch.search(kw).then((hits) => {
+        if (seq !== searchSeq || !document.getElementById(MOBILE_SHEET_ID)) return;
+        if (hits.length > 0) {
+          const count = document.createElement("div");
+          count.className = "lv-sheet-result-count";
+          count.textContent = hits.length > 12 ? `\u5171 ${hits.length} \u6761\u7A7F\u900F\u7ED3\u679C \xB7 \u663E\u793A\u524D 12 \u6761` : `${hits.length} \u6761\u7A7F\u900F\u7ED3\u679C`;
+          results.appendChild(count);
+        }
+        const shown = hits.slice(0, 12);
+        const groups = /* @__PURE__ */ new Map();
+        for (const hit of shown) {
+          const key = hit.source || hit.badge || "\u5C0F\u9A74";
+          const bucket = groups.get(key);
+          if (bucket) bucket.push(hit);
+          else groups.set(key, [hit]);
+        }
+        const SOURCE_ICONS = {
+          "\u6253\u5361": "\u{1F3C3}",
+          "\u7BA1\u5BB6": "\u{1F3E0}",
+          "\u62FE\u9057": "\u{1F516}",
+          "\u96F7\u5207": "\u2702\uFE0F",
+          "\u95EA\u5361": "\u{1F3B4}",
+          "\u8003\u8BD5": "\u{1F4DD}",
+          "\u4EBA\u8109": "\u{1F465}",
+          "\u5E38\u7528": "\u{1F524}"
+        };
+        for (const [sourceName, groupHits] of groups) {
+          const icon = SOURCE_ICONS[sourceName] || "\u{1F539}";
+          const groupHead = document.createElement("div");
+          groupHead.className = "lv-sheet-result-group";
+          groupHead.textContent = `${icon} ${sourceName} \xB7 ${groupHits.length} \u6761`;
+          results.appendChild(groupHead);
+          for (const hit of groupHits) {
+            const row = document.createElement("button");
+            row.type = "button";
+            row.className = "lv-sheet-result";
+            const badge = document.createElement("span");
+            badge.className = "lv-sheet-result-badge";
+            badge.textContent = `${icon} ${sourceName}`;
+            row.appendChild(badge);
+            const body = document.createElement("span");
+            body.className = "lv-sheet-result-body";
+            const t = document.createElement("span");
+            t.className = "lv-sheet-result-title";
+            t.textContent = hit.title;
+            body.appendChild(t);
+            if (hit.snippet) {
+              const s = document.createElement("span");
+              s.className = "lv-sheet-result-snippet";
+              s.textContent = hit.snippet;
+              body.appendChild(s);
+            }
+            row.appendChild(body);
+            row.addEventListener("click", () => {
+              var _a;
+              pushSearchHistory(kw);
+              closeMobileSheet();
+              try {
+                (_a = hit.onClick) == null ? void 0 : _a.call(hit);
+              } catch (e) {
+                console.warn("[LvLaunchpad] \u7A7F\u900F\u7ED3\u679C\u6253\u5F00\u5931\u8D25:", e);
+              }
+            });
+            results.appendChild(row);
+          }
+        }
+        if (!hits.length) {
+          const empty = document.createElement("div");
+          empty.className = "lv-sheet-empty";
+          empty.textContent = "\u672A\u627E\u5230\u5339\u914D\u7ED3\u679C";
+          results.appendChild(empty);
+        }
+      }).catch(() => {
+      });
+    });
+    const recentIds = getRecentTileIds();
+    const recentItems = recentIds.map((id) => items.find((it) => it.id === id)).filter((it) => Boolean(it)).slice(0, 5);
+    if (recentItems.length > 0 && items.length > 1) {
+      const recentRow = document.createElement("div");
+      recentRow.className = "lv-sheet-recent";
+      const recentLabel = document.createElement("span");
+      recentLabel.className = "lv-sheet-recent-label";
+      recentLabel.textContent = "\u6700\u8FD1";
+      recentRow.appendChild(recentLabel);
+      for (const [ri, rit] of recentItems.entries()) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "lv-sheet-recent-chip";
+        chip.setAttribute("aria-label", `\u6700\u8FD1\u76F4\u8FBE ${rit.fullName || rit.name}`);
+        chip.textContent = `${ri === 0 ? "\u27F2 " : ""}${rit.fullName || rit.name}`;
+        chip.addEventListener("click", () => {
+          hapticFeedback(8);
+          pushRecentTileId(rit.id);
+          closeMobileSheet();
+          try {
+            rit.onClick();
+          } catch (e) {
+            console.warn("[LvLaunchpad] \u6700\u8FD1\u76F4\u8FBE\u5931\u8D25:", e);
+          }
+        });
+        recentRow.appendChild(chip);
+      }
+      sheet.appendChild(recentRow);
+    }
+    const grid = document.createElement("div");
+    grid.className = items.length > 0 && items.length <= 2 ? "lv-sheet-grid lv-sheet-grid--sparse" : "lv-sheet-grid";
+    for (const item of items) {
+      const tile = buildSheetTile(item);
+      if (tile) grid.appendChild(tile);
+    }
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "lv-sheet-empty";
+      empty.textContent = "\u5C1A\u672A\u6709\u63D2\u4EF6\u5165\u9A7B\u7F57\u76D8";
+      grid.appendChild(empty);
+    }
+    if (items.length > 0) {
+      const subtitle = document.createElement("div");
+      subtitle.className = "lv-sheet-subtitle";
+      subtitle.textContent = `${items.length} \u4E2A\u63D2\u4EF6\u5165\u9A7B \xB7 \u957F\u6309\u78C1\u8D34\u5C55\u5F00\u5FEB\u6377\u884C\u52A8`;
+      sheet.appendChild(subtitle);
+    }
+    sheet.appendChild(grid);
+    mask.addEventListener("keydown", (ev) => {
+      const kev = ev;
+      const target = kev.target;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable === true)) return;
+      const n = Number(kev.key);
+      if (!Number.isInteger(n) || n < 1 || n > 9) return;
+      const tiles = grid.querySelectorAll(".lv-sheet-tile");
+      const tile = tiles[n - 1];
+      if (!tile) return;
+      kev.preventDefault();
+      tile.click();
+    });
+    const hint = document.createElement("div");
+    hint.className = "lv-sheet-hint";
+    hint.textContent = "\u70B9\u51FB\u78C1\u8D34\u76F4\u8FBE \xB7 \u957F\u6309\u5C55\u5F00\u884C\u52A8 \xB7 \u4E0B\u6ED1 / \u8FD4\u56DE\u952E / \u70B9\u7A7A\u767D\u5173\u95ED";
+    sheet.appendChild(hint);
+    mask.addEventListener("click", (ev) => {
+      if (ev.target === mask) closeMobileSheet();
+    });
+    let touchStartY = 0;
+    sheet.addEventListener("touchstart", (ev) => {
+      var _a, _b;
+      touchStartY = (_b = (_a = ev.touches[0]) == null ? void 0 : _a.clientY) != null ? _b : 0;
+    }, { passive: true });
+    sheet.addEventListener("touchend", (ev) => {
+      var _a, _b;
+      const diffY = ((_b = (_a = ev.changedTouches[0]) == null ? void 0 : _a.clientY) != null ? _b : 0) - touchStartY;
+      if (diffY > 60) closeMobileSheet();
+    }, { passive: true });
+    try {
+      lvSurfaceStack.push({ id: "lv-launchpad-mobile-sheet", dismiss: () => {
+        closeMobileSheet();
+        return true;
+      } });
+    } catch {
+    }
+    document.body.appendChild(mask);
+    mask.addEventListener("keydown", (ev) => {
+      const kev = ev;
+      if (kev.key !== "Tab") return;
+      const focusables = Array.from(mask.querySelectorAll("button, input, select, textarea, a[href], [tabindex]:not([tabindex='-1'])")).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) return;
+      if (kev.shiftKey && document.activeElement === first) {
+        kev.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!kev.shiftKey && document.activeElement === last) {
+        kev.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    });
+    if (!isMobileFrontend()) {
+      try {
+        search.focus({ preventScroll: true });
+      } catch {
+      }
+    }
+    armSheetHistory();
+    hapticFeedback(8);
+  }
+  function getOmnisearchHub() {
+    if (typeof window === "undefined") {
+      return {
+        version: PROTOCOL_VERSION,
+        registerProvider: (plugin, provider) => {
+          searchProviders.set(plugin, provider);
+          return () => searchProviders.delete(plugin);
+        },
+        search: async () => []
+      };
+    }
+    if (window.__LV_OMNISEARCH__ && window.__LV_OMNISEARCH__.version >= PROTOCOL_VERSION) {
+      return window.__LV_OMNISEARCH__;
+    }
+    const hub = {
+      version: PROTOCOL_VERSION,
+      registerProvider(plugin, provider) {
+        searchProviders.set(plugin, provider);
+        return () => searchProviders.delete(plugin);
+      },
+      async search(keyword) {
+        const kw = keyword.trim().toLowerCase();
+        if (!kw) return [];
+        const results = [];
+        const providers = Array.from(searchProviders.entries());
+        await Promise.all(
+          providers.map(async ([plugin, provider]) => {
+            let timerId = null;
+            try {
+              const timeoutPromise = new Promise((_, reject) => {
+                timerId = setTimeout(() => reject(new Error("Timeout")), 1e3);
+              });
+              const providerPromise = Promise.resolve(provider(kw));
+              const items = await Promise.race([providerPromise, timeoutPromise]);
+              if (Array.isArray(items)) {
+                results.push(...items);
+              }
+            } catch (err) {
+              console.warn(`[LvOmnisearch] \u63D2\u4EF6 ${plugin} \u68C0\u7D22\u5F02\u5E38\u6216\u8D85\u65F6:`, err);
+            } finally {
+              if (timerId !== null) {
+                clearTimeout(timerId);
+              }
+            }
+          })
+        );
+        return results.sort((a, b) => {
+          const aTitle = a.title.toLowerCase();
+          const bTitle = b.title.toLowerCase();
+          const aScore = aTitle === kw ? 3 : aTitle.startsWith(kw) ? 2 : aTitle.includes(kw) ? 1 : 0;
+          const bScore = bTitle === kw ? 3 : bTitle.startsWith(kw) ? 2 : bTitle.includes(kw) ? 1 : 0;
+          if (bScore !== aScore) return bScore - aScore;
+          return aTitle.length - bTitle.length;
+        });
+      }
+    };
+    window.__LV_OMNISEARCH__ = hub;
+    return hub;
+  }
+  var PROTOCOL_VERSION, STORAGE_PREFIX, AI_STORAGE_KEY, LAUNCHPAD_STORAGE_KEY, STYLES, nodeHistoryList, nodeHubInstance, lvSurfaceStack, nodeTickerInstance, lvTicker, nodeDocLockMap, NOTIFY_FOCUS_KEY, lvNotify, fallbackAiConfig, lvAi, fallbackActivities, lvActivity, backupRegistry, lvEcosystem, launchpadRegistry, memoryLaunchpadStates, lvLaunchpad, MOBILE_ENTRY_ID, DESKTOP_ENTRY_ID, MOBILE_SHEET_ID, mobileEntryRetryTimers, MOBILE_ENTRY_MODE_KEY, MOBILE_BALL_POS_KEY, MOBILE_BALL_ID, MOBILE_BALL_IDLE_MS, MOBILE_BALL_LONG_PRESS_MS, MOBILE_BALL_DRAG_SLOP_PX, COMPASS_SVG, ballIdleTimer, ballCurrentPos, ballResizeHandler, ballResizeTimer, ONBOARDING_KEY, BEDLINE_KEY, BEDLINE_LAST_KEY, BEDLINE_FORCE_KEY, mobileEntryOwners, desktopEntryOwners, desktopEntryRetryTimers, SIYUAN_NATIVE_BUTTON_IDS, DESKTOP_CONVERGENCE_ONBOARDING_KEY, DESKTOP_POPOVER_ID, desktopPopoverKeyDownHandler, desktopPopoverOutsideClickHandler, desktopPopoverResizeHandler, desktopToolbarObserver, desktopThemeObserver, ballDialogObserver, ballFocusHandler, ballDialogOpen, ballInputFocused, sheetCloseTimer, sheetHistoryArmed, sheetPopHandler, MOBILE_RECENT_KEY, MOBILE_RECENT_MAX, MOBILE_SEARCH_HISTORY_KEY, MOBILE_SEARCH_HISTORY_MAX, searchProviders, lvOmnisearch;
   var init_lv_notice_kit = __esm({
     "src/libs/lv-notice-kit.ts"() {
       "use strict";
-      PROTOCOL_VERSION = 160;
+      PROTOCOL_VERSION = 175;
       STORAGE_PREFIX = "lv_notice_mute_";
       AI_STORAGE_KEY = "lv_ai_shared_config";
+      LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
       STYLES = `
+:root {
+    --lv-safe-surface: #ffffff;
+    --lv-safe-surface-sub: #f8fafc;
+    --lv-safe-text: #0f172a;
+    --lv-safe-text-muted: #64748b;
+    --lv-safe-border: rgba(0, 0, 0, 0.08);
+}
+[data-theme-mode="dark"],
+body.dark {
+    --lv-safe-surface: #1e222b;
+    --lv-safe-surface-sub: #272c37;
+    --lv-safe-text: #f1f5f9;
+    --lv-safe-text-muted: #94a3b8;
+    --lv-safe-border: rgba(255, 255, 255, 0.1);
+}
+
+#lv-notice-host,
+#lv-launchpad-sheet-mask,
+#lv-launchpad-mobile-ball,
+#lvLaunchpadMobileEntry {
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: normal;
+    text-transform: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    &, *, *::before, *::after {
+        box-sizing: border-box;
+    }
+
+    button {
+        font-family: inherit;
+        text-transform: none;
+        letter-spacing: normal;
+    }
+}
+
 #lv-notice-host {
     position: fixed;
     right: 20px;
@@ -725,7 +3164,13 @@
     flex-direction: column;
     align-items: flex-end;
     gap: 8px;
+    /* \u5806\u53E0\u4E0A\u9650\uFF1A\u957F\u6587\u5361\u53EF\u5C55\u5F00\u81F3\u5168\u6587\uFF0C\u591A\u5361\u540C\u65F6\u5B58\u5728\u65F6\u5411\u5185\u6EDA\u52A8\u6536\u7EB3\uFF0C\u4E0D\u906E\u6574\u4E2A\u5DE5\u4F5C\u533A */
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
 }
+#lv-notice-host::-webkit-scrollbar { display: none; }
 
 .lv-notice-card {
     pointer-events: auto;
@@ -733,12 +3178,12 @@
     box-sizing: border-box;
     padding: 12px 14px;
     border-radius: 12px;
-    background: var(--b3-theme-surface, rgba(255, 255, 255, 0.92));
-    border: 1px solid var(--b3-theme-surface-lighter, rgba(128, 128, 128, 0.18));
+    background: var(--b3-theme-surface, var(--lv-safe-surface));
+    border: 1px solid var(--b3-theme-surface-lighter, var(--lv-safe-border));
     box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.14), 0 2px 8px -1px rgba(0, 0, 0, 0.05);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    color: var(--b3-theme-on-surface, #202124);
+    color: var(--b3-theme-on-surface, var(--lv-safe-text));
     font-size: 13px;
     line-height: 1.45;
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
@@ -793,7 +3238,7 @@
     padding: 1px 5px;
     border-radius: 10px;
     background: var(--b3-theme-primary, #4285f4);
-    color: #fff;
+    color: var(--b3-theme-on-primary, #fff);
 }
 
 .lv-notice-close-btn {
@@ -806,11 +3251,14 @@
     font-size: 14px;
     line-height: 1;
     border-radius: 4px;
-    transition: background 0.15s ease;
+    transition: all 0.15s ease;
 }
 .lv-notice-close-btn:hover {
     background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.08));
-    color: var(--b3-theme-on-surface, #202124);
+    transform: scale(1.08);
+}
+.lv-notice-close-btn:active {
+    transform: scale(0.92);
 }
 
 .lv-notice-body {
@@ -822,6 +3270,12 @@
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    cursor: default;
+}
+/* \u65E0\u884C\u52A8\u6309\u94AE\u7684\u957F\u6587\u5361\uFF1A\u70B9\u51FB\u6B63\u6587\u6574\u5361\u5C55\u5F00/\u6536\u8D77\uFF08\u622A\u65AD 3 \u884C \u2192 \u5168\u6587\uFF09\uFF0C\u53CC\u5411\u9605\u8BFB\u8DEF\u5F84 */
+.lv-notice-body--expanded {
+    -webkit-line-clamp: 999;
+    cursor: zoom-out;
 }
 
 .lv-notice-actions {
@@ -851,7 +3305,7 @@
 }
 .lv-notice-btn--primary {
     background: var(--b3-theme-primary, #4285f4);
-    color: #ffffff;
+    color: var(--b3-theme-on-primary, #ffffff);
 }
 .lv-notice-btn--primary:hover {
     filter: brightness(1.08);
@@ -871,6 +3325,29 @@
     font-size: 12px;
     color: var(--b3-theme-on-surface, #202124);
     animation: lvNoticeFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lv-notice-capsule-action {
+    background: var(--b3-theme-primary, #3576c7);
+    color: var(--b3-theme-on-primary, #ffffff);
+    border: none;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-left: 6px;
+    line-height: 1.4;
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+.lv-notice-capsule-action:hover {
+    filter: brightness(1.1);
+    transform: scale(1.05);
+}
+.lv-notice-capsule-action:active {
+    transform: scale(0.95);
 }
 
 @keyframes lvInlinePop {
@@ -896,6 +3373,11 @@
         bottom: auto;
         align-items: center;
         padding: 0 12px;
+        /* \u5C0F\u5C4F\u5806\u53E0\u4E0A\u9650\uFF1A3 \u5F20\u957F\u5361\uFF08\u6BCF\u5F20\u53EF\u5C55\u5F00\u81F3\u5168\u6587\uFF09\u4F1A\u5360\u8FD1\u534A\u5C4F\u906E\u6321\u6B63\u6587\u2014\u2014
+           \u9650\u9AD8\u6EDA\u52A8\u6536\u7EB3\uFF0C\u6700\u65B0\u5361\u5728\u53EF\u89C6\u533A\u9876\u90E8\uFF0C\u65E7\u5361\u6EDA\u52A8\u53EF\u8FBE */
+        max-height: calc(100dvh - 160px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
     }
     .lv-notice-card {
         width: 100%;
@@ -908,9 +3390,318 @@
     from { opacity: 0; transform: translateY(8px) scale(0.96); }
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* ===== \u79FB\u52A8\u7AEF\u7EDF\u4E00\u5F39\u5C04\u575E\uFF08Bottom Sheet\uFF09===== */
+#lv-launchpad-sheet-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 980;
+    background: rgba(0, 0, 0, 0.36);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: lvSheetMaskIn 160ms ease-out both;
+}
+#lv-launchpad-sheet-mask .lv-sheet {
+    width: 100%;
+    max-height: min(86dvh, 720px);
+    overflow-y: auto;
+    overscroll-behavior: contain; /* \u6A61\u76AE\u7B4B\u6EDA\u52A8\u4E0D\u5916\u6EA2\u5230\u601D\u6E90\u6587\u6863\u5C42 */
+    background: var(--b3-theme-surface, var(--lv-safe-surface));
+    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
+    padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+    animation: lvSheetUp 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    will-change: transform; /* GPU \u5408\u6210\u5C42\uFF1A\u5F00\u5408\u52A8\u753B\u6EE1\u5E27 */
+}
+/* \u78C1\u8D34\u5FBD\u8BB0\u80F6\u56CA\uFF1A\u8F7B\u91CF\u72B6\u6001\u4E00\u76EE\u4E86\u7136 */
+.lv-sheet-tile-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--b3-theme-primary-lightest, rgba(53,118,199,0.14));
+    color: var(--b3-theme-primary, #3576c7);
+    line-height: 1.4;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lv-sheet-tile-badge--success { background: rgba(39,174,96,0.14); color: #27ae60; }
+.lv-sheet-tile-badge--warn { background: rgba(242,153,74,0.16); color: #d35400; }
+.lv-sheet-result-count { font-size: 11px; color: var(--b3-theme-on-surface-light, #9ca3af); padding: 0 2px 2px; }
+/* \u7A7F\u900F\u7ED3\u679C\u5206\u7EC4\u5934\uFF08\u6309\u6765\u6E90\uFF09 */
+.lv-sheet-result-group { font-size: 11px; font-weight: 700; color: var(--b3-theme-primary, #3576c7); padding: 6px 2px 2px; }
+/* \u641C\u7D22\u5386\u53F2 chips */
+.lv-sheet-histrow { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; overscroll-behavior-x: contain; }
+.lv-sheet-histrow-label { flex-shrink: 0; font-size: 11px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); }
+.lv-sheet-histrow-chip {
+    flex-shrink: 0;
+    border: 1px dashed var(--b3-border-color, var(--lv-safe-border));
+    background: transparent;
+    border-radius: 999px;
+    padding: 4px 11px;
+    font-size: 12px;
+    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.lv-sheet-histrow-chip:active { background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12)); }
+/* \u751F\u6001\u76F4\u8FBE\u884C\uFF08\u4ECA\u65E5\u56DE\u987E / \u5C0F\u9A74 AI\uFF09 */
+.lv-sheet-eco-row { display: flex; gap: 8px; margin: 2px 0 10px; }
+.lv-sheet-eco-chip {
+    flex: 1;
+    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
+    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
+    border-radius: 12px;
+    padding: 9px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.lv-sheet-eco-chip:active { transform: scale(0.97); background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12)); }
+/* \u6700\u8FD1\u76F4\u8FBE\u884C\uFF1A\u4E0A\u6B21\u4F7F\u7528\u7684\u63D2\u4EF6\u4E00\u952E\u518D\u8FBE\uFF08\u6700\u5E38\u7528\u5355\u624B\u8DEF\u5F84\u96F6\u7FFB\u627E\uFF09 */
+.lv-sheet-recent { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding-bottom: 2px; overscroll-behavior-x: contain; }
+.lv-sheet-recent-label { flex-shrink: 0; font-size: 11px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); }
+.lv-sheet-recent-chip {
+    flex-shrink: 0;
+    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
+    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 13px;
+    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.lv-sheet-recent-chip:active { background: var(--b3-theme-primary-lightest, rgba(53,118,199,0.12)); }
+.lv-sheet-handle {
+    width: 44px;
+    height: 5px;
+    margin: 0 auto 10px;
+    border-radius: 999px;
+    background: var(--b3-border-color, var(--lv-safe-border));
+}
+.lv-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.lv-sheet-title { font-size: 17px; font-weight: 700; color: var(--b3-theme-on-surface, var(--lv-safe-text)); }
+.lv-sheet-close {
+    border: none;
+    background: transparent;
+    font-size: 16px;
+    line-height: 1;
+    padding: 8px;
+    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    cursor: pointer;
+}
+.lv-sheet-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+.lv-sheet-results { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.lv-sheet-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    border: none;
+    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
+    border-radius: 10px;
+    padding: 8px 10px;
+    text-align: left;
+    cursor: pointer;
+}
+.lv-sheet-result-badge {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--b3-theme-primary-lightest, rgba(53,118,199,0.12));
+    color: var(--b3-theme-primary, #3576c7);
+}
+.lv-sheet-result-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lv-sheet-result-title { font-size: 14px; font-weight: 600; color: var(--b3-theme-on-surface, var(--lv-safe-text)); }
+.lv-sheet-result-snippet {
+    font-size: 12px;
+    color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* \u78C1\u8D34\u7F51\u683C\u81EA\u9002\u5E94\u5217\u6570\uFF1A1~2 \u4E2A\u63D2\u4EF6\u65F6\u81EA\u52A8\u653E\u5BBD\u4E3A\u5C45\u4E2D\u5927\u5361\uFF0C3+ \u6062\u590D\u4E09\u5217\uFF0C\u675C\u7EDD\u5B64\u5361\u7A00\u758F */
+.lv-sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.lv-sheet-grid--sparse { grid-template-columns: repeat(auto-fit, minmax(150px, 190px)); justify-content: center; }
+.lv-sheet-subtitle { font-size: 12px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); margin: -6px 0 10px; }
+.lv-sheet-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
+    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
+    border-radius: 14px;
+    padding: 12px 6px 10px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+}
+.lv-sheet-tile:active { transform: scale(0.96); }
+.lv-sheet-tile-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--b3-theme-primary, #3576c7); }
+.lv-sheet-tile-name { font-size: 14px; font-weight: 600; color: var(--b3-theme-on-surface, var(--lv-safe-text)); text-align: center; }
+.lv-sheet-tile-desc {
+    font-size: 11px;
+    color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted));
+    text-align: center;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lv-sheet-tile--expanded { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; padding: 12px; }
+.lv-sheet-tile-icon { display: grid; place-items: center; width: 26px; height: 26px; color: var(--b3-theme-on-surface, var(--lv-safe-text)); }
+.lv-sheet-tile-icon svg { width: 22px; height: 22px; }
+.lv-sheet-tile-actions { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 6px; }
+.lv-sheet-action-chip {
+    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
+    background: var(--b3-theme-surface, var(--lv-safe-surface));
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.lv-sheet-action-chip:active { background: var(--b3-theme-primary-lightest, rgba(53,118,199,0.12)); }
+.lv-sheet-empty { grid-column: 1 / -1; text-align: center; font-size: 13px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); padding: 14px 0; }
+.lv-sheet-hint { text-align: center; font-size: 11px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); }
+@keyframes lvSheetMaskIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lvSheetUp { from { transform: translateY(40%); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+
+/* \u6536\u573A\u52A8\u753B\uFF1A\u4E0B\u6ED1\u6DE1\u51FA\uFF0C\u66FF\u4EE3\u751F\u786C\u7684\u77AC\u95F4\u79FB\u9664 */
+#lv-launchpad-sheet-mask.lv-sheet-closing { animation: lvSheetMaskOut 190ms ease-in both; pointer-events: none; }
+#lv-launchpad-sheet-mask.lv-sheet-closing .lv-sheet { animation: lvSheetDown 190ms ease-in both; }
+@keyframes lvSheetMaskOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes lvSheetDown { from { transform: translateY(0); opacity: 1; } to { transform: translateY(55%); opacity: 0; } }
+@media (min-width: 600px) {
+    #lv-launchpad-sheet-mask.lv-sheet-closing .lv-sheet { animation: lvSheetCenterOut 160ms ease-in both; }
+    @keyframes lvSheetCenterOut { from { transform: scale(1); opacity: 1; } to { transform: scale(0.94); opacity: 0; } }
+}
+@media (prefers-reduced-motion: reduce) {
+    #lv-launchpad-sheet-mask, #lv-launchpad-sheet-mask .lv-sheet { animation: none; }
+}
+
+/* ===== \u5C0F\u9A74\u7F57\u76D8\u60AC\u6D6E\u7403\uFF08Compass FAB\uFF09\uFF1A\u62D6\u62FD / \u8D34\u8FB9 / \u95F2\u7F6E\u534A\u9690 / \u6C89\u6D78\u6A21\u5F0F ===== */
+#lv-launchpad-mobile-ball {
+    position: fixed;
+    z-index: 970;
+    width: 46px;
+    height: 46px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    /* \u65E7 WebView \u65E0 color-mix \u65F6\u56DE\u9000\u5B9E\u8272\uFF0C\u518D\u6E10\u8FDB\u589E\u5F3A\u6BDB\u73BB\u7483 */
+    background: var(--b3-theme-surface, var(--lv-safe-surface));
+    background: color-mix(in srgb, var(--b3-theme-surface, var(--lv-safe-surface)) 82%, transparent);
+    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    cursor: pointer;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease, box-shadow 200ms ease;
+}
+#lv-launchpad-mobile-ball:active { box-shadow: 0 6px 22px rgba(0, 0, 0, 0.26); }
+/* \u6C34\u5E73\u4F4D\u7F6E\u7531 JS \u5199\u5165 style.left\uFF08\u62D6\u62FD/\u8D34\u8FB9\u5438\u9644\uFF09\uFF0Ctransform \u53EA\u8D1F\u8D23\u534A\u9690/\u6C89\u6D78/\u62D6\u62FD\u7F29\u653E\u89C6\u89C9 */
+#lv-launchpad-mobile-ball.lv-ball-edge-left.lv-ball-idle,
+#lv-launchpad-mobile-ball.lv-ball-edge-left.lv-ball-immersive { transform: translateX(-40%) scale(0.9); opacity: 0.55; }
+#lv-launchpad-mobile-ball.lv-ball-edge-right.lv-ball-idle,
+#lv-launchpad-mobile-ball.lv-ball-edge-right.lv-ball-immersive { transform: translateX(40%) scale(0.9); opacity: 0.55; }
+#lv-launchpad-mobile-ball.lv-ball-dragging { transition: none; transform: scale(1.1); opacity: 0.96; z-index: 990; }
+/* \u4E0E\u601D\u6E90\u539F\u751F\u79FB\u52A8\u7AEF\u51B2\u7A81\u907F\u8BA9\uFF1A\u4EFB\u4E00 .b3-dialog \u6253\u5F00\u6216\u6587\u672C\u8F93\u5165\u805A\u7126\uFF08\u952E\u76D8\u5F39\u8D77\uFF09\u65F6\u9690\u85CF\u60AC\u6D6E\u7403 */
+#lv-launchpad-mobile-ball.lv-ball-suppressed { display: none; }
+
+/* ===== \u8BBE\u5907\u77E9\u9635\u9002\u914D\uFF1A\u5E73\u677F / \u6298\u53E0\u5C4F\u5185\u5C4F\uFF08\u2265600px\uFF09\u5E95\u90E8\u62BD\u5C49 \u2192 \u5C45\u4E2D\u60AC\u6D6E\u5361\u7247 ===== */
+@media (min-width: 600px) {
+    #lv-launchpad-sheet-mask { align-items: center; padding: 24px; box-sizing: border-box; }
+    #lv-launchpad-sheet-mask .lv-sheet {
+        max-width: 560px;
+        width: auto;
+        min-width: min(420px, 92vw);
+        border-radius: 20px;
+        max-height: 82dvh;
+        animation: lvSheetCenter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .lv-sheet-handle { display: none; }
+}
+@keyframes lvSheetCenter { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* \u624B\u673A\u6A2A\u5C4F\u77EE\u7A97\uFF1A\u7D27\u51D1\u5E03\u5C40\uFF0C\u9690\u85CF\u63D0\u793A\u884C\u8BA9\u4F4D\u5185\u5BB9 */
+@media (orientation: landscape) and (max-height: 500px) {
+    #lv-launchpad-sheet-mask .lv-sheet { max-height: 92dvh; padding-top: 8px; }
+    .lv-sheet-grid { gap: 8px; }
+    .lv-sheet-hint { display: none; }
+}
+
+/* \u89E6\u63A7\u76EE\u6807\u9632\u8BEF\u89E6\uFF1A\u7981\u53CC\u51FB\u7F29\u653E\uFF0C\u78C1\u8D34/\u884C\u52A8 chips/\u7ED3\u679C\u884C/\u5173\u95ED\u952E\u7EDF\u4E00 */
+.lv-sheet-tile, .lv-sheet-action-chip, .lv-sheet-result, .lv-sheet-close, .lv-sheet-moon, .lv-sheet-today-chip { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+/* ===== \u4ECA\u65E5\u4E00\u7AD9\u5F0F\u805A\u5408\u6761\uFF1A\u5404\u63D2\u4EF6\u5FBD\u8BB0\u6570\u5B57\u4E00\u773C\u603B\u89C8\uFF0C\u70B9 chip \u76F4\u8FBE ===== */
+.lv-sheet-today { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding: 6px 8px; border-radius: 12px; background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.08)); overscroll-behavior-x: contain; }
+.lv-sheet-today-label { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--b3-theme-primary, #3576c7); }
+.lv-sheet-today-chip {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--b3-border-color, #e4e7eb);
+    background: var(--b3-theme-surface, #fff);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--b3-theme-on-surface, #1f2329);
+    cursor: pointer;
+}
+.lv-sheet-today-chip:active { transform: scale(0.96); }
+.lv-sheet-today-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--b3-theme-primary, #3576c7); }
+
+/* ===== \u4E13\u6CE8\u6A21\u5F0F\uFF1A\u575E\u5934 \u{1F319} \u5F00\u5173 + \u5165\u53E3\u5FBD\u8BB0 ===== */
+.lv-sheet-moon {
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    line-height: 1;
+    padding: 6px 8px;
+    margin-right: 2px;
+    border-radius: 8px;
+    color: var(--b3-theme-on-surface, #1f2329);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.lv-sheet-moon[aria-pressed="true"] {
+    background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12));
+    color: var(--b3-theme-primary, #3576c7);
+    font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+    #lv-launchpad-mobile-ball { transition: none; }
+}
 `;
       nodeHistoryList = [];
-      nodeSurfaceStack = [];
       lvSurfaceStack = {
         /** 将当前浮层压入栈顶，返回销毁/移出栈函数 */
         push(handle) {
@@ -930,8 +3721,45 @@
           return stack[stack.length - 1];
         }
       };
+      lvTicker = {
+        /** 注册固定周期心跳（毫秒，最低 5000ms） */
+        subscribe(pluginName, intervalMs, callback) {
+          const hub = getTicker(pluginName);
+          return hub.subscribe(pluginName, intervalMs, callback);
+        },
+        /** 注册每分钟整点对齐心跳 */
+        onMinute(pluginName, callback) {
+          return this.subscribe(pluginName, 6e4, callback);
+        },
+        /** 注册每小时整点心跳 */
+        onHour(pluginName, callback) {
+          return this.subscribe(pluginName, 36e5, callback);
+        },
+        /** 注册跨日零点广播（00:00:01 准点触发，传递新日期 YYYY-MM-DD） */
+        onDateCross(pluginName, callback) {
+          const hub = getTicker(pluginName);
+          return hub.onDateCross(pluginName, callback);
+        }
+      };
       nodeDocLockMap = /* @__PURE__ */ new Map();
+      NOTIFY_FOCUS_KEY = "lv_notify_focus_until";
       lvNotify = {
+        /** 开启全局专注模式：直至指定时间戳，card/capsule 全生态降级为历史留档不弹窗 */
+        setFocusUntil(ts) {
+          setNotifyFocusUntil(ts);
+        },
+        /** 退出全局专注模式 */
+        clearFocus() {
+          clearNotifyFocus();
+        },
+        /** 专注模式是否生效中 */
+        isFocusActive() {
+          return isNotifyFocusActive();
+        },
+        /** 专注模式截止时间戳（0=未开启） */
+        getFocusUntil() {
+          return getNotifyFocusUntil();
+        },
         card(options) {
           const id = `card_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
           const hub = getHub(options.source);
@@ -955,26 +3783,39 @@
             message: options.message,
             level: options.level || "info",
             duration: (_a = options.duration) != null ? _a : 2500,
+            action: options.action,
             createdAt: Date.now(),
             repeatCount: 1
           });
           return id;
         },
-        inline(target, tipText, isSuccess = true) {
-          if (!target || typeof target !== "object") return;
-          const stateClass = isSuccess ? "lv-inline-feedback--success" : "lv-inline-feedback--error";
-          if (target.classList && typeof target.classList.add === "function") {
-            target.classList.add("lv-inline-feedback-active", stateClass);
-          }
-          const originalTitle = typeof target.getAttribute === "function" ? target.getAttribute("title") : null;
-          if (tipText && typeof target.setAttribute === "function") target.setAttribute("title", tipText);
-          setTimeout(() => {
-            if (target.classList && typeof target.classList.remove === "function") {
-              target.classList.remove("lv-inline-feedback-active", stateClass);
+        /**
+         * 撤销胶囊通知（Undo Action Pill · 人体工程学撤销范式）
+         * 替代强阻断性的二次 confirm 弹窗：操作立即生效，底部滑出 5 秒倒计时撤销胶囊
+         */
+        undo(options) {
+          var _a;
+          return this.capsule({
+            source: options.source || "\u64A4\u9500",
+            message: options.message,
+            duration: (_a = options.duration) != null ? _a : 5e3,
+            action: {
+              label: options.undoLabel || "\u64A4\u9500",
+              onClick: options.onUndo
             }
-            if (originalTitle !== null && typeof target.setAttribute === "function") {
+          });
+        },
+        inline(target, tipText, isSuccess = true) {
+          if (!target) return;
+          const stateClass = isSuccess ? "lv-inline-feedback--success" : "lv-inline-feedback--error";
+          target.classList.add("lv-inline-feedback-active", stateClass);
+          const originalTitle = target.getAttribute("title");
+          if (tipText) target.setAttribute("title", tipText);
+          setTimeout(() => {
+            target.classList.remove("lv-inline-feedback-active", stateClass);
+            if (originalTitle !== null) {
               target.setAttribute("title", originalTitle);
-            } else if (typeof target.removeAttribute === "function") {
+            } else {
               target.removeAttribute("title");
             }
           }, 1e3);
@@ -994,15 +3835,11 @@
         },
         dismiss(id) {
           var _a;
-          if (typeof window !== "undefined") {
-            (_a = window.__LV_NOTICE_HUB__) == null ? void 0 : _a.dismiss(id);
-          }
+          (_a = window.__LV_NOTICE_HUB__) == null ? void 0 : _a.dismiss(id);
         },
         snooze(id, durationMs) {
           var _a;
-          if (typeof window !== "undefined") {
-            (_a = window.__LV_NOTICE_HUB__) == null ? void 0 : _a.snooze(id, durationMs);
-          }
+          (_a = window.__LV_NOTICE_HUB__) == null ? void 0 : _a.snooze(id, durationMs);
         },
         muteToday(category) {
           const hub = getHub();
@@ -1091,6 +3928,157 @@
           const count = diag.registeredPlugins.length;
           const pluginText = count > 0 ? `${count} \u63D2\u4EF6\u5DF2\u8054\u7ED3` : "\u5355\u673A\u6A21\u5F0F";
           return `\u{1F434} \u5C0F\u9A74\u5168\u5BB6\u6876\u534F\u540C\u6B63\u5E38 \xB7 ${pluginText} \xB7 \u4ECA\u65E5\u6D3B\u52A8 ${diag.todayActivitiesCount} \u9879`;
+        }
+      };
+      launchpadRegistry = /* @__PURE__ */ new Map();
+      memoryLaunchpadStates = {};
+      lvLaunchpad = {
+        /** 向小驴罗盘注册插件入口（替代传统的 addTopBar，支持置顶/收敛/隐藏与二级行动） */
+        register(item) {
+          return getLaunchpadHub().register(item);
+        },
+        /** 获取当前已注册的插件列表及其三态呈现属性 */
+        getItems() {
+          return getLaunchpadHub().getItems();
+        },
+        /** 用户动态设定插件状态：pinned（置顶在外） | docked（仅在坞内） | hidden（彻底隐藏） */
+        setPluginState(pluginId, state) {
+          getLaunchpadHub().setPluginState(pluginId, state);
+        },
+        /** 动态更新已注册条目的元数据（如徽标、提示语或宿主按钮引用，支持热更新） */
+        updateItem(pluginId, patch) {
+          var _a, _b;
+          (_b = (_a = getLaunchpadHub()).updateItem) == null ? void 0 : _b.call(_a, pluginId, patch);
+        },
+        /** 直接触发指定插件的二级快捷行动（供 Quicker 动作或外部快捷键毫秒级直达） */
+        executeAction(pluginId, actionName) {
+          return getLaunchpadHub().executeAction(pluginId, actionName);
+        },
+        /** 唤醒弹射坞（支持 popover 顶栏吸附或 center 屏幕居中） */
+        open(mode) {
+          getLaunchpadHub().open(mode);
+        },
+        /** 关闭弹射坞 */
+        close() {
+          getLaunchpadHub().close();
+        },
+        /** 判定当前是否思源移动端前端（手机端宿主渲染 #mobileTopBar；UA 兜底） */
+        isMobileFrontend() {
+          return isMobileFrontend();
+        },
+        /**
+         * 统一手机端顶栏收敛入口（Protocol v1.6.0 Mobile）：
+         * 仅在移动端注入一枚「小驴罗盘」按钮（desktop 调用为 no-op）。
+         * 已注册 ≥1 个插件即注入；pinned 插件的专属按钮由各插件自行保留在外。
+         * 幂等去重（#lvLaunchpadMobileEntry）+ 错峰重试（800/1500/4000/10000ms）。
+         * 返回清理函数：移除按钮与所有挂起重试计时器。
+         */
+        ensureMobileEntry() {
+          return ensureMobileEntry();
+        },
+        /**
+         * 统一桌面端顶栏收敛入口（Protocol v1.7 Desktop）：
+         * 挂载至桌面端 #toolbar。
+         * 仅有 1 个插件时左键直达主界面，长按/右键打开罗盘弹射坞，杜绝多层损耗；
+         * >= 2 个插件时左键打开罗盘弹射坞；
+         * 用户可通过 pinned 状态决定是否保留该插件的独立原生顶栏图标。
+         */
+        ensureDesktopEntry() {
+          return ensureDesktopEntry();
+        },
+        /** 统一全端顶栏收敛入口（自动适配桌面与移动端环境） */
+        ensureUnifiedEntry() {
+          const cleanM = ensureMobileEntry();
+          const cleanD = ensureDesktopEntry();
+          return () => {
+            cleanM();
+            cleanD();
+          };
+        },
+        /** 唤醒移动端底部弹射坞（Bottom Sheet：磁贴网格 + 穿透搜索 + 长按展开二级行动） */
+        openMobileSheet() {
+          openMobileSheet();
+        },
+        /** 关闭移动端弹射坞 */
+        closeMobileSheet() {
+          closeMobileSheet();
+        },
+        /** 轻触感震动反馈（移动端支持 navigator.vibrate；桌面端静默忽略） */
+        haptic(durationMs = 10) {
+          hapticFeedback(durationMs);
+        },
+        /** 读取手机端入口模式：topbar（仅顶栏）/ ball（仅悬浮球）/ both（并行，默认）/ none（都不要） */
+        getMobileEntryMode() {
+          return getMobileEntryMode();
+        },
+        /** 设定手机端入口模式并实时生效（持久化；顶栏按钮与悬浮球按模式增删） */
+        setMobileEntryMode(mode) {
+          setMobileEntryMode(mode);
+        },
+        /** 睡前日报定时提醒核对与触发（满足时间+有活动+未开启专注+今日未触发） */
+        checkBedlineReminder(now) {
+          return checkAndTriggerBedline(now);
+        }
+      };
+      MOBILE_ENTRY_ID = "lvLaunchpadMobileEntry";
+      DESKTOP_ENTRY_ID = "lvLaunchpadDesktopEntry";
+      MOBILE_SHEET_ID = "lv-launchpad-sheet-mask";
+      mobileEntryRetryTimers = [];
+      MOBILE_ENTRY_MODE_KEY = "lv_launchpad_entry_mode";
+      MOBILE_BALL_POS_KEY = "lv_launchpad_ball_pos";
+      MOBILE_BALL_ID = "lv-launchpad-mobile-ball";
+      MOBILE_BALL_IDLE_MS = 3500;
+      MOBILE_BALL_LONG_PRESS_MS = 600;
+      MOBILE_BALL_DRAG_SLOP_PX = 8;
+      COMPASS_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5"/></svg>`;
+      ONBOARDING_KEY = "lv_launchpad_onboarding_done";
+      BEDLINE_KEY = "lv_launchpad_bedline_reminder";
+      BEDLINE_LAST_KEY = "lv_launchpad_bedline_last";
+      BEDLINE_FORCE_KEY = "lv_launchpad_bedline_force";
+      mobileEntryOwners = /* @__PURE__ */ new Set();
+      desktopEntryOwners = /* @__PURE__ */ new Set();
+      desktopEntryRetryTimers = [];
+      SIYUAN_NATIVE_BUTTON_IDS = /* @__PURE__ */ new Set([
+        "barSearch",
+        "barSync",
+        "barBack",
+        "barForward",
+        "barDockL",
+        "barDockR",
+        "barDockB",
+        "barSetting",
+        "barSettings",
+        "barHelp",
+        "barHistory",
+        "barMode",
+        "drag",
+        "windowControls",
+        "barWorkspace",
+        "barExit"
+      ]);
+      DESKTOP_CONVERGENCE_ONBOARDING_KEY = "lv_desktop_convergence_onboarding_done";
+      DESKTOP_POPOVER_ID = "lv-desktop-launchpad-popover";
+      desktopPopoverKeyDownHandler = null;
+      desktopPopoverOutsideClickHandler = null;
+      desktopPopoverResizeHandler = null;
+      desktopToolbarObserver = null;
+      desktopThemeObserver = null;
+      ballDialogOpen = false;
+      ballInputFocused = false;
+      sheetHistoryArmed = false;
+      MOBILE_RECENT_KEY = "lv_launchpad_recent_tiles";
+      MOBILE_RECENT_MAX = 6;
+      MOBILE_SEARCH_HISTORY_KEY = "lv_launchpad_search_history";
+      MOBILE_SEARCH_HISTORY_MAX = 6;
+      searchProviders = /* @__PURE__ */ new Map();
+      lvOmnisearch = {
+        /** 插件向生态穿透搜索总线注册数据提供者 */
+        registerProvider(pluginName, provider) {
+          return getOmnisearchHub().registerProvider(pluginName, provider);
+        },
+        /** 跨插件穿透全文检索 */
+        search(keyword) {
+          return getOmnisearchHub().search(keyword);
         }
       };
     }
@@ -1215,6 +4203,12 @@
       width: "min(440px, 92vw)"
     });
     (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-form-host");
+    dialog.element.addEventListener("click", (e) => {
+      var _a2;
+      if (e.target === dialog.element || ((_a2 = e.target.classList) == null ? void 0 : _a2.contains("b3-dialog__scrim"))) {
+        dialog.destroy();
+      }
+    });
     mountPlatformDialogTitleWrap(dialog.element, options.title);
     const body = getDialogBody(dialog.element);
     if (!body) {
@@ -1275,6 +4269,12 @@
       width: "min(400px, 92vw)"
     });
     (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-form-host");
+    dialog.element.addEventListener("click", (e) => {
+      var _a2;
+      if (e.target === dialog.element || ((_a2 = e.target.classList) == null ? void 0 : _a2.contains("b3-dialog__scrim"))) {
+        dialog.destroy();
+      }
+    });
     mountPlatformDialogTitleWrap(dialog.element, title);
     const body = getDialogBody(dialog.element);
     if (!body) {
@@ -2077,12 +5077,22 @@
       return `__XLC_CODE_PLACEHOLDER_${codeBlocks.length - 1}__`;
     });
     const urlBlocks = [];
-    processed = processed.replace(/(https?:\/\/[^\s)）\]]+|\[[^\]]+\]\([^)]+\))/g, (match) => {
+    processed = processed.replace(/(https?:\/\/[^\s\u4e00-\u9fa5<>"')）\]]+|\[[^\]]+\]\([^)]+\))/g, (match) => {
       urlBlocks.push(match);
       return `__XLC_URL_PLACEHOLDER_${urlBlocks.length - 1}__`;
     });
+    const mathBlocks = [];
+    processed = processed.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (match) => {
+      mathBlocks.push(match);
+      return `__XLC_MATH_PLACEHOLDER_${mathBlocks.length - 1}__`;
+    });
+    const syBlocks = [];
+    processed = processed.replace(/(\(\([a-z0-9\-]{14,24}(?:\s+"[^"]*")?\)\)|\{\{select[\s\S]*?\}\})/gi, (match) => {
+      syBlocks.push(match);
+      return `__XLC_SY_PLACEHOLDER_${syBlocks.length - 1}__`;
+    });
     const xlcBlocks = [];
-    processed = processed.replace(/\{\{xlc:[\s\S]*?\}\}/g, (match) => {
+    processed = processed.replace(/\{\{[\s\S]*?\}\}/g, (match) => {
       xlcBlocks.push(match);
       return `__XLC_TAG_PLACEHOLDER_${xlcBlocks.length - 1}__`;
     });
@@ -2101,6 +5111,14 @@
     processed = processed.replace(/__XLC_TAG_PLACEHOLDER_(\d+)__/g, (_, idx) => {
       var _a;
       return (_a = xlcBlocks[Number(idx)]) != null ? _a : "";
+    });
+    processed = processed.replace(/__XLC_SY_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+      var _a;
+      return (_a = syBlocks[Number(idx)]) != null ? _a : "";
+    });
+    processed = processed.replace(/__XLC_MATH_PLACEHOLDER_(\d+)__/g, (_, idx) => {
+      var _a;
+      return (_a = mathBlocks[Number(idx)]) != null ? _a : "";
     });
     processed = processed.replace(/__XLC_URL_PLACEHOLDER_(\d+)__/g, (_, idx) => {
       var _a;
@@ -8335,8 +11353,11 @@ ${codeText}`;
   function pad(n) {
     return String(n).padStart(2, "0");
   }
-  function renderDate(now) {
+  function formatLocalDate(now = /* @__PURE__ */ new Date()) {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
+  function renderDate(now) {
+    return formatLocalDate(now);
   }
   function formatDateTime(date, pattern) {
     return pattern.replace(FORMAT_TOKEN_PATTERN, (token) => {
@@ -10065,6 +13086,10 @@ ${codeText}`;
         return generateNanoId(10);
       case "password":
         return generateSecurePassword(14, "complex");
+      // 生态宏类（achievement/home_board/review_card 等）由宏引擎另行渲染，不在此展开；
+      // 兜底空串保证穷尽性（TS2366），新增 kind 未注册渲染器时不产出脏文本
+      default:
+        return "";
     }
   }
   function resolveGreeting(now, arg) {
@@ -10362,6 +13387,9 @@ ${codeText}`;
         subAction = rawKind.split(":")[1];
       }
     }
+    if (rawKind.startsWith("checkin:") || rawKind.startsWith("home:") || rawKind.startsWith("butler:") || rawKind.startsWith("task:") || rawKind.startsWith("glean:") || rawKind.startsWith("contacts:")) {
+      return null;
+    }
     if (kind === "random") return arg ? pickRandomOption(arg) : null;
     if (kind === "date") return arg ? resolveDateArg(now, arg) : renderDate(now);
     if (kind === "time") return arg ? resolveTimeArg(now, arg) : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -10464,6 +13492,70 @@ ${codeText}`;
     if (kind === "json") return arg ? resolveJsonArg(arg, subAction) : null;
     if (kind === "line") return arg ? resolveLineArg(arg, subAction) : null;
     if (kind === "csv") return arg ? resolveCsvArg(arg, subAction) : null;
+    if (kind === "achievement" || kind.startsWith("checkin") && subAction !== "today" && arg !== "today") {
+      const today = formatLocalDate(now);
+      return [
+        `> \u{1F305} **\u4ECA\u65E5\u81EA\u5F8B\u6210\u5C31\u5361 \xB7 ${today}**`,
+        `> \u8FBE\u6210\u7387: **0%** (0/3) \xB7 \u8FDE\u7EED 1 \u5929\u{1F525}`,
+        `>`,
+        `> - [ ] **\u6668\u95F4\u9605\u8BFB 30 \u5206\u949F** \`\u26AA \u4FDD\u5E95\` \u26A1+2`,
+        `> - [ ] **\u6838\u5FC3\u6280\u80FD\u523B\u610F\u7EC3\u4E60** \`\u{1F7E2} \u8FBE\u6807\` \u26A1+3`,
+        `> - [ ] **\u665A\u95F4\u590D\u76D8\u603B\u7ED3** \`\u{1F525} \u7A81\u7834\` \u26A1+5`,
+        `{: custom-type="daily-achievement" custom-checkin-card="true" }`
+      ].join("\n");
+    }
+    if (kind === "home_board" || kind.startsWith("home")) {
+      const today = formatLocalDate(now);
+      return [
+        `> \u{1F3E0} **\u4ECA\u65E5\u5BB6\u5EAD\u751F\u6D3B\u5907\u5FD8\u4E0E\u5230\u671F\u9884\u8B66 \xB7 ${today}**`,
+        `> \u5F85\u5904\u7406: **0** \u9879 (\u{1F534} \u903E\u671F: **0** \xB7 \u{1F7E0} 7\u5929\u5185: **0** \xB7 \u{1F7E1} \u9884\u8B66\u671F: **0**)`,
+        `>`,
+        `> - \u{1F7E2} \u4ECA\u65E5\u5BB6\u5EAD\u8D44\u4EA7\u4E0E\u8BC1\u4EF6\u72B6\u6001\u5B89\u5168\uFF0C\u65E0\u4E34\u671F\u5230\u671F\u4E8B\u9879`,
+        `{: custom-type="home-alert-board" custom-home-summary="true" }`
+      ].join("\n");
+    }
+    if (kind === "review_card" || kind.startsWith("cards")) {
+      const today = formatLocalDate(now);
+      return [
+        `> \u{1F5C2}\uFE0F **\u4ECA\u65E5\u95EA\u5361\u590D\u4E60\u6218\u62A5 \xB7 ${today}**`,
+        `> \u590D\u4E60\u5B8C\u6210: **0** \u5F20 \xB7 \u638C\u63E1\u7387: **100%** (\u{1F7E2} \u719F\u7EC3: 0 \xB7 \u{1F7E1} \u52C9\u5F3A: 0 \xB7 \u{1F534} \u9057\u5FD8: 0)`,
+        `>`,
+        `> - \u23F1\uFE0F **\u4E13\u6CE8\u7528\u65F6**: 0 \u5206\u949F`,
+        `{: custom-type="flashcard-review-summary" custom-cards-reviewed="0" custom-retention="100" }`
+      ].join("\n");
+    }
+    if (kind === "exam_scorecard" || kind.startsWith("exam")) {
+      const title = arg ? arg.replace(/[\r\n]+/g, " ").trim() : "\u7EFC\u5408\u4E13\u9879\u6D4B\u9A8C";
+      return [
+        `> \u{1F4DD} **\u4ECA\u65E5\u6D4B\u8BC4\u6218\u62A5 \xB7 ${title}**`,
+        `> \u6210\u7EE9: **100/100** (100%) \xB7 \u{1F7E2} \u901A\u8FC7 \xB7 \u8BA2\u6B63\u5F85\u529E: **0** \u9879`,
+        `>`,
+        `> - \u23F1\uFE0F **\u8003\u573A\u72B6\u6001\u4E0E\u8282\u594F**: \u{1F30A} \u8BA4\u77E5\u5FC3\u6D41\u5E73\u7A33`,
+        `{: custom-type="exam-scorecard" custom-score="100" custom-pass="true" }`
+      ].join("\n");
+    }
+    if (kind === "reading_digest" || kind.startsWith("glean")) {
+      const today = formatLocalDate(now);
+      return [
+        `> \u{1F4D6} **\u4ECA\u65E5\u9605\u8BFB\u62FE\u9057\u8F68\u8FF9 \xB7 ${today}**`,
+        `> \u4ECA\u65E5\u5B8C\u6210\u9605\u8BFB: **0** \u7BC7 \xB7 \u23F1\uFE0F \u7D2F\u8BA1\u9605\u8BFB **0** \u5206\u949F`,
+        `>`,
+        `> - \u{1F4A1} \u6682\u65E0\u4ECA\u65E5\u65B0\u589E\u526A\u85CF\u5DF2\u8BFB\u6761\u76EE\uFF0C\u4FDD\u6301\u597D\u5947\u5FC3\u7EE7\u7EED\u63A2\u7D22`,
+        `{: custom-type="glean-reading-digest" custom-reading-count="0" }`
+      ].join("\n");
+    }
+    if (kind === "meeting_brief" || kind.startsWith("contacts")) {
+      const person = arg ? arg.replace(/[\r\n]+/g, " ").trim() : "\u8054\u7CFB\u4EBA";
+      return [
+        `> \u{1F91D} **\u4E0E ${person} \u7684\u4F1A\u524D 30 \u79D2\u7834\u51B0\u901F\u89C8**`,
+        `> \u5708\u5C42: **\u6838\u5FC3\u5708** \xB7 \u5173\u7CFB\u6E29\u5EA6: **\u{1F7E2} \u5BC6\u5207**`,
+        `>`,
+        `> - \u{1F4AC} **\u4E0A\u6B21\u804A\u4E86\u4EC0\u4E48**: \u8FD1\u671F\u91CD\u70B9\u4EA4\u6D41\u4E0E\u4E8B\u52A1\u534F\u540C`,
+        `> - \u2764\uFE0F **\u559C\u597D\u4E60\u60EF**: \u504F\u597D\u76F4\u63A5\u52A1\u5B9E\u6C9F\u901A`,
+        `> - \u26A0\uFE0F **\u654F\u611F\u96F7\u533A**: \u907F\u514D\u65E0\u51C6\u5907\u957F\u4F1A`,
+        `{: custom-type="meeting-brief" custom-person="${person}" }`
+      ].join("\n");
+    }
     if (kind === "path") {
       if (!arg && !subAction) return (_b = doc == null ? void 0 : doc.path) != null ? _b : "";
       return resolvePathArg(arg, subAction, (_c = doc == null ? void 0 : doc.path) != null ? _c : "");
@@ -10516,7 +13608,7 @@ ${codeText}`;
       init_calculator();
       init_clipboard_cleaner();
       init_text_formatting();
-      PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
+      PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|achievement|home_board|review_card|exam_scorecard|reading_digest|meeting_brief|checkin(?::[a-zA-Z0-9_-]+)?|home(?::[a-zA-Z0-9_-]+)?|cards(?::[a-zA-Z0-9_-]+)?|exam(?::[a-zA-Z0-9_-]+)?|glean(?::[a-zA-Z0-9_-]+)?|contacts(?::[a-zA-Z0-9_-]+)?|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
       WEEKDAYS_ZH = ["\u5468\u65E5", "\u5468\u4E00", "\u5468\u4E8C", "\u5468\u4E09", "\u5468\u56DB", "\u5468\u4E94", "\u5468\u516D"];
       WEEKDAYS_FULL_ZH = ["\u661F\u671F\u65E5", "\u661F\u671F\u4E00", "\u661F\u671F\u4E8C", "\u661F\u671F\u4E09", "\u661F\u671F\u56DB", "\u661F\u671F\u4E94", "\u661F\u671F\u516D"];
       WEEKDAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -10675,29 +13767,25 @@ ${codeText}`;
   }
   function stripCursorToken(text) {
     if (!text) return "";
-    return text.replace(/\{\{cursor\}\}|\{\{xlc:cursor\}\}|\$\|\$/g, "");
+    return text.replace(CURSOR_PATTERN, "");
   }
   function hasCursorToken(text) {
     if (!text) return false;
-    return text.includes("{{cursor}}") || text.includes("{{xlc:cursor}}") || text.includes("$|$");
+    CURSOR_PATTERN.lastIndex = 0;
+    return CURSOR_PATTERN.test(text);
   }
   function extractCursorPosition(text) {
     if (!text) return { text: "", cursorOffset: null };
-    let firstIdx = -1;
-    let matchedToken = "";
-    for (const token of CURSOR_TOKENS) {
-      const idx = text.indexOf(token);
-      if (idx !== -1 && (firstIdx === -1 || idx < firstIdx)) {
-        firstIdx = idx;
-        matchedToken = token;
-      }
-    }
-    if (firstIdx === -1) {
+    CURSOR_PATTERN.lastIndex = 0;
+    const match = CURSOR_PATTERN.exec(text);
+    if (!match) {
       return { text, cursorOffset: null };
     }
+    const firstIdx = match.index;
+    const matchedLen = match[0].length;
     const before = text.slice(0, firstIdx);
-    const after = text.slice(firstIdx + matchedToken.length);
-    const cleanedAfter = after.replace(/\{\{cursor\}\}|\{\{xlc:cursor\}\}|\$\|\$/g, "");
+    const after = text.slice(firstIdx + matchedLen);
+    const cleanedAfter = after.replace(CURSOR_PATTERN, "");
     return {
       text: before + cleanedAfter,
       cursorOffset: before.length
@@ -10760,14 +13848,14 @@ ${codeText}`;
     }
     return out;
   }
-  var ASK_PATTERN, CURSOR_TOKENS, SNIPPET_PATTERN;
+  var ASK_PATTERN, CURSOR_PATTERN, SNIPPET_PATTERN;
   var init_variables = __esm({
     "src/model/variables.ts"() {
       "use strict";
       init_constants();
       init_placeholders();
       ASK_PATTERN = /\{\{(?:(?:xlc:)?ask:|input:|select:|choice:)([^:|}]+)(?:[:|]([^}]*))?\}\}/g;
-      CURSOR_TOKENS = ["{{cursor}}", "{{xlc:cursor}}", "$|$"];
+      CURSOR_PATTERN = /\{\{\s*(?:xlc:)?cursor\s*\}\}|\$\|\$/gi;
       SNIPPET_PATTERN = /\{\{xlc:snippet:([^}]+)\}\}/g;
     }
   });
@@ -10849,7 +13937,61 @@ ${codeText}`;
     /^>\s+/m.test(text) || // 引用
     /^[-*+]\s+/m.test(text) || // 无序列表
     /^\d+\.\s+/m.test(text) || // 有序列表
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/.test(text);
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/.test(text) || // 链接
+    /^\s*\|?.+?\|.+?\|\s*$/m.test(text);
+  }
+  function renderMarkdownTableToHtml(lines) {
+    if (lines.length < 2) return null;
+    const isTableRow = (l) => /^\s*\|?(.+?\|)+.+?\|?\s*$/.test(l);
+    if (!lines.every(isTableRow)) return null;
+    const headerLine = lines[0];
+    const separatorLine = lines[1];
+    if (!headerLine || !separatorLine) return null;
+    const sepCells = separatorLine.replace(/^\s*\||\|\s*$/g, "").split("|").map((c) => c.trim());
+    if (sepCells.length === 0 || !sepCells.every((c) => /^:?-+:?$/.test(c))) {
+      return null;
+    }
+    const parseRow = (line) => {
+      return line.replace(/^\s*\||\|\s*$/g, "").split("|").map((c) => c.trim());
+    };
+    const aligns = sepCells.map((c) => {
+      const left = c.startsWith(":");
+      const right = c.endsWith(":");
+      if (left && right) return "center";
+      if (right) return "right";
+      return "left";
+    });
+    const headers = parseRow(headerLine);
+    const ths = headers.map((h, i) => {
+      var _a;
+      const align = (_a = aligns[i]) != null ? _a : "left";
+      return `<th style="border: 1px solid #d0d7de; padding: 6px 13px; background-color: #f6f8fa; font-weight: 600; text-align: ${align};">${h}</th>`;
+    }).join("\n      ");
+    const trs = [];
+    for (let r = 2; r < lines.length; r++) {
+      const rowLine = lines[r];
+      if (!rowLine) continue;
+      const cells = parseRow(rowLine);
+      const tds = headers.map((_, i) => {
+        var _a, _b;
+        const cellVal = (_a = cells[i]) != null ? _a : "";
+        const align = (_b = aligns[i]) != null ? _b : "left";
+        return `<td style="border: 1px solid #d0d7de; padding: 6px 13px; text-align: ${align};">${cellVal}</td>`;
+      }).join("\n      ");
+      trs.push(`    <tr>
+      ${tds}
+    </tr>`);
+    }
+    return `<table style="border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 13px; line-height: 1.5;">
+  <thead>
+    <tr>
+      ${ths}
+    </tr>
+  </thead>
+  <tbody>
+${trs.join("\n")}
+  </tbody>
+</table>`;
   }
   function renderSafeHtmlFromMarkdown(markdown) {
     var _a;
@@ -10903,6 +14045,11 @@ ${placeholder}
       if (lines.every((line) => line.startsWith("&gt;") || line.trim() === "")) {
         const quoteContent = lines.map((line) => line.replace(/^&gt;\s?/, "")).join("<br>");
         htmlParagraphs.push(`<blockquote style="margin: 0.8em 0; padding: 0.4em 0.8em; border-left: 3px solid #d0d7de; color: #57606a; background-color: #f6f8fa;">${quoteContent}</blockquote>`);
+        continue;
+      }
+      const tableHtml = renderMarkdownTableToHtml(lines);
+      if (tableHtml) {
+        htmlParagraphs.push(tableHtml);
         continue;
       }
       let currentListType = null;
@@ -10976,8 +14123,9 @@ ${finalHtml}
   ${rawHtml}
 </section>`.trim();
   }
-  async function writeRichClipboard(text, html, options) {
+  async function writeRichClipboard(rawText, html, options) {
     var _a, _b;
+    const text = rawText.replace(/\r\n?/g, "\n");
     const navClipboard = (_a = options == null ? void 0 : options.clipboard) != null ? _a : typeof navigator !== "undefined" ? navigator.clipboard : void 0;
     const isSecure = (_b = options == null ? void 0 : options.isSecure) != null ? _b : typeof window !== "undefined" ? window.isSecureContext : true;
     if (navClipboard && isSecure) {
@@ -11300,6 +14448,10 @@ ${finalHtml}
         input.setAttribute("enterkeyhint", "done");
       }
       if (field.kind === "date") input.type = "date";
+      if (field.kind === "text" && (/(?:数量|金额|数目|次数|年龄|端口|序号|编号|价格|比例|count|num|amount|price|port|index|age|qty)/i.test(field.name) || /^(?:\d+|\d+\.\d+)$/.test(field.defaultValue || ""))) {
+        input.type = "number";
+        input.setAttribute("inputmode", "numeric");
+      }
       if (field.kind === "select") {
         input.setAttribute("list", `xlc-varform-list-${fieldIndex}`);
         const datalist = document.createElement("datalist");
@@ -11672,6 +14824,7 @@ ${finalHtml}
     kbdHint.textContent = options.fields.some((f) => f.kind === "textarea") ? t("varFormHintMultiline") : t("varFormHint");
     foot.appendChild(kbdHint);
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "variable.cancel";
     cancelBtn.textContent = t("cancel");
@@ -11714,6 +14867,7 @@ ${finalHtml}
       foot.appendChild(copyBtn);
     }
     const insertBtn = document.createElement("button");
+    insertBtn.type = "button";
     insertBtn.className = "b3-button xlc-btn-primary";
     insertBtn.textContent = t("insert");
     insertBtn.setAttribute("aria-label", t("insert"));
@@ -17271,6 +20425,7 @@ ${res.progressBar}`;
           const sugText = document.createElement("span");
           sugrow.appendChild(sugText);
           const adoptBtn = document.createElement("button");
+          adoptBtn.type = "button";
           adoptBtn.className = "xlc-sugrow-adopt";
           adoptBtn.dataset.xlcControl = "capture.ai.suggestion.adopt";
           if (typeof adoptBtn.setAttribute === "function") {
@@ -17485,6 +20640,7 @@ ${res.progressBar}`;
             actions.setAttribute("aria-label", "\u6355\u83B7\u8868\u5355\u64CD\u4F5C\u680F");
           }
           const cancelBtn = document.createElement("button");
+          cancelBtn.type = "button";
           cancelBtn.className = "b3-button";
           cancelBtn.dataset.xlcControl = "capture.cancel";
           cancelBtn.textContent = t("cancel");
@@ -17498,6 +20654,7 @@ ${res.progressBar}`;
             dialog.destroy();
           });
           const saveBtn = document.createElement("button");
+          saveBtn.type = "button";
           saveBtn.className = "b3-button xlc-btn-primary";
           saveBtn.dataset.xlcControl = "capture.save";
           saveBtn.textContent = t("save");
@@ -19776,12 +22933,19 @@ ${res.progressBar}`;
   });
 
   // src/ui/starter-packs-dialog.ts
+  var starter_packs_dialog_exports = {};
+  __export(starter_packs_dialog_exports, {
+    ALL_HUB_PACKS: () => ALL_HUB_PACKS,
+    openStarterPacksHubDialog: () => openStarterPacksHubDialog
+  });
   function openStarterPacksHubDialog(deps) {
+    var _a;
     const dialog = new import_siyuan7.Dialog({
       title: deps.t("starterPacksTitle") || "\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A (Starter Packs Hub)",
       content: "",
       width: "min(720px, 94vw)"
     });
+    (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-dialog-host");
     mountPlatformDialogTitleWrap(dialog.element, deps.t("starterPacksTitle") || "\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A (Starter Packs Hub)");
     const body = getDialogBody(dialog.element);
     if (!body) return dialog;
@@ -19865,7 +23029,7 @@ ${res.progressBar}`;
       installBtn.dataset.xlcControl = `starter-hub.install.${pack.id}`;
       installBtn.textContent = `\uFF0B \u4E00\u952E\u542F\u7528 (${pack.itemCount}\u9879)`;
       installBtn.addEventListener("click", async () => {
-        var _a, _b, _c, _d;
+        var _a2, _b, _c, _d;
         installBtn.disabled = true;
         installBtn.textContent = "\u23F3 \u6B63\u5728\u88C5\u5165...";
         try {
@@ -19874,7 +23038,7 @@ ${res.progressBar}`;
             installBtn.textContent = "\u2713 \u5DF2\u542F\u7528";
             installBtn.classList.remove("xlc-btn-primary");
             installBtn.classList.add("b3-button--cancel");
-            (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", `\u5DF2\u6210\u529F\u5C06\u300C${pack.name}\u300D\u5171 ${res.count} \u9879\u6761\u76EE\u88C5\u5165\u5F53\u524D\u5E93\uFF01`);
+            (_a2 = deps.notify) == null ? void 0 : _a2.call(deps, "info", `\u5DF2\u6210\u529F\u5C06\u300C${pack.name}\u300D\u5171 ${res.count} \u9879\u6761\u76EE\u88C5\u5165\u5F53\u524D\u5E93\uFF01`);
             (_b = deps.onImportSuccess) == null ? void 0 : _b.call(deps);
           } else {
             installBtn.disabled = false;
@@ -19895,14 +23059,14 @@ ${res.progressBar}`;
         createDocBtn.textContent = "\u{1F4C1} \u65B0\u5EFA\u4E13\u5C5E\u6587\u6863";
         createDocBtn.title = "\u5728\u601D\u6E90\u5F53\u524D\u7B14\u8BB0\u672C\u4E2D\u521B\u5EFA\u4E13\u5C5E\u7ED3\u6784\u5316\u5927\u7EB2\u6587\u6863\u5E76\u81EA\u52A8\u7EB3\u7BA1";
         createDocBtn.addEventListener("click", async () => {
-          var _a, _b, _c, _d;
+          var _a2, _b, _c, _d;
           createDocBtn.disabled = true;
           createDocBtn.textContent = "\u23F3 \u521B\u5EFA\u4E2D...";
           try {
             const res = await deps.createStarterPackDedicatedDoc(pack);
             if (res.ok) {
               createDocBtn.textContent = "\u2713 \u6587\u6863\u5DF2\u5EFA";
-              (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", `\u5DF2\u5728\u601D\u6E90\u4E2D\u6210\u529F\u521B\u5EFA\u300A\u5E38\u7528\u8D44\u4EA7 \xB7 ${pack.name}\u300B\u4E13\u5C5E\u6587\u6863\uFF01`);
+              (_a2 = deps.notify) == null ? void 0 : _a2.call(deps, "info", `\u5DF2\u5728\u601D\u6E90\u4E2D\u6210\u529F\u521B\u5EFA\u300A\u5E38\u7528\u8D44\u4EA7 \xB7 ${pack.name}\u300B\u4E13\u5C5E\u6587\u6863\uFF01`);
               (_b = deps.onImportSuccess) == null ? void 0 : _b.call(deps);
             } else {
               createDocBtn.disabled = false;
@@ -20613,7 +23777,7 @@ ${res.progressBar}`;
       observer == null ? void 0 : observer.disconnect();
       onClose == null ? void 0 : onClose();
     };
-    const dialog = new import_siyuan9.Dialog({
+    const dialog = new import_siyuan10.Dialog({
       title: t("csvImportTitle"),
       content: "",
       width: "min(800px, 96vw)",
@@ -20719,6 +23883,7 @@ ${res.progressBar}`;
       btnRow.setAttribute("aria-label", "\u667A\u80FD\u63A8\u65AD\u5DE5\u5177\u680F");
     }
     const autoBtn = document.createElement("button");
+    autoBtn.type = "button";
     autoBtn.className = "b3-button b3-button--secondary";
     autoBtn.textContent = "\u2728 " + t("autoInfer");
     if (typeof autoBtn.setAttribute === "function") {
@@ -20754,6 +23919,7 @@ ${res.progressBar}`;
       foot.setAttribute("aria-label", "\u5BFC\u5165\u5411\u5BFC\u64CD\u4F5C\u680F");
     }
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
     cancelBtn.textContent = t("cancel");
     if (typeof cancelBtn.setAttribute === "function") {
@@ -20765,6 +23931,7 @@ ${res.progressBar}`;
     });
     let isSubmitting = false;
     const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.textContent = t("setupNext");
     nextBtn.disabled = true;
@@ -20913,11 +24080,11 @@ ${res.progressBar}`;
     });
     ta.focus();
   }
-  var import_siyuan9;
+  var import_siyuan10;
   var init_csv_tsv_wizard = __esm({
     "src/ui/csv-tsv-wizard.ts"() {
       "use strict";
-      import_siyuan9 = __toESM(require_stub_dom());
+      import_siyuan10 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_csv_tsv_import();
       init_errors();
@@ -21279,6 +24446,22 @@ ${res.progressBar}`;
         capability: "\u901A\u8FC7\u516C\u5F00\u534F\u8BAE\u5728\u96F7\u5207\u4E2D\u79D2\u7EA7\u8C03\u7528\u5E38\u7528\u8BED"
       },
       {
+        id: "siyuan-lv-cards",
+        name: "\u5C0F\u9A74\u95EA\u5361",
+        bridgeKey: "window.xiaolvCards",
+        installed: Boolean(host.xiaolvCards || host.lvCards || host.LvCards || host.siyuanCards),
+        description: "\u95F4\u9694\u91CD\u590D\u3001FSRS\u9057\u5FD8\u66F2\u7EBF\u4E0E\u8BB0\u5FC6\u5361\u7247",
+        capability: "\u63D2\u5165\u4ECA\u65E5\u5F85\u590D\u4E60\u95EA\u5361\u7EDF\u8BA1\u4E0E\u5FAE\u4EFB\u52A1\u6E05\u5355"
+      },
+      {
+        id: "siyuan-exam",
+        name: "\u5C0F\u9A74\u8003\u8BD5",
+        bridgeKey: "window.LvExam",
+        installed: Boolean(host.LvExam || host.siyuanExam || host.xiaolvExam || host.lvExam),
+        description: "\u667A\u80FD\u9898\u5E93\u3001\u771F\u9898\u6A21\u8003\u4E0E\u9519\u9898\u7BA1\u7406",
+        capability: "\u5FEB\u901F\u63D2\u5165\u4ECA\u65E5\u5237\u9898\u7EDF\u8BA1\u4E0E\u9519\u9898\u56DE\u987E"
+      },
+      {
         id: "siyuan-task-horizon",
         name: "\u4EFB\u52A1\u89C6\u754C",
         bridgeKey: "window.TaskHorizon",
@@ -21472,10 +24655,10 @@ ${res.progressBar}`;
     };
   }
   function openSanitizerOptionsDialog(initialOptions, onConfirm) {
-    if (typeof import_siyuan10.Dialog === "undefined") return null;
+    if (typeof import_siyuan11.Dialog === "undefined") return null;
     let dialog;
     try {
-      dialog = new import_siyuan10.Dialog({
+      dialog = new import_siyuan11.Dialog({
         title: "\u5BFC\u51FA\u5B89\u5168\u8131\u654F\u9009\u9879",
         content: "",
         width: "min(560px, 92vw)",
@@ -21505,13 +24688,13 @@ ${res.progressBar}`;
     if (innerHeader) innerHeader.style.display = "none";
     return dialog;
   }
-  var import_siyuan10, MockElement;
+  var import_siyuan11, MockElement;
   var init_export_sanitizer_modal = __esm({
     "src/ui/export-sanitizer-modal.ts"() {
       "use strict";
       init_clipboard();
       init_dialog_dom();
-      import_siyuan10 = __toESM(require_stub_dom());
+      import_siyuan11 = __toESM(require_stub_dom());
       MockElement = class {
         constructor(tagName = "div") {
           this._classes = /* @__PURE__ */ new Set();
@@ -22277,7 +25460,7 @@ ${res.progressBar}`;
     if (isBrowser) {
       let dialog = null;
       try {
-        dialog = new import_siyuan11.Dialog({
+        dialog = new import_siyuan12.Dialog({
           title: titleText,
           content: "",
           width: "min(960px, 94vw)",
@@ -22500,12 +25683,12 @@ ${res.progressBar}`;
       }
     };
   }
-  var import_siyuan11, MockElement2, STRATEGY_DESCRIPTIONS;
+  var import_siyuan12, MockElement2, STRATEGY_DESCRIPTIONS;
   var init_sync_diff_modal = __esm({
     "src/ui/sync-diff-modal.ts"() {
       "use strict";
       init_sync_diff();
-      import_siyuan11 = __toESM(require_stub_dom());
+      import_siyuan12 = __toESM(require_stub_dom());
       init_clipboard();
       init_dialog_dom();
       MockElement2 = class {
@@ -25234,7 +28417,7 @@ ${exception.mark.snippet}`;
     }
     activeSetupDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan12.Dialog({
+    const dialog = new import_siyuan13.Dialog({
       title: t("setupTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -25264,7 +28447,7 @@ ${exception.mark.snippet}`;
     }
     activeSettingsDialog = null;
     const t = ctx.t;
-    const dialog = new import_siyuan12.Dialog({
+    const dialog = new import_siyuan13.Dialog({
       title: t("openSettings"),
       content: "",
       width: "min(720px, 92vw)",
@@ -25314,6 +28497,7 @@ ${exception.mark.snippet}`;
         pill.setAttribute("aria-selected", "true");
         const el = root.querySelector(`#${tab.id}`);
         if (el) {
+          root.style.setProperty("--xlc-nav-h", `${navBar.offsetHeight + 8}px`);
           el.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       });
@@ -25356,6 +28540,7 @@ ${exception.mark.snippet}`;
     const cfg = ctx.getConfig();
     libStatus.textContent = cfg ? cfg.mode === "notebook" ? t("libModeNotebook", String(cfg.notebookIds.length)) : cfg.mode === "tree" ? t("libModeTree", String(cfg.containerDocIds.length)) : t("libModeDoc", String(cfg.containerDocIds.length)) : t("libraryNone");
     const changeBtn = document.createElement("button");
+    changeBtn.type = "button";
     changeBtn.className = "b3-button";
     changeBtn.dataset.xlcControl = "settings.library.change";
     changeBtn.textContent = t("openSettingsChangeLib");
@@ -25460,7 +28645,7 @@ ${exception.mark.snippet}`;
     }
     const all = Array.from(idx.items.values());
     const categories = Array.from(new Set(all.map((i) => i.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-    const dialog = new import_siyuan12.Dialog({
+    const dialog = new import_siyuan13.Dialog({
       title: t("packExportTitle"),
       content: "",
       width: "min(580px, 92vw)",
@@ -25610,12 +28795,14 @@ ${exception.mark.snippet}`;
       }
     });
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "settings.pack-export.cancel";
     cancelBtn.textContent = t("cancel");
     cancelBtn.setAttribute("aria-label", t("cancel"));
     actions.appendChild(cancelBtn);
     const exportBtn = document.createElement("button");
+    exportBtn.type = "button";
     exportBtn.className = "b3-button xlc-btn-primary";
     exportBtn.textContent = t("packExportBtn");
     exportBtn.setAttribute("aria-label", t("packExportBtn"));
@@ -25774,6 +28961,7 @@ ${exception.mark.snippet}`;
     }
     const clipLimitInput = document.createElement("input");
     clipLimitInput.type = "number";
+    clipLimitInput.inputMode = "numeric";
     clipLimitInput.className = "b3-text-field";
     clipLimitInput.style.cssText = "width:72px; text-align:center; display:none;";
     clipLimitInput.min = "10";
@@ -25825,7 +29013,7 @@ ${exception.mark.snippet}`;
         ctx.notify("info", t("clearClipboardEmpty"));
         return;
       }
-      (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
+      (0, import_siyuan13.confirm)("\u26A0\uFE0F " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
         ctx.state.clipboardHistory = [];
         ctx.persistSoon();
         ctx.notify("info", t("clearClipboardDone"));
@@ -25834,6 +29022,18 @@ ${exception.mark.snippet}`;
     clipLimitControls.append(clipLimitSelect, clipLimitInput, clearClipBtn);
     clipLimitRow.appendChild(clipLimitControls);
     sec.appendChild(clipLimitRow);
+    const smartMatchSwitchRow = buildSwitchRow(
+      t("clipboardSmartMatchToggle"),
+      t("clipboardSmartMatchSub"),
+      ctx.state.clipboardSmartMatchEnabled === true,
+      (value) => {
+        ctx.state.clipboardSmartMatchEnabled = value;
+        ctx.persistSoon();
+      }
+    );
+    const smartMatchInput = smartMatchSwitchRow.querySelector("input[type='checkbox']");
+    if (smartMatchInput) smartMatchInput.dataset.xlcControl = "settings.prefs.clipboardSmartMatchEnabled";
+    sec.appendChild(smartMatchSwitchRow);
     const syncClipLimitUi = () => {
       const on = !(ctx.state.clipboardHistoryEnabled === false);
       clipLimitRow.style.display = on ? "" : "none";
@@ -25846,6 +29046,7 @@ ${exception.mark.snippet}`;
     hint.textContent = t("usageStatsHint");
     foot.appendChild(hint);
     const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
     clearBtn.className = "b3-button";
     clearBtn.setAttribute("aria-label", t("clearUsageBtn"));
     const hasUsage = () => {
@@ -25859,7 +29060,7 @@ ${exception.mark.snippet}`;
     syncClearUsage();
     clearBtn.addEventListener("click", () => {
       if (!hasUsage()) return;
-      (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
+      (0, import_siyuan13.confirm)("\u26A0\uFE0F " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
         var _a2;
         ctx.state.usage = {};
         ctx.state.dailyUsage = {};
@@ -25894,7 +29095,7 @@ ${exception.mark.snippet}`;
       if (countRememberedFields(ctx.state.variableMemory) === 0) return;
       const confirmTitle = "\u26A0\uFE0F " + (t("clearVariableMemoryBtn") || "\u6E05\u7A7A\u53D8\u91CF\u8BB0\u5FC6");
       const confirmBody = t("clearVariableMemoryConfirm") || "\u786E\u5B9A\u6E05\u7A7A\u672C\u673A\u8BB0\u4F4F\u7684\u6240\u6709\u53D8\u91CF\u5386\u53F2\u586B\u5199\u503C\u5417\uFF1F\u6761\u76EE\u6A21\u677F\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002";
-      (0, import_siyuan12.confirm)(confirmTitle, confirmBody, () => {
+      (0, import_siyuan13.confirm)(confirmTitle, confirmBody, () => {
         ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
         ctx.persistSoon();
         syncClearMem();
@@ -25983,7 +29184,9 @@ ${exception.mark.snippet}`;
         mkMetric(String(insights.activeItems7Days), "7\u5929\u6D3B\u8DC3\u6761\u76EE")
       );
       insightsBox.appendChild(grid);
-      if (insights.topItems && insights.topItems.length > 0) {
+      const knownItemIds = new Set(items.map((it) => it.id));
+      const visibleTopItems = insights.topItems.filter((it) => knownItemIds.has(it.id));
+      if (visibleTopItems.length > 0) {
         const topSec = document.createElement("div");
         topSec.className = "xlc-insights-top";
         topSec.style.cssText = "margin-top:10px; display:flex; flex-direction:column; gap:6px;";
@@ -25993,7 +29196,7 @@ ${exception.mark.snippet}`;
         topSec.appendChild(topHead);
         const pillsWrap = document.createElement("div");
         pillsWrap.style.cssText = "display:flex; flex-wrap:wrap; gap:6px;";
-        for (const [idx, item] of insights.topItems.slice(0, 5).entries()) {
+        for (const [idx, item] of visibleTopItems.slice(0, 5).entries()) {
           const pill = document.createElement("button");
           pill.type = "button";
           pill.className = "xlc-quick-pill";
@@ -26029,7 +29232,7 @@ ${exception.mark.snippet}`;
       heatmapHead.className = "xlc-heatmap-head";
       const heatmapTitle = document.createElement("span");
       heatmapTitle.className = "xlc-heatmap-title";
-      heatmapTitle.textContent = `\u{1F4C5} \u8FD1 30 \u5929\u8D44\u4EA7\u590D\u7528\u6D3B\u8DC3\u5EA6\uFF08\u7D2F\u8BA1 ${heatmap.totalCalls30Days} \u6B21 \xB7 \u6D3B\u8DC3 ${heatmap.activeDays} \u5929\uFF09\uFF1A`;
+      heatmapTitle.textContent = `\u{1F4C5} \u8FD1 30 \u5929\u8D44\u4EA7\u590D\u7528\u6D3B\u8DC3\u5EA6\uFF08\u7A97\u53E3\u5185 ${heatmap.totalCalls30Days} \u6B21 \xB7 \u6D3B\u8DC3 ${heatmap.activeDays} \u5929\uFF09\uFF1A`;
       heatmapHead.appendChild(heatmapTitle);
       const heatmapGrid = document.createElement("div");
       heatmapGrid.className = "xlc-heatmap-grid";
@@ -26630,6 +29833,7 @@ ${exception.mark.snippet}`;
     nameInput.value = t("setupNewDocName");
     nameRow.appendChild(nameInput);
     const createBtn = document.createElement("button");
+    createBtn.type = "button";
     createBtn.className = "b3-button xlc-btn-primary";
     createBtn.dataset.xlcControl = "setup.newdoc.create";
     createBtn.style.whiteSpace = "nowrap";
@@ -26648,7 +29852,7 @@ ${exception.mark.snippet}`;
       }
       const revision = setupRevision;
       const confirmText = mode === "new-notebook" ? t("setupIndependentConfirmCreate", notebookName, title) : t("setupConfirmCreate", title);
-      (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
+      (0, import_siyuan13.confirm)("\u26A0\uFE0F " + t("setupTitle"), confirmText, () => {
         if (creatingLibrary || setupRevision !== revision || modeSelect.value !== mode || mode === "new-doc" && nbSelect.value !== notebookId || mode === "new-notebook" && independentNotebookInput.value.trim() !== notebookName || nameInput.value.trim() !== title) return;
         creatingLibrary = true;
         clearOrphanReceipt();
@@ -26794,6 +29998,7 @@ ${exception.mark.snippet}`;
     step1Actions.setAttribute("aria-label", "\u5411\u5BFC\u7B2C\u4E00\u6B65\u64CD\u4F5C");
     if (opts == null ? void 0 : opts.onDismiss) {
       const dismissBtn = document.createElement("button");
+      dismissBtn.type = "button";
       dismissBtn.className = "b3-button xlc-btn-ghost";
       dismissBtn.dataset.xlcControl = "setup.later";
       dismissBtn.textContent = t("setupLater");
@@ -26805,6 +30010,7 @@ ${exception.mark.snippet}`;
       step1Actions.appendChild(dismissBtn);
     }
     const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.dataset.xlcControl = "setup.next";
     nextBtn.textContent = t("setupNext");
@@ -26860,6 +30066,7 @@ ${exception.mark.snippet}`;
     step2Actions.setAttribute("role", "toolbar");
     step2Actions.setAttribute("aria-label", "\u5411\u5BFC\u7B2C\u4E8C\u6B65\u64CD\u4F5C");
     const backBtn = document.createElement("button");
+    backBtn.type = "button";
     backBtn.className = "b3-button xlc-btn-ghost";
     backBtn.dataset.xlcControl = "setup.back";
     backBtn.textContent = t("setupBack");
@@ -26867,6 +30074,7 @@ ${exception.mark.snippet}`;
     backBtn.addEventListener("click", () => gotoStep(1));
     step2Actions.appendChild(backBtn);
     const finishBtn = document.createElement("button");
+    finishBtn.type = "button";
     finishBtn.className = "b3-button xlc-btn-primary";
     finishBtn.dataset.xlcControl = "setup.finish";
     finishBtn.textContent = t("setupFinish");
@@ -27070,7 +30278,7 @@ ${exception.mark.snippet}`;
         delBtn.setAttribute("aria-label", `${t("delete")}\uFF1A${ct.name}`);
         delBtn.title = `${t("delete")}\uFF1A${ct.name}`;
         delBtn.addEventListener("click", () => {
-          (0, import_siyuan12.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
+          (0, import_siyuan13.confirm)(t("delete") + " \xB7 " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
             ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
             persistCt();
             repaintCt();
@@ -27239,7 +30447,7 @@ ${exception.mark.snippet}`;
         remove.textContent = t("savedViewsDelete");
         remove.setAttribute("aria-label", `${t("savedViewsDelete")}\uFF1A${view.name}`);
         remove.addEventListener("click", () => {
-          (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
+          (0, import_siyuan13.confirm)("\u26A0\uFE0F " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
             var _a;
             if (ctx.deleteSavedDiscoveryView) {
               ctx.deleteSavedDiscoveryView(view.id);
@@ -27683,7 +30891,7 @@ fi`;
     const clearRecentsBtn = mkBtn(ctx.state.recents.length ? t("clearRecents") : t("clearRecentsEmpty"), void 0, "settings.data.clearRecents");
     clearRecentsBtn.addEventListener("click", () => {
       if (ctx.state.recents.length === 0 || clearRecentsBtn.disabled) return;
-      (0, import_siyuan12.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
+      (0, import_siyuan13.confirm)("\u26A0\uFE0F " + t("clearRecents"), t("clearRecentsConfirm"), () => {
         var _a;
         ctx.state.recents = [];
         ctx.persistSoon();
@@ -28224,7 +31432,7 @@ fi`;
   }
   function openEspansoImportDialog(ctx, onClose) {
     const t = ctx.t;
-    const dialog = new import_siyuan12.Dialog({
+    const dialog = new import_siyuan13.Dialog({
       title: t("espansoTitle"),
       content: "",
       width: "min(680px, 92vw)",
@@ -28286,12 +31494,14 @@ fi`;
     foot.style.justifyContent = "flex-end";
     foot.style.gap = "8px";
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
     cancelBtn.dataset.xlcControl = "settings.espanso.cancel";
     cancelBtn.textContent = t("cancel");
     cancelBtn.setAttribute("aria-label", t("cancel"));
     foot.appendChild(cancelBtn);
     const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
     nextBtn.className = "b3-button xlc-btn-primary";
     nextBtn.dataset.xlcControl = "settings.espanso.next";
     nextBtn.textContent = t("setupNext");
@@ -28389,7 +31599,7 @@ fi`;
     } catch (err) {
       throw new Error(ctx.aiErrorText(err));
     }
-    const dialog = new import_siyuan12.Dialog({
+    const dialog = new import_siyuan13.Dialog({
       title: t("tagAuditTitle"),
       content: "",
       width: "min(620px, 92vw)",
@@ -28427,6 +31637,7 @@ fi`;
     actions.setAttribute("role", "toolbar");
     actions.setAttribute("aria-label", "\u6807\u7B7E\u4F53\u68C0\u64CD\u4F5C\u680F");
     const close = document.createElement("button");
+    close.type = "button";
     close.className = "b3-button";
     close.dataset.xlcControl = "settings.tag-audit.close";
     close.textContent = t("close");
@@ -28440,7 +31651,7 @@ fi`;
   function openImportPolicyDialog(ctx, parsed, issues, source) {
     var _a, _b, _c;
     const t = ctx.t;
-    const dialog = new import_siyuan12.Dialog({
+    const dialog = new import_siyuan13.Dialog({
       title: t("importPolicyTitle"),
       content: "",
       width: "min(540px, 92vw)",
@@ -28644,11 +31855,11 @@ fi`;
     });
     body.appendChild(wrap);
   }
-  var import_siyuan12, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
+  var import_siyuan13, activeSetupDialog, activeSettingsDialog, espansoParserPromise, csvTsvParserPromise;
   var init_settings_dialog = __esm({
     "src/ui/settings-dialog.ts"() {
       "use strict";
-      import_siyuan12 = __toESM(require_stub_dom());
+      import_siyuan13 = __toESM(require_stub_dom());
       init_dialog_dom();
       init_storage();
       init_constants();
@@ -28679,7 +31890,7 @@ fi`;
   });
 
   // src/ui/dialog.ts
-  var import_siyuan8 = __toESM(require_stub_dom());
+  var import_siyuan9 = __toESM(require_stub_dom());
   init_lv_notice_kit();
   init_dialog_dom();
   init_item();
@@ -29698,11 +32909,13 @@ fi`;
   init_lv_notice_kit();
   init_dialog_dom();
   function openShareCardDialog(deps, item, shareCode) {
+    var _a;
     const dialog = new import_siyuan5.Dialog({
       title: deps.t("shareCardTitle") || "\u5E38\u7528\u6761\u76EE\u4FBF\u643A\u5206\u4EAB\u5361\u7247",
       content: "",
       width: "min(560px, 92vw)"
     });
+    (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-dialog-host");
     mountPlatformDialogTitleWrap(dialog.element, deps.t("shareCardTitle") || "\u5E38\u7528\u6761\u76EE\u4FBF\u643A\u5206\u4EAB\u5361\u7247");
     const body = getDialogBody(dialog.element);
     if (!body) return dialog;
@@ -29783,12 +32996,12 @@ fi`;
     copyBtn.textContent = deps.t("shareCardCopy") || "\u29C9 \u590D\u5236\u5206\u4EAB\u7801";
     copyBtn.dataset.xlcControl = "share-card.copy";
     copyBtn.addEventListener("click", async () => {
-      var _a;
+      var _a2;
       const ok2 = await deps.copyText(shareCode);
       if (ok2) {
         lvNotify.inline(copyBtn, "\u5DF2\u590D\u5236");
       } else {
-        (_a = deps.notify) == null ? void 0 : _a.call(deps, "error", deps.t("copyFailed") || "\u590D\u5236\u5931\u8D25");
+        (_a2 = deps.notify) == null ? void 0 : _a2.call(deps, "error", deps.t("copyFailed") || "\u590D\u5236\u5931\u8D25");
       }
     });
     foot.append(closeBtn, copyBtn);
@@ -29802,11 +33015,13 @@ fi`;
   init_lv_notice_kit();
   init_dialog_dom();
   function openPinboardDialog(deps, title, items) {
+    var _a;
     const dialog = new import_siyuan6.Dialog({
       title: title || "\u8FDE\u73AF\u53D6\u7528\u62FC\u677F",
       content: "",
       width: "min(640px, 92vw)"
     });
+    (_a = dialog.element.querySelector(".b3-dialog__container")) == null ? void 0 : _a.classList.add("xlc-dialog-host");
     mountPlatformDialogTitleWrap(dialog.element, title || "\u8FDE\u73AF\u53D6\u7528\u62FC\u677F");
     const body = getDialogBody(dialog.element);
     if (!body) return dialog;
@@ -29835,7 +33050,7 @@ fi`;
       progressEl.textContent = `\u5DF2\u590D\u5236 ${copiedSet.size} / ${items.length}`;
     };
     resetBtn.addEventListener("click", () => {
-      var _a;
+      var _a2;
       copiedSet.clear();
       updateProgress();
       grid.querySelectorAll(".xlc-pinboard-card").forEach((card) => {
@@ -29843,7 +33058,7 @@ fi`;
         const status = card.querySelector(".xlc-pinboard-status");
         if (status) status.textContent = "\u70B9\u51FB\u590D\u5236";
       });
-      (_a = deps.notify) == null ? void 0 : _a.call(deps, "info", "\u5DF2\u91CD\u7F6E\u62FC\u677F\u53D6\u7528\u8FDB\u5EA6");
+      (_a2 = deps.notify) == null ? void 0 : _a2.call(deps, "info", "\u5DF2\u91CD\u7F6E\u62FC\u677F\u53D6\u7528\u8FDB\u5EA6");
     });
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
@@ -29869,7 +33084,7 @@ fi`;
       cardBody.textContent = (it.content || it.summary || "").slice(0, 120);
       card.append(cardTop, cardBody);
       const doCopy = async () => {
-        var _a;
+        var _a2;
         const textToCopy = it.content || it.summary || "";
         const ok2 = await deps.copyText(textToCopy);
         if (ok2) {
@@ -29879,7 +33094,7 @@ fi`;
           updateProgress();
           lvNotify.inline(card, "\u5DF2\u590D\u5236");
         } else {
-          (_a = deps.notify) == null ? void 0 : _a.call(deps, "error", deps.t("copyFailed") || "\u590D\u5236\u5931\u8D25");
+          (_a2 = deps.notify) == null ? void 0 : _a2.call(deps, "error", deps.t("copyFailed") || "\u590D\u5236\u5931\u8D25");
         }
       };
       card.addEventListener("click", doCopy);
@@ -29996,13 +33211,16 @@ fi`;
     EXAM_STATS: "lv-exam:stats",
     // 闪卡
     CARDS_REVIEWED: "lv-cards:reviewed",
+    CARDS_INCREMENTAL_EXTRACT: "lv-cards:incremental-extract",
+    // 任务视界 (Task Horizon) 联动
+    HORIZON_ACTION_CREATED: "horizon:action-created",
     // 常用
     COMMON_CREATED: "xiaolv:common:item-created",
     COMMON_UPDATED: "xiaolv:common:item-updated",
     COMMON_DELETED: "xiaolv:common:item-deleted",
     // 快门
-    QUICKGATE_COMMAND_EXECUTED: "lv-quickgate:command-executed",
-    QUICKGATE_DATA_CHANGED: "lv-quickgate:data-changed",
+    RAIKIRI_COMMAND_EXECUTED: "lv-raikiri:command-executed",
+    RAIKIRI_DATA_CHANGED: "lv-raikiri:data-changed",
     // 联盟伙伴：Task Horizon (任务视界)
     TASK_COMPLETED: "tm:task-completed"
   });
@@ -30015,8 +33233,10 @@ fi`;
     exam: ["LvExam", "siyuanExam", "xiaolvExam", "lvExam"],
     cards: ["xiaolvCards", "lvCards", "LvCards", "siyuanCards"],
     common: ["xiaolvCommon", "LvCommon", "lvCommon", "siyuanCommon"],
-    quickgate: ["LvQuickgate", "lvQuickgate", "xiaolvQuickgate", "siyuanQuickgate"],
-    taskHorizon: ["TaskHorizon", "taskHorizon", "siyuanTaskHorizon"]
+    quickgate: ["siyuanSpeedSwitch", "xiaolvSpeedSwitch", "xiaolvRaikiri", "lvRaikiri"],
+    taskHorizon: ["TaskHorizon", "taskHorizon", "siyuanTaskHorizon"],
+    sireader: ["sireader", "SiReader", "siyuanSireader"],
+    simedia: ["siyuanMediaPlayer", "siplayer", "SiMedia"]
   });
   function getBridgeSafely(target) {
     if (typeof window === "undefined") return void 0;
@@ -30047,9 +33267,17 @@ fi`;
         return fallback();
       }
     }
+    let timer;
     try {
-      return await caller(bridge);
+      const callerP = Promise.resolve(caller(bridge));
+      const timeoutP = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("caller-timeout")), timeoutMs);
+      });
+      const result = await Promise.race([callerP, timeoutP]);
+      if (timer !== void 0) clearTimeout(timer);
+      return result;
     } catch (err) {
+      if (timer !== void 0) clearTimeout(timer);
       console.warn(`[\u5C0F\u9A74\u751F\u6001\u8054\u90A6] \u8C03\u7528 ${target}.${requiredCapability} \u5931\u8D25\uFF0C\u5DF2\u4F18\u96C5\u964D\u7EA7:`, err);
       return fallback();
     }
@@ -30058,6 +33286,212 @@ fi`;
   // src/ui/dialog.ts
   init_storage();
   init_prompt_pack();
+
+  // src/ui/promote-clip.ts
+  var import_siyuan8 = __toESM(require_stub_dom());
+  init_lv_notice_kit();
+  init_item();
+  init_dialog_dom();
+  function normalizePromoteContent(raw) {
+    if (!raw || typeof raw !== "string") return "";
+    return raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  }
+  function checkShortcodeConflict(shortcode, entries, excludeId) {
+    const clean = cleanShortcode(shortcode);
+    if (!clean) return { conflict: false };
+    const match = entries.find((e) => e.id !== excludeId && cleanShortcode(e.shortcode) === clean);
+    return { conflict: Boolean(match), itemTitle: match == null ? void 0 : match.title };
+  }
+  function openPromoteClipDialog(options) {
+    const t = options.t;
+    const dialogTitle = "\u2B50 " + (t("promoteToCommon") || "\u5B58\u4E3A\u5E38\u7528\u7247\u6BB5");
+    const dialog = new import_siyuan8.Dialog({
+      title: dialogTitle,
+      content: "",
+      width: "min(460px, 92vw)",
+      height: "auto",
+      destroyCallback: () => {
+        surfaceUnreg();
+      }
+    });
+    const container = dialog.element.querySelector(".b3-dialog__container");
+    if (container) {
+      container.classList.add("xlc-promote-clip-host", "xlc-form-host");
+    }
+    mountPlatformDialogTitleWrap(dialog.element, dialogTitle);
+    const surfaceUnreg = lvSurfaceStack.push({
+      id: "xlc-promote-clip-dialog",
+      type: "dialog",
+      dismiss: () => {
+        dialog.destroy();
+        return true;
+      }
+    });
+    const body = getDialogBody(dialog.element);
+    if (!body) return dialog;
+    body.innerHTML = "";
+    const form = document.createElement("div");
+    form.className = "xlc-form xlc-promote-form";
+    const contentLabel = document.createElement("label");
+    contentLabel.className = "xlc-form-field";
+    const contentTitle = document.createElement("span");
+    contentTitle.className = "xlc-form-label";
+    contentTitle.textContent = "\u7247\u6BB5\u6B63\u6587\u5185\u5BB9";
+    contentLabel.appendChild(contentTitle);
+    const rawText = options.entry.content || options.entry.summary || options.entry.title || "";
+    const normalizedText = normalizePromoteContent(rawText);
+    const textarea = document.createElement("textarea");
+    textarea.className = "b3-text-field xlc-promote-content";
+    textarea.rows = 4;
+    textarea.value = normalizedText;
+    textarea.dataset.xlcControl = "promote.content";
+    textarea.setAttribute("aria-label", "\u7247\u6BB5\u6B63\u6587\u5185\u5BB9");
+    contentLabel.appendChild(textarea);
+    form.appendChild(contentLabel);
+    const scField = document.createElement("label");
+    scField.className = "xlc-form-field";
+    const scTitle = document.createElement("span");
+    scTitle.className = "xlc-form-label";
+    scTitle.textContent = t("shortcode") || "\u7B80\u7801 (:shortcode)";
+    scField.appendChild(scTitle);
+    const scInput = document.createElement("input");
+    scInput.type = "text";
+    scInput.className = "b3-text-field xlc-promote-shortcode";
+    scInput.placeholder = t("shortcodePlaceholder") || "\u5982 :wk\u3001:bug\uFF08\u9009\u586B\uFF0C\u8F93\u5165\u5373\u7F6E\u9876\u76F4\u8FBE\uFF09";
+    scInput.dataset.xlcControl = "promote.shortcode";
+    scInput.setAttribute("aria-label", t("shortcode") || "\u7B80\u7801");
+    scField.appendChild(scInput);
+    const statusHint = document.createElement("div");
+    statusHint.className = "xlc-shortcode-status";
+    statusHint.style.cssText = "font-size:12px; margin-top:4px; display:none; color:var(--b3-theme-error);";
+    scField.appendChild(statusHint);
+    form.appendChild(scField);
+    const catField = document.createElement("label");
+    catField.className = "xlc-form-field";
+    const catTitle = document.createElement("span");
+    catTitle.className = "xlc-form-label";
+    catTitle.textContent = t("category") || "\u5206\u7EC4\u5206\u7C7B";
+    catField.appendChild(catTitle);
+    const catSelect = document.createElement("select");
+    catSelect.className = "b3-select xlc-promote-category";
+    catSelect.dataset.xlcControl = "promote.category";
+    catSelect.setAttribute("aria-label", t("category") || "\u5206\u7EC4\u5206\u7C7B");
+    const allCategories = Array.from(new Set([
+      "\u5E38\u7528",
+      ...options.defaultCategory ? [options.defaultCategory] : [],
+      ...options.categories || []
+    ].filter(Boolean)));
+    for (const cat of allCategories) {
+      const opt = document.createElement("option");
+      opt.value = cat;
+      opt.textContent = cat;
+      catSelect.appendChild(opt);
+    }
+    const defaultCat = options.defaultCategory || "\u5E38\u7528";
+    catSelect.value = allCategories.includes(defaultCat) ? defaultCat : allCategories[0] || "\u5E38\u7528";
+    catField.appendChild(catSelect);
+    form.appendChild(catField);
+    const foot = document.createElement("div");
+    foot.className = "xlc-form-actions";
+    foot.style.cssText = "display:flex; justify-content:flex-end; gap:8px; margin-top:16px;";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "b3-button b3-button--cancel";
+    cancelBtn.textContent = t("cancel") || "\u53D6\u6D88";
+    cancelBtn.dataset.xlcControl = "promote.cancel";
+    cancelBtn.addEventListener("click", () => dialog.destroy());
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "button";
+    submitBtn.className = "b3-button xlc-btn-primary";
+    submitBtn.textContent = (t("save") || "\u8F6C\u6B63\u4FDD\u5B58") + " (Ctrl+Enter)";
+    submitBtn.dataset.xlcControl = "promote.submit";
+    const validateShortcode = () => {
+      const val = scInput.value.trim();
+      if (!val) {
+        statusHint.style.display = "none";
+        statusHint.textContent = "";
+        submitBtn.disabled = false;
+        return true;
+      }
+      const check = checkShortcodeConflict(val, options.entries, options.entry.id);
+      if (check.conflict) {
+        const clean = cleanShortcode(val);
+        statusHint.textContent = `\u26A0\uFE0F \u7B80\u7801 ${clean} \u5DF2\u88AB\u300C${check.itemTitle || "\u5176\u4ED6\u6761\u76EE"}\u300D\u5360\u7528`;
+        statusHint.style.display = "block";
+        submitBtn.disabled = true;
+        return false;
+      } else {
+        statusHint.style.display = "none";
+        statusHint.textContent = "";
+        submitBtn.disabled = false;
+        return true;
+      }
+    };
+    scInput.addEventListener("input", validateShortcode);
+    let isSubmitting = false;
+    const doSubmit = async () => {
+      var _a;
+      if (isSubmitting) return;
+      if (!validateShortcode()) return;
+      const finalContent = normalizePromoteContent(textarea.value);
+      if (!finalContent.trim()) {
+        (_a = options.notify) == null ? void 0 : _a.call(options, "error", "\u6B63\u6587\u5185\u5BB9\u4E0D\u80FD\u4E3A\u7A7A");
+        textarea.focus();
+        return;
+      }
+      const rawSc = scInput.value.trim();
+      const finalShortcode = rawSc ? cleanShortcode(rawSc) : "";
+      const cleanTitle = (options.entry.title || "").replace(/^[📋🔍☵★☆✦✓\s]+/, "").trim() || (finalShortcode ? finalShortcode.replace(/^:/, "") : finalContent.slice(0, 24).trim());
+      isSubmitting = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = "\u4FDD\u5B58\u4E2D\u2026";
+      try {
+        const ok2 = await options.onPromote({
+          markdown: finalContent,
+          title: cleanTitle,
+          shortcode: finalShortcode,
+          category: catSelect.value || "\u5E38\u7528",
+          tags: Array.from(new Set(["\u526A\u8D34\u677F", ...options.entry.tags || []].filter(Boolean)))
+        });
+        if (ok2) {
+          lvLaunchpad.haptic(10);
+          dialog.destroy();
+        } else {
+          submitBtn.disabled = false;
+          submitBtn.textContent = (t("save") || "\u8F6C\u6B63\u4FDD\u5B58") + " (Ctrl+Enter)";
+        }
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = (t("save") || "\u8F6C\u6B63\u4FDD\u5B58") + " (Ctrl+Enter)";
+      } finally {
+        isSubmitting = false;
+      }
+    };
+    submitBtn.addEventListener("click", () => void doSubmit());
+    foot.append(cancelBtn, submitBtn);
+    form.appendChild(foot);
+    body.appendChild(form);
+    form.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dialog.destroy();
+        return;
+      }
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+        if (ev.isComposing || ev.keyCode === 229) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        void doSubmit();
+      }
+    });
+    setTimeout(() => {
+      scInput.focus();
+    }, 60);
+    return dialog;
+  }
+
+  // src/ui/dialog.ts
   function resolveEntryBlockId(entry) {
     var _a;
     const strippedOmni = entry.id.startsWith("xlc-omni-") ? entry.id.slice("xlc-omni-".length) : entry.id;
@@ -30104,6 +33538,16 @@ fi`;
       this.selectedIds = /* @__PURE__ */ new Set();
       this.capturedOmniIds = /* @__PURE__ */ new Set();
       this.batchBarEl = null;
+      /** 移动端置顶高频片段直达行容器 (Mobile Spec v1) */
+      this.topChipsContainer = null;
+      /** 剪贴板智能匹配横幅元素 (Mobile Spec v2) */
+      this.smartMatchBannerEl = null;
+      /** 移动端多级分类面包屑导航元素 (Mobile Spec v2) */
+      this.mobileBreadcrumbsEl = null;
+      /** 连续复制连击追踪器 (Mobile Spec v2: 30秒内≥2次触发提示) */
+      this.copyCombo = { itemId: "", count: 0, lastTime: 0 };
+      /** 连击批量提示栏元素 */
+      this.copyComboBannerEl = null;
       /** 动作菜单 document 监听兜底清理（destroy 时调用；防键盘关弹窗残留监听） */
       this.menuDismiss = null;
       this.inputDebounce = null;
@@ -30184,7 +33628,7 @@ fi`;
           return true;
         }
       });
-      const dialog = new import_siyuan8.Dialog({
+      const dialog = new import_siyuan9.Dialog({
         title: this.deps.t("pluginName"),
         content: "",
         // 桌面采用宽松密度，减少截断并让双栏预览一次展示更多内容；移动端仍由 sheet 占满视口。
@@ -30407,45 +33851,86 @@ fi`;
       search.appendChild(qMark);
       search.appendChild(input);
       search.appendChild(clearBtn);
-      const pinBtn = document.createElement("button");
-      pinBtn.type = "button";
-      pinBtn.className = "xlc-search-pin" + (this.pinWindow ? " xlc-search-pin--active" : "");
-      pinBtn.dataset.xlcControl = "search.pin";
-      pinBtn.textContent = "\u{1F4CC}";
-      pinBtn.title = "\u56FA\u5B9A\u7A97\u53E3\uFF08\u8FDE\u7EED\u590D\u5236/\u63D2\u5165\u4E0D\u5173\u95ED\uFF0CAlt+P \u5207\u6362\uFF09";
-      pinBtn.setAttribute("aria-label", "\u56FA\u5B9A\u7A97\u53E3");
-      pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
-      pinBtn.addEventListener("click", () => {
-        this.togglePinWindow();
-      });
-      search.appendChild(pinBtn);
-      const densityBtn = document.createElement("button");
-      densityBtn.type = "button";
-      densityBtn.className = "xlc-search-density-btn" + (this.density === "compact" ? " xlc-search-density-btn--compact" : "");
-      densityBtn.dataset.xlcControl = "search.density.toggle";
-      densityBtn.textContent = this.density === "compact" ? "\u2630" : "\u2637";
-      densityBtn.title = this.density === "compact" ? "\u5F53\u524D\u4E3A\u7D27\u51D1\u5355\u884C\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u8212\u9002\u5361\u7247\uFF09" : "\u5F53\u524D\u4E3A\u8212\u9002\u5361\u7247\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u7D27\u51D1\u5355\u884C\uFF09";
-      densityBtn.setAttribute("aria-label", "\u5207\u6362\u89C6\u56FE\u5BC6\u5EA6");
-      densityBtn.setAttribute("aria-pressed", String(this.density === "compact"));
-      densityBtn.addEventListener("click", () => {
-        this.toggleDensity();
-      });
-      this.densityBtn = densityBtn;
-      search.appendChild(densityBtn);
-      const miniModeBtn = document.createElement("button");
-      miniModeBtn.type = "button";
-      miniModeBtn.className = "xlc-search-mini-btn" + (this.miniMode ? " xlc-search-mini-btn--active" : "");
-      miniModeBtn.dataset.xlcControl = "search.mini.toggle";
-      miniModeBtn.textContent = "\u{1F4D0}";
-      miniModeBtn.title = "\u8FF7\u4F60\u60AC\u6D6E\u6D6E\u6761\u6A21\u5F0F\uFF08\u6781\u7A84\u5355\u5217\u65E0\u906E\u6321\uFF0CAlt+M \u5207\u6362\uFF09";
-      miniModeBtn.setAttribute("aria-label", "\u5207\u6362\u8FF7\u4F60\u60AC\u6D6E\u6A21\u5F0F");
-      miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
-      miniModeBtn.addEventListener("click", () => {
-        this.toggleMiniMode();
-      });
-      this.miniModeBtn = miniModeBtn;
-      search.appendChild(miniModeBtn);
+      if (isMobile) {
+        const mobileCloseBtn = document.createElement("button");
+        mobileCloseBtn.type = "button";
+        mobileCloseBtn.className = "xlc-mobile-close-btn";
+        mobileCloseBtn.dataset.xlcControl = "search.mobile.close";
+        mobileCloseBtn.textContent = "\u2715";
+        mobileCloseBtn.title = this.deps.t("close") || "\u5173\u95ED";
+        mobileCloseBtn.setAttribute("aria-label", this.deps.t("close") || "\u5173\u95ED\u641C\u7D22\u5F39\u7A97");
+        mobileCloseBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.destroy();
+        });
+        search.appendChild(mobileCloseBtn);
+      }
+      if (!isMobile) {
+        const pinBtn = document.createElement("button");
+        pinBtn.type = "button";
+        pinBtn.className = "xlc-search-pin" + (this.pinWindow ? " xlc-search-pin--active" : "");
+        pinBtn.dataset.xlcControl = "search.pin";
+        pinBtn.textContent = "\u{1F4CC}";
+        pinBtn.title = "\u56FA\u5B9A\u7A97\u53E3\uFF08\u8FDE\u7EED\u590D\u5236/\u63D2\u5165\u4E0D\u5173\u95ED\uFF0CAlt+P \u5207\u6362\uFF09";
+        pinBtn.setAttribute("aria-label", "\u56FA\u5B9A\u7A97\u53E3");
+        pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
+        pinBtn.addEventListener("click", () => {
+          this.togglePinWindow();
+        });
+        search.appendChild(pinBtn);
+        const densityBtn = document.createElement("button");
+        densityBtn.type = "button";
+        densityBtn.className = "xlc-search-density-btn" + (this.density === "compact" ? " xlc-search-density-btn--compact" : "");
+        densityBtn.dataset.xlcControl = "search.density.toggle";
+        densityBtn.textContent = this.density === "compact" ? "\u2630" : "\u2637";
+        densityBtn.title = this.density === "compact" ? "\u5F53\u524D\u4E3A\u7D27\u51D1\u5355\u884C\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u8212\u9002\u5361\u7247\uFF09" : "\u5F53\u524D\u4E3A\u8212\u9002\u5361\u7247\u89C6\u56FE\uFF08\u70B9\u51FB\u6216 Alt+V \u5207\u6362\u4E3A\u7D27\u51D1\u5355\u884C\uFF09";
+        densityBtn.setAttribute("aria-label", "\u5207\u6362\u89C6\u56FE\u5BC6\u5EA6");
+        densityBtn.setAttribute("aria-pressed", String(this.density === "compact"));
+        densityBtn.addEventListener("click", () => {
+          this.toggleDensity();
+        });
+        this.densityBtn = densityBtn;
+        search.appendChild(densityBtn);
+        const miniModeBtn = document.createElement("button");
+        miniModeBtn.type = "button";
+        miniModeBtn.className = "xlc-search-mini-btn" + (this.miniMode ? " xlc-search-mini-btn--active" : "");
+        miniModeBtn.dataset.xlcControl = "search.mini.toggle";
+        miniModeBtn.textContent = "\u{1F4D0}";
+        miniModeBtn.title = "\u8FF7\u4F60\u60AC\u6D6E\u6D6E\u6761\u6A21\u5F0F\uFF08\u6781\u7A84\u5355\u5217\u65E0\u906E\u6321\uFF0CAlt+M \u5207\u6362\uFF09";
+        miniModeBtn.setAttribute("aria-label", "\u5207\u6362\u8FF7\u4F60\u60AC\u6D6E\u6A21\u5F0F");
+        miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
+        miniModeBtn.addEventListener("click", () => {
+          this.toggleMiniMode();
+        });
+        this.miniModeBtn = miniModeBtn;
+        search.appendChild(miniModeBtn);
+      }
       searchBlock.appendChild(search);
+      const smartBanner = document.createElement("div");
+      smartBanner.className = "xlc-smart-match-banner";
+      smartBanner.dataset.xlcControl = "search.smart-match-banner";
+      smartBanner.style.display = "none";
+      this.smartMatchBannerEl = smartBanner;
+      searchBlock.appendChild(smartBanner);
+      const comboBanner = document.createElement("div");
+      comboBanner.className = "xlc-combo-copy-banner";
+      comboBanner.dataset.xlcControl = "search.combo-banner";
+      comboBanner.style.display = "none";
+      this.copyComboBannerEl = comboBanner;
+      searchBlock.appendChild(comboBanner);
+      if (isMobile) {
+        const chipsRow = document.createElement("div");
+        chipsRow.className = "xlc-top-chips-row";
+        chipsRow.dataset.xlcControl = "search.mobile.top-chips";
+        this.topChipsContainer = chipsRow;
+        searchBlock.appendChild(chipsRow);
+        const breadcrumbs = document.createElement("div");
+        breadcrumbs.className = "xlc-mobile-breadcrumbs";
+        breadcrumbs.dataset.xlcControl = "search.mobile.breadcrumbs";
+        breadcrumbs.style.display = "none";
+        this.mobileBreadcrumbsEl = breadcrumbs;
+        searchBlock.appendChild(breadcrumbs);
+      }
       const searchHint = document.createElement("div");
       searchHint.className = "xlc-search-hint";
       searchHint.textContent = this.deps.t("searchHint");
@@ -30698,6 +34183,7 @@ fi`;
       track.setAttribute("aria-label", "\u641C\u7D22\u4F5C\u7528\u57DF\u5207\u6362");
       for (const scope of scopes) {
         const chip = document.createElement("button");
+        chip.type = "button";
         const on = this.currentScope === scope;
         chip.className = "xlc-chip xlc-scope-chip" + (on ? " xlc-chip--on xlc-scope-chip--on" : "");
         chip.dataset.scope = scope;
@@ -30781,6 +34267,7 @@ fi`;
       aiBanner.style.display = "none";
       filters.insertBefore(aiBanner, filters.firstChild);
       const sortChip = document.createElement("button");
+      sortChip.type = "button";
       sortChip.className = "xlc-chip xlc-sort-chip";
       sortChip.dataset.xlcControl = "sort.open";
       const paintSort = () => {
@@ -30858,7 +34345,14 @@ fi`;
           this.activeIndex = index;
           this.activeProvider = -1;
           this.paintActive();
-          this.schedulePreview(entry);
+          lvLaunchpad.haptic(12);
+          const text = entry.content || entry.summary || entry.title;
+          void this.deps.copyText(text).then((ok2) => {
+            if (ok2) {
+              lvNotify.inline(row, "\u5DF2\u590D\u5236");
+              this.trackCopyCombo(entry);
+            }
+          });
           return;
         }
         void this.runPrimary(entry);
@@ -30876,6 +34370,36 @@ fi`;
         }
       });
       this.attachLongPress(list, isMobile);
+      if (isMobile) {
+        let touchStartX = 0;
+        let touchStartY = 0;
+        list.addEventListener("touchstart", (e) => {
+          var _a2, _b2, _c2, _d2;
+          touchStartX = (_b2 = (_a2 = e.touches[0]) == null ? void 0 : _a2.clientX) != null ? _b2 : 0;
+          touchStartY = (_d2 = (_c2 = e.touches[0]) == null ? void 0 : _c2.clientY) != null ? _d2 : 0;
+        }, { passive: true });
+        list.addEventListener("touchend", (e) => {
+          var _a2, _b2, _c2, _d2, _e2;
+          const endX = (_b2 = (_a2 = e.changedTouches[0]) == null ? void 0 : _a2.clientX) != null ? _b2 : 0;
+          const endY = (_d2 = (_c2 = e.changedTouches[0]) == null ? void 0 : _c2.clientY) != null ? _d2 : 0;
+          const dx = endX - touchStartX;
+          const dy = endY - touchStartY;
+          if (dx < -60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+            const currentFilters = this.deps.getFilters();
+            const currentCat = (_e2 = currentFilters.category) == null ? void 0 : _e2.trim();
+            if (currentCat) {
+              const parts = currentCat.split("/").filter(Boolean);
+              if (parts.length > 0) {
+                parts.pop();
+                const parentCat = parts.join("/");
+                this.deps.setFilters({ ...currentFilters, category: parentCat });
+                lvLaunchpad.haptic(12);
+                void this.refresh();
+              }
+            }
+          }
+        }, { passive: true });
+      }
       bodyWrap.appendChild(list);
       if (isMobile) {
         const fabNew = document.createElement("button");
@@ -30968,6 +34492,7 @@ fi`;
         const footBtns = document.createElement("div");
         footBtns.className = "xlc-mobile-foot";
         const newBtn = document.createElement("button");
+        newBtn.type = "button";
         newBtn.className = "b3-button";
         newBtn.dataset.xlcControl = "search.new";
         newBtn.textContent = this.deps.t("quickNew");
@@ -30975,6 +34500,7 @@ fi`;
         newBtn.addEventListener("click", () => this.deps.newItem());
         footBtns.appendChild(newBtn);
         const insertBtn = document.createElement("button");
+        insertBtn.type = "button";
         insertBtn.className = "b3-button xlc-btn-primary xlc-mobile-insert";
         insertBtn.dataset.xlcControl = "preview.mobile-primary";
         insertBtn.textContent = this.deps.t(this.mobilePrimaryIsCopy() ? "copy" : "quickInsertSelected");
@@ -30987,7 +34513,16 @@ fi`;
         }
         insertBtn.addEventListener("click", () => {
           const entry = this.results[this.activeIndex];
-          if (entry) void this.runPrimary(entry);
+          if (entry) {
+            lvLaunchpad.haptic(12);
+            const text = entry.content || entry.summary || entry.title;
+            void this.deps.copyText(text).then((ok2) => {
+              if (ok2) {
+                lvNotify.inline(insertBtn, "\u5DF2\u590D\u5236");
+                this.trackCopyCombo(entry);
+              }
+            });
+          }
         });
         footBtns.appendChild(insertBtn);
         footer.appendChild(footBtns);
@@ -31018,40 +34553,43 @@ fi`;
       guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
       guide.addEventListener("click", () => this.openUsageGuide());
       footer.appendChild(guide);
-      const stepGuide = document.createElement("button");
-      stepGuide.type = "button";
-      stepGuide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-stepguide";
-      stepGuide.dataset.xlcControl = "footer.stepguide";
-      stepGuide.textContent = "\u{1F393} " + (this.deps.t("stepGuideTitle") || "\u65B0\u624B\u5B9E\u64CD\u6307\u5F15");
-      stepGuide.setAttribute("aria-label", this.deps.t("stepGuideTitle") || "\u65B0\u624B\u5B9E\u64CD\u6307\u5F15");
-      stepGuide.addEventListener("click", () => {
-        openStepByStepGuideDialog({
-          t: this.deps.t,
-          isMobile: this.deps.isMobile,
-          onOpenSearch: () => this.focusInput()
-        });
-      });
-      footer.appendChild(stepGuide);
-      const starterPacksBtn = document.createElement("button");
-      starterPacksBtn.type = "button";
-      starterPacksBtn.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-starter-packs";
-      starterPacksBtn.dataset.xlcControl = "footer.starter-packs";
-      starterPacksBtn.textContent = "\u{1F4E6} " + (this.deps.t("starterPacksBtn") || "\u5F00\u7BB1\u5957\u4EF6");
-      starterPacksBtn.title = "\u6253\u5F00\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A\uFF0C\u968F\u65F6\u6311\u9009\u542F\u7528\u884C\u4E1A\u573A\u666F\u5E38\u7528\u8BED";
-      starterPacksBtn.setAttribute("aria-label", "\u6253\u5F00\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A");
-      starterPacksBtn.addEventListener("click", () => {
-        if (this.deps.importStarterPackDirect) {
-          openStarterPacksHubDialog({
+      if (!isMobile) {
+        const stepGuide = document.createElement("button");
+        stepGuide.type = "button";
+        stepGuide.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-stepguide";
+        stepGuide.dataset.xlcControl = "footer.stepguide";
+        stepGuide.textContent = "\u{1F393} " + (this.deps.t("stepGuideTitle") || "\u65B0\u624B\u5B9E\u64CD\u6307\u5F15");
+        stepGuide.setAttribute("aria-label", this.deps.t("stepGuideTitle") || "\u65B0\u624B\u5B9E\u64CD\u6307\u5F15");
+        stepGuide.addEventListener("click", () => {
+          openStepByStepGuideDialog({
             t: this.deps.t,
-            notify: this.deps.notify,
-            importStarterPackDirect: this.deps.importStarterPackDirect,
-            createStarterPackDedicatedDoc: this.deps.createStarterPackDedicatedDoc,
-            onImportSuccess: () => void this.refresh()
+            isMobile: this.deps.isMobile,
+            onOpenSearch: () => this.focusInput()
           });
-        }
-      });
-      footer.appendChild(starterPacksBtn);
+        });
+        footer.appendChild(stepGuide);
+        const starterPacksBtn = document.createElement("button");
+        starterPacksBtn.type = "button";
+        starterPacksBtn.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-starter-packs";
+        starterPacksBtn.dataset.xlcControl = "footer.starter-packs";
+        starterPacksBtn.textContent = "\u{1F4E6} " + (this.deps.t("starterPacksBtn") || "\u5F00\u7BB1\u5957\u4EF6");
+        starterPacksBtn.title = "\u6253\u5F00\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A\uFF0C\u968F\u65F6\u6311\u9009\u542F\u7528\u884C\u4E1A\u573A\u666F\u5E38\u7528\u8BED";
+        starterPacksBtn.setAttribute("aria-label", "\u6253\u5F00\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A");
+        starterPacksBtn.addEventListener("click", () => {
+          if (this.deps.importStarterPackDirect) {
+            openStarterPacksHubDialog({
+              t: this.deps.t,
+              notify: this.deps.notify,
+              importStarterPackDirect: this.deps.importStarterPackDirect,
+              createStarterPackDedicatedDoc: this.deps.createStarterPackDedicatedDoc,
+              onImportSuccess: () => void this.refresh()
+            });
+          }
+        });
+        footer.appendChild(starterPacksBtn);
+      }
       const gear = document.createElement("button");
+      gear.type = "button";
       gear.className = "b3-button b3-button--text xlc-btn-ghost xlc-footer-gear";
       gear.dataset.xlcControl = "footer.settings";
       gear.textContent = "\u2699 " + this.deps.t("openSettings");
@@ -31083,7 +34621,7 @@ fi`;
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
     openUsageGuide() {
       var _a;
-      const guideDialog = new import_siyuan8.Dialog({
+      const guideDialog = new import_siyuan9.Dialog({
         title: this.deps.t("usageGuideTitle"),
         content: "",
         width: "min(600px, 92vw)",
@@ -31236,6 +34774,7 @@ fi`;
         }
       });
       const insert = document.createElement("button");
+      insert.type = "button";
       insert.className = "b3-button xlc-btn-primary";
       insert.textContent = this.deps.t("insert");
       insert.dataset.xlcPaneAct = "insert";
@@ -31252,6 +34791,7 @@ fi`;
         if (entry) void this.runPrimary(entry);
       });
       const copy = document.createElement("button");
+      copy.type = "button";
       copy.className = "b3-button";
       copy.textContent = this.deps.t("copy");
       copy.dataset.xlcPaneAct = "copy";
@@ -31314,6 +34854,7 @@ fi`;
       copyWrap.appendChild(copy);
       copyWrap.appendChild(copyFormatBtn);
       const aiBtn = document.createElement("button");
+      aiBtn.type = "button";
       aiBtn.className = "b3-button xlc-btn-ai";
       aiBtn.textContent = "\u2726 " + this.deps.t("aiTransform");
       aiBtn.dataset.xlcPaneAct = "ai";
@@ -31324,6 +34865,7 @@ fi`;
         if (entry) void this.showActionMenu(entry);
       });
       const embedBtn = document.createElement("button");
+      embedBtn.type = "button";
       embedBtn.className = "b3-button b3-button--text xlc-btn-ghost";
       embedBtn.textContent = "\u229E " + (this.deps.t("insertEmbed") || "\u540C\u6B65\u5D4C\u5165");
       embedBtn.title = "\u4F5C\u4E3A\u601D\u6E90\u539F\u751F\u5D4C\u5165\u5757\u63D2\u5165\uFF08\u6E90\u53D8\u52A8\u65F6\u591A\u5904\u81EA\u52A8\u540C\u6B65\u66F4\u65B0\uFF0CShift+Enter\uFF09";
@@ -31335,6 +34877,7 @@ fi`;
         if (entry) void this.insertEntryEmbedOrRef(entry, "embed");
       });
       const refBtn = document.createElement("button");
+      refBtn.type = "button";
       refBtn.className = "b3-button b3-button--text xlc-btn-ghost";
       refBtn.textContent = "\uFF0B " + (this.deps.t("insertRef") || "\u63D2\u5165\u5F15\u7528");
       refBtn.title = "\u4F5C\u4E3A\u601D\u6E90\u539F\u751F\u5757\u5F15\u7528\u63D2\u5165\uFF08Alt+Enter\uFF09";
@@ -31348,6 +34891,7 @@ fi`;
       const spacer = document.createElement("span");
       spacer.className = "xlc-foot-spacer";
       const source = document.createElement("button");
+      source.type = "button";
       source.className = "b3-button b3-button--text xlc-btn-ghost";
       source.textContent = this.deps.t("openSource");
       source.dataset.xlcPaneAct = "source";
@@ -31364,6 +34908,7 @@ fi`;
         }
       });
       const edit = document.createElement("button");
+      edit.type = "button";
       edit.className = "b3-button b3-button--text xlc-btn-ghost";
       edit.textContent = this.deps.t("edit");
       edit.dataset.xlcPaneAct = "edit";
@@ -31382,6 +34927,7 @@ fi`;
         }
       });
       const editAndCapture = document.createElement("button");
+      editAndCapture.type = "button";
       editAndCapture.className = "b3-button b3-button--text xlc-btn-ghost";
       editAndCapture.textContent = "\u270E " + this.deps.t("editAndCapture");
       editAndCapture.dataset.xlcPaneAct = "edit-and-capture-omni";
@@ -31394,6 +34940,7 @@ fi`;
         }
       });
       const saveOmni = document.createElement("button");
+      saveOmni.type = "button";
       saveOmni.className = "b3-button b3-button--text xlc-btn-ghost";
       saveOmni.textContent = "\u2726 " + this.deps.t("saveToCommon");
       saveOmni.dataset.xlcPaneAct = "save-omni";
@@ -31443,6 +34990,7 @@ fi`;
       foot.appendChild(editAndCapture);
       foot.appendChild(saveOmni);
       const cleanClipBtn = document.createElement("button");
+      cleanClipBtn.type = "button";
       cleanClipBtn.className = "b3-button b3-button--text xlc-btn-ghost";
       cleanClipBtn.textContent = "\u{1F9F9} \u683C\u5F0F\u6E05\u6D17";
       cleanClipBtn.title = "\u5265\u79BB\u96F6\u5BBD\u5B57\u7B26\u3001\u5408\u5E76\u8F6F\u6362\u884C\u4E0E\u538B\u7F29\u591A\u4F59\u7A7A\u884C";
@@ -31985,8 +35533,274 @@ fi`;
       }
       this.finishSearchLoad(list);
       this.renderList(list);
+      this.renderTopChips();
+      this.renderMobileBreadcrumbs();
+      void this.checkClipboardSmartMatch();
       this.updatePreview();
       (_j = this.syncQueueChipRef) == null ? void 0 : _j.call(this);
+    }
+    /**
+     * 移动端置顶高频片段直达行 (Mobile Spec v1 + v2):
+     * 固定的条目排在最前并带 📌 标记；未固定的按使用频次与热度补齐到前 5 个；
+     * 支持长按 500ms 切换固定/取消固定；点击复制并触发连击计数。
+     */
+    renderTopChips() {
+      var _a, _b, _c;
+      if (!this.topChipsContainer || !this.deps.isMobile()) return;
+      this.topChipsContainer.innerHTML = "";
+      const candidates = (this.results || []).filter((r) => !r.isOmni);
+      if (candidates.length === 0) {
+        this.topChipsContainer.style.display = "none";
+        return;
+      }
+      const usage = this.usageCounts;
+      const pinnedIds = new Set((_c = (_b = (_a = this.deps).getPinnedTopChips) == null ? void 0 : _b.call(_a)) != null ? _c : []);
+      const sorted = candidates.slice().sort((a, b) => {
+        var _a2, _b2;
+        const isPinnedA = pinnedIds.has(a.id) ? 1 : 0;
+        const isPinnedB = pinnedIds.has(b.id) ? 1 : 0;
+        if (isPinnedB !== isPinnedA) return isPinnedB - isPinnedA;
+        const countA = (_a2 = usage.get(a.id)) != null ? _a2 : 0;
+        const countB = (_b2 = usage.get(b.id)) != null ? _b2 : 0;
+        if (countB !== countA) return countB - countA;
+        const isFavA = this.deps.isFavorite(a.id) ? 1 : 0;
+        const isFavB = this.deps.isFavorite(b.id) ? 1 : 0;
+        if (isFavB !== isFavA) return isFavB - isFavA;
+        const timeDiff = (b.updatedAt || 0) - (a.updatedAt || 0);
+        if (timeDiff !== 0) return timeDiff;
+        return a.id.localeCompare(b.id);
+      });
+      const top5 = sorted.slice(0, 5);
+      if (top5.length === 0) {
+        this.topChipsContainer.style.display = "none";
+        return;
+      }
+      this.topChipsContainer.style.display = "flex";
+      for (const entry of top5) {
+        const isPinned = pinnedIds.has(entry.id);
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "xlc-top-chip" + (isPinned ? " xlc-top-chip--pinned" : "");
+        chip.title = `\u70B9\u51FB\u590D\u5236\uFF0C\u957F\u6309${isPinned ? "\u53D6\u6D88\u56FA\u5B9A" : "\u56FA\u5B9A"}\u300C${entry.title}\u300D`;
+        chip.setAttribute("aria-label", chip.title);
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "xlc-top-chip-icon";
+        iconSpan.textContent = isPinned ? "\u{1F4CC}" : "\u26A1";
+        const textSpan = document.createElement("span");
+        textSpan.className = "xlc-top-chip-text";
+        textSpan.textContent = entry.title || "\u5E38\u7528\u7247\u6BB5";
+        chip.append(iconSpan, textSpan);
+        let chipLongPressTimer;
+        let chipMoved = false;
+        let startX = 0;
+        let startY = 0;
+        chip.addEventListener("touchstart", (e) => {
+          var _a2, _b2, _c2, _d;
+          chipMoved = false;
+          startX = (_b2 = (_a2 = e.touches[0]) == null ? void 0 : _a2.clientX) != null ? _b2 : 0;
+          startY = (_d = (_c2 = e.touches[0]) == null ? void 0 : _c2.clientY) != null ? _d : 0;
+          chipLongPressTimer = setTimeout(() => {
+            var _a3, _b3, _c3, _d2, _e;
+            chipLongPressTimer = void 0;
+            lvLaunchpad.haptic(12);
+            const currentPinned = ((_c3 = (_b3 = (_a3 = this.deps).getPinnedTopChips) == null ? void 0 : _b3.call(_a3)) != null ? _c3 : []).slice();
+            let nextPinned;
+            if (currentPinned.includes(entry.id)) {
+              nextPinned = currentPinned.filter((id) => id !== entry.id);
+              lvNotify.inline(chip, "\u5DF2\u53D6\u6D88\u56FA\u5B9A");
+            } else {
+              nextPinned = [entry.id, ...currentPinned.filter((id) => id !== entry.id)].slice(0, 5);
+              lvNotify.inline(chip, "\u5DF2\u56FA\u5B9A\u5230\u76F4\u8FBE\u884C");
+            }
+            (_e = (_d2 = this.deps).setPinnedTopChips) == null ? void 0 : _e.call(_d2, nextPinned);
+            this.renderTopChips();
+          }, 500);
+        }, { passive: true });
+        chip.addEventListener("touchmove", (e) => {
+          var _a2, _b2, _c2, _d;
+          const dx = Math.abs(((_b2 = (_a2 = e.touches[0]) == null ? void 0 : _a2.clientX) != null ? _b2 : 0) - startX);
+          const dy = Math.abs(((_d = (_c2 = e.touches[0]) == null ? void 0 : _c2.clientY) != null ? _d : 0) - startY);
+          if (Math.max(dx, dy) > 8 && chipLongPressTimer) {
+            clearTimeout(chipLongPressTimer);
+            chipLongPressTimer = void 0;
+            chipMoved = true;
+          }
+        }, { passive: true });
+        chip.addEventListener("touchend", () => {
+          if (chipLongPressTimer) {
+            clearTimeout(chipLongPressTimer);
+            chipLongPressTimer = void 0;
+          }
+        }, { passive: true });
+        chip.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (chipMoved) return;
+          lvLaunchpad.haptic(12);
+          const text = entry.content || entry.summary || entry.title;
+          const ok2 = await this.deps.copyText(text);
+          if (ok2) {
+            iconSpan.textContent = "\u2713";
+            lvNotify.inline(chip, "\u5DF2\u590D\u5236");
+            setTimeout(() => {
+              iconSpan.textContent = isPinned ? "\u{1F4CC}" : "\u26A1";
+            }, 1500);
+            this.trackCopyCombo(entry);
+          }
+        });
+        this.topChipsContainer.appendChild(chip);
+      }
+    }
+    /**
+     * 剪贴板智能匹配 (Mobile Spec v2 专项深化 1):
+     * 若系统剪贴板文本与某片段名或内容前缀匹配（≥4 字符），顶部显示一键替换横幅。
+     */
+    async checkClipboardSmartMatch() {
+      var _a, _b, _c;
+      if (!((_b = (_a = this.deps).isClipboardSmartMatchEnabled) == null ? void 0 : _b.call(_a)) || !this.smartMatchBannerEl) return;
+      try {
+        if (!((_c = navigator.clipboard) == null ? void 0 : _c.readText) || typeof window !== "undefined" && !window.isSecureContext) return;
+        const clipText = (await navigator.clipboard.readText() || "").trim();
+        if (clipText.length < 4) {
+          this.smartMatchBannerEl.style.display = "none";
+          return;
+        }
+        const matched = this.results.find((entry) => {
+          const title = (entry.title || "").trim();
+          const alias = (entry.alias || "").trim();
+          const content = (entry.content || entry.summary || "").trim();
+          if (title && (title.toLowerCase().startsWith(clipText.toLowerCase()) || clipText.toLowerCase().startsWith(title.toLowerCase()))) return true;
+          if (alias && alias.toLowerCase() === clipText.toLowerCase()) return true;
+          if (content && (content.toLowerCase().startsWith(clipText.toLowerCase()) || clipText.toLowerCase().startsWith(content.slice(0, 40).toLowerCase()))) return true;
+          return false;
+        });
+        if (!matched) {
+          this.smartMatchBannerEl.style.display = "none";
+          return;
+        }
+        this.smartMatchBannerEl.innerHTML = "";
+        this.smartMatchBannerEl.style.display = "flex";
+        const bannerText = document.createElement("span");
+        bannerText.className = "xlc-smart-match-text";
+        bannerText.textContent = this.deps.t("clipboardSmartMatchBanner", matched.title);
+        const replaceBtn = document.createElement("button");
+        replaceBtn.type = "button";
+        replaceBtn.className = "b3-button b3-button--small xlc-btn-primary";
+        replaceBtn.textContent = "\u4E00\u952E\u66FF\u6362";
+        replaceBtn.addEventListener("click", async () => {
+          lvLaunchpad.haptic(12);
+          const text = matched.content || matched.summary || matched.title;
+          const ok2 = await this.deps.copyText(text);
+          if (ok2) {
+            bannerText.textContent = this.deps.t("clipboardSmartMatchDone");
+            lvNotify.inline(replaceBtn, "\u5DF2\u590D\u5236");
+            setTimeout(() => {
+              if (this.smartMatchBannerEl) this.smartMatchBannerEl.style.display = "none";
+            }, 1500);
+          }
+        });
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "xlc-banner-close";
+        closeBtn.textContent = "\u2715";
+        closeBtn.addEventListener("click", () => {
+          if (this.smartMatchBannerEl) this.smartMatchBannerEl.style.display = "none";
+        });
+        this.smartMatchBannerEl.append(bannerText, replaceBtn, closeBtn);
+      } catch {
+      }
+    }
+    /**
+     * 移动端多级分类面包屑导航 (Mobile Spec v2 专项深化 2):
+     * 支持面包屑节点快速切换分类与左滑返回上一级分类。
+     */
+    renderMobileBreadcrumbs() {
+      var _a;
+      if (!this.mobileBreadcrumbsEl || !this.deps.isMobile()) return;
+      const currentFilters = this.deps.getFilters();
+      const category = (_a = currentFilters.category) == null ? void 0 : _a.trim();
+      if (!category || !category.includes("/")) {
+        this.mobileBreadcrumbsEl.style.display = "none";
+        this.mobileBreadcrumbsEl.innerHTML = "";
+        return;
+      }
+      this.mobileBreadcrumbsEl.innerHTML = "";
+      this.mobileBreadcrumbsEl.style.display = "flex";
+      const parts = category.split("/").filter(Boolean);
+      const allBtn = document.createElement("button");
+      allBtn.type = "button";
+      allBtn.className = "xlc-breadcrumb-item";
+      allBtn.textContent = "\u5168\u90E8";
+      allBtn.addEventListener("click", () => {
+        this.deps.setFilters({ ...currentFilters, category: "" });
+        void this.refresh();
+      });
+      this.mobileBreadcrumbsEl.appendChild(allBtn);
+      let acc = "";
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (!part) continue;
+        const sep = document.createElement("span");
+        sep.className = "xlc-breadcrumb-sep";
+        sep.textContent = "\u203A";
+        this.mobileBreadcrumbsEl.appendChild(sep);
+        acc = acc ? `${acc}/${part}` : part;
+        const targetCat = acc;
+        const partBtn = document.createElement("button");
+        partBtn.type = "button";
+        partBtn.className = "xlc-breadcrumb-item" + (i === parts.length - 1 ? " xlc-breadcrumb-item--active" : "");
+        partBtn.textContent = part;
+        if (i < parts.length - 1) {
+          partBtn.addEventListener("click", () => {
+            this.deps.setFilters({ ...currentFilters, category: targetCat });
+            void this.refresh();
+          });
+        }
+        this.mobileBreadcrumbsEl.appendChild(partBtn);
+      }
+    }
+    /**
+     * 复制连击计数 (Mobile Spec v2 专项深化 4):
+     * 同一片段 30 秒内连续复制 ≥2 次时提示批量导出并提供多选入口。
+     */
+    trackCopyCombo(entry) {
+      const now = Date.now();
+      if (this.copyCombo.itemId === entry.id && now - this.copyCombo.lastTime <= 3e4) {
+        this.copyCombo.count++;
+      } else {
+        this.copyCombo.itemId = entry.id;
+        this.copyCombo.count = 1;
+      }
+      this.copyCombo.lastTime = now;
+      if (this.copyCombo.count >= 2) {
+        this.showCopyComboBanner(entry, this.copyCombo.count);
+      }
+    }
+    showCopyComboBanner(entry, count) {
+      if (!this.copyComboBannerEl) return;
+      this.copyComboBannerEl.innerHTML = "";
+      this.copyComboBannerEl.style.display = "flex";
+      const textSpan = document.createElement("span");
+      textSpan.className = "xlc-combo-text";
+      textSpan.textContent = this.deps.t("copyComboCount", String(count));
+      const multiBtn = document.createElement("button");
+      multiBtn.type = "button";
+      multiBtn.className = "b3-button b3-button--small xlc-btn-primary";
+      multiBtn.textContent = this.deps.t("enterMultiSelect");
+      multiBtn.addEventListener("click", () => {
+        this.multiSelectMode = true;
+        this.selectedIds.add(entry.id);
+        this.copyComboBannerEl.style.display = "none";
+        this.renderBatchBar();
+        if (this.listEl) this.renderList(this.listEl);
+      });
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "xlc-banner-close";
+      closeBtn.textContent = "\u2715";
+      closeBtn.addEventListener("click", () => {
+        this.copyComboBannerEl.style.display = "none";
+      });
+      this.copyComboBannerEl.append(textSpan, multiBtn, closeBtn);
     }
     /** 收尾一次搜索刷新：解除列表加载反馈（成功与失败路径共用）。 */
     finishSearchLoad(list) {
@@ -32254,15 +36068,41 @@ fi`;
           actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
           const isCaptured = this.capturedOmniIds.has(entry.id);
           const saveBtn = document.createElement("button");
+          saveBtn.type = "button";
           saveBtn.className = "b3-button b3-button--small xlc-row-action";
           saveBtn.dataset.xlcControl = "item.save-to-common";
           saveBtn.textContent = isCaptured ? "\u2713" : "\u2B50";
-          saveBtn.title = isCaptured ? "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : "\u4E00\u952E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED (Alt+S)";
-          saveBtn.setAttribute("aria-label", isCaptured ? "\u5DF2\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED" : "\u4E00\u952E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED");
+          saveBtn.title = isCaptured ? "\u5DF2\u5B58\u4E3A\u5E38\u7528" : "\u5B58\u4E3A\u5E38\u7528 (\u8F6C\u6B63\u4E3A\u6C38\u4E45\u7247\u6BB5)";
+          saveBtn.setAttribute("aria-label", isCaptured ? "\u5DF2\u5B58\u4E3A\u5E38\u7528" : "\u5B58\u4E3A\u5E38\u7528");
           saveBtn.disabled = isCaptured;
           saveBtn.addEventListener("click", async (e) => {
             e.stopPropagation();
             if (saveBtn.disabled || this.capturedOmniIds.has(entry.id)) return;
+            if (this.deps.promoteClipboardEntry) {
+              const existingCategories = Array.from(new Set(this.results.map((r) => r.category).filter(Boolean)));
+              const lastCategory = this.deps.getFilters().category || "\u5E38\u7528";
+              openPromoteClipDialog({
+                t: this.deps.t,
+                entry,
+                categories: existingCategories,
+                defaultCategory: lastCategory,
+                entries: this.results,
+                notify: this.deps.notify,
+                onPromote: async (payload) => {
+                  const ok2 = await this.deps.promoteClipboardEntry(entry, payload);
+                  if (ok2) {
+                    this.capturedOmniIds.add(entry.id);
+                    saveBtn.textContent = "\u2713";
+                    saveBtn.disabled = true;
+                    saveBtn.title = "\u5DF2\u5B58\u4E3A\u5E38\u7528";
+                    lvNotify.inline(saveBtn, "\u5DF2\u5B58\u4E3A\u5E38\u7528");
+                    this.syncPaneActions();
+                  }
+                  return ok2;
+                }
+              });
+              return;
+            }
             saveBtn.disabled = true;
             saveBtn.textContent = "\u2026";
             if (this.deps.createFromOmni) {
@@ -32288,8 +36128,9 @@ fi`;
             }
           });
           actionsWrap.appendChild(saveBtn);
-          if (this.deps.captureOmniWithForm) {
+          if (this.deps.captureOmniWithForm && !this.deps.isMobile()) {
             const editBtn = document.createElement("button");
+            editBtn.type = "button";
             editBtn.className = "b3-button b3-button--small xlc-row-action";
             editBtn.dataset.xlcControl = "item.edit-capture";
             editBtn.textContent = "\u270E";
@@ -32305,6 +36146,7 @@ fi`;
           const homeBridge = getBridgeSafely("home");
           if (homeBridge && typeof homeBridge.addMemo === "function") {
             const memoBtn = document.createElement("button");
+            memoBtn.type = "button";
             memoBtn.className = "b3-button b3-button--small xlc-row-action";
             memoBtn.dataset.xlcControl = "item.promote-to-home";
             memoBtn.textContent = "\u{1F4CB}";
@@ -32345,6 +36187,7 @@ fi`;
           actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
           if (this.deps.openDocBlock) {
             const locateBtn = document.createElement("button");
+            locateBtn.type = "button";
             locateBtn.className = "b3-button b3-button--small xlc-row-action";
             locateBtn.dataset.xlcControl = "item.locate-source";
             locateBtn.textContent = "\u2197";
@@ -32359,6 +36202,7 @@ fi`;
           }
           const isCaptured = this.capturedOmniIds.has(entry.id);
           const saveBtn = document.createElement("button");
+          saveBtn.type = "button";
           saveBtn.className = "b3-button b3-button--small xlc-row-action";
           saveBtn.dataset.xlcControl = "item.save-to-common";
           saveBtn.textContent = isCaptured ? "\u2713" : "\u2726";
@@ -32397,6 +36241,7 @@ fi`;
         }
       } else {
         const star = document.createElement("button");
+        star.type = "button";
         star.className = "b3-button b3-button--small xlc-row-action";
         star.dataset.xlcControl = "item.favorite";
         star.textContent = fav ? "\u2605" : "\u2606";
@@ -32410,22 +36255,24 @@ fi`;
           void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
         });
         row.appendChild(star);
-        const trayBtn = document.createElement("button");
-        trayBtn.type = "button";
-        trayBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action-tray";
-        trayBtn.dataset.xlcControl = "item.add-tray";
-        const inTray = this.pasteTrayItems.some((it) => it.id === entry.id);
-        trayBtn.textContent = inTray ? "\u2713" : "\u{1F6D2}";
-        trayBtn.title = inTray ? "\u5DF2\u52A0\u5165\u6682\u5B58\u6258\u76D8" : "\u52A0\u5165\u6682\u5B58\u6258\u76D8 (Alt+A)";
-        trayBtn.setAttribute("aria-label", trayBtn.title);
-        trayBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          this.togglePasteTrayItem(entry);
-          const nowIn = this.pasteTrayItems.some((it) => it.id === entry.id);
-          trayBtn.textContent = nowIn ? "\u2713" : "\u{1F6D2}";
-          lvNotify.inline(trayBtn, nowIn ? "\u5DF2\u6682\u5B58" : "\u5DF2\u79FB\u51FA");
-        });
-        row.appendChild(trayBtn);
+        if (!this.deps.isMobile()) {
+          const trayBtn = document.createElement("button");
+          trayBtn.type = "button";
+          trayBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action-tray";
+          trayBtn.dataset.xlcControl = "item.add-tray";
+          const inTray = this.pasteTrayItems.some((it) => it.id === entry.id);
+          trayBtn.textContent = inTray ? "\u2713" : "\u{1F6D2}";
+          trayBtn.title = inTray ? "\u5DF2\u52A0\u5165\u6682\u5B58\u6258\u76D8" : "\u52A0\u5165\u6682\u5B58\u6258\u76D8 (Alt+A)";
+          trayBtn.setAttribute("aria-label", trayBtn.title);
+          trayBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.togglePasteTrayItem(entry);
+            const nowIn = this.pasteTrayItems.some((it) => it.id === entry.id);
+            trayBtn.textContent = nowIn ? "\u2713" : "\u{1F6D2}";
+            lvNotify.inline(trayBtn, nowIn ? "\u5DF2\u6682\u5B58" : "\u5DF2\u79FB\u51FA");
+          });
+          row.appendChild(trayBtn);
+        }
       }
       return row;
     }
@@ -32435,6 +36282,11 @@ fi`;
       this.virtualListCleanup = null;
       this.virtualEnsureIndex = null;
       list.innerHTML = "";
+      const bodyWrapEl = list.parentElement;
+      if (bodyWrapEl) {
+        const soloEmpty = this.results.length === 0 && this.providerRows.length === 0 && this.emptyMessage === this.deps.t("emptyLibrary");
+        bodyWrapEl.classList.toggle("xlc-body--solo", soloEmpty);
+      }
       if (this.results.length === 0 && this.providerRows.length === 0 && this.emptyMessage) {
         const empty = document.createElement("div");
         empty.className = "xlc-empty";
@@ -32900,7 +36752,9 @@ fi`;
             }
           }
         }
-        for (let i = 0; i < this.results.length; i++) {
+        const totalCount = this.results.length;
+        const renderCount = this.deps.isMobile() ? Math.min(totalCount, 50) : totalCount;
+        for (let i = 0; i < renderCount; i++) {
           while (headCursor + 1 < groupLabels.length && i === headStarts[headCursor + 1]) {
             headCursor++;
             const head = groupLabels[headCursor];
@@ -32939,6 +36793,15 @@ fi`;
             list.appendChild(omniHead);
           }
           if (entry) list.appendChild(this.createEntryRow(entry, i));
+        }
+        if (this.deps.isMobile() && totalCount > 50) {
+          const limitNotice = document.createElement("div");
+          limitNotice.className = "xlc-list-end-divider";
+          limitNotice.dataset.xlcControl = "search.mobile.limit-notice";
+          const noticeSpan = document.createElement("span");
+          noticeSpan.textContent = `\u5DF2\u663E\u793A\u524D 50 \u6761\u9AD8\u9891\u7ED3\u679C\uFF08\u5171 ${totalCount} \u6761\uFF09\uFF0C\u8F93\u5165\u5173\u952E\u8BCD\u53EF\u7CBE\u51C6\u67E5\u627E`;
+          limitNotice.appendChild(noticeSpan);
+          list.appendChild(limitNotice);
         }
       }
       if (this.providerRows.length > 0) {
@@ -34018,7 +37881,24 @@ fi`;
         var _a2, _b2, _c2;
         const lbl = document.createElement("div");
         lbl.className = "xlc-menu-lbl";
-        lbl.textContent = (entry.title || this.deps.t("unknownType")) + " \xB7 " + this.deps.t("actionsNoun");
+        const lblText = document.createElement("span");
+        lblText.textContent = (entry.title || this.deps.t("unknownType")) + " \xB7 " + this.deps.t("actionsNoun");
+        lbl.appendChild(lblText);
+        if (this.deps.isMobile()) {
+          const closeBtn = document.createElement("button");
+          closeBtn.type = "button";
+          closeBtn.className = "xlc-menu-close-btn";
+          closeBtn.textContent = "\u2715";
+          closeBtn.title = this.deps.t("close") || "\u5173\u95ED\u83DC\u5355";
+          closeBtn.setAttribute("aria-label", closeBtn.title);
+          closeBtn.addEventListener("click", (ev) => {
+            var _a3;
+            ev.stopPropagation();
+            (_a3 = this.menuDismiss) == null ? void 0 : _a3.call(this);
+            this.menuDismiss = null;
+          });
+          lbl.appendChild(closeBtn);
+        }
         menu.appendChild(lbl);
         appendMediaHint();
         const previewBox = document.createElement("pre");
@@ -34159,7 +38039,37 @@ fi`;
                 (_b3 = (_a3 = this.deps).notify) == null ? void 0 : _b3.call(_a3, "info", `\u5DF2\u8F6C\u4E3A Markdown \u8868\u683C\u5E76\u590D\u5236 (${table.rowCount}\u884C)`);
               });
             }
-            if (this.deps.createFromOmni) {
+            if (this.deps.promoteClipboardEntry) {
+              addSilent("\u2B50", "\u2B50 \u5B58\u4E3A\u5E38\u7528 (\u8F6C\u6B63\u4E3A\u6C38\u4E45\u7247\u6BB5)", () => {
+                const existingCategories = Array.from(new Set(this.results.map((r) => r.category).filter(Boolean)));
+                const lastCategory = this.deps.getFilters().category || "\u5E38\u7528";
+                openPromoteClipDialog({
+                  t: this.deps.t,
+                  entry,
+                  categories: existingCategories,
+                  defaultCategory: lastCategory,
+                  entries: this.results,
+                  notify: this.deps.notify,
+                  onPromote: async (payload) => {
+                    var _a3;
+                    const ok2 = await this.deps.promoteClipboardEntry(entry, payload);
+                    if (ok2) {
+                      this.capturedOmniIds.add(entry.id);
+                      this.syncPaneActions();
+                      const activeRow = (_a3 = this.dialog) == null ? void 0 : _a3.element.querySelector(`[data-xlc-item-id="${entry.id}"]`);
+                      const rowSaveBtn = activeRow == null ? void 0 : activeRow.querySelector('[data-xlc-control="item.save-to-common"]');
+                      if (rowSaveBtn) {
+                        rowSaveBtn.textContent = "\u2713";
+                        rowSaveBtn.disabled = true;
+                        rowSaveBtn.title = "\u5DF2\u5B58\u4E3A\u5E38\u7528";
+                        lvNotify.inline(rowSaveBtn, "\u5DF2\u5B58\u4E3A\u5E38\u7528");
+                      }
+                    }
+                    return ok2;
+                  }
+                });
+              });
+            } else if (this.deps.createFromOmni) {
               addSilent("\u2B50", "\u4E00\u952E\u6C89\u6DC0\u4E3A\u5E38\u7528\u8BED (Alt+S)", async () => {
                 var _a3;
                 const ok2 = await this.deps.createFromOmni(entry);
@@ -37659,7 +41569,7 @@ ${progress.progressBar}`);
   init_capture();
 
   // src/ui/discovery-dialog.ts
-  var import_siyuan13 = __toESM(require_stub_dom());
+  var import_siyuan14 = __toESM(require_stub_dom());
   init_constants();
   init_lv_notice_kit();
   init_dialog_dom();
@@ -37946,7 +41856,7 @@ ${progress.progressBar}`);
           return true;
         }
       });
-      const dialog = new import_siyuan13.Dialog({
+      const dialog = new import_siyuan14.Dialog({
         title: (_a = this.options.title) != null ? _a : this.tx(this.titleKey()),
         content: "",
         width: "min(1040px, 94vw)",
@@ -38039,7 +41949,7 @@ ${progress.progressBar}`);
       var _a;
       if (this.closeConfirmationDialog || this.closed) return;
       let surfaceUnreg = null;
-      const dialog = new import_siyuan13.Dialog({
+      const dialog = new import_siyuan14.Dialog({
         title: this.tx("discoveryCloseTitle"),
         content: "",
         width: "min(440px, 92vw)",
@@ -39227,7 +43137,7 @@ ${progress.progressBar}`);
         defaultCategory: ((_h = (_g = this.defaultCategoryInput) == null ? void 0 : _g.value) != null ? _h : "").trim().slice(0, LIMITS.category)
       };
       let saveSurfaceUnreg = null;
-      const dialog = new import_siyuan13.Dialog({
+      const dialog = new import_siyuan14.Dialog({
         title: this.tx("discoverySaveView"),
         content: "",
         width: "min(440px, 92vw)",
@@ -39738,7 +43648,7 @@ ${details.join("\n")}` : ""}`;
 
   // src/service/commands.ts
   var siyuan = __toESM(require_stub_dom());
-  var import_siyuan14 = __toESM(require_stub_dom());
+  var import_siyuan15 = __toESM(require_stub_dom());
   init_constants();
   init_actions();
   init_placeholders();
@@ -39950,6 +43860,76 @@ ${details.join("\n")}` : ""}`;
           );
           output = output.replaceAll("{{xlc:contacts:recent}}", contactsSummaryText);
         }
+        if (output.includes("{{xlc:cards:today}}") || output.includes("{{xlc:flashcard:today}}")) {
+          const cardsSummaryText = await callBridge(
+            "cards",
+            "cards.read",
+            async (bridge) => {
+              var _a2, _b2, _c, _d;
+              if (typeof bridge.getDueSummary === "function") {
+                const res = await bridge.getDueSummary();
+                const data = (res == null ? void 0 : res.data) || res;
+                if (data && typeof data.unreviewedCount === "number") {
+                  if (data.unreviewedCount === 0) return "\u4ECA\u65E5\u95EA\u5361\uFF08\u5168\u90E8\u590D\u4E60\u5B8C\u6BD5\uFF09";
+                  return `\u3010\u95EA\u5361\u590D\u4E60\u3011\u4ECA\u65E5\u5F85\u590D\u4E60: ${data.unreviewedCount} \u5F20 (\u65B0\u5361: ${(_a2 = data.unreviewedNewCardCount) != null ? _a2 : 0}, \u5F85\u590D\u4E60: ${(_b2 = data.unreviewedOldCardCount) != null ? _b2 : 0})`;
+                }
+              }
+              if (typeof bridge.getStats === "function") {
+                const res = await bridge.getStats();
+                const data = (res == null ? void 0 : res.data) || res;
+                if (data) {
+                  return `\u3010\u95EA\u5361\u6982\u89C8\u3011\u8FDE\u7EED: ${(_c = data.streak) != null ? _c : 0} \u5929\uFF0C\u4ECA\u65E5\u5DF2\u590D\u4E60: ${(_d = data.todayReviews) != null ? _d : 0} \u5F20`;
+                }
+              }
+              return "\uFF08\u6682\u65E0\u95EA\u5361\u6570\u636E\uFF09";
+            },
+            () => "\uFF08\u672A\u68C0\u6D4B\u5230\u5C0F\u9A74\u95EA\u5361\uFF09"
+          );
+          output = output.replaceAll("{{xlc:cards:today}}", cardsSummaryText).replaceAll("{{xlc:flashcard:today}}", cardsSummaryText);
+        }
+        if (output.includes("{{xlc:exam:today}}") || output.includes("{{xlc:exam:stats}}")) {
+          const examSummaryText = await callBridge(
+            "exam",
+            "exam.read",
+            async (bridge) => {
+              var _a2, _b2, _c, _d, _e, _f, _g;
+              if (typeof bridge.statsRead === "function") {
+                const s = await bridge.statsRead();
+                const data = (s == null ? void 0 : s.data) || s;
+                if (data) {
+                  const todayStr = formatLocalDate();
+                  const todayItem = Array.isArray(data.daily) ? data.daily.find((d) => d.date === todayStr) : null;
+                  const todayAnswered = (_b2 = (_a2 = data.todayAnswered) != null ? _a2 : todayItem == null ? void 0 : todayItem.attempts) != null ? _b2 : 0;
+                  const accuracy = (_d = (_c = data.accuracy) != null ? _c : data.accuracyPercent) != null ? _d : 0;
+                  const wrongCount = (_f = (_e = data.activeWrong) != null ? _e : data.wrongbookCount) != null ? _f : 0;
+                  const streakDays = (_g = data.streak) != null ? _g : 0;
+                  return `\u3010\u5C0F\u9A74\u8003\u8BD5\u3011\u4ECA\u65E5\u5237\u9898: ${todayAnswered} \u9053\uFF0C\u6B63\u786E\u7387: ${accuracy}%\uFF0C\u9519\u9898\u5728\u518C: ${wrongCount} \u9898${streakDays > 0 ? ` (\u8FDE\u7EED ${streakDays} \u5929)` : ""}`;
+                }
+              }
+              return "\uFF08\u6682\u65E0\u8003\u8BD5\u6570\u636E\uFF09";
+            },
+            () => "\uFF08\u672A\u68C0\u6D4B\u5230\u5C0F\u9A74\u8003\u8BD5\uFF09"
+          );
+          output = output.replaceAll("{{xlc:exam:today}}", examSummaryText).replaceAll("{{xlc:exam:stats}}", examSummaryText);
+        }
+        if (output.includes("{{xlc:raikiri:active}}") || output.includes("{{xlc:speedswitch:active}}")) {
+          const raikiriSummaryText = await callBridge(
+            "raikiri",
+            "navigation.context",
+            (bridge) => {
+              if (typeof bridge.getNavigationContext === "function") {
+                const raw = bridge.getNavigationContext();
+                const ctx = (raw == null ? void 0 : raw.data) || raw;
+                if (ctx && ctx.currentDocTitle) {
+                  return `\u5F53\u524D\u6587\u6863\uFF1A${ctx.currentDocTitle} (${ctx.currentDocId || ""})`;
+                }
+              }
+              return "\uFF08\u65E0\u6D3B\u52A8\u5BFC\u822A\u4E0A\u4E0B\u6587\uFF09";
+            },
+            () => "\uFF08\u672A\u68C0\u6D4B\u5230\u5C0F\u9A74\u96F7\u5207\uFF09"
+          );
+          output = output.replaceAll("{{xlc:raikiri:active}}", raikiriSummaryText).replaceAll("{{xlc:speedswitch:active}}", raikiriSummaryText);
+        }
         return output;
       } catch {
         return text;
@@ -40135,7 +44115,7 @@ ${details.join("\n")}` : ""}`;
               ...rendered.cursorOffset !== null ? { cursorOffset: rendered.cursorOffset } : {}
             };
           }
-          const inserted = this.host.insertMarkdown(md, editorTarget);
+          const inserted = this.host.insertMarkdown(md, editorTarget, rendered.cursorOffset);
           if (inserted) {
             this.emitEvent(EVENTS.itemInserted, item, {
               insertMode: plan.mode,
@@ -41812,9 +45792,9 @@ ${details.join("\n")}` : ""}`;
     insertNoEditorBanner: "\u5F53\u524D\u6CA1\u6709\u6D3B\u52A8\u7F16\u8F91\u5668\uFF0C\u4E3B\u64CD\u4F5C\u4F1A\u590D\u5236\u5230\u526A\u8D34\u677F",
     insertCurrentEditorBanner: "\u63D2\u5165\u5230\u6253\u5F00\u5F39\u7A97\u65F6\u7684\u5149\u6807\u4F4D\u7F6E",
     insertTargetUnavailableBanner: "\u539F\u63D2\u5165\u4F4D\u7F6E\u4E0D\u53EF\u7528\uFF0C\u4E3B\u64CD\u4F5C\u4F1A\u590D\u5236\u5230\u526A\u8D34\u677F",
-    insertMobileActionHint: "\u79FB\u52A8\u7AEF\u76F4\u63A5\u63D2\u5165\u5C1A\u672A\u9A8C\u8BC1\uFF0C\u5F53\u524D\u64CD\u4F5C\u4F1A\u590D\u5236\u5230\u526A\u8D34\u677F",
+    insertMobileActionHint: "\u5DF2\u590D\u5236\uFF0C\u53BB\u76EE\u6807\u5E94\u7528\u7C98\u8D34",
     insertFailed: "\u63D2\u5165\u5931\u8D25\uFF0C\u8BF7\u786E\u8BA4\u5F53\u524D\u6587\u6863\u4ECD\u53EF\u7F16\u8F91\u540E\u91CD\u8BD5",
-    insertPendingMobile: "\u79FB\u52A8\u7AEF\u76F4\u63A5\u63D2\u5165\u5F85\u9A8C\u8BC1\uFF0C\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F",
+    insertPendingMobile: "\u5DF2\u590D\u5236\uFF0C\u53BB\u76EE\u6807\u5E94\u7528\u7C98\u8D34",
     sourceOpened: "\u5DF2\u6253\u5F00\u6765\u6E90",
     sourceGone: "\u539F\u5185\u5BB9\u5757\u5DF2\u79FB\u52A8\u6216\u5220\u9664\u3002\u53EF\u7F16\u8F91\u6B64\u6761\u76EE\u5E76\u91CD\u65B0\u6307\u5B9A\u6765\u6E90\u3002",
     deleted: "\u5DF2\u5220\u9664\uFF1A%s",
@@ -42409,7 +46389,13 @@ ${details.join("\n")}` : ""}`;
     globalQuickMini: "\u5168\u5C40\u547C\u51FA\u5E38\u7528\u8BED\u8FF7\u4F60\u6761 (\u8DE8\u5E94\u7528/\u540E\u53F0\u53EF\u7528)",
     globalQuickMiniDone: "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\u5E76\u91CD\u65B0\u9000\u56DE\u540E\u53F0\uFF0C\u53EF\u5728\u5916\u90E8\u8F6F\u4EF6\u4E2D\u76F4\u63A5 Ctrl+V \u7C98\u8D34",
     starterPacksTitle: "\u5F00\u7BB1\u5373\u7528\u5957\u4EF6\u5E02\u573A (Starter Packs Hub)",
-    starterPacksBtn: "\u5F00\u7BB1\u5957\u4EF6"
+    starterPacksBtn: "\u5F00\u7BB1\u5957\u4EF6",
+    clipboardSmartMatchToggle: "\u526A\u8D34\u677F\u667A\u80FD\u5339\u914D\uFF08\u5B9E\u9A8C\u6027\uFF09",
+    clipboardSmartMatchSub: "\u6253\u5F00\u641C\u7D22\u9762\u677F\u65F6\u82E5\u7CFB\u7EDF\u526A\u8D34\u677F\u6587\u672C\u4E0E\u67D0\u7247\u6BB5\u540D\u6216\u5185\u5BB9\u524D\u7F00\u5339\u914D\uFF08\u22654 \u5B57\u7B26\uFF09\uFF0C\u9876\u90E8\u663E\u793A\u4E00\u952E\u66FF\u6362\u6A2A\u5E45\u3002\u6B64\u529F\u80FD\u9700\u8BFB\u53D6\u526A\u8D34\u677F\u6743\u9650\uFF0C\u9ED8\u8BA4\u5173\u95ED\u3002",
+    clipboardSmartMatchBanner: "\u68C0\u6D4B\u5230\u526A\u8D34\u677F\u53EF\u80FD\u5339\u914D\uFF1A\u300C%s\u300D\u2192 \u70B9\u51FB\u4E00\u952E\u66FF\u6362",
+    clipboardSmartMatchDone: "\u2713 \u5DF2\u590D\u5236\u66FF\u6362\u7ED3\u679C",
+    copyComboCount: "\u5DF2\u8FDE\u7EED\u590D\u5236 %s \u6B21\uFF0C\u9700\u8981\u6279\u91CF\u5BFC\u51FA\u5417\uFF1F",
+    enterMultiSelect: "\u8FDB\u5165\u591A\u9009"
   };
 
   // scripts/harness/entry.ts
@@ -43590,6 +47576,20 @@ ${details.join("\n")}` : ""}`;
     completeDeferredTidy() {
       deferredTidyResponse == null ? void 0 : deferredTidyResponse({ ok: true, title: "\u8FDF\u5230\u7684\u65E7\u5EFA\u8BAE", alias: "\u65E7\u522B\u540D", tags: ["\u65E7\u6807\u7B7E"], category: "\u65E7\u5206\u7C7B" });
       deferredTidyResponse = null;
+    },
+    openStarterHub() {
+      void Promise.resolve().then(async () => {
+        const { openStarterPacksHubDialog: openStarterPacksHubDialog2 } = await Promise.resolve().then(() => (init_starter_packs_dialog(), starter_packs_dialog_exports));
+        openStarterPacksHubDialog2({
+          t: T,
+          notify: () => {
+          },
+          importStarterPackDirect: async () => ({ ok: true, count: 6 }),
+          createStarterPackDedicatedDoc: async () => ({ ok: true, count: 6, docId: "20240101120001-hijklmn", hPath: "/\u5E38\u7528\u8D44\u4EA7" }),
+          onImportSuccess: () => {
+          }
+        });
+      });
     }
   };
 })();

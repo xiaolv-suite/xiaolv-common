@@ -2064,6 +2064,9 @@ export function renderPlaceholder(kind: PlaceholderKind, now: Date, doc?: {title
         case "csv": return "";
         case "nanoid": return generateNanoId(10);
         case "password": return generateSecurePassword(14, "complex");
+        // 生态宏类（achievement/home_board/review_card 等）由宏引擎另行渲染，不在此展开；
+        // 兜底空串保证穷尽性（TS2366），新增 kind 未注册渲染器时不产出脏文本
+        default: return "";
     }
 }
 

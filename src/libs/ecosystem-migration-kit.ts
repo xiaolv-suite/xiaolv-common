@@ -222,9 +222,9 @@ export async function scanLegacyAssets(api: SiyuanApiAdapter): Promise<LegacyAss
             else if (attr.includes("reading") || attr.includes("custom-url")) targetPlugin = "siyuan-glean";
             else if (attr.includes("xlc")) targetPlugin = "xiaolv-common";
 
-            if (targetPlugin && plugins[targetPlugin]) {
+            if (targetPlugin) {
                 const p = plugins[targetPlugin];
-                if (!p.docIds.includes(rootId)) {
+                if (p && !p.docIds.includes(rootId)) {
                     p.docIds.push(rootId);
                     p.count += Number(row.cnt) || 1;
                 }

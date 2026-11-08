@@ -3175,6 +3175,14 @@ export class CommonSearchDialog {
         this.virtualListCleanup = null;
         this.virtualEnsureIndex = null;
         list.innerHTML = "";
+        // 空库态独占整宽（R431 截图实证）：空库下右预览栏无条目可预览，只剩大片灰白空白，
+        // 与左侧 330px 空态卡片形成割裂。此时隐藏右栏让空态居中铺满。
+        const bodyWrapEl = list.parentElement;
+        if (bodyWrapEl) {
+            const soloEmpty = this.results.length === 0 && this.providerRows.length === 0
+                && this.emptyMessage === this.deps.t("emptyLibrary");
+            bodyWrapEl.classList.toggle("xlc-body--solo", soloEmpty);
+        }
         // 大空态（无结果且无提供方行；图标 + 主文案 + ? 语义找提示）
         if (this.results.length === 0 && this.providerRows.length === 0 && this.emptyMessage) {
             const empty = document.createElement("div");

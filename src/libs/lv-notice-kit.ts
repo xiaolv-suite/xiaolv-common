@@ -2566,9 +2566,12 @@ function refreshEntryBadgeDot(): void {
 
             // 单插件时动态适配专属名称与操作提示；多插件时保持全家桶统一标题
             if (items.length === 1) {
-                const singleName = items[0].fullName || items[0].name;
-                root.setAttribute("aria-label", `${singleName} · 小驴罗盘`);
-                root.setAttribute("title", `${singleName} (左键直达 · 右键小驴罗盘)`);
+                const single = items[0];
+                if (single) {
+                    const singleName = single.fullName || single.name;
+                    root.setAttribute("aria-label", `${singleName} · 小驴罗盘`);
+                    root.setAttribute("title", `${singleName} (左键直达 · 右键小驴罗盘)`);
+                }
             } else if (items.length > 1) {
                 root.setAttribute("aria-label", "小驴罗盘");
                 root.setAttribute("title", `小驴罗盘 · 全家桶极速直达 (${items.length} 插件已联结 · 快捷键 1~${items.length})`);
@@ -2597,7 +2600,10 @@ function buildMobileEntryButton(): boolean {
         const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
         if (items.length === 1) {
             // 只有 1 个插件时：点击直接穿透触发该插件主功能（零多余层级，极致效率）
-            try { items[0].onClick(); } catch (e) { console.warn("[LvLaunchpad] 移动端单插件直达失败:", e); }
+            const single = items[0];
+            if (single) {
+                try { single.onClick(); } catch (e) { console.warn("[LvLaunchpad] 移动端单插件直达失败:", e); }
+            }
             return;
         }
         openMobileSheet();
@@ -2768,7 +2774,10 @@ function buildMobileBallButton(): boolean {
         hapticFeedback(8);
         const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
         if (items.length === 1) {
-            try { items[0].onClick(); } catch (e) { console.warn("[LvLaunchpad] 悬浮球单插件直达失败:", e); }
+            const single = items[0];
+            if (single) {
+                try { single.onClick(); } catch (e) { console.warn("[LvLaunchpad] 悬浮球单插件直达失败:", e); }
+            }
             scheduleBallIdle(ball, pos);
             return;
         }
@@ -3556,7 +3565,10 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
         if (!isNaN(num) && num >= 1 && num <= items.length) {
             try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
             closeDesktopLaunchpadPopover();
-            try { items[num - 1].onClick(); } catch (err) { console.warn("[LvLaunchpad] 键盘瞬发失败:", err); }
+            const target = items[num - 1];
+            if (target) {
+                try { target.onClick(); } catch (err) { console.warn("[LvLaunchpad] 键盘瞬发失败:", err); }
+            }
             return;
         }
     };
@@ -3628,7 +3640,10 @@ function buildDesktopEntryButton(): boolean {
     btn.addEventListener("click", () => {
         const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
         if (items.length === 1) {
-            try { items[0].onClick(); } catch (err) { console.warn("[LvLaunchpad] 桌面单插件直达失败:", err); }
+            const first = items[0];
+            if (first) {
+                try { first.onClick(); } catch (err) { console.warn("[LvLaunchpad] 桌面单插件直达失败:", err); }
+            }
             return;
         }
         toggleDesktopLaunchpadPopover(btn);

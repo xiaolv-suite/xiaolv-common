@@ -991,6 +991,20 @@
     }
   }
 
+  // 空库独占整宽（R431）：空库大空态下右预览栏无条目可预览，只剩大片灰白空白，
+  // 隐藏右栏让空态卡片居中铺满，避免「左窄卡片 + 右灰白空白」的割裂感。
+  // 注意：tokens-r187 的 :is($roots).xlc-dialog .xlc-list 有 (0,4,0) 的 46% 双栏规则，
+  // 这里用 .xlc-body.xlc-body--solo 抬到同强度并靠后源序取胜，同时复位 flex 基准。
+  .xlc-body.xlc-body--solo {
+    .xlc-pane { display: none; }
+
+    .xlc-list {
+      flex: 1 1 auto;
+      width: 100%;
+      border-right: none;
+    }
+  }
+
   .xlc-row {
     display: flex;
     // 顶对齐（原型屏 1）：星标与标题行齐平，两行内容时右侧不悬空
@@ -2479,6 +2493,17 @@
 }
 
 // ---------- 设置中心快速定位胶囊导航条（胶囊体系贯穿 / 吸顶导航）----------
+// R431 截图实证：滚动容器（.b3-dialog__body）的顶部 padding 会把 sticky 导航条从滚动口
+// 顶边往下顶，导航条上方露出一条缝隙，被滚出的行在缝里半行悬空（视觉上像被标题裁切）。
+// 顶距改由内容根 .xlc-settings 自带，导航条才能贴住滚动口顶边。
+// 覆盖规则须放在下方 form-host padding 规则之后并以同等强度书写，否则被 (0,4,0) 的
+// :has 选择器压掉（调试实证：body computed padding-top 仍为 20px）。
+.xlc-settings { padding-top: var(--xlc-space-5); }
+
+// 导航跳转落点补偿：scrollIntoView 不知道 sticky 导航条的存在，目标章节标题会被导航条盖住；
+// --xlc-nav-h 由导航胶囊条点击时按实际吸顶高度写入，未写入前回退到双行胶囊的安全值。
+.xlc-settings [id^="xlc-settings-"] { scroll-margin-top: var(--xlc-nav-h, 96px); }
+
 .xlc-settings-nav-bar {
   position: sticky;
   top: 0;
@@ -3601,6 +3626,14 @@
       min-width: 0;
     }
   }
+}
+
+// R431 截图实证：设置面板 sticky 导航条被滚动容器顶部 padding 顶离滚动口顶边，
+// 上方缝隙里被滚出的行半行悬空（像被标题裁切）。这里以同等选择器强度、靠后源序
+// 压掉上方 form-host 的 padding-top（顶部间距已由 .xlc-settings 根自带）。
+.b3-dialog__container.xlc-form-host.xlc-settings-root-host .b3-dialog__body,
+.b3-dialog__container:has(> .b3-dialog__body > .xlc-settings) .b3-dialog__body {
+  padding-top: 0;
 }
 
 // ---------- 剪贴板转正常用微弹窗宿主 (.xlc-promote-clip-host) ----------

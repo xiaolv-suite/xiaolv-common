@@ -12,6 +12,9 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    // r421 等测试以 node 原生 require 加载 .ts 源文件，import 必须带 .ts 扩展名（node CJS 不解析无扩展名 .ts）
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "allowJs": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,

@@ -86,6 +86,8 @@ export function openStarterPacksHubDialog(deps: StarterPacksHubDeps): Dialog {
         content: "",
         width: "min(720px, 94vw)",
     });
+    // 令牌作用域（R431）：不加 host 类时 --xlc-* 全部失效，容器 padding 塌陷、关闭按钮贴出边缘
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host");
 
     mountPlatformDialogTitleWrap(dialog.element, deps.t("starterPacksTitle") || "开箱即用套件市场 (Starter Packs Hub)");
 

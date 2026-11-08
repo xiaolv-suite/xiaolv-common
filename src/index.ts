@@ -99,6 +99,8 @@ export default class XiaolvCommonPlugin extends Plugin {
     private config!: LibraryConfig | null;
     private searchDialog: CommonSearchDialog | null = null;
     private saveTimer: ReturnType<typeof setTimeout> | null = null;
+    /** 顶栏罗盘挂载元素（launchpad 注册与徽标探测共用，T-0820 顶栏收敛） */
+    private topBarElement: HTMLElement | null = null;
     private sidecarReady = false;
     /** Future or unreadable sidecar data must survive this older runtime unchanged. */
     private sidecarStateWritable = false;

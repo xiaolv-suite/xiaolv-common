@@ -18,7 +18,7 @@ import {PROMPT_PACK_MD, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_MD, CALLOUT_PAC
 import type {SavedDiscoveryScope, SavedDiscoveryView} from "../model/storage";
 import {openCsvTsvImportWizard} from "./csv-tsv-wizard";
 import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doctor";
-import {calculateUsageInsights, calculateHeatmap, buildDailyUsageMap, type UsageItemMeta} from "../model/usage-insights";
+import {calculateUsageInsights, calculateHeatmap, buildDailyUsageMap, filterKnownTopItems, type UsageItemMeta} from "../model/usage-insights";
 import {detectEcosystem} from "../service/ecosystem";
 import {lvEcosystem} from "../libs/lv-notice-kit";
 import {openSanitizerOptionsDialog} from "./export-sanitizer-modal";
@@ -194,6 +194,9 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
             pill.setAttribute("aria-selected", "true");
             const el = root.querySelector<HTMLElement>(`#${tab.id}`);
             if (el) {
+                // sticky 导航条跳转落点补偿（R431）：按实际吸顶高度写入 scroll-margin，
+                // 否则目标章节标题会被导航条盖住
+                root.style.setProperty("--xlc-nav-h", `${navBar.offsetHeight + 8}px`);
                 el.scrollIntoView({behavior: "smooth", block: "start"});
             }
         });
@@ -941,8 +944,11 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
         );
         insightsBox.appendChild(grid);
 
-        // 高频资产 Top 榜单直达（G52）
-        if (insights.topItems && insights.topItems.length > 0) {
+        // 高频资产 Top 榜单直达（G52）；R431：过滤已从库中删除的幽灵条目，
+        // 避免榜单露出裸块 ID（xlc-xxxx）且点击复制静默失败
+        const knownItemIds = new Set(items.map((it) => it.id));
+        const visibleTopItems = filterKnownTopItems(insights.topItems, knownItemIds);
+        if (visibleTopItems.length > 0) {
             const topSec = document.createElement("div");
             topSec.className = "xlc-insights-top";
             topSec.style.cssText = "margin-top:10px; display:flex; flex-direction:column; gap:6px;";
@@ -954,7 +960,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
             const pillsWrap = document.createElement("div");
             pillsWrap.style.cssText = "display:flex; flex-wrap:wrap; gap:6px;";
 
-            for (const [idx, item] of insights.topItems.slice(0, 5).entries()) {
+            for (const [idx, item] of visibleTopItems.slice(0, 5).entries()) {
                 const pill = document.createElement("button");
                 pill.type = "button";
                 pill.className = "xlc-quick-pill";
@@ -996,7 +1002,9 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
 
         const heatmapTitle = document.createElement("span");
         heatmapTitle.className = "xlc-heatmap-title";
-        heatmapTitle.textContent = `📅 近 30 天资产复用活跃度（累计 ${heatmap.totalCalls30Days} 次 · 活跃 ${heatmap.activeDays} 天）：`;
+        // 「窗口内」措辞（R431）：此计数只统计 30 天窗口，与上方「累计调用」的全期口径不同，
+        // 旧称「累计」会让历史使用（窗口外）用户误读为数据矛盾
+        heatmapTitle.textContent = `📅 近 30 天资产复用活跃度（窗口内 ${heatmap.totalCalls30Days} 次 · 活跃 ${heatmap.activeDays} 天）：`;
         heatmapHead.appendChild(heatmapTitle);
 
         const heatmapGrid = document.createElement("div");

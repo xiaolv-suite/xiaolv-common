@@ -843,4 +843,17 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
         deferredTidyResponse?.({ok: true, title: "迟到的旧建议", alias: "旧别名", tags: ["旧标签"], category: "旧分类"});
         deferredTidyResponse = null;
     },
+    openStarterHub(): void {
+        // 套件市场弹窗（UI 复现用）：生产 openStarterPacksHubDialog + 假数据依赖
+        void Promise.resolve().then(async () => {
+            const {openStarterPacksHubDialog} = await import("../../src/ui/starter-packs-dialog");
+            openStarterPacksHubDialog({
+                t: T,
+                notify: () => {},
+                importStarterPackDirect: async () => ({ok: true, count: 6}),
+                createStarterPackDedicatedDoc: async () => ({ok: true, count: 6, docId: "20240101120001-hijklmn", hPath: "/常用资产"}),
+                onImportSuccess: () => {},
+            });
+        });
+    },
 };

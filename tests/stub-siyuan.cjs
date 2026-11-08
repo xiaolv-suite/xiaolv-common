@@ -38,7 +38,17 @@ module.exports = {
                     return res;
                 },
             };
-            const containerEl = { classList: { add: () => {} }, style: {}, children: [bodyEl] };
+            const containerClasses = new Set();
+            const containerEl = {
+                classList: {
+                    add: (...cls) => { cls.forEach((c) => containerClasses.add(c)); },
+                    remove: (...cls) => { cls.forEach((c) => containerClasses.delete(c)); },
+                    contains: (c) => containerClasses.has(c),
+                },
+                _classes: containerClasses,
+                style: {},
+                children: [bodyEl],
+            };
             const headerEl = { querySelector: () => ({ appendChild: () => {}, textContent: "" }) };
             this.element = {
                 querySelector: (sel) => {
