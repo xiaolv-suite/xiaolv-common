@@ -1756,6 +1756,43 @@ function check(name, ok, detail = "") {
             miniModeActive && pillActive && expandedAgain && restoredStandard,
             JSON.stringify({miniState, miniModeActive, pillActive, expandedAgain, restoredStandard}));
 
+        // ══════════ 第 25 步：高频资产 Top 榜幽灵条目过滤（R431 第 5 项真机验收） ══════════
+        // 构造幽灵场景：真删一个有使用记录（usage>0）的条目，侧车 usage 残留而索引无此条目，
+        // 打开设置后 Top 榜必须过滤幽灵——不露出裸块 ID（xlc-xxxx），区块可整体隐藏
+        const ghostState = await page.evaluate(async () => {
+            const p = window.siyuan.ws.app.plugins.find((x) => x.name === "xiaolv-common");
+            const idx = await p.library.ensureIndex(0);
+            const ghostEntry = Object.entries(p.state.usage ?? {})
+                .find(([id, u]) => (u.count || 0) > 0 && idx.items.has(id));
+            if (!ghostEntry) return {skipped: true, reason: "no used item"};
+            const [ghostId] = ghostEntry;
+            const delRes = await p.library.removeItem(ghostId);
+            await new Promise((r) => setTimeout(r, 400));
+            // 打开设置面板（当前面板处于标准双栏模式）
+            const gear = document.querySelector(".xlc-footer-gear");
+            gear?.click();
+            await new Promise((r) => setTimeout(r, 1200));
+            // 等待洞察区渲染（paintInsights 异步 ensureIndex）
+            let pills = [];
+            for (let i = 0; i < 10; i++) {
+                pills = Array.from(document.querySelectorAll(".xlc-insights-top .xlc-quick-pill"));
+                if (pills.length > 0 || document.querySelector(".xlc-heatmap-title")) break;
+                await new Promise((r) => setTimeout(r, 300));
+            }
+            const rawIdPills = pills.filter((b) => /^xlc-[a-z0-9]{10,}$/i.test(((b.textContent ?? "").replace(/^#\d+\s*/, "").replace(/\s*\(\d+次\)$/, "")).trim()));
+            return {
+                skipped: false,
+                deleted: delRes.ok,
+                ghostId,
+                pillCount: pills.length,
+                pillTexts: pills.map((b) => (b.textContent ?? "").trim()).slice(0, 5),
+                noRawIdPills: rawIdPills.length === 0,
+            };
+        });
+        check("步骤 25：高频资产 Top 榜过滤幽灵条目（删除已用条目后不露裸块 ID）",
+            ghostState.skipped === true || (ghostState.deleted && ghostState.noRawIdPills),
+            JSON.stringify(ghostState));
+
         cleanup();
         const pass = results.filter((r) => r.ok).length;
         const fail = results.length - pass;
