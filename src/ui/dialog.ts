@@ -6,7 +6,7 @@
 // AI：? 前缀语义找条目（默认仅元数据出域）；动作菜单 AI 变换（预览后选插入，原文永不被改写）。
 import {Dialog} from "siyuan";
 import {lvEcosystem, lvLaunchpad, lvNotify, lvSurfaceStack} from "../libs/lv-notice-kit";
-import {getDialogBody, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations, extractCleanPayload} from "../model/item";
 import {ItemSortMode} from "../model/storage";
 import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
@@ -248,6 +248,8 @@ export class CommonSearchDialog {
     /** 大结果集只保留视口附近的行；窗口回调由 renderList 安装并在销毁/重绘时清理。 */
     private virtualListCleanup: (() => void) | null = null;
     private virtualEnsureIndex: ((index: number) => void) | null = null;
+    private visualViewportCleanup: (() => void) | null = null;
+    private syncMobileFilterToggleRef: (() => void) | null = null;
     private updateHistoryBarRef: (() => void) | null = null;
     private syncQueueChipRef: (() => void) | null = null;
     private compactBundleCandidate: ExportBundle | null = null;
@@ -322,7 +324,7 @@ export class CommonSearchDialog {
             content: "",
             // 桌面采用宽松密度，减少截断并让双栏预览一次展示更多内容；移动端仍由 sheet 占满视口。
             width: isMobile ? "100vw" : "min(960px, 94vw)",
-            height: isMobile ? "100vh" : "min(820px, 92vh)",
+            height: isMobile ? "100dvh" : "min(820px, 92vh)",
             destroyCallback: () => {
                 this.destroy();
                 this.dialog = null;
@@ -345,8 +347,9 @@ export class CommonSearchDialog {
                 if (changed) void this.refresh();
             });
         }
-        const container = this.dialog.element.querySelector(".b3-dialog__container");
+        const container = this.dialog.element.querySelector<HTMLElement>(".b3-dialog__container");
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
+        this.bindMobileVisualViewport(isMobile, container, content);
         mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"));
         this.syncScopeChips();
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
@@ -359,14 +362,105 @@ export class CommonSearchDialog {
                     this.currentScope = "all";
                 }
                 input.dispatchEvent(new Event("input", {bubbles: true}));
-                if (initial) {
+                if (initial && !isMobile) {
                     // 若是由划选文本带入，全选以便用户可直接回车确认或敲键覆盖
                     input.select();
                 }
             }
-            input.focus();
+            if (!isMobile) {
+                input.focus();
+            }
         }
         void this.refresh();
+    }
+
+    /**
+     * 绑定移动端 visualViewport 软键盘自适应监听：
+     * 实时同步容器 --xlc-vv-h，并在软键盘弹起或输入框获焦时标记 data-keyboard-open="true"；
+     * 弹窗销毁时完整移除全部监听，严防泄漏。
+     */
+    private bindMobileVisualViewport(isMobile: boolean, container: HTMLElement | null, root: HTMLElement): void {
+        this.visualViewportCleanup?.();
+        this.visualViewportCleanup = null;
+        if (!isMobile || typeof window === "undefined") return;
+
+        const vv = window.visualViewport ?? null;
+        let lastWidth = window.innerWidth || 0;
+        let baseHeight = Math.max(window.innerHeight || 0, vv?.height || 0);
+        let blurSettleTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const syncViewport = (): void => {
+            const curWinW = window.innerWidth || 0;
+            const curWinH = window.innerHeight || 0;
+            const vvHeight = vv && vv.height > 0 ? vv.height : curWinH;
+            if (Math.abs(curWinW - lastWidth) > 80) {
+                lastWidth = curWinW;
+                baseHeight = Math.max(curWinH, vvHeight);
+            } else if (Math.max(curWinH, vvHeight) > baseHeight) {
+                baseHeight = Math.max(curWinH, vvHeight);
+            }
+            if (container && container.style && typeof container.style.setProperty === "function" && vvHeight > 0) {
+                container.style.setProperty("--xlc-vv-h", `${Math.round(vvHeight)}px`);
+            }
+            const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+            const activeTag = activeEl ? activeEl.tagName : "";
+            const isInputFocused = Boolean(
+                activeEl
+                && typeof root.contains === "function"
+                && root.contains(activeEl)
+                && (activeTag === "INPUT" || activeTag === "TEXTAREA")
+            );
+            const shrunkVsWindow = curWinH > 0 && vvHeight > 0 && vvHeight < curWinH * 0.78;
+            const shrunkVsBase = baseHeight > 540 && vvHeight > 0 && vvHeight < baseHeight * 0.78;
+            const keyboardOpen = shrunkVsWindow || shrunkVsBase || isInputFocused;
+            if (keyboardOpen) {
+                root.dataset.keyboardOpen = "true";
+            } else {
+                delete root.dataset.keyboardOpen;
+            }
+        };
+
+        const onFocusChange = (): void => {
+            if (blurSettleTimer) {
+                clearTimeout(blurSettleTimer);
+                blurSettleTimer = null;
+            }
+            blurSettleTimer = setTimeout(() => {
+                blurSettleTimer = null;
+                syncViewport();
+            }, 30);
+        };
+
+        syncViewport();
+        if (vv && typeof vv.addEventListener === "function") {
+            vv.addEventListener("resize", syncViewport);
+            vv.addEventListener("scroll", syncViewport);
+        }
+        if (typeof window.addEventListener === "function") {
+            window.addEventListener("resize", syncViewport);
+        }
+        if (typeof root.addEventListener === "function") {
+            root.addEventListener("focusin", syncViewport);
+            root.addEventListener("focusout", onFocusChange);
+        }
+
+        this.visualViewportCleanup = () => {
+            if (blurSettleTimer) {
+                clearTimeout(blurSettleTimer);
+                blurSettleTimer = null;
+            }
+            if (vv && typeof vv.removeEventListener === "function") {
+                vv.removeEventListener("resize", syncViewport);
+                vv.removeEventListener("scroll", syncViewport);
+            }
+            if (typeof window.removeEventListener === "function") {
+                window.removeEventListener("resize", syncViewport);
+            }
+            if (typeof root.removeEventListener === "function") {
+                root.removeEventListener("focusin", syncViewport);
+                root.removeEventListener("focusout", onFocusChange);
+            }
+        };
     }
 
     public focusInput(): void {
@@ -564,6 +658,19 @@ export class CommonSearchDialog {
         search.appendChild(clearBtn);
 
         if (isMobile) {
+            const mobileNewBtn = document.createElement("button");
+            mobileNewBtn.type = "button";
+            mobileNewBtn.className = "xlc-mobile-new-btn";
+            mobileNewBtn.dataset.xlcControl = "search.mobile.new";
+            mobileNewBtn.textContent = "＋";
+            mobileNewBtn.title = this.deps.t("newItem");
+            mobileNewBtn.setAttribute("aria-label", this.deps.t("newItem"));
+            mobileNewBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.deps.newItem();
+            });
+            search.appendChild(mobileNewBtn);
+
             // 审计 1: 消除 Esc-only 隐患，手机端提供可见 ✕ 关闭按钮
             const mobileCloseBtn = document.createElement("button");
             mobileCloseBtn.type = "button";
@@ -887,6 +994,7 @@ export class CommonSearchDialog {
                 tag: tagSelect?.value ?? "",
                 category: categorySelect?.value ?? "",
             });
+            this.syncMobileFilterToggleRef?.();
             void this.refresh();
         });
         filters.appendChild(typeSelect);
@@ -902,6 +1010,7 @@ export class CommonSearchDialog {
                 tag: tagSelect.value,
                 category: categorySelect?.value ?? "",
             });
+            this.syncMobileFilterToggleRef?.();
             void this.refresh();
         });
         filters.appendChild(tagSelect);
@@ -914,6 +1023,7 @@ export class CommonSearchDialog {
         categorySelect.disabled = true;
         categorySelect.addEventListener("change", () => {
             this.deps.setFilters({type: typeSelect.value, tag: tagSelect.value, category: categorySelect.value});
+            this.syncMobileFilterToggleRef?.();
             void this.refresh();
         });
         filters.appendChild(categorySelect);
@@ -1026,6 +1136,7 @@ export class CommonSearchDialog {
             sortChip.setAttribute("aria-label", `${this.deps.t("sort")}：${this.deps.t(`sort.${sort}`)}。${this.deps.t(`sortHint.${sort}`)}`);
             // 非默认档高亮（原型屏 1：⇅常用 为选中态）
             sortChip.classList.toggle("xlc-chip--on", sort !== "manual");
+            this.syncMobileFilterToggleRef?.();
         };
         paintSort();
         sortChip.addEventListener("click", () => {
@@ -1034,6 +1145,40 @@ export class CommonSearchDialog {
             this.showSortMenu(paintSort);
         });
         filters.appendChild(sortChip);
+
+        if (isMobile) {
+            const filterToggleBtn = document.createElement("button");
+            filterToggleBtn.type = "button";
+            filterToggleBtn.className = "xlc-chip xlc-mobile-filter-toggle";
+            filterToggleBtn.dataset.xlcControl = "filter.mobile.toggle";
+            const syncMobileFilterToggle = (): void => {
+                const f = this.deps.getFilters();
+                const activeCount = (f.type ? 1 : 0)
+                    + (f.tag ? 1 : 0)
+                    + (f.category ? 1 : 0)
+                    + (this.deps.getSort() !== "manual" ? 1 : 0);
+                const isOpen = root.dataset.mobileFiltersOpen === "true";
+                filterToggleBtn.textContent = activeCount > 0 ? `筛选 (${activeCount})` : "筛选";
+                filterToggleBtn.classList.toggle("xlc-chip--on", isOpen || activeCount > 0);
+                filterToggleBtn.setAttribute("aria-expanded", String(isOpen));
+                filterToggleBtn.setAttribute(
+                    "aria-label",
+                    activeCount > 0 ? `筛选（已激活 ${activeCount} 项）` : "展开或收起筛选条件",
+                );
+            };
+            filterToggleBtn.addEventListener("click", () => {
+                const nextOpen = root.dataset.mobileFiltersOpen !== "true";
+                if (nextOpen) {
+                    root.dataset.mobileFiltersOpen = "true";
+                } else {
+                    delete root.dataset.mobileFiltersOpen;
+                }
+                syncMobileFilterToggle();
+            });
+            this.syncMobileFilterToggleRef = syncMobileFilterToggle;
+            syncMobileFilterToggle();
+            filters.appendChild(filterToggleBtn);
+        }
         // 定向插入模式横幅（R116）：文档树入口进入时明示落点，防止误以为插入当前编辑器
         if (this.insertTarget) {
             const targetBanner = document.createElement("span");
@@ -1411,14 +1556,16 @@ export class CommonSearchDialog {
 
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
     private openUsageGuide(): void {
+        const isMobileModal = isMobileDialogViewport();
         const guideDialog = new Dialog({
             title: this.deps.t("usageGuideTitle"),
             content: "",
-            width: "min(600px, 92vw)",
-            height: "min(680px, 88vh)",
+            width: isMobileModal ? "100vw" : "min(600px, 92vw)",
+            height: isMobileModal ? "100dvh" : "min(680px, 88vh)",
         });
         mountPlatformDialogTitleWrap(guideDialog.element, this.deps.t("usageGuideTitle"));
         guideDialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+        adaptSecondaryDialogForMobile(guideDialog, this.deps.t("close"));
         const body = getDialogBody(guideDialog.element);
         if (!body) return;
         body.innerHTML = "";
@@ -1898,6 +2045,7 @@ export class CommonSearchDialog {
         if (changed) {
             this.deps.setFilters({type: current.type, tag: nextTag, category: nextCategory});
         }
+        this.syncMobileFilterToggleRef?.();
 
         // 渲染热门标签快捷筛选胶囊
         const quickPillsHost = this.dialog?.element.querySelector<HTMLElement>(".xlc-quick-filter-pills");
@@ -2058,6 +2206,7 @@ export class CommonSearchDialog {
     private async refresh(): Promise<void> {
         const seq = ++this.searchSeq;
         this.accessIssueMessage = null;
+        this.syncMobileFilterToggleRef?.();
         const query = this.buildQuery();
         // 命中高亮快照（renderList 用；AI 语义找结果不高亮——匹配依据是语义而非字面）
         this.lastQueryText = query.text.trim();
@@ -8353,6 +8502,9 @@ export class CommonSearchDialog {
         this.virtualListCleanup?.();
         this.virtualListCleanup = null;
         this.virtualEnsureIndex = null;
+        this.visualViewportCleanup?.();
+        this.visualViewportCleanup = null;
+        this.syncMobileFilterToggleRef = null;
         this.longPressCancel?.();
         this.longPressCancel = null;
         this.dropCleanup?.();

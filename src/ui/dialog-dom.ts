@@ -1,5 +1,87 @@
+import * as siyuan from "siyuan";
 import {Dialog} from "siyuan";
 import {PLUGIN_DISPLAY_VERSION} from "../constants";
+import {isMobileFrontend} from "../libs/lv-notice-kit";
+
+/**
+ * 判定当前弹窗是否运行于移动端或窄屏（<=640px）视口环境。
+ */
+export function isMobileDialogViewport(): boolean {
+    try {
+        const getFn = (siyuan as unknown as {getFrontend?: () => string}).getFrontend;
+        if (typeof getFn === "function") {
+            const frontend = getFn();
+            if (frontend === "mobile" || frontend === "browser-mobile") return true;
+        }
+    } catch {
+        // ignore
+    }
+    if (isMobileFrontend()) return true;
+    try {
+        const winMobile = typeof window !== "undefined"
+            ? (window as unknown as {siyuan?: {mobile?: unknown}}).siyuan?.mobile
+            : undefined;
+        if (winMobile === true || (typeof winMobile === "object" && winMobile !== null)) return true;
+    } catch {
+        // ignore
+    }
+    try {
+        if (typeof document !== "undefined" && document.body?.classList?.contains?.("body--mobile")) return true;
+        if (typeof window !== "undefined" && typeof window.innerWidth === "number" && window.innerWidth > 0 && window.innerWidth <= 640) {
+            return true;
+        }
+    } catch {
+        // ignore
+    }
+    return false;
+}
+
+/**
+ * 为次级弹窗（设置、捕获、提示、向导等）适配手机端视口约束与顶栏 44x44px 可见 ✕ 关闭按钮。
+ */
+export function adaptSecondaryDialogForMobile(
+    dialog: Dialog,
+    closeLabel = "关闭",
+    onClose?: () => void,
+): void {
+    const dialogEl = dialog?.element as HTMLElement | undefined;
+    if (!dialogEl || typeof dialogEl.querySelector !== "function") return;
+    const container = dialogEl.querySelector(".b3-dialog__container") as HTMLElement | null;
+    const isMobile = isMobileDialogViewport();
+    if (container && isMobile) {
+        container.classList?.add?.("xlc-mobile-modal");
+        if (container.style) {
+            container.style.maxWidth = "100vw";
+            container.style.maxHeight = "100dvh";
+        }
+    }
+    const header = dialogEl.querySelector(".b3-dialog__header") as HTMLElement | null;
+    if (!header || typeof header.appendChild !== "function" || typeof document === "undefined" || typeof document.createElement !== "function") {
+        return;
+    }
+    const existingClose = typeof header.querySelector === "function"
+        ? header.querySelector(".xlc-dialog-close-btn")
+        : null;
+    if (existingClose && (existingClose as {className?: string}).className?.includes?.("xlc-dialog-close-btn")) {
+        return;
+    }
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "xlc-dialog-close-btn";
+    closeBtn.dataset.xlcControl = "dialog.mobile.close";
+    closeBtn.textContent = "✕";
+    closeBtn.title = closeLabel;
+    closeBtn.setAttribute("aria-label", closeLabel);
+    closeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (onClose) {
+            onClose();
+        } else {
+            dialog.destroy();
+        }
+    });
+    header.appendChild(closeBtn);
+}
 
 /**
  * SiYuan 弹窗内容容器兼容层（R142 P0）。
@@ -81,10 +163,11 @@ export interface TextPromptDialogOptions {
  * 替代在 Electron 宿主中被禁用的 window.prompt()，提供无障碍、支持 Enter/Esc 的单字段输入弹窗。
  */
 export function openTextPromptDialog(options: TextPromptDialogOptions): Dialog {
+    const isMobile = isMobileDialogViewport();
     const dialog = new Dialog({
         title: options.title,
         content: "",
-        width: "min(440px, 92vw)",
+        width: isMobile ? "100vw" : "min(440px, 92vw)",
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
     dialog.element.addEventListener("click", (e) => {
@@ -93,6 +176,7 @@ export function openTextPromptDialog(options: TextPromptDialogOptions): Dialog {
         }
     });
     mountPlatformDialogTitleWrap(dialog.element, options.title);
+    adaptSecondaryDialogForMobile(dialog, options.cancelText || "关闭");
     const body = getDialogBody(dialog.element);
     if (!body) {
         dialog.destroy();
@@ -153,10 +237,11 @@ export function openTextPromptDialog(options: TextPromptDialogOptions): Dialog {
  * 替代阻塞式的 window.alert()，以非阻塞宿主弹窗展示统计或提示信息。
  */
 export function openInfoDialog(title: string, lines: string[], closeText = "关闭"): Dialog {
+    const isMobile = isMobileDialogViewport();
     const dialog = new Dialog({
         title,
         content: "",
-        width: "min(400px, 92vw)",
+        width: isMobile ? "100vw" : "min(400px, 92vw)",
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
     dialog.element.addEventListener("click", (e) => {
@@ -165,6 +250,7 @@ export function openInfoDialog(title: string, lines: string[], closeText = "关�
         }
     });
     mountPlatformDialogTitleWrap(dialog.element, title);
+    adaptSecondaryDialogForMobile(dialog, closeText);
     const body = getDialogBody(dialog.element);
     if (!body) {
         dialog.destroy();

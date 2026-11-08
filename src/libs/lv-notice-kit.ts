@@ -107,7 +107,7 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 176; // 1.7.6 (Phase 9: SiYuan 3.8.x native topbar entry citizenship · #barMore anchored compass · closeguard Esc yield · zIndex lift · mute expiry cleanup)
+const PROTOCOL_VERSION = 177; // 1.7.7 (Phase 10: Mobile Fullscreen Modal Ball Suppression · Dynamic Sheet Z-Index · Early Mobile Frontend Detection)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
 const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
@@ -594,7 +594,7 @@ body.dark {
 #lv-launchpad-sheet-mask {
     position: fixed;
     inset: 0;
-    z-index: 980;
+    z-index: 1080;
     background: rgba(0, 0, 0, 0.36);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
@@ -2501,10 +2501,14 @@ const MOBILE_ENTRY_ID = "lvLaunchpadMobileEntry";
 const DESKTOP_ENTRY_ID = "lvLaunchpadDesktopEntry";
 const MOBILE_SHEET_ID = "lv-launchpad-sheet-mask";
 
-/** 思源移动端检测：手机宿主渲染 #mobileTopBar；UA 兜底覆盖 browser-mobile 场景 */
+/** 思源移动端检测：手机宿主渲染 #mobileTopBar 或挂载 window.siyuan.mobile 对象；UA 兜底覆盖 browser-mobile 场景 */
 export function isMobileFrontend(): boolean {
     if (typeof document === "undefined") return false;
     if (document.getElementById("mobileTopBar")) return true;
+    try {
+        const syMobile = (globalThis as { siyuan?: { mobile?: unknown } }).siyuan?.mobile;
+        if (syMobile === true || (typeof syMobile === "object" && syMobile !== null)) return true;
+    } catch { /* ignore */ }
     if (typeof navigator === "undefined") return false;
     const ua = navigator.userAgent || "";
     if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
@@ -2823,6 +2827,7 @@ function buildMobileBallButton(): boolean {
     refreshEntryBadgeDot();
     scheduleBallIdle(ball, pos);
     wireViewportWatch();
+    recomputeBallSuppression();
     return true;
 }
 
@@ -3796,12 +3801,36 @@ function ensureDesktopEntry(): MobileEntryCleanup {
     };
 }
 
-/* ===== 与思源原生移动端的冲突避让：原生对话框打开 / 文本输入聚焦（键盘弹起）时隐藏悬浮球 ===== */
+/* ===== 与思源原生移动端的冲突避让：原生/插件全屏对话框打开 / 文本输入聚焦（键盘弹起）时隐藏悬浮球 ===== */
 
 let ballDialogObserver: MutationObserver | undefined;
+let ballDialogDebounceTimer: number | undefined;
 let ballFocusHandler: ((ev: FocusEvent) => void) | undefined;
+let ballBlurHandler: (() => void) | undefined;
 let ballDialogOpen = false;
 let ballInputFocused = false;
+
+const MOBILE_OVERLAY_SELECTOR = [
+    ".b3-dialog--open",
+    ".b3-dialog--container",
+    ".b3-dialog__container",
+    "#lv-launchpad-sheet-mask:not(.lv-sheet-closing)",
+    ".lvct-dialog-mask",
+    ".lvct-sheet",
+    ".sw__mobile-sheet-overlay",
+    ".sw__mobile-sort-overlay",
+    ".lv-peek-drawer",
+].join(", ");
+
+function isOverlayElementVisible(el: Element): boolean {
+    const htmlEl = el as HTMLElement;
+    if (htmlEl.hidden === true) return false;
+    if (htmlEl.classList && typeof htmlEl.classList.contains === "function" && htmlEl.classList.contains("fn__none")) {
+        return false;
+    }
+    if (htmlEl.style && htmlEl.style.display === "none") return false;
+    return true;
+}
 
 function updateBallSuppression(): void {
     if (typeof document === "undefined") return;
@@ -3809,12 +3838,24 @@ function updateBallSuppression(): void {
     if (ball) ball.classList.toggle("lv-ball-suppressed", ballDialogOpen || ballInputFocused);
 }
 
-/** 依据实时状态重算抑制：对话框开合 + 当前焦点元素（不依赖 focusout——焦点元素被移除时 Chromium 不派发 focusout） */
+/** 依据实时状态重算抑制：对话框/自绘抽屉开合 + 当前焦点元素（不单靠 focusout——焦点元素被移除时 Chromium 不派发 focusout） */
 function recomputeBallSuppression(): void {
+    if (typeof document === "undefined") return;
     let open = false;
     try {
-        // 桌面宿主 Dialog 为 .b3-dialog--container（双横线），手机宿主为 .b3-dialog__container（双下划线）
-        open = Boolean(document.querySelector(".b3-dialog--container, .b3-dialog__container"));
+        if (typeof document.querySelectorAll === "function") {
+            const matches = document.querySelectorAll(MOBILE_OVERLAY_SELECTOR);
+            for (let i = 0; i < matches.length; i++) {
+                const candidate = matches[i];
+                if (candidate && isOverlayElementVisible(candidate)) {
+                    open = true;
+                    break;
+                }
+            }
+        } else if (typeof document.querySelector === "function") {
+            const first = document.querySelector(MOBILE_OVERLAY_SELECTOR);
+            open = Boolean(first && isOverlayElementVisible(first));
+        }
     } catch { /* ignore */ }
     if (open !== ballDialogOpen) ballDialogOpen = open;
     const el = document.activeElement as HTMLElement | null;
@@ -3826,25 +3867,58 @@ function recomputeBallSuppression(): void {
 
 function wireMobileSuppression(): void {
     if (ballDialogObserver || typeof document === "undefined") return;
-    // 原生/插件 Dialog 覆盖层出现时让位（body 直挂子级探测，不做深层 subtree 扫描，开销恒定）
+    // 原生/插件 Dialog 与全屏抽屉覆盖层出现、复用显隐切换时自动让位（50ms 防抖合并）
     if (typeof MutationObserver === "function") {
-        ballDialogObserver = new MutationObserver(() => recomputeBallSuppression());
-        try { ballDialogObserver.observe(document.body, { childList: true }); } catch { /* ignore */ }
+        ballDialogObserver = new MutationObserver(() => {
+            if (ballDialogDebounceTimer !== undefined) return;
+            const schedule = typeof window !== "undefined" && typeof window.setTimeout === "function" ? window.setTimeout : setTimeout;
+            ballDialogDebounceTimer = Number(schedule(() => {
+                ballDialogDebounceTimer = undefined;
+                recomputeBallSuppression();
+            }, 50));
+        });
+        try {
+            ballDialogObserver.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ["class", "style", "hidden"],
+            });
+        } catch { /* ignore */ }
     }
-    // 键盘弹起（任意文本输入聚焦）时隐藏，避免悬浮球压在软键盘/输入法面板上
+    // 键盘弹起/收起（文本输入聚焦与失焦）时实时重算，避免悬浮球压在软键盘/输入法面板上
     if (typeof document.addEventListener === "function") {
         ballFocusHandler = () => recomputeBallSuppression();
+        ballBlurHandler = () => {
+            const schedule = typeof window !== "undefined" && typeof window.setTimeout === "function" ? window.setTimeout : setTimeout;
+            schedule(() => recomputeBallSuppression(), 40);
+        };
         document.addEventListener("focusin", ballFocusHandler, true);
+        document.addEventListener("focusout", ballBlurHandler, true);
     }
+    recomputeBallSuppression();
 }
 
 function unwireMobileSuppression(): void {
+    if (ballDialogDebounceTimer !== undefined) {
+        try {
+            if (typeof window !== "undefined" && typeof window.clearTimeout === "function") window.clearTimeout(ballDialogDebounceTimer);
+            else clearTimeout(ballDialogDebounceTimer);
+        } catch { /* ignore */ }
+        ballDialogDebounceTimer = undefined;
+    }
     try { ballDialogObserver?.disconnect(); } catch { /* ignore */ }
     ballDialogObserver = undefined;
-    if (ballFocusHandler && typeof document !== "undefined" && typeof document.removeEventListener === "function") {
-        try { document.removeEventListener("focusin", ballFocusHandler, true); } catch { /* ignore */ }
+    if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+        if (ballFocusHandler) {
+            try { document.removeEventListener("focusin", ballFocusHandler, true); } catch { /* ignore */ }
+        }
+        if (ballBlurHandler) {
+            try { document.removeEventListener("focusout", ballBlurHandler, true); } catch { /* ignore */ }
+        }
     }
     ballFocusHandler = undefined;
+    ballBlurHandler = undefined;
     ballDialogOpen = false;
     ballInputFocused = false;
 }
@@ -4468,7 +4542,13 @@ function openMobileSheet(): void {
         lvSurfaceStack.push({ id: "lv-launchpad-mobile-sheet", dismiss: () => { closeMobileSheet(); return true; } });
     } catch { /* 焦点栈不可用不阻断 */ }
 
+    // 动态层级：确保移动端罗盘弹射坞永远高于任何插件自建悬浮球与宿主递增 zIndex
+    try {
+        const currentZ = typeof window !== "undefined" && (window as unknown as { siyuan?: { zIndex?: number } }).siyuan?.zIndex;
+        mask.style.zIndex = String(typeof currentZ === "number" ? Math.max(1080, currentZ + 30) : 1080);
+    } catch { /* ignore */ }
     document.body.appendChild(mask);
+    recomputeBallSuppression();
     // 键盘循环（零依赖内联版 focus-trap）：Tab 在坞内循环，不外逸到底层文档
     mask.addEventListener("keydown", (ev) => {
         const kev = ev as KeyboardEvent;

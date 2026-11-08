@@ -11,7 +11,7 @@ import {CommonItem, extractCleanPayload} from "../model/item";
 import {LibraryService, SourceHealth} from "./library";
 import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown, writeRichClipboard} from "../model/clipboard";
 import {callBridge} from "../ecosystem-bridge-kit";
-import {lvActivity, withDocLock} from "../libs/lv-notice-kit";
+import {isMobileFrontend, lvActivity, withDocLock} from "../libs/lv-notice-kit";
 import {aiSmartExpandTemplate} from "./ai";
 
 /** 占位符应用钩子：由入口注入（读设置 + 当前时间 + 当前文档 + 剪贴板）；未注入则原样保留 */
@@ -119,6 +119,41 @@ export function setCaretAtOffset(container: Node, targetOffset: number): boolean
     return false;
 }
 
+/**
+ * 统一移动端宿主判定：优先结合思源官方 getFrontend()（"mobile" | "browser-mobile"）
+ * 与生态标准库 isMobileFrontend()，同时兼容思源 3.8.x window.siyuan.mobile 对象形态、
+ * #mobileTopBar 节点以及 body--mobile 类名；桌面单测环境保持返回 false。
+ */
+export function detectMobileHost(): boolean {
+    try {
+        const getFn = (siyuan as unknown as {getFrontend?: () => string}).getFrontend;
+        if (typeof getFn === "function") {
+            const frontend = getFn();
+            if (frontend === "mobile" || frontend === "browser-mobile") return true;
+        }
+    } catch {
+        // ignore
+    }
+    if (isMobileFrontend()) return true;
+    try {
+        const winMobile = typeof window !== "undefined"
+            ? (window as unknown as {siyuan?: {mobile?: unknown}}).siyuan?.mobile
+            : undefined;
+        if (winMobile === true || (typeof winMobile === "object" && winMobile !== null)) return true;
+    } catch {
+        // ignore
+    }
+    try {
+        if (typeof document !== "undefined") {
+            if (typeof document.getElementById === "function" && document.getElementById("mobileTopBar")) return true;
+            if (document.body?.classList?.contains?.("body--mobile")) return true;
+        }
+    } catch {
+        // ignore
+    }
+    return false;
+}
+
 export class HostBridge implements IHostBridge {
     private lastActiveEditor: Protyle | null = null;
 
@@ -155,7 +190,7 @@ export class HostBridge implements IHostBridge {
     }
 
     isMobile(): boolean {
-        return (window.siyuan?.mobile as unknown) === true || document.body.classList.contains("body--mobile");
+        return detectMobileHost();
     }
 
     hasActiveEditor(): boolean {

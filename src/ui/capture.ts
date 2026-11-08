@@ -1,7 +1,7 @@
 // 捕获流程：选区/当前块 → 新条目表单（类型推断 + 元数据一步完成）。
 // 剪贴板读取失败（权限/平台）诚实回执，保留手动输入。
 import {Dialog, confirm} from "siyuan";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {ItemType, cleanShortcode, extractKramdownNativeTags, isSafeHttpUrl, parseSnippetAnnotations} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {NewItemInput} from "../service/library";
@@ -447,11 +447,12 @@ export class CaptureDialog {
         const formWriteKey = newWriteKey("form");
         let tidySeq = 0;
         let draftSeq = 0;
+        const isMobileModal = isMobileDialogViewport();
         const dialog = new Dialog({
             title: t("newItem"),
             content: "",
-            width: "min(620px, 92vw)",
-            height: "min(860px, 92vh)",
+            width: isMobileModal ? "100vw" : "min(620px, 92vw)",
+            height: isMobileModal ? "100dvh" : "min(860px, 92vh)",
             destroyCallback: () => {
                 if (!savedSuccessfully && contentElRef) {
                     const draftVal = contentElRef.value.trim();
@@ -482,6 +483,7 @@ export class CaptureDialog {
         const container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
         container?.classList.add("xlc-form-host");
         mountPlatformDialogTitleWrap(dialog.element, t("newItem"));
+        adaptSecondaryDialogForMobile(dialog, t("close"));
 
         // 移动端虚拟键盘避让（动态计算高度偏移，防遮挡操作区）
         const handleViewport = () => {

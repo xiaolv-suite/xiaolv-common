@@ -2,6 +2,7 @@
 // 真实宿主行为不在单测里冒充（验收走真实思源 E2E）。
 "use strict";
 module.exports = {
+    getFrontend: () => "desktop",
     getActiveEditor: () => null,
     openTab: () => {},
     Dialog: class {

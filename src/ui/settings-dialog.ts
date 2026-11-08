@@ -1,7 +1,7 @@
 // 设置界面（自 index.ts 拆出，R19）：首次引导 / 完整设置 / 库选择器 / AI / 搜索 / 数据区 / 标签体检 / 导入策略。
 // 依赖经 SettingsUiContext 注入（不持有插件实例）；状态对象按引用共享，落盘由 persistSoon 节流。
 import {Dialog, confirm} from "siyuan";
-import {getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {CONFIG_VERSION, LibraryConfig, PluginState, summarizeUsage} from "../model/storage";
 import {LIMITS} from "../constants";
 import {validateImport, ConflictPolicy, ImportIssue, ImportReceipt, ExportedItem} from "../model/transfer";
@@ -114,15 +114,17 @@ export function openSetupDialog(ctx: SettingsUiContext, opts?: SetupDialogOption
     }
     activeSetupDialog = null;
     const t = ctx.t;
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("setupTitle"),
         content: "",
-        width: "min(680px, 92vw)",
-        height: "min(820px, 92vh)", // 首次快速开始卡需要留出阅读空间，长屏仍保持视口内滚动（R175）
+        width: isMobileModal ? "100vw" : "min(680px, 92vw)",
+        height: isMobileModal ? "100dvh" : "min(820px, 92vh)", // 首次快速开始卡需要留出阅读空间，长屏仍保持视口内滚动（R175）
     });
     activeSetupDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-setup-root-host");
     mountPlatformDialogTitleWrap(dialog.element, t("setupTitle"));
+    adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -143,15 +145,17 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     }
     activeSettingsDialog = null;
     const t = ctx.t;
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("openSettings"),
         content: "",
-        width: "min(720px, 92vw)",
-        height: "min(860px, 92vh)", // 固定高：展开/收起/提示行显隐不再顶跳弹窗（R146）
+        width: isMobileModal ? "100vw" : "min(720px, 92vw)",
+        height: isMobileModal ? "100dvh" : "min(860px, 92vh)", // 固定高：展开/收起/提示行显隐不再顶跳弹窗（R146）
     });
     activeSettingsDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
     mountPlatformDialogTitleWrap(dialog.element, t("openSettings"));
+    adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -354,14 +358,16 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     const categories = Array.from(new Set(all.map((i) => i.category).filter(Boolean)))
         .sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
 
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("packExportTitle"),
         content: "",
-        width: "min(580px, 92vw)",
-        height: "min(680px, 90vh)", // 固定高：分类切换不顶跳（R146）
+        width: isMobileModal ? "100vw" : "min(580px, 92vw)",
+        height: isMobileModal ? "100dvh" : "min(680px, 90vh)", // 固定高：分类切换不顶跳（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("packExportTitle"));
+    adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";
@@ -3336,15 +3342,17 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
 /** Espanso 配置导入（G2/R164）：粘贴 match YAML → 解析预览（条数+问题清单）→ 复用导入策略管道落库。 */
 function openEspansoImportDialog(ctx: SettingsUiContext, onClose?: () => void): void {
     const t = ctx.t;
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("espansoTitle"),
         content: "",
-        width: "min(680px, 92vw)",
-        height: "min(680px, 86vh)",
+        width: isMobileModal ? "100vw" : "min(680px, 92vw)",
+        height: isMobileModal ? "100dvh" : "min(680px, 86vh)",
     });
     const container = dialog.element.querySelector(".b3-dialog__container");
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("espansoTitle"));
+    adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
     if (!body) {
         onClose?.();
@@ -3511,14 +3519,16 @@ async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown"> {
     } catch (err) {
         throw new Error(ctx.aiErrorText(err));
     }
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("tagAuditTitle"),
         content: "",
-        width: "min(620px, 92vw)",
-        height: "min(600px, 84vh)", // 固定高：建议清单增长不顶跳（R146）
+        width: isMobileModal ? "100vw" : "min(620px, 92vw)",
+        height: isMobileModal ? "100dvh" : "min(600px, 84vh)", // 固定高：建议清单增长不顶跳（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("tagAuditTitle"));
+    adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
     if (!body) throw new Error(t("kernelError", "无法打开体检结果"));
     body.innerHTML = "";
@@ -3568,14 +3578,16 @@ export function openImportPolicyDialog(
     source: {kind: "json"; text: string} | {kind: "markdown-pack"; items: ExportedItem[]} | {kind: "espanso"; items: ExportedItem[]} | {kind: "csv-tsv"; items: ExportedItem[]},
 ): void {
     const t = ctx.t;
+    const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("importPolicyTitle"),
         content: "",
-        width: "min(540px, 92vw)",
-        height: "min(640px, 86vh)", // 固定高：策略卡片高度稳定（R146）
+        width: isMobileModal ? "100vw" : "min(540px, 92vw)",
+        height: isMobileModal ? "100dvh" : "min(640px, 86vh)", // 固定高：策略卡片高度稳定（R146）
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("importPolicyTitle"));
+    adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
     if (!body) return;
     body.innerHTML = "";

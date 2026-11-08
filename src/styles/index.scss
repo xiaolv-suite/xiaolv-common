@@ -4069,39 +4069,172 @@
 
 .b3-dialog__container.xlc-sheet {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   top: 0 !important;
   width: 100vw !important;
-  height: 100vh !important;
-  height: 100dvh !important;
   max-width: 100vw !important;
+  height: 100vh !important;
+  height: var(--xlc-vv-h, 100dvh) !important;
   max-height: 100vh !important;
-  max-height: 100dvh !important;
-  border-radius: 0;
+  max-height: var(--xlc-vv-h, 100dvh) !important;
+  border-radius: 0 !important;
+  border: 0 !important;
   margin: 0 !important;
+  padding: 0 !important;
   transform: none !important;
-  padding-top: max(0px, env(safe-area-inset-top, 0px));
-  padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
-  padding-left: max(0px, env(safe-area-inset-left, 0px));
-  padding-right: max(0px, env(safe-area-inset-right, 0px));
+  display: flex !important;
+  flex-direction: column !important;
   box-sizing: border-box;
 
+  .b3-dialog__header,
+  > .b3-dialog__close {
+    display: none !important;
+  }
+
   .b3-dialog__content, .b3-dialog__body {
-    padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-3);
+    padding: 0 !important;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+  }
+}
+
+.xlc-dialog-close-btn {
+  display: none;
+}
+
+.b3-dialog__container.xlc-mobile-modal {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  max-height: 100dvh !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+
+  > .b3-dialog__close {
+    display: none !important;
+  }
+
+  .b3-dialog__header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xlc-space-2);
+    padding: max(var(--xlc-space-2), env(safe-area-inset-top, 0px)) var(--xlc-space-2) var(--xlc-space-2) var(--xlc-space-4) !important;
+    flex-shrink: 0;
+
+    .b3-dialog__title {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .xlc-dialog-close-btn {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 44px !important;
+      width: 44px !important;
+      height: 44px !important;
+      min-width: 44px !important;
+      min-height: 44px !important;
+      box-sizing: border-box;
+      padding: 0;
+      border: none;
+      border-radius: var(--xlc-radius-circle);
+      background: transparent;
+      color: var(--b3-theme-on-surface);
+      font-size: var(--xlc-font-lg);
+      cursor: pointer;
+      touch-action: manipulation;
+
+      &:active {
+        background: var(--b3-theme-surface-lighter);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
+  }
+
+  .b3-dialog__body,
+  .b3-dialog__content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 640px) {
+  .b3-dialog__container.xlc-form-host,
+  .b3-dialog__container.xlc-varform-host {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    box-sizing: border-box;
+
+    > .b3-dialog__close {
+      display: none !important;
+    }
+
+    .b3-dialog__body,
+    .b3-dialog__content {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  .b3-dialog__container.xlc-form-host:not(.xlc-discovery-host) .b3-dialog__header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xlc-space-2);
+    padding: max(var(--xlc-space-2), env(safe-area-inset-top, 0px)) var(--xlc-space-2) var(--xlc-space-2) var(--xlc-space-4) !important;
+    flex-shrink: 0;
+
+    .b3-dialog__title {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .xlc-dialog-close-btn {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 44px !important;
+      width: 44px !important;
+      height: 44px !important;
+      min-width: 44px !important;
+      min-height: 44px !important;
+      box-sizing: border-box;
+      padding: 0;
+      border: none;
+      border-radius: var(--xlc-radius-circle);
+      background: transparent;
+      color: var(--b3-theme-on-surface);
+      font-size: var(--xlc-font-lg);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
   }
 }
 
 // 普通表单在窄屏继续保留可触控的左右边距；内容区滚动时边缘不再贴屏。
 @media (max-width: 620px) {
   // R200：tokens-r187 的作用域选择器包含多个根类，优先级高于普通 sheet 规则，
-  // 会让移动端标题/内容区回退到桌面宽松内边距。这里使用同等级作用域覆盖，
-  // 把首屏空间还给搜索与结果列表；仍保留安全区和触控命中尺寸。
-  :is(.b3-dialog__container.xlc-sheet, .xlc-dialog).b3-dialog__container {
+  // 这里使用同等级作用域覆盖，手机 sheet 隐藏宿主 header 并将 body 内边距归零。
+  :is(.xlc-dialog).b3-dialog__container:not(.xlc-sheet) {
     .b3-dialog__header {
       padding: var(--xlc-space-2) var(--xlc-space-4) var(--xlc-space-1);
       font-size: var(--xlc-font-xl);
@@ -4116,63 +4249,65 @@
 
   // 同理，tokens-r187 的 .xlc-dialog 规则会覆盖移动端紧凑间距。
   :is(.xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-sheet).xlc-dialog.xlc-dialog--mobile {
-    gap: var(--xlc-space-2);
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    gap: 6px;
+    padding-top: env(safe-area-inset-top, 0px);
 
     .xlc-top,
-    .xlc-top-main { gap: var(--xlc-space-2); }
+    .xlc-top-main { gap: 4px; }
 
-    .xlc-search-hint {
-      margin-top: var(--xlc-space-0-5);
-      font-size: var(--xlc-font-xs);
-      line-height: var(--xlc-line-control);
-    }
-
+    .xlc-search-hint,
     .xlc-target-banner {
-      min-height: 32px;
-      padding: var(--xlc-space-1) var(--xlc-space-2);
-      font-size: var(--xlc-font-xs);
-      line-height: var(--xlc-line-control);
+      display: none !important;
     }
 
     .xlc-filters { gap: var(--xlc-space-1); }
 
     .xlc-footer {
-      padding-top: var(--xlc-space-1);
-      padding-bottom: calc(var(--xlc-space-3) + env(safe-area-inset-bottom, 0px));
-      padding-left: max(var(--xlc-space-2), env(safe-area-inset-left, 0px));
-      padding-right: max(var(--xlc-space-2), env(safe-area-inset-right, 0px));
-      gap: var(--xlc-space-1) var(--xlc-space-2);
-      row-gap: var(--xlc-space-1);
+      padding-top: 2px;
+      padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+      padding-left: max(var(--xlc-space-1), env(safe-area-inset-left, 0px));
+      padding-right: max(var(--xlc-space-1), env(safe-area-inset-right, 0px));
+      gap: 6px;
+      flex-wrap: nowrap;
     }
   }
 
-  // 移动端标题栏压缩为单行任务头，把首屏留给搜索与结果。
   .b3-dialog__container.xlc-sheet {
-    height: 100vh;
-    height: 100dvh;
-    max-height: 100dvh;
-    padding-top: max(0px, env(safe-area-inset-top, 0px));
-    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
-    padding-left: max(0px, env(safe-area-inset-left, 0px));
-    padding-right: max(0px, env(safe-area-inset-right, 0px));
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    height: var(--xlc-vv-h, 100dvh) !important;
+    max-height: var(--xlc-vv-h, 100dvh) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
     box-sizing: border-box;
 
-    .b3-dialog__header {
-      padding: max(var(--xlc-space-2), env(safe-area-inset-top, 0px)) max(var(--xlc-space-4), env(safe-area-inset-right, 0px)) var(--xlc-space-1) max(var(--xlc-space-4), env(safe-area-inset-left, 0px));
-      font-size: var(--xlc-font-xl);
-      line-height: var(--xlc-line-heading);
+    .b3-dialog__header,
+    > .b3-dialog__close {
+      display: none !important;
     }
 
     .b3-dialog__body,
     .b3-dialog__content {
-      padding: var(--xlc-space-2) max(var(--xlc-space-3), env(safe-area-inset-right, 0px)) var(--xlc-space-1) max(var(--xlc-space-3), env(safe-area-inset-left, 0px));
+      padding: 0 !important;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
   }
 
   .b3-dialog__container.xlc-form-host {
+    width: 100vw !important;
+    max-width: 100vw !important;
     height: 100vh;
     height: 100dvh;
-    max-height: 100dvh;
+    max-height: 100dvh !important;
     padding-top: max(0px, env(safe-area-inset-top, 0px));
     padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
     padding-left: max(0px, env(safe-area-inset-left, 0px));
@@ -4270,19 +4405,28 @@
 
 // ---------- 移动端：底部 sheet（触控优先；行 = 圆角卡片，原型屏4）----------
 .xlc-dialog--mobile {
-  gap: var(--xlc-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   height: 100%;
-  height: 100dvh;
-  max-height: 100dvh;
+  max-height: 100%;
+  min-height: 0;
   box-sizing: border-box;
-  padding: max(var(--xlc-space-1), env(safe-area-inset-top, 0px)) max(var(--xlc-space-1), env(safe-area-inset-right, 0px)) 0 max(var(--xlc-space-1), env(safe-area-inset-left, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: max(var(--xlc-space-2), env(safe-area-inset-right, 0px));
+  padding-bottom: 0;
+  padding-left: max(var(--xlc-space-2), env(safe-area-inset-left, 0px));
   touch-action: manipulation;
 
-  .xlc-top { gap: var(--xlc-space-2); }
-  .xlc-top-main { gap: var(--xlc-space-2); }
-  .xlc-search-block { min-width: 0; }
+  .xlc-top {
+    padding-top: 4px;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+  .xlc-top-main { gap: 4px; width: 100%; }
+  .xlc-search-block { min-width: 0; width: 100%; }
 
-  // 手机端隐藏仅桌面功能入口：宏配置、密度切换、固定窗口、迷你条、套件市场等
+  // 手机端隐藏仅桌面功能入口及冗余静态提示，释放首屏列表纵向空间
   .xlc-kbdrow,
   .xlc-search-pin,
   .xlc-search-density-btn,
@@ -4290,7 +4434,10 @@
   .xlc-mini-drag-bar,
   .xlc-footer-starter-packs,
   .xlc-footer-stepguide,
-  .xlc-row-action-tray {
+  .xlc-row-action-tray,
+  .xlc-search-hint,
+  .xlc-target-banner,
+  .xlc-fab-new {
     display: none !important;
   }
 
@@ -4298,11 +4445,11 @@
   .xlc-top-chips-row {
     display: flex;
     align-items: center;
-    gap: var(--xlc-space-2);
+    gap: var(--xlc-space-1);
     overflow-x: auto;
     overflow-y: hidden;
-    padding: var(--xlc-space-1) var(--xlc-space-0);
-    margin-bottom: var(--xlc-space-1);
+    padding: 4px var(--xlc-space-0) 0;
+    margin-bottom: 0;
     scrollbar-width: none;
     touch-action: manipulation;
     -webkit-overflow-scrolling: touch;
@@ -4312,15 +4459,15 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      height: 38px;
-      min-height: 38px;
-      max-width: 150px;
-      padding: 0 var(--xlc-space-3);
-      border-radius: 19px;
+      height: 30px;
+      min-height: 30px;
+      max-width: 140px;
+      padding: 0 var(--xlc-space-2);
+      border-radius: var(--xlc-radius-pill);
       border: 1px solid var(--b3-theme-primary-light);
       background: var(--b3-theme-surface);
       color: var(--b3-theme-on-surface);
-      font-size: var(--xlc-font-sm);
+      font-size: var(--xlc-font-xs);
       white-space: nowrap;
       text-overflow: ellipsis;
       overflow: hidden;
@@ -4354,15 +4501,20 @@
   }
 
   .xlc-search {
-    height: 44px;
+    height: 46px;
+    min-height: 46px;
+    padding: 0 2px 0 var(--xlc-space-3);
+    gap: 4px;
 
+    .xlc-mobile-new-btn,
     .xlc-mobile-close-btn {
-      width: 38px;
-      height: 38px;
-      min-width: 38px;
-      min-height: 38px;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0;
       border: none;
-      border-radius: 50%;
+      border-radius: var(--xlc-radius-circle);
       background: transparent;
       color: var(--b3-theme-on-surface);
       font-size: var(--xlc-font-lg);
@@ -4371,12 +4523,22 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      margin-left: 2px;
       flex-shrink: 0;
 
       &:active {
         background: var(--b3-theme-surface-lighter);
       }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
+
+    .xlc-mobile-new-btn {
+      color: var(--b3-theme-primary);
+      font-size: var(--xlc-font-xl);
+      font-weight: var(--xlc-weight-semibold);
     }
   }
 
@@ -4506,66 +4668,128 @@
     }
   }
 
-  // 语义搜索提示在窄屏完整保留入口和前置条件，最多显示两行。
-  .xlc-search-hint {
-    white-space: normal;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
   // 移动端搜索输入 16px：低于该值 iOS 聚焦时整页缩放（R109）
   .xlc-search-input { font-size: 16px; }
 
-  // 说明保留为一行短提示；完整解释从“使用帮助”进入，首屏优先展示结果。
-  .xlc-search-hint {
-    display: block;
-    max-height: var(--xlc-line-control);
-    margin-top: var(--xlc-space-0-5);
-    font-size: var(--xlc-font-xs);
-    line-height: var(--xlc-line-control);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .xlc-target-banner {
-    min-height: 32px;
-    padding: var(--xlc-space-1) var(--xlc-space-2);
-    font-size: var(--xlc-font-xs);
-    line-height: var(--xlc-line-control);
-  }
-
-  // 触控命中：清空 × 与筛选下拉提至 24/32px（18/26px 低于指尖标准，R106）
+  // 触控命中：清空 × 提至 28px
   .xlc-search-clear {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     font-size: var(--xlc-font-lg);
   }
 
+  // 默认折叠 3 个下拉与排序芯片，仅展示单行横向滚动作用域胶囊栏 + 右侧紧凑「筛选」切换钮
   .xlc-filters {
-    gap: var(--xlc-space-1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
     flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: var(--xlc-space-0-5);
-    scrollbar-width: none;
-    &::-webkit-scrollbar { display: none; }
-    > * { flex: 0 0 auto; }
-  }
-  .xlc-filters .b3-select { height: 36px; min-height: 36px; max-width: none; font-size: var(--xlc-font-sm); }
+    overflow: hidden;
+    padding: 0;
 
-  .xlc-chip { min-height: 36px; font-size: var(--xlc-font-sm); padding-left: var(--xlc-space-2); padding-right: var(--xlc-space-2); }
+    .xlc-segmented-track {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 36px;
+      min-height: 36px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex-wrap: nowrap;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      &::-webkit-scrollbar { display: none; }
+
+      .xlc-scope-chip {
+        height: 30px;
+        min-height: 30px;
+        flex-shrink: 0;
+        padding: 0 10px;
+        font-size: var(--xlc-font-xs);
+      }
+    }
+
+    .xlc-mobile-filter-toggle {
+      flex: 0 0 auto;
+      height: 36px;
+      min-height: 36px;
+      padding: 0 10px;
+      font-size: var(--xlc-font-xs);
+      touch-action: manipulation;
+    }
+
+    .b3-select {
+      height: 34px;
+      min-height: 34px;
+      max-width: none;
+      font-size: var(--xlc-font-xs);
+    }
+  }
+
+  .xlc-chip {
+    min-height: 34px;
+    font-size: var(--xlc-font-xs);
+    padding-left: var(--xlc-space-2);
+    padding-right: var(--xlc-space-2);
+  }
+
+  &:not([data-mobile-filters-open="true"]) {
+    .xlc-type-select,
+    .xlc-tag-select,
+    .xlc-category-select,
+    .xlc-sort-chip,
+    .xlc-quick-filter-pills {
+      display: none !important;
+    }
+  }
+
+  &[data-mobile-filters-open="true"] {
+    .xlc-filters {
+      flex-wrap: wrap;
+      overflow: visible;
+
+      .xlc-segmented-track {
+        flex: 1 1 calc(100% - 88px);
+        order: 1;
+      }
+
+      .xlc-mobile-filter-toggle {
+        order: 2;
+      }
+
+      .xlc-type-select,
+      .xlc-tag-select,
+      .xlc-category-select,
+      .xlc-sort-chip,
+      .xlc-clip-format-pills,
+      .xlc-queue-chip,
+      .xlc-ai-banner {
+        order: 3;
+      }
+
+      .b3-select {
+        flex: 1 1 auto;
+        min-width: 88px;
+      }
+    }
+  }
 
   .xlc-body {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
     border: none;
     background: transparent;
-    min-height: 240px;
   }
 
   .xlc-list {
+    flex: 1 1 auto;
+    min-height: 0;
     width: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     border: none;
     border-radius: var(--xlc-radius-none);
     background: transparent;
@@ -4636,19 +4860,31 @@
   }
 
   .xlc-footer {
+    flex: 0 0 auto;
     border-top: none;
-    padding-top: var(--xlc-space-1);
-    padding-bottom: calc(var(--xlc-space-3) + env(safe-area-inset-bottom, 0px));
-    padding-left: max(var(--xlc-space-2), env(safe-area-inset-left, 0px));
-    padding-right: max(var(--xlc-space-2), env(safe-area-inset-right, 0px));
-    gap: var(--xlc-space-1) var(--xlc-space-2);
-    flex-wrap: wrap;
-    row-gap: var(--xlc-space-1);
+    padding-top: 2px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(var(--xlc-space-1), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--xlc-space-1), env(safe-area-inset-right, 0px));
+    gap: 6px;
+    flex-wrap: nowrap;
+    align-items: center;
     font-size: var(--xlc-font-xs);
     box-sizing: border-box;
 
-    .xlc-footer-claim { display: none; }
-    :is(.xlc-footer-guide, .xlc-footer-gear) { min-height: 38px; padding: var(--xlc-space-1) var(--xlc-space-2); font-size: var(--xlc-font-xs); touch-action: manipulation; }
+    .xlc-footer-claim,
+    .xlc-footer-count {
+      display: none !important;
+    }
+
+    :is(.xlc-footer-guide, .xlc-footer-gear) {
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 0 var(--xlc-space-2);
+      font-size: var(--xlc-font-xs);
+      white-space: nowrap;
+      touch-action: manipulation;
+    }
   }
 
   .xlc-empty { padding: var(--xlc-space-6) var(--xlc-space-3); gap: var(--xlc-space-1); }
@@ -4656,18 +4892,52 @@
   // 操作钮行（触控目标 ≥52px，规范 4；在 iPhone 手势条上方留足安全边距防遮挡）
   .xlc-mobile-foot {
     display: flex;
-    gap: var(--xlc-space-2);
-    width: 100%;
-    padding-bottom: max(var(--xlc-space-1), env(safe-area-inset-bottom, 0px));
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 6px;
+    width: auto;
+    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
     box-sizing: border-box;
 
     .b3-button {
-      flex: 1;
+      flex: 1 1 0;
+      min-width: 0;
       min-height: 52px;
       height: 52px;
+      padding: 0 var(--xlc-space-2);
       border-radius: var(--xlc-radius);
-      font-size: var(--xlc-font-md);
+      font-size: var(--xlc-font-sm);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       touch-action: manipulation;
+    }
+  }
+
+  // 软键盘弹起态或极低视口下自动收起底栏、高频直达条与历史条，全力保障列表可视高度 >= 220px
+  &[data-keyboard-open="true"] {
+    padding-bottom: 4px;
+
+    .xlc-footer,
+    .xlc-mobile-foot,
+    .xlc-top-chips-row,
+    .xlc-search-history-bar,
+    .xlc-mobile-breadcrumbs,
+    .xlc-quick-filter-pills {
+      display: none !important;
+    }
+  }
+
+  @media (max-height: 500px) {
+    padding-bottom: 4px;
+
+    .xlc-footer,
+    .xlc-mobile-foot,
+    .xlc-top-chips-row,
+    .xlc-search-history-bar,
+    .xlc-mobile-breadcrumbs,
+    .xlc-quick-filter-pills {
+      display: none !important;
     }
   }
 }

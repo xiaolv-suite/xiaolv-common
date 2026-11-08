@@ -123,3 +123,69 @@ test("Mobile Polish: 跨应用剪贴板保真度契约 (Markdown 表格与代码
     assert.ok(codeHtml.includes("data-language=\"ts\""), "必须保留语言元属性");
 });
 
+test("Mobile Fix: HostBridge.isMobile 兼容思源 3.8.x window.siyuan.mobile 对象与 #mobileTopBar，桌面单测保持 false", () => {
+    const { HostBridge, detectMobileHost } = entry.commands;
+    const bridge = new HostBridge({}, {});
+    const prevWin = globalThis.window;
+    const prevDoc = globalThis.document;
+    const prevSy = globalThis.siyuan;
+    try {
+        delete globalThis.siyuan;
+        globalThis.window = {};
+        globalThis.document = {
+            getElementById: () => null,
+            body: { classList: { contains: () => false } },
+        };
+        assert.equal(bridge.isMobile(), false, "桌面单测环境下 isMobile() 必须返回 false");
+        assert.equal(detectMobileHost(), false);
+
+        // 思源 3.8.x 真机形态：window.siyuan.mobile 为非空对象而非布尔 true
+        globalThis.window = { siyuan: { mobile: { editor: {} } } };
+        assert.equal(bridge.isMobile(), true, "window.siyuan.mobile 为对象时必须返回 true");
+
+        // #mobileTopBar 节点存在时返回 true
+        globalThis.window = {};
+        globalThis.document = {
+            getElementById: (id) => (id === "mobileTopBar" ? {} : null),
+            body: { classList: { contains: () => false } },
+        };
+        assert.equal(bridge.isMobile(), true, "存在 #mobileTopBar 时必须返回 true");
+
+        // body--mobile 类名存在时返回 true
+        globalThis.document = {
+            getElementById: () => null,
+            body: { classList: { contains: (cls) => cls === "body--mobile" } },
+        };
+        assert.equal(bridge.isMobile(), true, "存在 body--mobile 时必须返回 true");
+    } finally {
+        if (prevWin === undefined) delete globalThis.window; else globalThis.window = prevWin;
+        if (prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+        if (prevSy === undefined) delete globalThis.siyuan; else globalThis.siyuan = prevSy;
+    }
+});
+
+test("Mobile Fix: 双顶栏消除、visualViewport 软键盘监听清理、筛选折叠与 44x44 关闭按钮契约", () => {
+    const scss = fs.readFileSync(path.join(__dirname, "../src/styles/index.scss"), "utf8");
+    const dialogSrc = fs.readFileSync(path.join(__dirname, "../src/ui/dialog.ts"), "utf8");
+    const dialogDomSrc = fs.readFileSync(path.join(__dirname, "../src/ui/dialog-dom.ts"), "utf8");
+
+    // 1) .xlc-sheet 隐藏原生 .b3-dialog__header，绑定 --xlc-vv-h，body 零内边距
+    assert.match(scss, /\.b3-dialog__container\.xlc-sheet[\s\S]*?--xlc-vv-h,\s*100dvh/);
+    assert.match(scss, /\.b3-dialog__container\.xlc-sheet[\s\S]*?\.b3-dialog__header[\s\S]*?display:\s*none\s*!important/);
+
+    // 2) visualViewport 绑定与移除监听 + data-keyboard-open 软键盘减负
+    assert.ok(dialogSrc.includes("addEventListener(\"resize\", syncViewport)") && dialogSrc.includes("removeEventListener(\"resize\", syncViewport)"));
+    assert.ok(dialogSrc.includes("addEventListener(\"scroll\", syncViewport)") && dialogSrc.includes("removeEventListener(\"scroll\", syncViewport)"));
+    assert.ok(dialogSrc.includes("dataset.keyboardOpen = \"true\""));
+    assert.ok(scss.includes("[data-keyboard-open=\"true\"]"));
+
+    // 3) 筛选器默认折叠 + .xlc-mobile-filter-toggle 展开 data-mobile-filters-open="true"
+    assert.ok(dialogSrc.includes("xlc-mobile-filter-toggle") && dialogSrc.includes("dataset.mobileFiltersOpen = \"true\""));
+    assert.ok(scss.includes("data-mobile-filters-open=\"true\""));
+
+    // 4) 44x44 关闭按钮与次级弹窗移动端关闭按钮
+    assert.match(scss, /\.xlc-mobile-close-btn\s*\{[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px;/);
+    assert.ok(dialogDomSrc.includes("adaptSecondaryDialogForMobile") && scss.includes(".xlc-dialog-close-btn"));
+});
+
+
