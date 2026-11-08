@@ -1040,19 +1040,29 @@ const check = (name, ok, detail = "") => {
         const btn = document.querySelector(".xlc-mobile-insert");
         const row = document.querySelector(".xlc-list .xlc-row[data-xlc-index='1']");
         row?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+        const rowText = (row?.querySelector(".xlc-row-summary")?.textContent ?? row?.querySelector(".xlc-row-titletext")?.textContent ?? "");
         return {
             sheet: Boolean(sheet),
             copyFallback: (btn?.textContent ?? "").includes("复制"),
             selectedRow: row?.getAttribute("aria-current") === "true" && row.classList.contains("xlc-row--active"),
             buttonAvailable: Boolean(btn && !btn.disabled),
+            copied: ((window).__xlcCopied ?? "").slice(0, 24),
+            rowText: rowText.slice(0, 24),
+            copiedMatchesRow: ((window).__xlcCopied ?? "").length > 0 && rowText.includes(((window).__xlcCopied ?? "").slice(0, 10)),
         };
     });
-    const actionsAfterMobileSelection = await page.evaluate(() => (window.__xlcActions ?? []).length);
-    check("J1 移动端点按只选择条目，不提前执行复制", mobile.sheet && mobile.selectedRow && mobile.buttonAvailable && mobile.copyFallback && actionsAfterMobileSelection === actionsBeforeMobileSelection, JSON.stringify(mobile));
+    // T-0829 契约（R432 对齐）：移动端点按条目 = 选中 + 立即复制（copyText），不再经 runAction
+    check("J1 移动端点按选中条目并立即复制（T-0829 点按即复制契约）", mobile.sheet && mobile.selectedRow && mobile.buttonAvailable && mobile.copyFallback && mobile.copiedMatchesRow, JSON.stringify(mobile));
+    await page.evaluate(() => { delete (window).__xlcCopied; });
     await page.locator("[data-xlc-control='preview.mobile-primary']").click();
-    await sleep(100);
-    const mobileSelectedAction = await page.evaluate(() => window.__xlcActions?.at(-1));
-    check("J2 移动端底栏主按钮执行当前选中条目", mobileSelectedAction?.id === "xlc-demo0000003" && mobileSelectedAction.mode === "copy", JSON.stringify(mobileSelectedAction));
+    await sleep(150);
+    const mobileSelectedCopy = await page.evaluate(() => {
+        const row = document.querySelector(".xlc-list .xlc-row[data-xlc-index='1']");
+        const rowText = (row?.querySelector(".xlc-row-summary")?.textContent ?? row?.querySelector(".xlc-row-titletext")?.textContent ?? "");
+        const copied = (window).__xlcCopied ?? "";
+        return {copied: copied.slice(0, 24), rowText: rowText.slice(0, 24), matched: copied.length > 0 && rowText.includes(copied.slice(0, 10))};
+    });
+    check("J2 移动端底栏主按钮复制当前选中条目", mobileSelectedCopy.matched, JSON.stringify(mobileSelectedCopy));
 
     await open({mobile: true, empty: true, query: "不存在的条目"});
     await sleep(200);
