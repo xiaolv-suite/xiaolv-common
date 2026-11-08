@@ -107,7 +107,7 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 177; // 1.7.7 (Phase 10: Mobile Fullscreen Modal Ball Suppression · Dynamic Sheet Z-Index · Early Mobile Frontend Detection)
+const PROTOCOL_VERSION = 178; // 1.7.8 (Phase 11: SiYuan Litheness 24x24 Icon System · TopBar Right-Side Re-Anchor · Popover Viewport Clamp & 9-Grid Registry Self-Healing)
 const STORAGE_PREFIX = "lv_notice_mute_";
 const AI_STORAGE_KEY = "lv_ai_shared_config";
 const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
@@ -304,6 +304,7 @@ declare global {
         __LV_ACTIVITY_STREAM__?: LvActivityStreamHub;
         __LV_BACKUP_HUB__?: LvBackupHub;
         __LV_LAUNCHPAD__?: LvLaunchpadHub;
+        __LV_LAUNCHPAD_REGISTRY__?: Map<string, LvLaunchpadItem>;
         __LV_OMNISEARCH__?: LvOmnisearchHub;
         __LV_AUTOMATION__?: LvAutomationHub;
     }
@@ -2266,6 +2267,76 @@ export const lvEcosystem = {
 const launchpadRegistry = new Map<string, LvLaunchpadItem>();
 let memoryLaunchpadStates: Record<string, "pinned" | "docked" | "hidden"> = {};
 
+function getSharedLaunchpadRegistry(): Map<string, LvLaunchpadItem> {
+    if (typeof window !== "undefined") {
+        if (!window.__LV_LAUNCHPAD_REGISTRY__ || typeof window.__LV_LAUNCHPAD_REGISTRY__.get !== "function") {
+            window.__LV_LAUNCHPAD_REGISTRY__ = launchpadRegistry;
+        } else if (window.__LV_LAUNCHPAD_REGISTRY__ !== launchpadRegistry) {
+            for (const [k, v] of launchpadRegistry.entries()) {
+                if (!window.__LV_LAUNCHPAD_REGISTRY__.has(k)) {
+                    window.__LV_LAUNCHPAD_REGISTRY__.set(k, v);
+                }
+            }
+        }
+        return window.__LV_LAUNCHPAD_REGISTRY__;
+    }
+    return launchpadRegistry;
+}
+
+/**
+ * 热重载与版本热升级自愈探针：
+ * 当单个插件因云同步或手动开关热重载导致旧版 __LV_LAUNCHPAD__ 被高版本替换时，
+ * 自动从旧实例及思源宿主 app.plugins 中唤醒所有在世的小驴插件重新归队，彻底杜绝“9宫格只显示一部分插件”。
+ */
+let healingInProgress = false;
+function healMissingPluginsFromHost(reg: Map<string, LvLaunchpadItem>): void {
+    if (healingInProgress || typeof window === "undefined") return;
+    healingInProgress = true;
+    try {
+        const w = window as any;
+        const plugins: any[] = w.siyuan?.ws?.app?.plugins || w.app?.plugins || [];
+        if (!Array.isArray(plugins) || plugins.length === 0) return;
+        for (const p of plugins) {
+            if (!p || typeof p.name !== "string") continue;
+            if (reg.has(p.name)) continue;
+            try {
+                if (typeof p.syncLaunchpadRegistry === "function") {
+                    p.syncLaunchpadRegistry();
+                } else if (typeof p.registerLaunchpadEntry === "function") {
+                    p.registerLaunchpadEntry();
+                } else if (typeof p.registerLaunchpad === "function") {
+                    p.registerLaunchpad();
+                } else if (p.launchpadItem && typeof p.launchpadItem === "object") {
+                    reg.set(p.launchpadItem.id || p.name, p.launchpadItem);
+                } else if (p.name === "siyuan-speed-switch" && (typeof p.openMainView === "function" || typeof p.showSwitcher === "function")) {
+                    reg.set("siyuan-speed-switch", {
+                        id: "siyuan-speed-switch",
+                        name: "雷切",
+                        fullName: "小驴雷切",
+                        svgIcon: "icon-lv-raikiri",
+                        color: "#38bdf8",
+                        desc: "分栏切换 · 选区暂存",
+                        digit: 2,
+                        badge: "已就绪",
+                        badgeType: "success",
+                        actions: ["打开切片库", "切片当前文档", "开关动作悬浮球", "搜索当前文档切片", "打开暂存栈顶切片"],
+                        topBarElement: Array.isArray(p.topBarIcons) ? p.topBarIcons[0] : undefined,
+                        onClick: () => {
+                            if (typeof p.openMainView === "function") p.openMainView();
+                            else if (typeof p.showSwitcher === "function") p.showSwitcher();
+                        },
+                        onAction: (act: string) => {
+                            if (typeof p.handleQuickAction === "function") p.handleQuickAction(act);
+                        },
+                    });
+                }
+            } catch { /* 单个插件唤醒异常隔离 */ }
+        }
+    } catch { /* ignore */ } finally {
+        healingInProgress = false;
+    }
+}
+
 function getLaunchpadStates(): Record<string, "pinned" | "docked" | "hidden"> {
     if (typeof localStorage === "undefined") return { ...memoryLaunchpadStates };
     try {
@@ -2317,29 +2388,51 @@ function getLaunchpadHub(): LvLaunchpadHub {
         };
     }
 
+    const sharedRegistry = getSharedLaunchpadRegistry();
+
     if (window.__LV_LAUNCHPAD__ && window.__LV_LAUNCHPAD__.version >= PROTOCOL_VERSION) {
         return window.__LV_LAUNCHPAD__;
+    }
+
+    // 若从旧版本协议升级，无损迁移旧实例内已注册的所有插件条目
+    if (window.__LV_LAUNCHPAD__ && typeof window.__LV_LAUNCHPAD__.getItems === "function") {
+        try {
+            const prevItems = window.__LV_LAUNCHPAD__.getItems();
+            if (Array.isArray(prevItems)) {
+                for (const prev of prevItems) {
+                    if (prev && prev.id && !sharedRegistry.has(prev.id)) {
+                        const { state: _st, ...rest } = prev;
+                        sharedRegistry.set(prev.id, rest);
+                    }
+                }
+            }
+        } catch { /* ignore */ }
     }
 
     const hub: LvLaunchpadHub = {
         version: PROTOCOL_VERSION,
 
         register(item: LvLaunchpadItem): () => void {
-            launchpadRegistry.set(item.id, item);
+            const reg = getSharedLaunchpadRegistry();
+            reg.set(item.id, item);
             maybeShowOnboardingCard();
             syncTopBarConvergence();
             return () => {
-                launchpadRegistry.delete(item.id);
+                reg.delete(item.id);
                 syncTopBarConvergence();
             };
         },
 
         getItems(): Array<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }> {
+            const reg = getSharedLaunchpadRegistry();
+            healMissingPluginsFromHost(reg);
             const states = getLaunchpadStates();
-            return Array.from(launchpadRegistry.values()).map(item => ({
+            const list = Array.from(reg.values()).map(item => ({
                 ...item,
                 state: states[item.id] || "docked",
             }));
+            list.sort((a, b) => (a.digit ?? 99) - (b.digit ?? 99));
+            return list;
         },
 
         setPluginState(id: string, state: "pinned" | "docked" | "hidden"): void {
@@ -2350,7 +2443,8 @@ function getLaunchpadHub(): LvLaunchpadHub {
         },
 
         updateItem(id: string, patch: Partial<LvLaunchpadItem>): void {
-            const item = launchpadRegistry.get(id);
+            const reg = getSharedLaunchpadRegistry();
+            const item = reg.get(id);
             if (item) {
                 Object.assign(item, patch);
                 refreshEntryBadgeDot();
@@ -2359,7 +2453,9 @@ function getLaunchpadHub(): LvLaunchpadHub {
         },
 
         executeAction(id: string, actionName: string): boolean {
-            const item = launchpadRegistry.get(id);
+            const reg = getSharedLaunchpadRegistry();
+            healMissingPluginsFromHost(reg);
+            const item = reg.get(id);
             if (!item) return false;
             if (item.onAction) {
                 item.onAction(actionName);
@@ -2386,6 +2482,7 @@ function getLaunchpadHub(): LvLaunchpadHub {
     };
 
     window.__LV_LAUNCHPAD__ = hub;
+    healMissingPluginsFromHost(sharedRegistry);
     return hub;
 }
 
@@ -2604,7 +2701,28 @@ function refreshEntryBadgeDot(): void {
     } catch { /* ignore */ }
 }
 
-const COMPASS_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5"/></svg>`;
+/**
+ * 思源 3.8+ 原生 litheness 图标风格规范（24×24 viewBox, 1.7px stroke-width, round cap/join, fill:none）。
+ * 注意：思源全局 base.css 含有 `svg { fill: currentColor }`，内联 SVG 必须显式携带 `style="fill:none!important"` 且子路径加 `fill="none"`，
+ * 严防被全局样式污染成实心黑块。
+ */
+const COMPASS_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="fill:none!important;stroke:currentColor!important;" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="none"/><path d="M17.5 2.5 21.5 6.5 17.5 10.5 13.5 6.5Z" fill="none"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="none"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="none"/></svg>`;
+
+const PLUGIN_LITHE_ICON_PATHS: Record<string, string> = {
+    "siyuan-checkin": `<path d="M8 2v4" fill="none"/><path d="M16 2v4" fill="none"/><rect width="18" height="18" x="3" y="4" rx="2" fill="none"/><path d="M3 10h18" fill="none"/><path d="m9 16 2 2 4-4" fill="none"/>`,
+    "siyuan-speed-switch": `<rect x="3" y="3" width="18" height="18" rx="2" fill="none"/><path d="M9 3v18" fill="none"/><path d="m15.5 8-3 4.5h3l-2.5 4.5" fill="none"/>`,
+    "siyuan-home": `<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" fill="none"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none"/>`,
+    "siyuan-glean": `<path d="M12 7v14" fill="none"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" fill="none"/>`,
+    "siyuan-exam": `<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" fill="none"/><path d="m9 12 2 2 4-4" fill="none"/>`,
+    "siyuan-lv-cards": `<rect x="6" y="6" width="14" height="16" rx="2.5" fill="none"/><path d="M4 18V5a2.5 2.5 0 0 1 2.5-2.5H17" fill="none"/><path d="m10 14 2.2 2.2 4.3-4.4" fill="none"/>`,
+    "siyuan-contacts": `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" fill="none"/><circle cx="9" cy="7" r="4" fill="none"/><path d="M22 21v-2a4 4 0 0 0-3-3.87" fill="none"/><path d="M16 3.13a4 4 0 0 1 0 7.75" fill="none"/>`,
+    "xiaolv-common": `<rect x="4" y="3" width="16" height="18" rx="2" fill="none"/><path d="m10 10-2 2 2 2" fill="none"/><path d="m14 10 2 2-2 2" fill="none"/><path d="M9 17h6" fill="none"/>`,
+};
+
+function renderPluginLitheSvg(pluginId: string, size = 16): string {
+    const paths = PLUGIN_LITHE_ICON_PATHS[pluginId] || `<rect x="3" y="3" width="7" height="7" rx="1.5" fill="none"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="none"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="none"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="none"/>`;
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:${size}px;height:${size}px;fill:none!important;stroke:currentColor!important;" aria-hidden="true">${paths}</svg>`;
+}
 
 function buildMobileEntryButton(): boolean {
     if (typeof document === "undefined") return false;
@@ -3145,6 +3263,12 @@ export function syncTopBarConvergence(): void {
 
         const compassBtn = document.getElementById(DESKTOP_ENTRY_ID);
         if (compassBtn && typeof compassBtn === "object" && "style" in compassBtn && compassBtn.style) {
+            // 思源 3.8.x ye() 重排防护：ye() 会将 orders.topBar 中的所有原生/插件项重插到 #barMore 之前，
+            // 若罗盘按钮被挤到 #drag 左侧，立即自愈归位到右侧插件区锚点（#barPlugins / #barMore）之前
+            const toolbar = document.getElementById("toolbar");
+            if (toolbar && compassBtn.parentElement === toolbar && typeof toolbar.querySelector === "function") {
+                ensureCompassOnRightSide(toolbar, compassBtn);
+            }
             compassBtn.style.display = needConverge ? "inline-flex" : "none";
             refreshEntryBadgeDot();
             if (needConverge) {
@@ -3176,6 +3300,20 @@ export function syncTopBarConvergence(): void {
     } catch (err) {
         console.warn("[LvLaunchpad] 顶栏收敛同步异常:", err);
     }
+}
+
+function ensureCompassOnRightSide(toolbar: HTMLElement, btn: HTMLElement): void {
+    try {
+        const anchor = toolbar.querySelector("#barPlugins, #barCommand, #barSearch, #barMode, #barExit, #barMore, #windowControls");
+        if (!anchor || anchor.parentElement !== toolbar || btn.nextElementSibling === anchor) return;
+        const children = Array.from(toolbar.children || []);
+        const dragIdx = children.findIndex((c) => c.id === "drag");
+        const btnIdx = children.indexOf(btn);
+        // 仅当罗盘漂移到了 #drag 左侧，或不在右侧工具区时归位，避免无谓 DOM 写入
+        if (btnIdx === -1 || (dragIdx !== -1 && btnIdx < dragIdx)) {
+            toolbar.insertBefore(btn, anchor);
+        }
+    } catch { /* ignore */ }
 }
 
 const DESKTOP_POPOVER_ID = "lv-desktop-launchpad-popover";
@@ -3315,28 +3453,29 @@ export function buildLaunchpadPopoverHtml(
     allPinned: boolean,
 ): string {
     const toggleAllTitle = allPinned ? "收敛全部到小驴罗盘 (新版极简模式)" : "平铺全部独立图标到顶栏 (恢复老版布局)";
-    const toggleAllText = allPinned ? "🧭 收敛全部" : "📌 平铺顶栏";
+    const toggleAllText = allPinned ? "收敛全部" : "平铺顶栏";
+    const pinSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;fill:none!important;stroke:currentColor!important;vertical-align:-1px;" aria-hidden="true"><path d="M12 17v5" fill="none"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" fill="none"/></svg>`;
 
     const headerHtml = `
-      <div class="lv-pop-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;border-bottom:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08));">
+      <div class="lv-pop-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;border-bottom:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.08));flex-shrink:0;">
         <div style="display:flex;align-items:center;gap:6px;">
-          <span style="font-size:16px;">🧭</span>
+          <span style="display:inline-flex;align-items:center;color:var(--b3-theme-primary,#3576c7);">${COMPASS_SVG}</span>
           <span style="font-weight:600;font-size:13px;color:var(--b3-theme-on-background,#333);">小驴罗盘中枢</span>
           <span style="font-size:11px;padding:1px 6px;border-radius:999px;background:var(--b3-theme-primary-light,rgba(53,118,199,0.1));color:var(--b3-theme-primary,#3576c7);">${items.length} 插件已联结</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;">
-          <button type="button" class="lv-pop-toggle-all-btn" title="${toggleAllTitle}" style="background:transparent;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.15));border-radius:4px;cursor:pointer;font-size:10px;padding:2px 6px;color:var(--b3-theme-primary,#3576c7);user-select:none;">${toggleAllText}</button>
+          <button type="button" class="lv-pop-toggle-all-btn" title="${toggleAllTitle}" style="display:inline-flex;align-items:center;gap:3px;background:transparent;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.15));border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;color:var(--b3-theme-primary,#3576c7);user-select:none;">${pinSvg}<span>${toggleAllText}</span></button>
           <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">1~${items.length}</span>
         </div>
       </div>
     `;
 
-    let gridHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;max-height:420px;overflow-y:auto;">`;
+    const cols = items.length >= 6 ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))";
+    let gridHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:${cols};gap:8px;padding:12px;flex:1 1 auto;min-height:0;overflow-y:auto;">`;
 
     items.forEach((item, idx) => {
         const digit = idx + 1;
         const isPinned = item.state === "pinned";
-        const pinIcon = isPinned ? "📌" : "📍";
         const pinTitle = isPinned ? "已置顶在顶栏 (点击收敛回罗盘)" : "置顶到顶栏独立显示";
         const badgeClass = item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary";
         const safeName = escapeHtml(item.name);
@@ -3345,18 +3484,19 @@ export function buildLaunchpadPopoverHtml(
         const safeId = escapeHtml(item.id);
         const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(item.color ?? "") ? item.color : "var(--b3-theme-primary)";
         const badgeHtml = item.badge ? `<span class="lv-pop-badge ${escapeHtml(badgeClass)}">${safeBadge}</span>` : "";
+        const iconSvg = renderPluginLitheSvg(item.id, 16);
 
         gridHtml += `
-          <div class="lv-pop-tile" data-idx="${idx}" data-id="${safeId}" style="position:relative;display:flex;flex-direction:column;padding:10px;border-radius:10px;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-surface,#fff);cursor:pointer;user-select:none;transition:all 0.15s ease;">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span class="lv-pop-icon" style="color:${safeColor};display:flex;align-items:center;">
-                  <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="lv-pop-tile" data-idx="${idx}" data-id="${safeId}" style="position:relative;display:flex;flex-direction:column;padding:10px;border-radius:10px;border:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-surface,#fff);cursor:pointer;user-select:none;transition:all 0.15s ease;min-width:0;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;">
+              <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+                <span class="lv-pop-icon" style="color:${safeColor};display:flex;align-items:center;flex-shrink:0;">
+                  ${iconSvg}
                 </span>
-                <span style="font-weight:600;font-size:13px;">${safeName}</span>
+                <span style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeName}</span>
               </div>
-              <div style="display:flex;align-items:center;gap:4px;">
-                <button type="button" class="lv-pop-pin-btn" data-pin-id="${safeId}" title="${pinTitle}" style="background:transparent;border:none;cursor:pointer;font-size:12px;opacity:${isPinned ? '1' : '0.3'};padding:1px 3px;border-radius:4px;">${pinIcon}</button>
+              <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
+                <button type="button" class="lv-pop-pin-btn" data-pin-id="${safeId}" title="${pinTitle}" style="display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:${isPinned ? 'var(--b3-theme-primary,#3576c7)' : 'var(--b3-theme-on-surface,#666)'};opacity:${isPinned ? '1' : '0.35'};padding:2px;border-radius:4px;">${pinSvg}</button>
                 <span style="font-size:10px;font-family:monospace;padding:1px 4px;border-radius:3px;background:var(--b3-theme-background,#f0f0f0);color:var(--b3-theme-on-surface-light,#888);">${digit}</span>
               </div>
             </div>
@@ -3368,7 +3508,7 @@ export function buildLaunchpadPopoverHtml(
     gridHtml += `</div>`;
 
     const footerHtml = `
-      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-background-light,rgba(0,0,0,0.02));border-radius:0 0 14px 14px;">
+      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--b3-border-color-trans,rgba(0,0,0,0.06));background:var(--b3-theme-background-light,rgba(0,0,0,0.02));border-radius:0 0 14px 14px;flex-shrink:0;">
         <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#888);">快捷键: 方向键/1~${items.length} · Enter 执行 · P 置顶</span>
         <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--b3-theme-primary,#3576c7);">Esc 关闭</button>
       </div>
@@ -3393,38 +3533,52 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
     popover.setAttribute("aria-label", "小驴罗盘全家桶弹射坞");
     if ("tabIndex" in popover) popover.tabIndex = -1;
 
+    const targetWidth = items.length >= 6 ? 384 : 340;
+
     const reposition = () => {
-        if (!anchor || typeof anchor.getBoundingClientRect !== "function") return;
+        if (!popover || !popover.style) return;
         try {
-            const rect = anchor.getBoundingClientRect();
-            if (popover && popover.style) {
-                popover.style.position = "fixed";
+            const winW = typeof window !== "undefined" && typeof window.innerWidth === "number" && window.innerWidth > 0 ? window.innerWidth : 1200;
+            const winH = typeof window !== "undefined" && typeof window.innerHeight === "number" && window.innerHeight > 0 ? window.innerHeight : 800;
+            const popW = Math.min(targetWidth, Math.max(260, winW - 24));
+            popover.style.width = `${popW}px`;
+            popover.style.position = "fixed";
+
+            if (anchor && typeof anchor.getBoundingClientRect === "function") {
+                const rect = anchor.getBoundingClientRect();
                 if (rect && typeof rect.bottom === "number" && rect.bottom > 0) {
                     popover.style.top = `${Math.round(rect.bottom + 6)}px`;
-                    const winW = typeof window !== "undefined" && typeof window.innerWidth === "number" ? window.innerWidth : 1200;
-                    const rightOffset = Math.max(12, Math.round(winW - (rect.right || 0) - 8));
+                    // 双侧视口边界钳制：即使锚点按钮在顶栏左侧或窄窗口中，也绝不允许左边缘溢出屏幕外 (left >= 12px)
+                    const maxRightOffset = Math.max(12, winW - popW - 12);
+                    const rawRight = Math.round(winW - (rect.right || 0) - 8);
+                    const rightOffset = Math.max(12, Math.min(rawRight, maxRightOffset));
                     popover.style.right = `${rightOffset}px`;
-                    const winH = typeof window !== "undefined" && typeof window.innerHeight === "number" ? window.innerHeight : 800;
-                    const availableHeight = Math.max(220, winH - rect.bottom - 24);
+                    const availableHeight = Math.max(260, winH - rect.bottom - 20);
                     popover.style.maxHeight = `${availableHeight}px`;
                 } else {
                     popover.style.top = "42px";
                     popover.style.right = "16px";
+                    popover.style.maxHeight = `${Math.max(260, winH - 64)}px`;
                 }
-                // 动态层级：跟随思源递增的 window.siyuan.zIndex，保证盖过内容流但不压住原生 dialog/搜索
-                try {
-                    const currentZ = typeof window !== "undefined" && (window as any).siyuan?.zIndex;
-                    popover.style.zIndex = String(typeof currentZ === "number" ? Math.max(300, currentZ + 20) : 300);
-                } catch {
-                    popover.style.zIndex = "300";
-                }
+            } else {
+                popover.style.top = "42px";
+                popover.style.right = "16px";
+                popover.style.maxHeight = `${Math.max(260, winH - 64)}px`;
+            }
+            // 动态层级：跟随思源递增的 window.siyuan.zIndex，保证盖过内容流但不压住原生 dialog/搜索
+            try {
+                const currentZ = typeof window !== "undefined" && (window as any).siyuan?.zIndex;
+                popover.style.zIndex = String(typeof currentZ === "number" ? Math.max(300, currentZ + 20) : 300);
+            } catch {
+                popover.style.zIndex = "300";
             }
         } catch { /* ignore */ }
     };
     reposition();
 
     if (popover.style) {
-        popover.style.width = "340px";
+        popover.style.display = "flex";
+        popover.style.flexDirection = "column";
         popover.style.borderRadius = "14px";
         popover.style.boxShadow = "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)";
         popover.style.background = "var(--b3-theme-surface,#fff)";
@@ -3565,10 +3719,12 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
             return;
         }
 
+        const gridCols = items.length >= 6 ? 3 : 2;
+
         if (e.key === "ArrowDown") {
             try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
-            if (currentFocusIndex + 2 < items.length) {
-                currentFocusIndex += 2;
+            if (currentFocusIndex + gridCols < items.length) {
+                currentFocusIndex += gridCols;
             } else if (currentFocusIndex + 1 < items.length) {
                 currentFocusIndex += 1;
             }
@@ -3578,8 +3734,8 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
 
         if (e.key === "ArrowUp") {
             try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
-            if (currentFocusIndex - 2 >= 0) {
-                currentFocusIndex -= 2;
+            if (currentFocusIndex - gridCols >= 0) {
+                currentFocusIndex -= gridCols;
             } else if (currentFocusIndex - 1 >= 0) {
                 currentFocusIndex -= 1;
             }
@@ -3674,10 +3830,9 @@ export function toggleDesktopLaunchpadPopover(anchorEl?: HTMLElement | null): vo
 function insertDesktopEntryButton(toolbar: HTMLElement, btn: HTMLElement): void {
     if (typeof toolbar.querySelector === "function" && typeof toolbar.insertBefore === "function") {
         try {
-            // 思源 3.8.x 顶栏条目重排规则：所有带 data-topbar-entry 的条目会被思源按保存顺序重插到 #barMore 之前。
-            // 罗盘锚定 #barMore（原生「更多」溢出锚点）才能稳定驻留在插件区末尾，既不漂移也绝不落入 #windowControls 窗口控制区；
-            // 旧版本思源无 #barMore 时逐级回退到插件/命令/搜索/停靠锚点。
-            const anchor = toolbar.querySelector("#barMore, #barPlugins, #barCommand, #barSearch, #barDockR, #barSetting, #barSettings, #barHelp, #windowControls");
+            // 思源 3.8.x 顶栏条目重排规则：锚定在 #barPlugins / #barMore 之前（始终处于 #drag 右侧插件区），
+            // 配合 syncTopBarConvergence 中的 ensureCompassOnRightSide 自愈，既不漂移到左侧也绝不落入 #windowControls 窗口控制区。
+            const anchor = toolbar.querySelector("#barPlugins, #barCommand, #barSearch, #barDockR, #barSetting, #barSettings, #barHelp, #barMore, #windowControls");
             if (anchor && anchor.parentElement === toolbar) {
                 toolbar.insertBefore(btn, anchor);
                 return;
@@ -4072,13 +4227,19 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
     tile.className = "lv-sheet-tile";
     tile.setAttribute("aria-label", item.fullName || item.name);
     tile.setAttribute("aria-expanded", "false");
-    // 优先渲染插件真实 sprite 图标（kebab/camel 双形态探测）；缺失时回退品牌色圆点
+    // 优先渲染插件真实 sprite 图标（kebab/camel 双形态探测）；再回退内置 24x24 litheness 线性图标，最终回退品牌色圆点
     const iconHref = resolveIconHref(item.svgIcon);
     if (iconHref) {
         const iconWrap = document.createElement("span");
         iconWrap.className = "lv-sheet-tile-icon";
         if (item.color) iconWrap.style.color = item.color; // 品牌色染色，磁贴一眼可辨
-        iconWrap.innerHTML = `<svg aria-hidden="true"><use xlink:href="${iconHref}" href="${iconHref}"></use></svg>`;
+        iconWrap.innerHTML = `<svg aria-hidden="true" style="fill:none!important;stroke:currentColor!important;"><use xlink:href="${iconHref}" href="${iconHref}"></use></svg>`;
+        tile.appendChild(iconWrap);
+    } else if (PLUGIN_LITHE_ICON_PATHS[item.id]) {
+        const iconWrap = document.createElement("span");
+        iconWrap.className = "lv-sheet-tile-icon";
+        if (item.color) iconWrap.style.color = item.color;
+        iconWrap.innerHTML = renderPluginLitheSvg(item.id, 22);
         tile.appendChild(iconWrap);
     } else {
         const dot = document.createElement("span");
