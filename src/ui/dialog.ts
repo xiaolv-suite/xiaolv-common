@@ -7637,6 +7637,13 @@ export class CommonSearchDialog {
             this.miniModeBtn.setAttribute("aria-pressed", String(this.miniMode));
         }
 
+        // R432 真机实证：mini 切换只切类不重渲染，行内 1-9 直达数字徽标要等下一次
+        // refresh 才出现——与「按键直达可用」不同步。列表已有内容时立即重渲染。
+        const miniListEl = this.listEl;
+        if (miniListEl && miniListEl.childElementCount > 0 && !this.miniCollapsed) {
+            this.renderList(miniListEl);
+        }
+
         this.applyMiniCollapse();
     }
 

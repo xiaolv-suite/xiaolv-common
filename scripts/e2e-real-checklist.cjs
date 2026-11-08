@@ -1625,22 +1625,29 @@ function check(name, ok, detail = "") {
         });
         await page.waitForSelector(".xlc-search-mini-btn", {timeout: 10000});
 
-        // 1. 开启极窄迷你模式
+        // 1. 开启极窄迷你模式（R432：自诊断断言——四条件逐项上报，不再裸超时）
         await page.locator("[data-xlc-control='search.mini.toggle']").click();
-        await page.waitForFunction(() => {
+        await sleep(800);
+        const miniState = await page.evaluate(() => {
             const dlg = document.querySelector(".b3-dialog__container.xlc-dialog--mini, .xlc-dialog--mini");
             const btn = document.querySelector(".xlc-search-mini-btn--active");
             const num = document.querySelector(".xlc-mini-row-num");
             const dragBar = document.querySelector("[data-xlc-control='search.mini.drag-bar']");
-            return Boolean(dlg && btn && num && dragBar);
-        }, null, {timeout: 6000});
-        const miniModeActive = await page.evaluate(() => {
-            const dlg = document.querySelector(".b3-dialog__container.xlc-dialog--mini, .xlc-dialog--mini");
-            const btn = document.querySelector(".xlc-search-mini-btn--active");
-            const num = document.querySelector(".xlc-mini-row-num");
-            const dragBar = document.querySelector("[data-xlc-control='search.mini.drag-bar']");
-            return Boolean(dlg && btn && num && dragBar);
+            const list = document.querySelector(".xlc-list");
+            const rows = document.querySelectorAll(".xlc-list .xlc-row[data-xlc-index]").length;
+            const listEmpty = document.querySelector(".xlc-empty");
+            return {
+                dlg: Boolean(dlg),
+                btnActive: Boolean(btn),
+                miniRowNum: Boolean(num),
+                dragBar: Boolean(dragBar),
+                rows,
+                listEmpty: Boolean(listEmpty),
+                emptyText: (document.querySelector(".xlc-empty-text")?.textContent ?? "").slice(0, 20),
+                miniToggleOn: (document.querySelector("[data-xlc-control='search.mini.toggle']")?.textContent ?? "").includes("退出"),
+            };
         });
+        const miniModeActive = miniState.dlg && miniState.btnActive && miniState.miniRowNum && miniState.dragBar;
 
         // 2. 折叠为胶囊浮条
         await page.locator("[data-xlc-control='search.mini.collapse']").click();
@@ -1668,7 +1675,7 @@ function check(name, ok, detail = "") {
 
         check("步骤 24：极窄悬浮迷你模式（Mini Mode）单列无遮挡、1-9数字直达、拖拽条与折叠胶囊全部通过",
             miniModeActive && pillActive && expandedAgain && restoredStandard,
-            JSON.stringify({miniModeActive, pillActive, expandedAgain, restoredStandard}));
+            JSON.stringify({miniState, miniModeActive, pillActive, expandedAgain, restoredStandard}));
 
         cleanup();
         const pass = results.filter((r) => r.ok).length;
