@@ -122,7 +122,9 @@ export function renderSanitizerOptionsModal(props: SanitizerModalProps): Sanitiz
 
     if (typeof document !== "undefined") {
         const container = document.createElement("div");
-        container.className = "b3-dialog__container xlc-export-sanitizer-modal";
+        // R433：此元素是嵌在外层弹窗 body 内的内层容器，严禁复用 .b3-dialog__container——
+        // 宿主会对其再次施加 max-height:80vh + overflow:hidden，内容超高即被裁、按钮够不到
+        container.className = "xlc-export-sanitizer-modal";
         container.innerHTML = htmlContent;
 
         const parseOptions = (): SanitizerOptions => {

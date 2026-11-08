@@ -856,4 +856,110 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
             });
         });
     },
+    openSurface(name: string): void {
+        // 全表面视觉审计入口（R433）：渲染所有用户可触达弹窗，供截图目检
+        void Promise.resolve().then(async () => {
+            if (name === "quickEdit") {
+                const {openQuickEditDialog} = await import("../../src/ui/quick-edit");
+                openQuickEditDialog({
+                    t: T,
+                    updateBlock: async () => ({success: true}),
+                    notify: () => {},
+                    onUpdated: () => {},
+                }, "20241108120000-surface", "尊敬的 {{xlc:ask:客户名称}}：\n\n关于本期「会员系统」交付延期，我们深表歉意。经复盘，主要原因为第三方支付联调超期。\n\n为弥补影响，我们提供以下补偿：\n1. 本期服务费减免 5%；\n2. 上线后 48 小时专属值守。\n\n再次感谢理解与支持。");
+            } else if (name === "syncDiff") {
+                const {openSyncDiffModal} = await import("../../src/ui/sync-diff-modal");
+                const mkEntry = (id: string, title: string, kramdown: string, updatedAt: number) => ({
+                    id, title, kramdown, alias: "", tags: ["客服"], category: "客服",
+                    itemType: "markdown" as const, updatedAt, varCount: 1, shortcode: "",
+                });
+                openSyncDiffModal({
+                    report: {
+                        timestamp: Date.now(), totalLocal: 24, totalRemote: 26,
+                        identicalCount: 20, addedCount: 1, removedCount: 1, modifiedCount: 2, conflictCount: 1,
+                        diffs: [
+                            {id: "xlc-diff000001", status: "conflict", local: mkEntry("xlc-diff000001", "延期道歉（本地改）", "本地正文", Date.now()), remote: mkEntry("xlc-diff000001", "延期道歉（远端改）", "远端正文", Date.now() + 1000), changedFields: ["title", "kramdown"]},
+                            {id: "xlc-diff000002", status: "modified", local: mkEntry("xlc-diff000002", "SLA 赔付标准", "更新后的赔付条款", Date.now()), remote: mkEntry("xlc-diff000002", "SLA 赔付标准", "旧赔付条款", Date.now() - 5000), changedFields: ["kramdown"]},
+                            {id: "xlc-diff000003", status: "added", remote: mkEntry("xlc-diff000003", "周报模板（新增）", "本周完成…", Date.now()), changedFields: []},
+                            {id: "xlc-diff000004", status: "removed", local: mkEntry("xlc-diff000004", "旧版话术（远端已删）", "…", Date.now()), changedFields: []},
+                        ],
+                    },
+                    localEntries: [],
+                    title: "同步比对 · 多源合并",
+                    localLabel: "本地库（工作区）",
+                    remoteLabel: "远端库（同事分享）",
+                    onConfirm: () => {},
+                    onCancel: () => {},
+                });
+            } else if (name === "csvWizard") {
+                const {openCsvTsvImportWizard} = await import("../../src/ui/csv-tsv-wizard");
+                openCsvTsvImportWizard({
+                    t: T,
+                    library: {
+                        ensureIndex: async () => ({entries: [], items: new Map(), truncated: false, docsScanned: 0, errors: [], builtAt: 1}),
+                    },
+                    notify: () => {},
+                    persistSoon: () => {},
+                    importMarkdownItems: async () => ({total: 0, created: 0, skipped: 0, overwritten: 0, renamed: 0, failed: 0, lines: []}),
+                    fetchAssetBytes: async () => null,
+                } as unknown as Parameters<typeof openCsvTsvImportWizard>[0], () => {});
+            } else if (name === "shareCard") {
+                const {openShareCardDialog} = await import("../../src/ui/share-card");
+                openShareCardDialog(
+                    {t: T, copyText: async () => true},
+                    {id: "xlc-demo0000001", title: "项目延期道歉与补偿方案", itemType: "markdown", category: "客服", tags: ["客户沟通", "模板"], summary: "尊敬的 {{xlc:ask:客户名称}}：关于本期交付延期……", varCount: 2},
+                    "xlc-bundle-v1-demo0surface0card",
+                );
+            } else if (name === "pinboard") {
+                const {openPinboardDialog} = await import("../../src/ui/pinboard");
+                openPinboardDialog(
+                    {t: T, copyText: async () => true},
+                    "对公转账四件套",
+                    [
+                        {id: "xlc-pin01", title: "开户行", content: "工商银行北京分行营业部"},
+                        {id: "xlc-pin02", title: "账号", content: "0200 1234 5678 9012"},
+                        {id: "xlc-pin03", title: "户名", content: "某某科技有限公司"},
+                        {id: "xlc-pin04", title: "税号", content: "91110108MA000000XY"},
+                    ],
+                );
+            } else if (name === "promoteClip") {
+                const {openPromoteClipDialog} = await import("../../src/ui/promote-clip");
+                openPromoteClipDialog({
+                    t: T,
+                    entry: {id: "xlc-clip-surface1", title: "📋 紧急报障电话", summary: "· 18988889999", tags: ["紧急报障电话"], itemType: "text"} as never,
+                    categories: ["常用", "客服"],
+                    defaultCategory: "常用",
+                    entries: [],
+                    notify: () => {},
+                    onPromote: async () => true,
+                });
+            } else if (name === "sanitizer") {
+                const {openSanitizerOptionsDialog} = await import("../../src/ui/export-sanitizer-modal");
+                openSanitizerOptionsDialog(undefined, () => {});
+            } else if (name === "varForm") {
+                const {openVariableFillCard} = await import("../../src/ui/variable-form");
+                openVariableFillCard({
+                    t: T,
+                    itemType: "markdown",
+                    title: "项目延期道歉与补偿方案",
+                    fields: [
+                        {name: "客户名称", kind: "text", options: []},
+                        {name: "补偿比例", kind: "select", options: ["5%", "10%"]},
+                        {name: "专属值守电话", kind: "text", options: []},
+                    ] as never,
+                    templateText: "尊敬的 {{xlc:ask:客户名称}}：\n\n补偿方案：本期服务费减免 {{xlc:ask:补偿比例|5%,10%}}；\n值守电话：{{xlc:ask:专属值守电话}}。\n{{xlc:cursor}}",
+                    defaults: {"客户名称": "王总"},
+                    presets: {"王总专案": {"客户名称": "王总", "补偿比例": "5%"}},
+                    onSavePreset: () => {},
+                    onDeletePreset: () => {},
+                    onConfirm: () => {},
+                    onCopy: () => {},
+                    onCancel: () => {},
+                });
+            } else if (name === "guide") {
+                const {openStepByStepGuideDialog} = await import("../../src/ui/guide-dialog");
+                openStepByStepGuideDialog({t: T, isMobile: () => false, onOpenSearch: () => {}});
+            }
+        });
+    },
 };

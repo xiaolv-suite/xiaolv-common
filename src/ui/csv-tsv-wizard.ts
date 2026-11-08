@@ -50,7 +50,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
         title: t("csvImportTitle"),
         content: "",
         width: "min(800px, 96vw)",
-        height: "min(700px, 86vh)",
+        // R433：高度自适应内容——固定高度会让空态 body 底部留出 ~230px 空白断层
         destroyCallback: () => {
             release();
         },
@@ -192,12 +192,17 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     mapRow.appendChild(btnRow);
     root.appendChild(mapRow);
 
-    // 步骤 3：预览区域
+    // 步骤 3：预览区域（R433：空态隐藏，避免粘贴区下方出现孤立白条）
     const preview = document.createElement("div");
     preview.className = "xlc-form-hint xlc-wizard-preview-box";
     preview.tabIndex = 0;
     preview.setAttribute("role", "region");
     preview.setAttribute("aria-label", "表格解析预览");
+    preview.style.display = "none";
+    const setPreview = (text: string): void => {
+        preview.textContent = text;
+        preview.style.display = text ? "" : "none";
+    };
     root.appendChild(preview);
 
     // 底部按钮
@@ -302,7 +307,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
 
     const updatePreview = async (): Promise<void> => {
         if (!state.rawText.trim()) {
-            preview.textContent = t("noData");
+            setPreview(t("noData"));
             nextBtn.disabled = true;
             return;
         }
@@ -340,10 +345,10 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
             if (parsedItems.length < result.validRows) {
                 lines.push(`· …+${result.validRows - parsedItems.length}`);
             }
-            preview.textContent = lines.join("\n");
+            setPreview(lines.join("\n"));
             nextBtn.disabled = parsedItems.length === 0;
         } catch (err) {
-            preview.textContent = t("importFailed", toErrorMessage(err).slice(0, 120));
+            setPreview(t("importFailed", toErrorMessage(err).slice(0, 120)));
             nextBtn.disabled = true;
         }
     };
@@ -378,7 +383,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
         if (parseTimer) clearTimeout(parseTimer);
         state.rawText = ta.value;
         mapRow.style.display = "none";
-        preview.textContent = t("loading");
+        setPreview(t("loading"));
         nextBtn.disabled = true;
         parseTimer = setTimeout(() => { void updatePreview(); }, 400);
     });

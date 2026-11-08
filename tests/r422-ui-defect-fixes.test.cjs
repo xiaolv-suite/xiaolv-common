@@ -175,3 +175,14 @@ test("R422-5: 热力图标题措辞必须是「窗口内」口径（与全期「
         "严禁再用「累计」描述 30 天窗口计数（历史使用用户会误读为数据矛盾）",
     );
 });
+
+test("R433-1: 弹窗内层容器严禁复用 .b3-dialog__container 类（宿主会二次施加 max-height+overflow 裁切内容）", () => {
+    const sanitizerTs = fs.readFileSync(path.join(root, "src", "ui", "export-sanitizer-modal.ts"), "utf8");
+    assert.doesNotMatch(
+        sanitizerTs,
+        /className\s*=\s*["'][^"']*b3-dialog__container/,
+        "renderSanitizerOptionsModal 的内层容器不得携带 .b3-dialog__container（R433 截图实证：内容被宿主 80vh 裁切、按钮够不到）",
+    );
+    // 内层容器仍须有自身的样式钩子
+    assert.match(sanitizerTs, /xlc-export-sanitizer-modal/, "内层容器必须保留 xlc-export-sanitizer-modal 样式钩子");
+});

@@ -221,7 +221,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
             .join("");
 
         return `
-            <div class="xlc-sync-diff-controls b3-dialog__content">
+            <div class="xlc-sync-diff-controls">
                 <div class="xlc-sync-strategy-row">
                     <label class="xlc-field-label">合并冲突策略：</label>
                     <select class="b3-select xlc-sync-strategy-select" aria-label="合并冲突策略">

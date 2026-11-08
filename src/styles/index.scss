@@ -5775,7 +5775,8 @@
     flex: 1 1 auto;
     overflow-y: auto;
     min-height: 240px;
-    max-height: 48vh;
+    // R433：弹窗高度由 Dialog 固定（min(860px, 92vh)），此处 flex:1 已在界内伸展；
+    // 原先叠加 max-height:48vh 会在高视口把表格压短、留出中部断层
     padding: 0 16px;
 
     &:focus-visible {
@@ -6690,6 +6691,24 @@
 .xlc-export-sanitizer-modal {
   width: 100%;
   box-sizing: border-box;
+
+  // R433：行布局不依赖宿主 fn__flex 工具类的实现细节——
+  // 自带 flex 保障，避免 label 在个别宿主/环境下被 select 挤压成竖排
+  .fn__flex {
+    display: flex;
+    align-items: center;
+    gap: var(--xlc-space-3);
+
+    .fn__flex-1 {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .b3-select {
+      flex: 0 1 auto;
+      max-width: 62%;
+    }
+  }
 
   .xlc-export-sanitizer-form {
     display: flex;
