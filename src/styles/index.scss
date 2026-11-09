@@ -7364,7 +7364,19 @@
   .xlc-sanitizer-checkbox-row {
     cursor: pointer;
     user-select: none;
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 4px 8px;
+    border-radius: var(--xlc-radius-sm);
     transition: background-color var(--xlc-dur-fast) var(--xlc-ease);
+    touch-action: manipulation;
+
+    @media (max-width: 620px), (pointer: coarse) {
+      min-height: 44px;
+      padding: 6px 10px;
+      gap: 8px;
+    }
   }
 
   .xlc-sanitizer-custom-block {
