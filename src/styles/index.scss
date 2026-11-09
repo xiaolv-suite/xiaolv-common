@@ -4607,10 +4607,12 @@
   .xlc-mini-drag-bar,
   .xlc-footer-starter-packs,
   .xlc-footer-stepguide,
+  .xlc-footer-guide,
   .xlc-row-action-tray,
   .xlc-search-hint,
   .xlc-target-banner,
-  .xlc-fab-new {
+  .xlc-fab-new,
+  .xlc-search-block:not(:focus-within) .xlc-search-history-bar {
     display: none !important;
   }
 

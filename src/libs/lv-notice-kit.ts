@@ -373,22 +373,36 @@ body.dark {
 #lv-notice-host::-webkit-scrollbar { display: none; }
 
 .lv-notice-card {
+    --lv-nt-bg: rgba(255, 255, 255, 0.97);
+    --lv-nt-border: rgba(15, 23, 42, 0.085);
+    --lv-nt-text: #0f172a;
+    --lv-nt-text-sub: #475569;
+    --lv-nt-pill-bg: #f1f5f9;
+    --lv-nt-accent: var(--b3-theme-primary, #2563eb);
     pointer-events: auto;
     width: min(380px, calc(100vw - 32px));
     box-sizing: border-box;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: var(--b3-theme-surface, var(--lv-safe-surface));
-    border: 1px solid var(--b3-theme-surface-lighter, var(--lv-safe-border));
-    box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.14), 0 2px 8px -1px rgba(0, 0, 0, 0.05);
+    padding: 13px 15px;
+    border-radius: 14px;
+    background: var(--lv-nt-bg);
+    border: 1px solid var(--lv-nt-border);
+    box-shadow: 0 12px 32px -6px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    color: var(--lv-nt-text);
     font-size: 13px;
     line-height: 1.45;
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
     position: relative;
     overflow: hidden;
+}
+:is([data-theme-mode="dark"], body.body--dark, html.dark) .lv-notice-card {
+    --lv-nt-bg: rgba(28, 33, 45, 0.96);
+    --lv-nt-border: rgba(255, 255, 255, 0.1);
+    --lv-nt-text: #f8fafc;
+    --lv-nt-text-sub: #cbd5e1;
+    --lv-nt-pill-bg: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 14px 36px -6px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .lv-notice-card::before {
@@ -396,13 +410,13 @@ body.dark {
     position: absolute;
     top: 0; left: 0; bottom: 0;
     width: 3.5px;
-    background: var(--b3-theme-primary, #4285f4);
-    border-top-left-radius: 12px;
-    border-bottom-left-radius: 12px;
+    background: var(--lv-nt-accent);
+    border-top-left-radius: 14px;
+    border-bottom-left-radius: 14px;
 }
-.lv-notice-card[data-level="error"]::before { background: var(--b3-theme-error, #d93025); }
-.lv-notice-card[data-level="warn"]::before { background: #f2994a; }
-.lv-notice-card[data-level="success"]::before { background: #27ae60; }
+.lv-notice-card[data-level="error"]::before { background: var(--b3-theme-error, #ef4444); }
+.lv-notice-card[data-level="warn"]::before { background: #f59e0b; }
+.lv-notice-card[data-level="success"]::before { background: #10b981; }
 
 .lv-notice-header {
     display: flex;
@@ -414,22 +428,22 @@ body.dark {
 .lv-notice-source-badge {
     font-size: 10.5px;
     font-weight: 600;
-    padding: 1px 6px;
+    padding: 1.5px 7px;
     border-radius: 6px;
-    background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
-    color: var(--b3-theme-primary, #4285f4);
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--lv-nt-accent);
     line-height: 1.4;
     white-space: nowrap;
 }
 
 .lv-notice-title {
-    font-weight: 600;
+    font-weight: 650;
     font-size: 13px;
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--b3-theme-on-surface, #202124);
+    color: var(--lv-nt-text);
 }
 
 .lv-notice-repeat {
@@ -437,8 +451,8 @@ body.dark {
     font-weight: 700;
     padding: 1px 5px;
     border-radius: 10px;
-    background: var(--b3-theme-primary, #4285f4);
-    color: var(--b3-theme-on-primary, #fff);
+    background: var(--lv-nt-accent);
+    color: #ffffff;
 }
 
 .lv-notice-close-btn {
@@ -447,14 +461,15 @@ body.dark {
     cursor: pointer;
     padding: 2px 4px;
     margin: -2px -2px 0 0;
-    color: var(--b3-theme-on-surface-light, #5f6368);
+    color: var(--lv-nt-text-sub);
     font-size: 14px;
     line-height: 1;
     border-radius: 4px;
     transition: all 0.15s ease;
 }
 .lv-notice-close-btn:hover {
-    background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.08));
+    background: var(--lv-nt-pill-bg);
+    color: var(--lv-nt-text);
     transform: scale(1.08);
 }
 .lv-notice-close-btn:active {
@@ -463,7 +478,7 @@ body.dark {
 
 .lv-notice-body {
     font-size: 12.5px;
-    color: var(--b3-theme-on-surface, #3c4043);
+    color: var(--lv-nt-text-sub);
     margin-bottom: 8px;
     word-break: break-word;
     display: -webkit-box;
@@ -487,27 +502,30 @@ body.dark {
 }
 
 .lv-notice-btn {
-    border: none;
+    border: 1px solid var(--lv-nt-border);
     cursor: pointer;
     font-size: 11.5px;
-    font-weight: 500;
+    font-weight: 600;
     padding: 4px 10px;
-    border-radius: 6px;
-    background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
-    color: var(--b3-theme-on-surface, #202124);
+    border-radius: 7px;
+    background: var(--lv-nt-pill-bg);
+    color: var(--lv-nt-text);
     transition: background 0.15s ease, transform 0.1s ease;
 }
 .lv-notice-btn:hover {
-    background: var(--b3-theme-surface-lighter, rgba(0,0,0,0.12));
+    border-color: var(--lv-nt-accent);
+    color: var(--lv-nt-accent);
 }
 .lv-notice-btn:active {
     transform: scale(0.97);
 }
 .lv-notice-btn--primary {
-    background: var(--b3-theme-primary, #4285f4);
-    color: var(--b3-theme-on-primary, #ffffff);
+    border-color: transparent;
+    background: var(--lv-nt-accent);
+    color: #ffffff;
 }
 .lv-notice-btn--primary:hover {
+    color: #ffffff;
     filter: brightness(1.08);
 }
 
@@ -517,14 +535,21 @@ body.dark {
     align-items: center;
     gap: 6px;
     padding: 6px 14px;
-    border-radius: 20px;
-    background: var(--b3-theme-surface, rgba(255, 255, 255, 0.95));
-    border: 1px solid var(--b3-theme-surface-lighter, rgba(128, 128, 128, 0.18));
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid rgba(15, 23, 42, 0.09);
+    box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05);
     backdrop-filter: blur(16px);
-    font-size: 12px;
-    color: var(--b3-theme-on-surface, #202124);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #0f172a;
     animation: lvNoticeFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+:is([data-theme-mode="dark"], body.body--dark, html.dark) .lv-notice-capsule {
+    background: rgba(28, 33, 45, 0.96);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.45);
 }
 
 .lv-notice-capsule-action {
@@ -591,132 +616,188 @@ body.dark {
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ===== 移动端统一弹射坞（Bottom Sheet）===== */
+/* ===== 移动端统一弹射坞（Bottom Sheet · Modern Tactile Glass 2.0）===== */
 #lv-launchpad-sheet-mask {
+    --lv-lp-bg: linear-gradient(165deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+    --lv-lp-panel-bg: #f8fafc;
+    --lv-lp-card-bg: #ffffff;
+    --lv-lp-border: rgba(15, 23, 42, 0.075);
+    --lv-lp-border-strong: rgba(15, 23, 42, 0.12);
+    --lv-lp-text: #0f172a;
+    --lv-lp-text-sub: #64748b;
+    --lv-lp-accent: #2563eb;
+    --lv-lp-accent-soft: rgba(37, 99, 235, 0.09);
+    --lv-lp-card-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9);
     position: fixed;
     inset: 0;
     z-index: 1080;
-    background: rgba(0, 0, 0, 0.36);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(15, 23, 42, 0.42);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     display: flex;
     align-items: flex-end;
     justify-content: center;
     animation: lvSheetMaskIn 160ms ease-out both;
 }
+:is([data-theme-mode="dark"], body.body--dark, html.dark) #lv-launchpad-sheet-mask {
+    --lv-lp-bg: linear-gradient(165deg, rgba(24, 28, 38, 0.98) 0%, rgba(15, 18, 26, 0.99) 100%);
+    --lv-lp-panel-bg: rgba(30, 36, 49, 0.78);
+    --lv-lp-card-bg: rgba(33, 39, 53, 0.92);
+    --lv-lp-border: rgba(255, 255, 255, 0.085);
+    --lv-lp-border-strong: rgba(255, 255, 255, 0.14);
+    --lv-lp-text: #f8fafc;
+    --lv-lp-text-sub: #94a3b8;
+    --lv-lp-accent: #60a5fa;
+    --lv-lp-accent-soft: rgba(59, 130, 246, 0.18);
+    --lv-lp-card-shadow: 0 4px 14px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
 #lv-launchpad-sheet-mask .lv-sheet {
     width: 100%;
-    max-height: min(86dvh, 720px);
+    max-height: min(88dvh, 740px);
     overflow-y: auto;
-    overscroll-behavior: contain; /* 橡皮筋滚动不外溢到思源文档层 */
-    background: var(--b3-theme-surface, var(--lv-safe-surface));
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
-    border-radius: 20px 20px 0 0;
-    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
-    padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
+    background: var(--lv-lp-bg);
+    color: var(--lv-lp-text);
+    border-radius: 22px 22px 0 0;
+    border-top: 1px solid var(--lv-lp-border-strong);
+    box-shadow: 0 -16px 48px rgba(15, 23, 42, 0.24);
+    padding: 8px 14px calc(14px + env(safe-area-inset-bottom, 0px));
     box-sizing: border-box;
     animation: lvSheetUp 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    will-change: transform; /* GPU 合成层：开合动画满帧 */
+    will-change: transform;
 }
-/* 磁贴徽记胶囊：轻量状态一目了然 */
+/* 磁贴徽记胶囊：高对比度清透微胶囊 */
 .lv-sheet-tile-badge {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
-    padding: 2px 8px;
+    padding: 1.5px 8px;
     border-radius: 999px;
-    background: var(--b3-theme-primary-lightest, rgba(53,118,199,0.14));
-    color: var(--b3-theme-primary, #3576c7);
+    background: var(--lv-lp-accent-soft);
+    color: var(--lv-lp-accent);
+    border: 1px solid color-mix(in srgb, var(--lv-lp-accent) 18%, transparent);
     line-height: 1.4;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.lv-sheet-tile-badge--success { background: rgba(39,174,96,0.14); color: #27ae60; }
-.lv-sheet-tile-badge--warn { background: rgba(242,153,74,0.16); color: #d35400; }
-.lv-sheet-result-count { font-size: 11px; color: var(--b3-theme-on-surface-light, #9ca3af); padding: 0 2px 2px; }
+.lv-sheet-tile-badge--success { background: rgba(16, 185, 129, 0.12); color: #059669; border-color: rgba(16, 185, 129, 0.22); }
+.lv-sheet-tile-badge--warn { background: rgba(245, 158, 11, 0.14); color: #d97706; border-color: rgba(245, 158, 11, 0.24); }
+.lv-sheet-result-count { font-size: 11px; color: var(--lv-lp-text-sub); padding: 0 2px 2px; }
 /* 穿透结果分组头（按来源） */
-.lv-sheet-result-group { font-size: 11px; font-weight: 700; color: var(--b3-theme-primary, #3576c7); padding: 6px 2px 2px; }
+.lv-sheet-result-group { font-size: 11px; font-weight: 700; color: var(--lv-lp-accent); padding: 6px 2px 2px; }
 /* 搜索历史 chips */
-.lv-sheet-histrow { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; overscroll-behavior-x: contain; }
-.lv-sheet-histrow-label { flex-shrink: 0; font-size: 11px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); }
+.lv-sheet-histrow { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 6px; overscroll-behavior-x: contain; scrollbar-width: none; }
+.lv-sheet-histrow::-webkit-scrollbar { display: none; }
+.lv-sheet-histrow-label { flex-shrink: 0; font-size: 11px; color: var(--lv-lp-text-sub); }
 .lv-sheet-histrow-chip {
     flex-shrink: 0;
-    border: 1px dashed var(--b3-border-color, var(--lv-safe-border));
-    background: transparent;
+    border: 1px dashed var(--lv-lp-border-strong);
+    background: var(--lv-lp-card-bg);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11.5px;
+    color: var(--lv-lp-text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.lv-sheet-histrow-chip:active { background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); }
+/* 生态直达行（今日回顾 / 雷切画板） */
+.lv-sheet-eco-row { display: flex; gap: 8px; margin: 0 0 8px; }
+.lv-sheet-eco-chip {
+    flex: 1;
+    border: 1px solid var(--lv-lp-border);
+    background: var(--lv-lp-card-bg);
+    box-shadow: var(--lv-lp-card-shadow);
+    border-radius: 11px;
+    padding: 7px 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--lv-lp-text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.14s ease, border-color 0.14s ease;
+}
+.lv-sheet-eco-chip:active { transform: scale(0.97); background: var(--lv-lp-accent-soft); border-color: var(--lv-lp-accent); }
+/* 最近直达行：上次使用的插件一键再达 */
+.lv-sheet-recent { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding-bottom: 2px; overscroll-behavior-x: contain; scrollbar-width: none; }
+.lv-sheet-recent::-webkit-scrollbar { display: none; }
+.lv-sheet-recent-label { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--lv-lp-text-sub); }
+.lv-sheet-recent-chip {
+    flex-shrink: 0;
+    border: 1px solid var(--lv-lp-border);
+    background: var(--lv-lp-card-bg);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
     border-radius: 999px;
     padding: 4px 11px;
     font-size: 12px;
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    font-weight: 500;
+    color: var(--lv-lp-text);
     cursor: pointer;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
 }
-.lv-sheet-histrow-chip:active { background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12)); }
-/* 生态直达行（今日回顾 / 小驴 AI） */
-.lv-sheet-eco-row { display: flex; gap: 8px; margin: 2px 0 10px; }
-.lv-sheet-eco-chip {
-    flex: 1;
-    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
-    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
-    border-radius: 12px;
-    padding: 9px 10px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-}
-.lv-sheet-eco-chip:active { transform: scale(0.97); background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12)); }
-/* 最近直达行：上次使用的插件一键再达（最常用单手路径零翻找） */
-.lv-sheet-recent { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding-bottom: 2px; overscroll-behavior-x: contain; }
-.lv-sheet-recent-label { flex-shrink: 0; font-size: 11px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); }
-.lv-sheet-recent-chip {
-    flex-shrink: 0;
-    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
-    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
-    border-radius: 999px;
-    padding: 5px 12px;
-    font-size: 13px;
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-}
-.lv-sheet-recent-chip:active { background: var(--b3-theme-primary-lightest, rgba(53,118,199,0.12)); }
+.lv-sheet-recent-chip:active { background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); }
 .lv-sheet-handle {
-    width: 44px;
-    height: 5px;
-    margin: 0 auto 10px;
+    width: 40px;
+    height: 4px;
+    margin: 0 auto 8px;
     border-radius: 999px;
-    background: var(--b3-border-color, var(--lv-safe-border));
+    background: var(--lv-lp-border-strong);
 }
 .lv-sheet-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
+    gap: 8px;
+    margin-bottom: 8px;
 }
-.lv-sheet-title { font-size: 17px; font-weight: 700; color: var(--b3-theme-on-surface, var(--lv-safe-text)); }
+.lv-sheet-title { font-size: 16px; font-weight: 700; color: var(--lv-lp-text); letter-spacing: -0.01em; }
 .lv-sheet-close {
-    border: none;
-    background: transparent;
-    font-size: 16px;
+    border: 1px solid var(--lv-lp-border);
+    background: var(--lv-lp-card-bg);
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 14px;
     line-height: 1;
-    padding: 8px;
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    padding: 0;
+    color: var(--lv-lp-text-sub);
     cursor: pointer;
 }
-.lv-sheet-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
-.lv-sheet-results { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.lv-sheet-search.b3-text-field,
+.lv-sheet-search {
+    width: 100%;
+    height: 36px;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+    padding: 6px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--lv-lp-border-strong);
+    background: var(--lv-lp-panel-bg);
+    color: var(--lv-lp-text);
+    font-size: 13px;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.lv-sheet-search:focus {
+    background: var(--lv-lp-card-bg);
+    border-color: var(--lv-lp-accent);
+    box-shadow: 0 0 0 3px var(--lv-lp-accent-soft);
+    outline: none;
+}
+.lv-sheet-results { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
 .lv-sheet-result {
     display: flex;
     align-items: flex-start;
     gap: 8px;
     width: 100%;
-    border: none;
-    background: var(--b3-theme-background-light, var(--b3-theme-surface-light, rgba(128, 128, 128, 0.08)));
+    border: 1px solid var(--lv-lp-border);
+    background: var(--lv-lp-card-bg);
+    box-shadow: var(--lv-lp-card-shadow);
     border-radius: 10px;
     padding: 8px 10px;
     text-align: left;
@@ -728,42 +809,49 @@ body.dark {
     font-weight: 600;
     padding: 2px 7px;
     border-radius: 999px;
-    background: var(--b3-theme-primary-lightest, rgba(53,118,199,0.12));
-    color: var(--b3-theme-primary, #3576c7);
+    background: var(--lv-lp-accent-soft);
+    color: var(--lv-lp-accent);
 }
 .lv-sheet-result-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lv-sheet-result-title { font-size: 14px; font-weight: 600; color: var(--b3-theme-on-surface, var(--lv-safe-text)); }
+.lv-sheet-result-title { font-size: 13.5px; font-weight: 600; color: var(--lv-lp-text); }
 .lv-sheet-result-snippet {
     font-size: 12px;
-    color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted));
+    color: var(--lv-lp-text-sub);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 /* 磁贴网格自适应列数：1~2 个插件时自动放宽为居中大卡，3+ 恢复三列，杜绝孤卡稀疏 */
-.lv-sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.lv-sheet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
 .lv-sheet-grid--sparse { grid-template-columns: repeat(auto-fit, minmax(150px, 190px)); justify-content: center; }
-.lv-sheet-subtitle { font-size: 12px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); margin: -6px 0 10px; }
+.lv-sheet-subtitle { font-size: 11.5px; color: var(--lv-lp-text-sub); margin: 0 0 6px; font-weight: 500; }
 .lv-sheet-tile {
+    --tile-brand: #3b82f6;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
-    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
-    background: var(--b3-theme-surface-lighter, var(--b3-theme-background-light, rgba(128, 128, 128, 0.06)));
+    gap: 4px;
+    border: 1px solid var(--lv-lp-border);
+    background: var(--lv-lp-card-bg);
+    background-image: radial-gradient(80px circle at 85% 15%, color-mix(in srgb, var(--tile-brand) 9%, transparent), transparent 70%);
+    box-shadow: var(--lv-lp-card-shadow);
     border-radius: 14px;
-    padding: 13px 8px 11px;
+    padding: 11px 6px 9px;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     position: relative;
-    transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.16s ease, background 0.16s ease;
+    min-width: 0;
+    transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.16s ease, box-shadow 0.16s ease;
 }
-.lv-sheet-tile:active { transform: scale(0.96); }
-.lv-sheet-tile-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--b3-theme-primary, #3576c7); }
-.lv-sheet-tile-name { font-size: 14px; font-weight: 600; color: var(--b3-theme-on-surface, var(--lv-safe-text)); text-align: center; line-height: 1.25; }
+.lv-sheet-tile:active {
+    transform: scale(0.96);
+    border-color: color-mix(in srgb, var(--tile-brand) 55%, transparent);
+}
+.lv-sheet-tile-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--lv-lp-accent); }
+.lv-sheet-tile-name { font-size: 13.5px; font-weight: 650; color: var(--lv-lp-text); text-align: center; line-height: 1.25; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lv-sheet-tile-desc {
-    font-size: 11.5px;
-    color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted));
+    font-size: 11px;
+    color: var(--lv-lp-text-sub);
     text-align: center;
     max-width: 100%;
     overflow: hidden;
@@ -774,31 +862,32 @@ body.dark {
 .lv-sheet-tile-icon {
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    background: var(--b3-theme-surface, #fff);
-    background: color-mix(in srgb, currentColor 10%, var(--b3-theme-surface, #fff));
-    border: 1px solid var(--b3-border-color, rgba(15, 23, 42, 0.08));
-    border-color: color-mix(in srgb, currentColor 20%, var(--b3-border-color, rgba(15, 23, 42, 0.08)));
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    background: linear-gradient(135deg, color-mix(in srgb, currentColor 16%, var(--lv-lp-card-bg)) 0%, color-mix(in srgb, currentColor 7%, var(--lv-lp-card-bg)) 100%);
+    border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+    box-shadow: 0 4px 10px -2px color-mix(in srgb, currentColor 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    color: var(--lv-lp-accent);
     margin-bottom: 2px;
 }
 .lv-sheet-tile-icon svg { width: 18px; height: 18px; }
 .lv-sheet-tile-actions { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 6px; }
 .lv-sheet-action-chip {
-    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
-    background: var(--b3-theme-surface, var(--lv-safe-surface));
+    border: 1px solid var(--lv-lp-border-strong);
+    background: var(--lv-lp-card-bg);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
     border-radius: 999px;
-    padding: 6px 12px;
-    font-size: 13px;
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
+    padding: 5px 11px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--lv-lp-text);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
 }
-.lv-sheet-action-chip:active { background: var(--b3-theme-primary-lightest, rgba(53,118,199,0.12)); }
-.lv-sheet-empty { grid-column: 1 / -1; text-align: center; font-size: 13px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); padding: 14px 0; }
-.lv-sheet-hint { text-align: center; font-size: 11px; color: var(--b3-theme-on-surface-light, var(--lv-safe-text-muted)); }
+.lv-sheet-action-chip:active { background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); border-color: var(--lv-lp-accent); }
+.lv-sheet-empty { grid-column: 1 / -1; text-align: center; font-size: 13px; color: var(--lv-lp-text-sub); padding: 14px 0; }
+.lv-sheet-hint { text-align: center; font-size: 11px; color: var(--lv-lp-text-sub); }
 @keyframes lvSheetMaskIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes lvSheetUp { from { transform: translateY(40%); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
 
@@ -824,18 +913,22 @@ body.dark {
     border-radius: 999px;
     display: grid;
     place-items: center;
-    color: var(--b3-theme-on-surface, var(--lv-safe-text));
-    /* 旧 WebView 无 color-mix 时回退实色，再渐进增强毛玻璃 */
-    background: var(--b3-theme-surface, var(--lv-safe-surface));
-    background: color-mix(in srgb, var(--b3-theme-surface, var(--lv-safe-surface)) 82%, transparent);
-    border: 1px solid var(--b3-border-color, var(--lv-safe-border));
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     -webkit-tap-highlight-color: transparent;
     touch-action: none;
     cursor: pointer;
     transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease, box-shadow 200ms ease;
+}
+:is([data-theme-mode="dark"], body.body--dark, html.dark) #lv-launchpad-mobile-ball {
+    color: #f8fafc;
+    background: rgba(30, 36, 49, 0.9);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 #lv-launchpad-mobile-ball:active { box-shadow: 0 6px 22px rgba(0, 0, 0, 0.26); }
 /* 水平位置由 JS 写入 style.left（拖拽/贴边吸附），transform 只负责半隐/沉浸/拖拽缩放视觉 */
@@ -873,41 +966,46 @@ body.dark {
 .lv-sheet-tile, .lv-sheet-action-chip, .lv-sheet-result, .lv-sheet-close, .lv-sheet-moon, .lv-sheet-today-chip { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
 /* ===== 今日一站式聚合条：各插件徽记数字一眼总览，点 chip 直达 ===== */
-.lv-sheet-today { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding: 6px 8px; border-radius: 12px; background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.08)); overscroll-behavior-x: contain; }
-.lv-sheet-today-label { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--b3-theme-primary, #3576c7); }
+.lv-sheet-today { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding: 5px 8px; border-radius: 11px; background: var(--lv-lp-accent-soft); border: 1px solid color-mix(in srgb, var(--lv-lp-accent) 16%, transparent); overscroll-behavior-x: contain; scrollbar-width: none; }
+.lv-sheet-today::-webkit-scrollbar { display: none; }
+.lv-sheet-today-label { flex-shrink: 0; font-size: 11.5px; font-weight: 700; color: var(--lv-lp-accent); }
 .lv-sheet-today-chip {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    border: 1px solid var(--b3-border-color, #e4e7eb);
-    background: var(--b3-theme-surface, #fff);
+    border: 1px solid var(--lv-lp-border);
+    background: var(--lv-lp-card-bg);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
     border-radius: 999px;
-    padding: 5px 12px;
-    font-size: 13px;
+    padding: 3.5px 10px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--b3-theme-on-surface, #1f2329);
+    color: var(--lv-lp-text);
     cursor: pointer;
 }
 .lv-sheet-today-chip:active { transform: scale(0.96); }
-.lv-sheet-today-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--b3-theme-primary, #3576c7); }
+.lv-sheet-today-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--lv-lp-accent); }
 
 /* ===== 专注模式：坞头 🌙 开关 + 入口徽记 ===== */
 .lv-sheet-moon {
-    border: none;
-    background: transparent;
-    font-size: 13px;
+    border: 1px solid var(--lv-lp-border);
+    background: var(--lv-lp-card-bg);
+    font-size: 12.5px;
     line-height: 1;
-    padding: 6px 8px;
-    margin-right: 2px;
-    border-radius: 8px;
-    color: var(--b3-theme-on-surface, #1f2329);
+    height: 32px;
+    padding: 0 10px;
+    margin-left: auto;
+    margin-right: 4px;
+    border-radius: 999px;
+    color: var(--lv-lp-text);
     cursor: pointer;
     white-space: nowrap;
 }
 .lv-sheet-moon[aria-pressed="true"] {
-    background: var(--b3-theme-primary-lightest, rgba(53, 118, 199, 0.12));
-    color: var(--b3-theme-primary, #3576c7);
+    background: var(--lv-lp-accent-soft);
+    border-color: color-mix(in srgb, var(--lv-lp-accent) 30%, transparent);
+    color: var(--lv-lp-accent);
     font-weight: 600;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -920,13 +1018,15 @@ function ensureStyles(): void {
     const styleId = "lv-notice-styles";
     const existing = document.getElementById(styleId);
     if (existing) {
-        if ((existing.textContent?.length ?? 0) < STYLES.length) {
+        if (existing.getAttribute?.("data-lv-ver") !== "2.1" || (existing.textContent?.length ?? 0) < STYLES.length) {
             existing.textContent = STYLES;
+            existing.setAttribute?.("data-lv-ver", "2.1");
         }
         return;
     }
     const styleEl = document.createElement("style");
     styleEl.id = styleId;
+    styleEl.setAttribute?.("data-lv-ver", "2.1");
     styleEl.textContent = STYLES;
     document.head.appendChild(styleEl);
 }
@@ -2409,7 +2509,7 @@ function getLaunchpadHub(): LvLaunchpadHub {
 
     const sharedRegistry = getSharedLaunchpadRegistry();
 
-    if (window.__LV_LAUNCHPAD__ && window.__LV_LAUNCHPAD__.version >= PROTOCOL_VERSION && (window.__LV_LAUNCHPAD__ as any).__v180 === true) {
+    if (window.__LV_LAUNCHPAD__ && window.__LV_LAUNCHPAD__.version >= PROTOCOL_VERSION && (window.__LV_LAUNCHPAD__ as any).__v210 === true) {
         return window.__LV_LAUNCHPAD__;
     }
 
@@ -2487,11 +2587,16 @@ function getLaunchpadHub(): LvLaunchpadHub {
         open(_mode?: "popover" | "center"): void {
             // 通过 DOM 或 CustomEvent 派发打开弹射坞并唤起罗盘
             window.dispatchEvent(new CustomEvent("lv:launchpad:open", { detail: { mode: _mode || "popover" } }));
-            openMobileSheet();
+            if (_mode === "popover" || (!isMobileFrontend() && _mode !== "center" && typeof document !== "undefined" && Boolean(document.getElementById("toolbar")))) {
+                openDesktopLaunchpadPopover();
+            } else {
+                openMobileSheet();
+            }
         },
 
         close(): void {
             window.dispatchEvent(new CustomEvent("lv:launchpad:close"));
+            closeDesktopLaunchpadPopover();
             closeMobileSheet();
         },
 
@@ -2500,7 +2605,11 @@ function getLaunchpadHub(): LvLaunchpadHub {
         }
     };
 
+    (hub as any).__v210 = true;
     (hub as any).__v180 = true;
+    (hub as any).openMobileSheet = () => openMobileSheet();
+    (hub as any).closeMobileSheet = () => closeMobileSheet();
+    (hub as any).openDesktopPopover = () => openDesktopLaunchpadPopover();
     window.__LV_LAUNCHPAD__ = hub;
     healMissingPluginsFromHost(sharedRegistry);
     return hub;
@@ -3393,13 +3502,23 @@ function ensureDesktopStyles(): void {
     if (typeof document === "undefined" || !document.head || typeof document.createElement !== "function") return;
     const cssText = `
 .lv-desktop-launchpad-popover {
+  --lv-lp-bg: linear-gradient(165deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+  --lv-lp-panel-bg: #f8fafc;
+  --lv-lp-card-bg: #ffffff;
+  --lv-lp-card-hover-bg: #ffffff;
+  --lv-lp-border: rgba(15, 23, 42, 0.075);
+  --lv-lp-border-strong: rgba(15, 23, 42, 0.12);
+  --lv-lp-text: #0f172a;
+  --lv-lp-text-sub: #64748b;
+  --lv-lp-accent: #2563eb;
+  --lv-lp-accent-soft: rgba(37, 99, 235, 0.09);
+  --lv-lp-card-shadow: 0 2px 6px -1px rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
-  color: var(--b3-theme-on-surface, var(--b3-theme-on-background, #0f172a));
-  background: var(--b3-theme-surface, #ffffff);
-  background: color-mix(in srgb, var(--b3-theme-surface, #ffffff) 94%, transparent);
-  border: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
-  border-radius: 16px;
-  box-shadow: 0 24px 50px -12px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: var(--lv-lp-text);
+  background: var(--lv-lp-bg) !important;
+  border: 1px solid var(--lv-lp-border-strong) !important;
+  border-radius: 18px;
+  box-shadow: 0 24px 56px -12px rgba(15, 23, 42, 0.18), 0 8px 20px -6px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
   backdrop-filter: blur(32px) saturate(190%);
   -webkit-backdrop-filter: blur(32px) saturate(190%);
   transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
@@ -3408,13 +3527,25 @@ function ensureDesktopStyles(): void {
   box-sizing: border-box;
 }
 :is([data-theme-mode="dark"], body.body--dark, html.dark) .lv-desktop-launchpad-popover {
-  box-shadow: 0 24px 56px -10px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --lv-lp-bg: linear-gradient(165deg, rgba(24, 28, 38, 0.97) 0%, rgba(15, 18, 26, 0.98) 100%);
+  --lv-lp-panel-bg: rgba(30, 36, 49, 0.76);
+  --lv-lp-card-bg: rgba(33, 39, 53, 0.92);
+  --lv-lp-card-hover-bg: rgba(40, 47, 64, 0.98);
+  --lv-lp-border: rgba(255, 255, 255, 0.085);
+  --lv-lp-border-strong: rgba(255, 255, 255, 0.14);
+  --lv-lp-text: #f8fafc;
+  --lv-lp-text-sub: #94a3b8;
+  --lv-lp-accent: #60a5fa;
+  --lv-lp-accent-soft: rgba(59, 130, 246, 0.18);
+  --lv-lp-card-shadow: 0 4px 12px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 28px 60px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }`;
     const existing = document.getElementById("lv-launchpad-desktop-styles");
     try {
         const style = existing ?? document.createElement("style");
-        if (existing && (existing.textContent?.length ?? 0) >= cssText.length + 2500) return;
+        if (existing && existing.getAttribute?.("data-lv-ver") === "2.1") return;
         style.id = "lv-launchpad-desktop-styles";
+        style.setAttribute?.("data-lv-ver", "2.1");
         style.textContent = cssText + `
 .lv-desktop-launchpad-popover * {
   box-sizing: border-box;
@@ -3433,55 +3564,57 @@ function ensureDesktopStyles(): void {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 16px 10px;
-  border-bottom: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
+  padding: 13px 16px 11px;
+  border-bottom: 1px solid var(--lv-lp-border);
+  background: var(--lv-lp-card-bg);
   flex-shrink: 0;
 }
 .lv-pop-view-tabs {
   display: inline-flex;
-  background: var(--b3-theme-surface-light, rgba(15, 23, 42, 0.05));
-  border: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
-  border-radius: 6px;
+  background: var(--lv-lp-panel-bg);
+  border: 1px solid var(--lv-lp-border);
+  border-radius: 7px;
   padding: 2px;
 }
 .lv-pop-view-tab {
   border: none;
   background: transparent;
-  color: var(--b3-theme-on-surface-light, #64748b);
+  color: var(--lv-lp-text-sub);
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 2.5px 8px;
+  border-radius: 5px;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.14s ease;
 }
 .lv-pop-view-tab.active {
-  background: var(--b3-theme-surface, #fff);
-  color: var(--b3-theme-on-surface, #0f172a);
+  background: var(--lv-lp-card-bg);
+  color: var(--lv-lp-text);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 .lv-pop-sub-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 3.5px 8.5px;
+  border-radius: 7px;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.1));
-  background: var(--b3-theme-surface-lighter, rgba(15, 23, 42, 0.03));
-  color: var(--b3-theme-on-surface, #334155);
+  border: 1px solid var(--lv-lp-border);
+  background: var(--lv-lp-card-bg);
+  color: var(--lv-lp-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
   font-family: inherit;
   transition: all 0.14s ease;
   user-select: none;
 }
 .lv-pop-sub-btn:hover,
 .lv-pop-sub-btn.active {
-  border-color: var(--b3-theme-primary, #2563eb);
-  color: var(--b3-theme-primary, #2563eb);
-  background: var(--b3-theme-primary-lightest, rgba(37, 99, 235, 0.08));
+  border-color: var(--lv-lp-accent);
+  color: var(--lv-lp-accent);
+  background: var(--lv-lp-accent-soft);
 }
 .lv-pop-sub-btn:active,
 .lv-pop-view-tab:active,
@@ -3498,13 +3631,22 @@ function ensureDesktopStyles(): void {
   overscroll-behavior: contain;
 }
 .lv-pop-search-bar {
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
+  margin: 10px 14px 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--lv-lp-border-strong);
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--b3-theme-surface-lighter, rgba(15, 23, 42, 0.02));
+  background: var(--lv-lp-panel-bg);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
   flex-shrink: 0;
+  transition: all 0.16s ease;
+}
+.lv-pop-search-bar:focus-within {
+  background: var(--lv-lp-card-bg);
+  border-color: var(--lv-lp-accent);
+  box-shadow: 0 0 0 3px var(--lv-lp-accent-soft);
 }
 .lv-pop-search-input {
   flex: 1;
@@ -3513,38 +3655,39 @@ function ensureDesktopStyles(): void {
   border: none;
   outline: none;
   font-size: 12.5px;
-  color: var(--b3-theme-on-surface, #0f172a);
+  color: var(--lv-lp-text);
   font-family: inherit;
 }
 .lv-pop-search-input::placeholder {
-  color: var(--b3-theme-on-surface-light, #94a3b8);
+  color: var(--lv-lp-text-sub);
 }
 .lv-pop-kbd {
   font-size: 10px;
-  background: var(--b3-theme-surface, #fff);
-  padding: 1px 5px;
+  background: var(--lv-lp-card-bg);
+  padding: 1.5px 5px;
   border-radius: 4px;
-  border: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.1));
-  color: var(--b3-theme-on-surface-light, #64748b);
+  border: 1px solid var(--lv-lp-border);
+  color: var(--lv-lp-text-sub);
   font-weight: 500;
   white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
 }
 .lv-pop-strip {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
-  border-bottom: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.06));
+  padding: 4px 14px 8px;
+  border-bottom: 1px solid var(--lv-lp-border);
   overflow-x: auto;
   scrollbar-width: none;
   flex-shrink: 0;
-  background: var(--b3-theme-surface, #fff);
+  background: transparent;
 }
 .lv-pop-strip::-webkit-scrollbar { display: none; }
 .lv-pop-strip-label {
   font-size: 10.5px;
   font-weight: 700;
-  color: var(--b3-theme-on-surface-light, #64748b);
+  color: var(--lv-lp-text-sub);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -3552,13 +3695,14 @@ function ensureDesktopStyles(): void {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 9px;
+  padding: 2.5px 9px;
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 500;
-  border: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.1));
-  background: var(--b3-theme-surface-lighter, rgba(15, 23, 42, 0.03));
-  color: var(--b3-theme-on-surface, #0f172a);
+  border: 1px solid var(--lv-lp-border);
+  background: var(--lv-lp-card-bg);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+  color: var(--lv-lp-text);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
@@ -3566,21 +3710,24 @@ function ensureDesktopStyles(): void {
   transition: all 0.14s ease;
 }
 .lv-pop-strip-chip:hover {
-  border-color: var(--b3-theme-primary, #2563eb);
-  color: var(--b3-theme-primary, #2563eb);
-  background: var(--b3-theme-primary-lightest, rgba(37, 99, 235, 0.08));
+  border-color: var(--lv-lp-accent);
+  color: var(--lv-lp-accent);
+  background: var(--lv-lp-accent-soft);
 }
 .lv-pop-tile {
+  --tile-brand: #3b82f6;
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 13px 8px 11px;
-  border-radius: 12px;
-  border: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
-  background: var(--b3-theme-surface-lighter, rgba(15, 23, 42, 0.025));
+  padding: 14px 8px 11px;
+  border-radius: 14px;
+  border: 1px solid var(--lv-lp-border);
+  background: var(--lv-lp-card-bg);
+  background-image: radial-gradient(96px circle at 86% 14%, color-mix(in srgb, var(--tile-brand) 9%, transparent), transparent 72%);
+  box-shadow: var(--lv-lp-card-shadow);
   cursor: pointer;
   user-select: none;
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
@@ -3589,33 +3736,34 @@ function ensureDesktopStyles(): void {
 }
 .lv-pop-tile:hover,
 .lv-pop-tile.lv-pop-tile-focused {
-  background: var(--b3-theme-surface, #ffffff);
-  border-color: var(--b3-theme-primary, #2563eb);
+  background-color: var(--lv-lp-card-hover-bg);
+  background-image: radial-gradient(110px circle at 85% 15%, color-mix(in srgb, var(--tile-brand) 15%, transparent), transparent 75%);
+  border-color: color-mix(in srgb, var(--tile-brand) 55%, var(--lv-lp-accent));
   transform: translateY(-2px);
-  box-shadow: 0 10px 22px -6px rgba(15, 23, 42, 0.12), 0 0 0 1px var(--b3-theme-primary, #2563eb);
+  box-shadow: 0 12px 24px -6px color-mix(in srgb, var(--tile-brand) 22%, rgba(15, 23, 42, 0.1)), 0 0 0 1px color-mix(in srgb, var(--tile-brand) 45%, transparent);
 }
 .lv-pop-tile:active {
   transform: scale(0.97);
 }
 .lv-pop-icon-wrap {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 7px;
-  background: var(--b3-theme-surface, #ffffff);
-  background: color-mix(in srgb, currentColor 10%, var(--b3-theme-surface, #ffffff));
-  border: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
-  border-color: color-mix(in srgb, currentColor 22%, var(--b3-border-color-trans, rgba(15, 23, 42, 0.08)));
+  background: linear-gradient(135deg, color-mix(in srgb, currentColor 16%, var(--lv-lp-card-bg)) 0%, color-mix(in srgb, currentColor 7%, var(--lv-lp-card-bg)) 100%);
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  box-shadow: 0 4px 10px -2px color-mix(in srgb, currentColor 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.65);
   position: relative;
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
   flex-shrink: 0;
 }
 .lv-pop-tile:hover .lv-pop-icon-wrap,
 .lv-pop-tile.lv-pop-tile-focused .lv-pop-icon-wrap {
-  transform: scale(1.07);
+  transform: scale(1.08) translateY(-1px);
+  box-shadow: 0 6px 14px -2px color-mix(in srgb, currentColor 30%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 .lv-pop-status-dot {
   position: absolute;
@@ -3624,8 +3772,8 @@ function ensureDesktopStyles(): void {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1.5px solid var(--b3-theme-surface, #fff);
-  background: var(--b3-theme-primary, #2563eb);
+  border: 1.5px solid var(--lv-lp-card-bg);
+  background: var(--lv-lp-accent);
 }
 .lv-pop-status-dot.warn { background: #f59e0b; }
 .lv-pop-status-dot.error { background: #ef4444; }
@@ -3635,12 +3783,12 @@ function ensureDesktopStyles(): void {
   justify-content: space-between;
   text-align: left;
   padding: 8px 12px;
-  border-radius: 9px;
+  border-radius: 10px;
 }
 .lv-pop-tile.lv-pop-list-item:hover,
 .lv-pop-tile.lv-pop-list-item.lv-pop-tile-focused {
   transform: none;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 0 0 1px var(--b3-theme-primary, #2563eb);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06), 0 0 0 1px color-mix(in srgb, var(--tile-brand) 45%, var(--lv-lp-accent));
 }
 .lv-pop-pin-btn {
   transition: transform 0.12s ease, opacity 0.12s ease;
@@ -3651,12 +3799,12 @@ function ensureDesktopStyles(): void {
 .lv-pop-pin-btn:hover {
   opacity: 1 !important;
   transform: scale(1.15);
-  color: var(--b3-theme-primary, #2563eb) !important;
+  color: var(--lv-lp-accent) !important;
 }
 .lv-pop-badge {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  padding: 1px 7px;
+  padding: 1.5px 8px;
   border-radius: 999px;
   display: inline-block;
   width: fit-content;
@@ -3665,40 +3813,45 @@ function ensureDesktopStyles(): void {
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-top: 5px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 .lv-pop-badge.lv-badge-primary {
-  background: var(--b3-theme-primary-light, rgba(37, 99, 235, 0.12));
-  color: var(--b3-theme-primary, #2563eb);
+  background: var(--lv-lp-accent-soft);
+  color: var(--lv-lp-accent);
+  border: 1px solid color-mix(in srgb, var(--lv-lp-accent) 18%, transparent);
 }
 .lv-pop-badge.lv-badge-warn {
   background: rgba(245, 158, 11, 0.14);
   color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.24);
 }
 .lv-pop-badge.lv-badge-error {
   background: rgba(239, 68, 68, 0.14);
   color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.24);
 }
 .lv-pop-badge.lv-badge-success {
-  background: rgba(16, 185, 129, 0.14);
+  background: rgba(16, 185, 129, 0.12);
   color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.22);
 }
 .lv-pop-actions-drawer {
-  border-top: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
-  background: var(--b3-theme-surface-lighter, rgba(15, 23, 42, 0.025));
+  border-top: 1px solid var(--lv-lp-border);
+  background: var(--lv-lp-panel-bg);
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   flex-shrink: 0;
 }
 .lv-pop-action-row {
   padding: 6px 10px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--b3-theme-on-surface, #0f172a);
+  border-radius: 8px;
+  border: 1px solid var(--lv-lp-border);
+  background: var(--lv-lp-card-bg);
+  color: var(--lv-lp-text);
   font-size: 12px;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   display: flex;
@@ -3706,18 +3859,22 @@ function ensureDesktopStyles(): void {
   justify-content: space-between;
   text-align: left;
   width: 100%;
-  transition: all 0.12s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+  transition: all 0.14s ease;
 }
 .lv-pop-action-row:hover {
-  background: var(--b3-theme-surface, #ffffff);
-  color: var(--b3-theme-primary, #2563eb);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  background: var(--lv-lp-card-hover-bg);
+  border-color: var(--lv-lp-accent);
+  color: var(--lv-lp-accent);
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.08);
+  transform: translateX(1.5px);
 }
 .lv-pop-hit-item {
   padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--b3-theme-surface-lighter, rgba(15, 23, 42, 0.03));
-  border: 1px solid var(--b3-border-color-trans, rgba(15, 23, 42, 0.08));
+  border-radius: 9px;
+  background: var(--lv-lp-card-bg);
+  border: 1px solid var(--lv-lp-border);
+  box-shadow: var(--lv-lp-card-shadow);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3730,9 +3887,9 @@ function ensureDesktopStyles(): void {
 }
 .lv-pop-hit-item:hover,
 .lv-pop-hit-item.focused {
-  background: var(--b3-theme-surface, #ffffff);
-  border-color: var(--b3-theme-primary, #2563eb);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+  background: var(--lv-lp-card-hover-bg);
+  border-color: var(--lv-lp-accent);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
 }
 .lv-pop-pulse-dot {
   width: 7px;
@@ -3809,18 +3966,18 @@ function buildActionsDrawerInnerHtml(
         const safeAct = escapeHtml(String(act));
         rowsHtml += `
           <button type="button" class="lv-pop-action-row" data-action-plugin="${safePluginId}" data-action-name="${safeAct}">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">• ${safeAct}</span>
-            <span style="font-size:10.5px;color:var(--b3-theme-on-surface-light,#64748b);flex-shrink:0;margin-left:8px;">↵ 执行</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⚡ ${safeAct}</span>
+            <span style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);flex-shrink:0;margin-left:8px;">↵ 执行</span>
           </button>
         `;
     });
 
     return `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
-        <span class="lv-pop-actions-title" style="font-size:11.5px;font-weight:700;color:var(--b3-theme-primary,#2563eb);">⚡ ${safeTitle} · 极速二级行动直达</span>
-        <button type="button" class="lv-pop-actions-limit-btn" style="border:none;background:transparent;font-size:10.5px;color:var(--b3-theme-on-surface-light,#64748b);cursor:pointer;padding:2px 4px;font-family:inherit;">${escapeHtml(limitToggleLabel)}</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span class="lv-pop-actions-title" style="font-size:11.5px;font-weight:700;color:var(--lv-lp-accent,#2563eb);">⚡ ${safeTitle} · 极速二级行动直达</span>
+        <button type="button" class="lv-pop-actions-limit-btn" style="border:none;background:transparent;font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);cursor:pointer;padding:2px 4px;font-family:inherit;">${escapeHtml(limitToggleLabel)}</button>
       </div>
-      <div class="lv-pop-actions-list" style="display:flex;flex-direction:column;gap:2px;">
+      <div class="lv-pop-actions-list" style="display:flex;flex-direction:column;gap:4px;">
         ${rowsHtml}
       </div>
     `;
@@ -3848,15 +4005,15 @@ export function buildLaunchpadPopoverHtml(
     const toggleAllTitle = allPinned ? "收敛全部到小驴罗盘 (新版极简模式)" : "平铺全部独立图标到顶栏 (恢复老版布局)";
     const toggleAllText = allPinned ? "收敛全部" : "平铺顶栏";
     const pinSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;fill:none!important;stroke:currentColor!important;vertical-align:-1px;" aria-hidden="true"><path d="M12 17v5" fill="none"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" fill="none"/></svg>`;
-    const searchSvg = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;fill:none!important;stroke:currentColor!important;flex-shrink:0;color:var(--b3-theme-on-surface-light,#64748b);" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none"/><line x1="21" y1="21" x2="16.65" y2="16.65" fill="none"/></svg>`;
+    const searchSvg = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;fill:none!important;stroke:currentColor!important;flex-shrink:0;color:var(--lv-lp-text-sub,#64748b);" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none"/><line x1="21" y1="21" x2="16.65" y2="16.65" fill="none"/></svg>`;
 
     const focusLabel = focusActive ? `🌙 至${new Date(focusUntil).toTimeString().slice(0, 5)}` : "🌙 专注";
     const headerHtml = `
       <div class="lv-pop-header">
-        <div style="display:flex;align-items:center;gap:7px;min-width:0;">
-          <span style="display:inline-flex;align-items:center;color:var(--b3-theme-primary,#2563eb);">${COMPASS_SVG}</span>
-          <span style="font-weight:700;font-size:14px;color:var(--b3-theme-on-surface,#0f172a);white-space:nowrap;">小驴家族极速弹射坞</span>
-          <span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--b3-theme-primary-light,rgba(37,99,235,0.1));color:var(--b3-theme-primary,#2563eb);white-space:nowrap;">${items.length} 插件已联结</span>
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">${COMPASS_SVG}</span>
+          <span style="font-weight:700;font-size:14px;color:var(--lv-lp-text,#0f172a);white-space:nowrap;letter-spacing:-0.01em;">小驴罗盘</span>
+          <span style="font-size:10.5px;font-weight:600;padding:1.5px 7px;border-radius:999px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);white-space:nowrap;">${items.length} 插件联结</span>
         </div>
         <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
           <div class="lv-pop-view-tabs" role="tablist" aria-label="视图切换">
@@ -3866,7 +4023,7 @@ export function buildLaunchpadPopoverHtml(
           <button type="button" class="lv-pop-sub-btn lv-pop-focus-btn ${focusActive ? "active" : ""}" title="${focusActive ? "点击退出全局专注模式" : "开启全局专注模式（静音通知至今晚）"}">${escapeHtml(focusLabel)}</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-pref-btn ${showPref ? "active" : ""}" title="顶栏与罗盘坞内显隐及跨插件联动设置">⚙ 设置</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-toggle-all-btn" title="${toggleAllTitle}">${pinSvg}<span>${toggleAllText}</span></button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-close-btn" title="关闭 (Esc)" style="padding:3px 6px;">✕</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-close-btn" title="关闭 (Esc)" style="padding:3.5px 7px;">✕</button>
         </div>
       </div>
     `;
@@ -3881,12 +4038,12 @@ export function buildLaunchpadPopoverHtml(
             const pColor = resolveSafeBrandColor(p.id, p.color);
             const pSvg = renderPluginLitheSvg(p.id, 15);
             stateRowsHtml += `
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--b3-border-color-trans,rgba(15,23,42,0.08));">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
                 <div style="display:flex;align-items:center;gap:8px;">
                   <span style="color:${pColor};display:inline-flex;align-items:center;">${pSvg}</span>
-                  <strong style="font-size:12.5px;color:var(--b3-theme-on-surface,#0f172a);">${pTitle}</strong>
+                  <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">${pTitle}</strong>
                 </div>
-                <select class="lv-pop-state-select" data-state-id="${pId}" style="background:var(--b3-theme-surface,#fff);border:1px solid var(--b3-border-color-trans,rgba(15,23,42,0.14));color:var(--b3-theme-on-surface,#0f172a);padding:3px 8px;border-radius:6px;font-size:11.5px;font-family:inherit;cursor:pointer;">
+                <select class="lv-pop-state-select" data-state-id="${pId}" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:3px 8px;border-radius:6px;font-size:11.5px;font-family:inherit;cursor:pointer;">
                   <option value="docked" ${p.state === "docked" ? "selected" : ""}>📥 仅在罗盘坞内 (顶栏隐藏)</option>
                   <option value="pinned" ${p.state === "pinned" ? "selected" : ""}>📌 置顶在外 (顶栏+坞内同时显示)</option>
                   <option value="hidden" ${p.state === "hidden" ? "selected" : ""}>👁️ 彻底隐藏 (仅快捷键唤醒)</option>
@@ -3900,27 +4057,27 @@ export function buildLaunchpadPopoverHtml(
         if (rules.length > 0) {
             rules.forEach((r) => {
                 rulesHtml += `
-                  <label style="padding:7px 10px;border-radius:8px;background:var(--b3-theme-surface,#fff);border:1px solid var(--b3-border-color-trans,rgba(15,23,42,0.08));display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;">
+                  <label style="padding:7px 10px;border-radius:8px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;">
                     <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
-                      <span style="font-size:12px;font-weight:600;color:var(--b3-theme-on-surface,#0f172a);">${escapeHtml(r.name)}</span>
-                      <span style="font-size:10.5px;color:var(--b3-theme-on-surface-light,#64748b);">${escapeHtml(r.desc || `${r.triggerSource} → ${r.actionPlugin}`)}</span>
+                      <span style="font-size:12px;font-weight:600;color:var(--lv-lp-text,#0f172a);">${escapeHtml(r.name)}</span>
+                      <span style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);">${escapeHtml(r.desc || `${r.triggerSource} → ${r.actionPlugin}`)}</span>
                     </div>
                     <input type="checkbox" class="lv-pop-rule-toggle" data-rule-id="${escapeHtml(r.id)}" ${r.enabled ? "checked" : ""} style="cursor:pointer;flex-shrink:0;" />
                   </label>
                 `;
             });
         } else {
-            rulesHtml = `<div style="font-size:11.5px;color:var(--b3-theme-on-surface-light,#64748b);padding:6px 2px;">各插件启动后注册的跨插件 IFTTT 规则将在此统一管控</div>`;
+            rulesHtml = `<div style="font-size:11.5px;color:var(--lv-lp-text-sub,#64748b);padding:6px 2px;">各插件启动后注册的跨插件 IFTTT 规则将在此统一管控</div>`;
         }
 
         prefDrawerHtml = `
-          <div class="lv-pop-pref-drawer" style="padding:12px 16px;border-bottom:1px solid var(--b3-border-color-trans,rgba(15,23,42,0.08));background:var(--b3-theme-surface-lighter,rgba(15,23,42,0.03));display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto;">
-            <div style="background:var(--b3-theme-primary-light,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:8px 12px;border-radius:8px;font-size:11.5px;line-height:1.5;color:var(--b3-theme-on-surface,#0f172a);">
+          <div class="lv-pop-pref-drawer" style="padding:12px 16px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));background:var(--lv-lp-panel-bg,#f8fafc);display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto;">
+            <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:8px 12px;border-radius:8px;font-size:11.5px;line-height:1.5;color:var(--lv-lp-text,#0f172a);">
               👋 <strong>顶栏与罗盘主权设置</strong>：自主决定哪些插件<strong>常驻在思源顶栏</strong>，哪些<strong>仅在罗盘坞内收敛</strong>，哪些<strong>彻底隐藏</strong>。
             </div>
-            <div style="font-weight:700;font-size:12px;color:var(--b3-theme-primary,#2563eb);margin-top:2px;">📌 顶栏与罗盘图标显隐管理</div>
+            <div style="font-weight:700;font-size:12px;color:var(--lv-lp-accent,#2563eb);margin-top:2px;">📌 顶栏与罗盘图标显隐管理</div>
             <div>${stateRowsHtml}</div>
-            <div style="font-weight:700;font-size:12px;color:var(--b3-theme-primary,#2563eb);margin-top:4px;">⚡ 跨插件智能自动化规则 (IFTTT)</div>
+            <div style="font-weight:700;font-size:12px;color:var(--lv-lp-accent,#2563eb);margin-top:4px;">⚡ 跨插件智能自动化规则 (IFTTT)</div>
             <div style="display:flex;flex-direction:column;gap:5px;">${rulesHtml}</div>
             <div style="display:flex;justify-content:flex-end;margin-top:4px;">
               <button type="button" class="lv-pop-sub-btn lv-pop-pref-btn active" style="padding:5px 12px;font-weight:600;">完成设置并返回罗盘 ➔</button>
@@ -3933,8 +4090,8 @@ export function buildLaunchpadPopoverHtml(
     const searchBarHtml = `
       <div class="lv-pop-search-bar">
         ${searchSvg}
-        <input type="text" class="lv-pop-search-input" placeholder="输入关键词穿透全家桶 (习惯 / 切片 / 资产 / 闪卡 / 人脉)..." aria-label="全生态穿透搜索" autocomplete="off" />
-        <span class="lv-pop-kbd">↑↓ 导航</span>
+        <input type="text" class="lv-pop-search-input" placeholder="搜索全家桶 (习惯 / 切片 / 资产 / 闪卡 / 人脉)..." aria-label="全生态穿透搜索" autocomplete="off" />
+        <span class="lv-pop-kbd">↑↓</span>
         <span class="lv-pop-kbd">↵ 直达</span>
         <span class="lv-pop-kbd">1~${items.length}</span>
       </div>
@@ -3967,8 +4124,8 @@ export function buildLaunchpadPopoverHtml(
             });
         }
         if (todayItems.length > 0) {
-            if (chipsHtml) chipsHtml += `<span style="width:1px;height:12px;background:var(--b3-border-color-trans,rgba(15,23,42,0.12));margin:0 2px;flex-shrink:0;"></span>`;
-            chipsHtml += `<span class="lv-pop-strip-label" style="color:var(--b3-theme-primary,#2563eb);">今日</span>`;
+            if (chipsHtml) chipsHtml += `<span style="width:1px;height:12px;background:var(--lv-lp-border-strong,rgba(15,23,42,0.12));margin:0 2px;flex-shrink:0;"></span>`;
+            chipsHtml += `<span class="lv-pop-strip-label" style="color:var(--lv-lp-accent,#2563eb);">今日</span>`;
             todayItems.forEach(({ it, m }) => {
                 const tColor = resolveSafeBrandColor(it.id, it.color);
                 const tName = escapeHtml(it.name);
@@ -3986,7 +4143,7 @@ export function buildLaunchpadPopoverHtml(
     // 核心呈现区：9宫格微磁贴 vs 紧凑列表视图
     let mainViewHtml = "";
     if (view === "list") {
-        mainViewHtml = `<div class="lv-pop-list" style="display:flex;flex-direction:column;gap:4px;padding:8px 12px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:310px;">`;
+        mainViewHtml = `<div class="lv-pop-list" style="display:flex;flex-direction:column;gap:5px;padding:8px 12px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:310px;">`;
         items.forEach((item, idx) => {
             const digit = idx + 1;
             const isPinned = item.state === "pinned";
@@ -4004,19 +4161,19 @@ export function buildLaunchpadPopoverHtml(
             const iconSvg = renderPluginLitheSvg(item.id, 17);
 
             mainViewHtml += `
-              <div class="lv-pop-tile lv-pop-list-item ${isFocused ? "lv-pop-tile-focused" : ""}" data-idx="${idx}" data-id="${safeId}" data-fullname="${safeFullName}">
+              <div class="lv-pop-tile lv-pop-list-item ${isFocused ? "lv-pop-tile-focused" : ""}" style="--tile-brand:${safeColor};" data-idx="${idx}" data-id="${safeId}" data-fullname="${safeFullName}">
                 <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
-                  <div class="lv-pop-icon-wrap" style="width:30px;height:30px;border-radius:8px;margin-bottom:0;color:${safeColor};">
+                  <div class="lv-pop-icon-wrap" style="width:32px;height:32px;border-radius:9px;margin-bottom:0;color:${safeColor};">
                     ${iconSvg}
                   </div>
-                  <span style="font-weight:600;font-size:13.5px;color:var(--b3-theme-on-surface,#0f172a);white-space:nowrap;">${displayTitle}</span>
+                  <span style="font-weight:650;font-size:13.5px;color:var(--lv-lp-text,#0f172a);white-space:nowrap;">${displayTitle}</span>
                   ${displayTitle !== safeName ? `<span style="display:none;">${safeName}</span>` : ""}
-                  <span style="font-size:11.5px;color:var(--b3-theme-on-surface-light,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeDesc}</span>
+                  <span style="font-size:11.5px;color:var(--lv-lp-text-sub,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeDesc}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                   ${badgeHtml}
-                  <span style="font-size:10px;font-weight:700;font-family:monospace;padding:1px 5px;border-radius:4px;background:var(--b3-theme-surface,#fff);border:1px solid var(--b3-border-color-trans,rgba(15,23,42,0.1));color:var(--b3-theme-on-surface-light,#64748b);">${digit}</span>
-                  <button type="button" class="lv-pop-pin-btn" data-pin-id="${safeId}" title="${pinTitle}" style="display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:${isPinned ? "var(--b3-theme-primary,#2563eb)" : "var(--b3-theme-on-surface,#64748b)"};opacity:${isPinned ? "1" : "0.35"};padding:3px;border-radius:4px;">${pinSvg}</button>
+                  <span style="font-size:10px;font-weight:700;font-family:monospace;padding:1px 5px;border-radius:4px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));color:var(--lv-lp-text-sub,#64748b);">${digit}</span>
+                  <button type="button" class="lv-pop-pin-btn" data-pin-id="${safeId}" title="${pinTitle}" style="display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:${isPinned ? "var(--lv-lp-accent,#2563eb)" : "var(--lv-lp-text-sub,#64748b)"};opacity:${isPinned ? "1" : "0.35"};padding:3px;border-radius:4px;">${pinSvg}</button>
                 </div>
               </div>
             `;
@@ -4024,7 +4181,7 @@ export function buildLaunchpadPopoverHtml(
         mainViewHtml += `</div>`;
     } else {
         const cols = items.length >= 3 ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))";
-        mainViewHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:${cols};gap:9px;padding:12px 14px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:320px;">`;
+        mainViewHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:${cols};gap:10px;padding:10px 14px 12px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:330px;">`;
 
         items.forEach((item, idx) => {
             const digit = idx + 1;
@@ -4043,23 +4200,23 @@ export function buildLaunchpadPopoverHtml(
             const safeColor = resolveSafeBrandColor(item.id, item.color);
             const badgeHtml = item.badge ? `<span class="lv-pop-badge ${escapeHtml(badgeClass)}">${safeBadge}</span>` : "";
             const statusDotHtml = item.badge ? `<span class="lv-pop-status-dot ${escapeHtml(dotClass)}" title="${safeBadge}"></span>` : "";
-            const recentTagHtml = isMostRecent ? `<span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:var(--b3-theme-primary-light,rgba(37,99,235,0.12));color:var(--b3-theme-primary,#2563eb);line-height:1.4;">最近</span>` : "";
-            const iconSvg = renderPluginLitheSvg(item.id, 18);
+            const recentTagHtml = isMostRecent ? `<span style="font-size:9px;font-weight:700;padding:0.5px 4.5px;border-radius:4px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);line-height:1.4;">最近</span>` : "";
+            const iconSvg = renderPluginLitheSvg(item.id, 19);
 
             mainViewHtml += `
-              <div class="lv-pop-tile ${isFocused ? "lv-pop-tile-focused" : ""}" data-idx="${idx}" data-id="${safeId}" data-fullname="${safeFullName}">
-                <span class="lv-pop-key" style="position:absolute;top:6px;left:6px;font-size:9.5px;font-weight:700;font-family:monospace;padding:0 4px;border-radius:4px;background:var(--b3-theme-surface,#fff);border:1px solid var(--b3-border-color-trans,rgba(15,23,42,0.08));color:var(--b3-theme-on-surface-light,#64748b);line-height:1.5;">${digit}</span>
-                <button type="button" class="lv-pop-pin-btn" data-pin-id="${safeId}" title="${pinTitle}" style="position:absolute;top:5px;right:5px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:${isPinned ? "var(--b3-theme-primary,#2563eb)" : "var(--b3-theme-on-surface,#64748b)"};opacity:${isPinned ? "1" : "0.28"};padding:3px;border-radius:4px;">${pinSvg}</button>
+              <div class="lv-pop-tile ${isFocused ? "lv-pop-tile-focused" : ""}" style="--tile-brand:${safeColor};" data-idx="${idx}" data-id="${safeId}" data-fullname="${safeFullName}">
+                <span class="lv-pop-key" style="position:absolute;top:6px;left:6px;font-size:9.5px;font-weight:700;font-family:monospace;padding:0 4.5px;border-radius:5px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));color:var(--lv-lp-text-sub,#64748b);line-height:1.55;">${digit}</span>
+                <button type="button" class="lv-pop-pin-btn" data-pin-id="${safeId}" title="${pinTitle}" style="position:absolute;top:5px;right:5px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:${isPinned ? "var(--lv-lp-accent,#2563eb)" : "var(--lv-lp-text-sub,#64748b)"};opacity:${isPinned ? "1" : "0.28"};padding:3px;border-radius:4px;">${pinSvg}</button>
                 <div class="lv-pop-icon-wrap" style="color:${safeColor};">
                   ${iconSvg}
                   ${statusDotHtml}
                 </div>
                 <div style="display:flex;align-items:center;justify-content:center;gap:4px;width:100%;min-width:0;">
-                  <span class="lv-pop-title" style="font-weight:600;font-size:14px;color:var(--b3-theme-on-surface,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayTitle}</span>
+                  <span class="lv-pop-title" style="font-weight:650;font-size:13.5px;color:var(--lv-lp-text,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayTitle}</span>
                   ${displayTitle !== safeName ? `<span style="display:none;">${safeName}</span>` : ""}
                   ${recentTagHtml}
                 </div>
-                <span class="lv-pop-desc" style="font-size:11.5px;color:var(--b3-theme-on-surface-light,#64748b);margin-top:3px;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeDesc}</span>
+                <span class="lv-pop-desc" style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);margin-top:2.5px;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeDesc}</span>
                 ${badgeHtml}
               </div>
             `;
@@ -4067,7 +4224,7 @@ export function buildLaunchpadPopoverHtml(
         mainViewHtml += `</div>`;
     }
 
-    const omniResultsContainerHtml = `<div class="lv-pop-omni-results" style="display:none;flex-direction:column;gap:5px;padding:10px 14px;max-height:310px;overflow-y:auto;"></div>`;
+    const omniResultsContainerHtml = `<div class="lv-pop-omni-results" style="display:none;flex-direction:column;gap:6px;padding:10px 14px;max-height:310px;overflow-y:auto;"></div>`;
 
     // 底部二级快捷行动常驻抽屉
     const focusedItem = items[focusedIdx] || items[0];
@@ -4084,15 +4241,15 @@ export function buildLaunchpadPopoverHtml(
     } catch { /* ignore */ }
 
     const footerHtml = `
-      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-top:1px solid var(--b3-border-color-trans,rgba(15,23,42,0.08));background:var(--b3-theme-surface-lighter,rgba(15,23,42,0.02));border-radius:0 0 16px 16px;flex-shrink:0;font-size:11px;color:var(--b3-theme-on-surface-light,#64748b);">
+      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-top:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));background:var(--lv-lp-card-bg,#ffffff);border-radius:0 0 18px 18px;flex-shrink:0;font-size:11px;color:var(--lv-lp-text-sub,#64748b);">
         <div style="display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
           <span class="lv-pop-pulse-dot"></span>
-          <span>${items.length} 插件已联结 · 今日活动 <strong>${todayActCount} 项</strong> · P 键置顶</span>
+          <span>${items.length} 插件协同 · 今日活动 <strong style="color:var(--lv-lp-text,#0f172a);">${todayActCount} 项</strong> · P 键置顶</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
           <button type="button" class="lv-pop-sub-btn lv-pop-diary-btn" title="将今日全生态活动汇总写入日记或复制">📝 今日回顾</button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-backup-btn" title="一键导出小驴全家桶联合灾备包">💾 全生态备份</button>
-          <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;color:var(--b3-theme-primary,#2563eb);padding:2px 4px;">Esc 关闭</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-backup-btn" title="一键导出小驴全家桶联合灾备包">💾 联合备份</button>
+          <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--lv-lp-accent,#2563eb);padding:2px 4px;">Esc</button>
         </div>
       </div>
     `;
@@ -4163,11 +4320,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
     if (popover.style) {
         popover.style.display = "flex";
         popover.style.flexDirection = "column";
-        popover.style.borderRadius = "16px";
-        popover.style.boxShadow = "0 24px 50px -12px rgba(15,23,42,0.22), 0 0 0 1px rgba(15,23,42,0.06)";
-        popover.style.background = "var(--b3-theme-surface,#fff)";
-        popover.style.border = "1px solid var(--b3-border-color-trans,rgba(15,23,42,0.08))";
-        popover.style.backdropFilter = "blur(32px)";
+        popover.style.borderRadius = "18px";
         popover.style.overflow = "hidden";
     }
 
@@ -4309,11 +4462,11 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                     html += `
                       <button type="button" class="lv-pop-hit-item ${idx === 0 ? "focused" : ""}" data-omni-idx="${idx}">
                         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-                          <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:var(--b3-theme-primary-light,rgba(37,99,235,0.12));color:${pColor};flex-shrink:0;">插件</span>
-                          <span style="font-size:12.5px;font-weight:600;color:var(--b3-theme-on-surface,#0f172a);white-space:nowrap;">${escapeHtml(p.fullName || p.name)}</span>
-                          <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.desc || "")}</span>
+                          <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:${pColor};flex-shrink:0;">插件</span>
+                          <span style="font-size:12.5px;font-weight:600;color:var(--lv-lp-text,#0f172a);white-space:nowrap;">${escapeHtml(p.fullName || p.name)}</span>
+                          <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.desc || "")}</span>
                         </div>
-                        <span style="font-size:10.5px;color:var(--b3-theme-primary,#2563eb);flex-shrink:0;">启动 ➔</span>
+                        <span style="font-size:10.5px;font-weight:600;color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">启动 ➔</span>
                       </button>
                     `;
                 });
@@ -4332,9 +4485,9 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                       <button type="button" class="lv-pop-hit-item ${idx === 0 ? "focused" : ""}" data-omni-idx="${idx}">
                         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                           <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.14);color:#059669;flex-shrink:0;">⚡ ${escapeHtml(p.name)}</span>
-                          <span style="font-size:12.5px;font-weight:600;color:var(--b3-theme-on-surface,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(action)}</span>
+                          <span style="font-size:12.5px;font-weight:600;color:var(--lv-lp-text,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(action)}</span>
                         </div>
-                        <span style="font-size:10.5px;color:var(--b3-theme-primary,#2563eb);flex-shrink:0;">执行 ➔</span>
+                        <span style="font-size:10.5px;font-weight:600;color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">执行 ➔</span>
                       </button>
                     `;
                 });
@@ -4353,17 +4506,17 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                     html += `
                       <button type="button" class="lv-pop-hit-item ${idx === 0 ? "focused" : ""}" data-omni-idx="${idx}">
                         <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">
-                          <span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--b3-theme-primary-light,rgba(37,99,235,0.12));color:var(--b3-theme-primary,#2563eb);flex-shrink:0;">${escapeHtml(hit.source || hit.badge || "小驴")}</span>
-                          <span style="font-size:12.5px;font-weight:600;color:var(--b3-theme-on-surface,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(hit.title)}</span>
-                          ${hit.snippet ? `<span style="font-size:11px;color:var(--b3-theme-on-surface-light,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(hit.snippet)}</span>` : ""}
+                          <span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">${escapeHtml(hit.source || hit.badge || "小驴")}</span>
+                          <span style="font-size:12.5px;font-weight:600;color:var(--lv-lp-text,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(hit.title)}</span>
+                          ${hit.snippet ? `<span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(hit.snippet)}</span>` : ""}
                         </div>
-                        <span style="font-size:10.5px;color:var(--b3-theme-primary,#2563eb);flex-shrink:0;">直达 ➔</span>
+                        <span style="font-size:10.5px;font-weight:600;color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">直达 ➔</span>
                       </button>
                     `;
                 });
 
                 if (omniHitsList.length === 0) {
-                    html = `<div style="text-align:center;padding:28px 12px;font-size:12px;color:var(--b3-theme-on-surface-light,#64748b);">未在小驴全家桶中穿透检索到与 “<strong>${escapeHtml(searchInput.value.trim())}</strong>” 相关的条目</div>`;
+                    html = `<div style="text-align:center;padding:28px 12px;font-size:12px;color:var(--lv-lp-text-sub,#64748b);">未在小驴全家桶中穿透检索到与 “<strong style="color:var(--lv-lp-text,#0f172a);">${escapeHtml(searchInput.value.trim())}</strong>” 相关的条目</div>`;
                 }
 
                 omniBox.innerHTML = html;
@@ -5176,6 +5329,9 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
     // 优先渲染插件真实 sprite 图标（kebab/camel 双形态探测）；再回退内置 24x24 litheness 线性图标，最终回退品牌色圆点
     const iconHref = resolveIconHref(item.svgIcon);
     const tileBrandColor = (item.color && !item.color.startsWith("var(--lv-brand")) ? item.color : PLUGIN_DEFAULT_BRAND_COLORS[item.id];
+    if (tileBrandColor && tile.style && typeof tile.style.setProperty === "function") {
+        try { tile.style.setProperty("--tile-brand", tileBrandColor); } catch { /* ignore */ }
+    }
     if (iconHref) {
         const iconWrap = document.createElement("span");
         iconWrap.className = "lv-sheet-tile-icon";
@@ -5308,15 +5464,8 @@ function openMobileSheet(): void {
     head.className = "lv-sheet-head";
     const title = document.createElement("span");
     title.className = "lv-sheet-title";
-    title.textContent = "🐴 小驴罗盘";
+    title.textContent = "🧭 小驴罗盘";
     head.appendChild(title);
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "lv-sheet-close";
-    closeBtn.setAttribute("aria-label", "关闭");
-    closeBtn.textContent = "✕";
-    closeBtn.addEventListener("click", () => closeMobileSheet());
-    head.appendChild(closeBtn);
 
     // 专注模式开关（🌙）：开启后全生态 card/capsule 静音至今晚，仅留历史档
     const moonBtn = document.createElement("button");
@@ -5326,7 +5475,7 @@ function openMobileSheet(): void {
     const syncMoon = () => {
         const active = isNotifyFocusActive();
         const until = getNotifyFocusUntil();
-        moonBtn.textContent = active ? `🌙 至 ${new Date(until).toTimeString().slice(0, 5)}` : "🌙";
+        moonBtn.textContent = active ? `🌙 至 ${new Date(until).toTimeString().slice(0, 5)}` : "🌙 专注";
         moonBtn.setAttribute("aria-pressed", String(active));
         moonBtn.title = active ? "点击退出专注模式" : "开启专注模式（全生态静音至今晚）";
     };
@@ -5349,6 +5498,14 @@ function openMobileSheet(): void {
         refreshEntryBadgeDot();
     });
     head.appendChild(moonBtn);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "lv-sheet-close";
+    closeBtn.setAttribute("aria-label", "关闭");
+    closeBtn.textContent = "✕";
+    closeBtn.addEventListener("click", () => closeMobileSheet());
+    head.appendChild(closeBtn);
     sheet.appendChild(head);
 
     // 今日一站式聚合条：解析各插件徽记数字，一眼总览今日待办，点 chip 直达对应插件
@@ -5617,9 +5774,9 @@ function openMobileSheet(): void {
     if (quickTarget && Array.isArray(quickTarget.actions) && quickTarget.actions.length > 0) {
         const quickBox = document.createElement("div");
         quickBox.className = "lv-sheet-quick-drawer";
-        quickBox.style.cssText = "margin:2px 0 10px;padding:10px 12px;border-radius:12px;background:var(--b3-theme-surface-lighter,rgba(15,23,42,0.03));border:1px solid var(--b3-border-color,rgba(15,23,42,0.08));";
+        quickBox.style.cssText = "margin:2px 0 8px;padding:9px 11px;border-radius:12px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));";
         const qHead = document.createElement("div");
-        qHead.style.cssText = "font-size:11.5px;font-weight:700;color:var(--b3-theme-primary,#2563eb);margin-bottom:6px;";
+        qHead.style.cssText = "font-size:11.5px;font-weight:700;color:var(--lv-lp-accent,#2563eb);margin-bottom:6px;";
         qHead.textContent = `⚡ ${quickTarget.fullName || quickTarget.name} · 快捷行动直达`;
         quickBox.appendChild(qHead);
         const qChips = document.createElement("div");
