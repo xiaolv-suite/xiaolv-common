@@ -2,7 +2,7 @@
  * 隔离环境独立网页服务脚本 (Isolated Live Web Environment)
  *
  * 专门用于为用户拉起一个完全隔离的、带完整图形界面的真实思源桌面网页端：
- * 1. 独立临时工作区位于 D 盘（D:\Temp\xiaolv-common-live-workspace），零占用 C 盘空间；
+ * 1. 默认独立工作区位于 D:\思源插件配套\测试工作区\小驴常用-isolated-preview，零占用 C 盘空间；
  * 2. 挂载真实思源内核与思源官方桌面 Web 前端 (http://127.0.0.1:43920/stage/build/desktop/)；
  * 3. 自动同步安装最新 dist/ 构建产物（小驴常用），开启集市信任与插件挂载；
  * 4. 自动预置测试笔记本、体验文档与常用库，开箱即用无需重复引导；
@@ -28,7 +28,10 @@ const INSTANCE_RECORD = path.join(ROOT, "scripts", ".last-live-instance.json");
 
 function resolveWorkspace() {
     if (process.env.SIYUAN_LIVE_WS) return path.resolve(process.env.SIYUAN_LIVE_WS);
-    // 优先放置在 D:\思源插件\小驴常用-isolated-preview（与小驴人脉规范保持一致，完全在 D 盘，零占用 C 盘）
+    // 默认测试数据与源码分开存放；其他环境沿用仓库旁目录与临时目录回退。
+    if (process.platform === "win32" && fs.existsSync("D:\\")) {
+        return path.join("D:\\思源插件配套", "测试工作区", "小驴常用-isolated-preview");
+    }
     const parentDir = path.dirname(ROOT);
     const dPreview = path.join(parentDir, "小驴常用-isolated-preview");
     if (fs.existsSync(parentDir)) {

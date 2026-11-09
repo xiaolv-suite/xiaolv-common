@@ -2251,20 +2251,24 @@ export default class XiaolvCommonPlugin extends Plugin {
             if (!nbReceipt.ok || nbReceipt.data.length === 0) {
                 return {ok: false, count: 0};
             }
+            const hubNb = nbReceipt.data.find((n) => /小驴空间|小驴生态统一测试空间|小驴笔记本|小驴常用/.test(n.name || ""));
             const targetNotebookId = this.config?.mode === "notebook"
-                ? (this.config.notebookIds?.[0] || nbReceipt.data[0]!.id)
-                : nbReceipt.data[0]!.id;
+                ? (this.config.notebookIds?.[0] || hubNb?.id || nbReceipt.data[0]!.id)
+                : (hubNb?.id || nbReceipt.data[0]!.id);
+            const targetNbMeta = nbReceipt.data.find((n) => n.id === targetNotebookId);
+            const isHubNb = Boolean(targetNbMeta && /小驴空间|小驴生态统一测试空间|小驴笔记本/.test(targetNbMeta.name || ""));
             const docTitle = `常用资产 · ${pack.name}`;
+            const targetHPath = isHubNb ? `/07-小驴常用/${docTitle}` : `/${docTitle}`;
             const docMd = buildDedicatedDocMarkdown(pack);
             const res = await this.kernelClient.request<string>("createDocWithMd", {
                 notebook: targetNotebookId,
-                path: `/${docTitle}`,
+                path: targetHPath,
                 markdown: docMd,
             });
             if (res) {
                 await this.library.ensureIndex(0);
                 this.notifyExternalDataChange();
-                return {ok: true, count: pack.itemCount, docId: res, hPath: `/${docTitle}`};
+                return {ok: true, count: pack.itemCount, docId: res, hPath: targetHPath};
             }
             return {ok: false, count: 0};
         } catch {

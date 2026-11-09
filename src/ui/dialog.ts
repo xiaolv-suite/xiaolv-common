@@ -3954,7 +3954,12 @@ export class CommonSearchDialog {
                     const cHead = document.createElement("div");
                     cHead.className = "xlc-group-head xlc-group-head--common";
                     const commonCount = this.results.filter((r) => !r.isOmni).length;
-                    cHead.innerHTML = `<span>📌 常用语资产 (${commonCount})</span><span class="xlc-group-head-tip">点击直接插入 · 右侧可复制</span>`;
+                    const cLabel = document.createElement("span");
+                    cLabel.textContent = `📌 常用语资产 (${commonCount})`;
+                    const cTip = document.createElement("span");
+                    cTip.className = "xlc-group-head-tip";
+                    cTip.textContent = "点击直接插入 · 右侧可复制";
+                    cHead.append(cLabel, cTip);
                     list.appendChild(cHead);
                 }
                 if (entry && entry.isOmni && !omniHeaderPlaced) {
@@ -3962,7 +3967,12 @@ export class CommonSearchDialog {
                     const omniHead = document.createElement("div");
                     omniHead.className = "xlc-group-head xlc-group-head--omni";
                     const omniCount = this.results.filter((r) => r.isOmni).length;
-                    omniHead.innerHTML = `<span>🔍 思源全库匹配内容块 (${omniCount})</span><span class="xlc-group-head-tip">点击直接插入 · 点右侧「复制 / 存常用 / 原文」</span>`;
+                    const oLabel = document.createElement("span");
+                    oLabel.textContent = `🔍 思源全库匹配内容块 (${omniCount})`;
+                    const oTip = document.createElement("span");
+                    oTip.className = "xlc-group-head-tip";
+                    oTip.textContent = "点击直接插入 · 点右侧「复制 / 存常用 / 原文」";
+                    omniHead.append(oLabel, oTip);
                     list.appendChild(omniHead);
                 }
                 if (entry) list.appendChild(this.createEntryRow(entry, i));
