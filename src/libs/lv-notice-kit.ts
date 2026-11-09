@@ -918,7 +918,13 @@ body.dark {
 function ensureStyles(): void {
     if (typeof document === "undefined") return;
     const styleId = "lv-notice-styles";
-    if (document.getElementById(styleId)) return;
+    const existing = document.getElementById(styleId);
+    if (existing) {
+        if ((existing.textContent?.length ?? 0) < STYLES.length) {
+            existing.textContent = STYLES;
+        }
+        return;
+    }
     const styleEl = document.createElement("style");
     styleEl.id = styleId;
     styleEl.textContent = STYLES;
@@ -3385,11 +3391,7 @@ function setLaunchpadActionLimit(limit: number | "all"): void {
 
 function ensureDesktopStyles(): void {
     if (typeof document === "undefined" || !document.head || typeof document.createElement !== "function") return;
-    if (document.getElementById("lv-launchpad-desktop-styles")) return;
-    try {
-        const style = document.createElement("style");
-        style.id = "lv-launchpad-desktop-styles";
-        style.textContent = `
+    const cssText = `
 .lv-desktop-launchpad-popover {
   font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   color: var(--b3-theme-on-surface, var(--b3-theme-on-background, #0f172a));
@@ -3405,6 +3407,15 @@ function ensureDesktopStyles(): void {
   outline: none;
   box-sizing: border-box;
 }
+:is([data-theme-mode="dark"], body.body--dark, html.dark) .lv-desktop-launchpad-popover {
+  box-shadow: 0 24px 56px -10px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}`;
+    const existing = document.getElementById("lv-launchpad-desktop-styles");
+    try {
+        const style = existing ?? document.createElement("style");
+        if (existing && (existing.textContent?.length ?? 0) >= cssText.length + 2500) return;
+        style.id = "lv-launchpad-desktop-styles";
+        style.textContent = cssText + `
 .lv-desktop-launchpad-popover * {
   box-sizing: border-box;
 }
@@ -3733,7 +3744,7 @@ function ensureDesktopStyles(): void {
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
 }
 `;
-        document.head.appendChild(style);
+        if (!existing) document.head.appendChild(style);
     } catch { /* ignore */ }
 }
 

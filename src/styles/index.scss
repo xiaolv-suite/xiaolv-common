@@ -4145,8 +4145,35 @@
   }
 }
 
+.b3-dialog__header:has(.xlc-dialog-close-btn) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--xlc-space-2);
+}
+
 .xlc-dialog-close-btn {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--b3-theme-on-surface);
+  opacity: 0.72;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    opacity: 1;
+    background: var(--b3-theme-surface-lighter);
+  }
 }
 
 .b3-dialog__container.xlc-mobile-modal {

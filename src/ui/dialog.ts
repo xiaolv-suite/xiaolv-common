@@ -351,6 +351,9 @@ export class CommonSearchDialog {
         if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
         this.bindMobileVisualViewport(isMobile, container, content);
         mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"));
+        if (!isMobile) {
+            adaptSecondaryDialogForMobile(this.dialog, this.deps.t("close") || "关闭");
+        }
         this.syncScopeChips();
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
