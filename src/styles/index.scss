@@ -4925,11 +4925,17 @@
   // 移动端搜索输入 16px：低于该值 iOS 聚焦时整页缩放（R109）
   .xlc-search-input { font-size: 16px; }
 
-  // 触控命中：清空 × 提至 28px
+  // 触控命中：清空 × 提至 38px 大热区
   .xlc-search-clear {
-    width: 28px;
-    height: 28px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: var(--xlc-font-lg);
+    touch-action: manipulation;
   }
 
   // 默认折叠 3 个下拉与排序芯片，仅展示单行横向滚动作用域胶囊栏 + 右侧紧凑「筛选」切换钮
