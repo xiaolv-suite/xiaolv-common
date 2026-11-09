@@ -8271,3 +8271,28 @@
     fill: none;
   }
 }
+
+// CY-R2-01: A short viewport uses one natural scroll surface. Keep the first
+// input visible; preview/presets must not squeeze fields into a few pixels.
+@media (max-height: 480px) {
+  .b3-dialog__container.xlc-varform-host .b3-dialog__body {
+    display: block !important;
+    overflow-y: auto !important;
+  }
+  .b3-dialog__container.xlc-varform-host .xlc-varform {
+    flex: none;
+    min-height: min-content;
+    padding-bottom: 8px;
+  }
+  .b3-dialog__container.xlc-varform-host .xlc-varform-fields {
+    flex: none;
+    min-height: 140px;
+    overflow: visible;
+  }
+  .b3-dialog__container.xlc-varform-host .xlc-varform-preview-wrap,
+  .b3-dialog__container.xlc-varform-host .xlc-varform-preset-wrap,
+  .b3-dialog__container.xlc-varform-host .xlc-varform-foot { flex-shrink: 0; }
+  .b3-dialog__container.xlc-varform-host .xlc-varform-foot {
+    position: static !important;
+  }
+}

@@ -155,9 +155,9 @@ export function openStepByStepGuideDialog(deps: GuideDialogDeps): void {
                 </p>
                 <div class="xlc-guide-feature-grid">
                     <div class="xlc-guide-feature-box">
-                        <span class="xlc-guide-kbd">Alt + Space</span>
-                        <div class="xlc-guide-box-title">全局闪电呼出</div>
-                        <div class="xlc-guide-box-desc">随时唤起常用语搜索面板，支持连续多次调用。</div>
+                        <span class="xlc-guide-kbd">Alt + Shift + C</span>
+                        <div class="xlc-guide-box-title">打开检索</div>
+                        <div class="xlc-guide-box-desc">默认快捷键，可在思源快捷键设置中修改。跨应用迷你条默认使用 Alt + Shift + M。</div>
                     </div>
                     <div class="xlc-guide-feature-box">
                         <span class="xlc-guide-kbd">/常用</span>

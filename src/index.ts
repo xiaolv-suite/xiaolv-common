@@ -2120,7 +2120,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         allBtn.type = "button";
         allBtn.className = "b3-button b3-button--text xlc-quick-popover-all-btn";
         allBtn.dataset.xlcControl = "host.quick-popover.open-all";
-        allBtn.textContent = "🔍 打开全部常用语 (Alt+Space)";
+        allBtn.textContent = "🔍 打开全部常用语（默认 Alt+Shift+C）";
         allBtn.addEventListener("click", () => {
             this.closeQuickAccessPopover();
             this.openSearch();
