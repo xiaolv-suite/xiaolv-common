@@ -354,6 +354,7 @@ export class CommonSearchDialog {
         if (!isMobile) {
             adaptSecondaryDialogForMobile(this.dialog, this.deps.t("close") || "关闭");
         }
+        this.applyMiniMode();
         this.syncScopeChips();
         const input = this.dialog.element.querySelector<HTMLInputElement>(".xlc-search-input");
         if (input) {
@@ -493,7 +494,7 @@ export class CommonSearchDialog {
 
         handleText.addEventListener("mousedown", (ev: MouseEvent) => {
             if (ev.button !== 0) return;
-            const container = this.dialog?.element;
+            const container = this.dialog?.element?.querySelector<HTMLElement>(".b3-dialog__container") ?? this.dialog?.element;
             if (!container) return;
             ev.preventDefault();
 
@@ -507,6 +508,7 @@ export class CommonSearchDialog {
                 container.style.position = "fixed";
                 container.style.left = `${newX}px`;
                 container.style.top = `${newY}px`;
+                container.style.right = "auto";
                 container.style.margin = "0";
                 container.style.transform = "none";
                 this.miniPosition = {x: Math.round(newX), y: Math.round(newY)};
@@ -3229,27 +3231,45 @@ export class CommonSearchDialog {
                 actionsWrap.className = "xlc-row-action-wrap";
                 actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
 
-                if (this.deps.openDocBlock) {
-                    const locateBtn = document.createElement("button");
-                    locateBtn.type = "button";
-                    locateBtn.className = "b3-button b3-button--small xlc-row-action";
-                    locateBtn.dataset.xlcControl = "item.locate-source";
-                    locateBtn.textContent = "↗";
-                    locateBtn.title = "在思源中定位源块";
-                    locateBtn.setAttribute("aria-label", "在思源中定位源块");
-                    locateBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        void this.deps.openDocBlock?.(entry.targetBlockId || entry.id);
+                const insertBtn = document.createElement("button");
+                insertBtn.type = "button";
+                insertBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill xlc-row-action--primary";
+                insertBtn.dataset.xlcControl = "item.insert-omni";
+                insertBtn.textContent = "↵ 插入";
+                insertBtn.title = "直接将此内容块插入到当前光标处 (Enter)";
+                insertBtn.setAttribute("aria-label", "插入内容块");
+                insertBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    void this.runPrimary(entry);
+                });
+                actionsWrap.appendChild(insertBtn);
+
+                const copyBtn = document.createElement("button");
+                copyBtn.type = "button";
+                copyBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill";
+                copyBtn.dataset.xlcControl = "item.copy-omni";
+                copyBtn.textContent = "复制";
+                copyBtn.title = "复制此内容块纯文本到剪贴板 (Ctrl+Enter)";
+                copyBtn.setAttribute("aria-label", "复制内容块");
+                copyBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const text = entry.content || entry.summary || entry.title || "";
+                    void this.deps.copyText(text).then((ok) => {
+                        if (ok) {
+                            copyBtn.textContent = "✓ 已复制";
+                            lvNotify.inline(copyBtn, "已复制");
+                            setTimeout(() => { copyBtn.textContent = "复制"; }, 1400);
+                        }
                     });
-                    actionsWrap.appendChild(locateBtn);
-                }
+                });
+                actionsWrap.appendChild(copyBtn);
 
                 const isCaptured = this.capturedOmniIds.has(entry.id);
                 const saveBtn = document.createElement("button");
                 saveBtn.type = "button";
-                saveBtn.className = "b3-button b3-button--small xlc-row-action";
+                saveBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill";
                 saveBtn.dataset.xlcControl = "item.save-to-common";
-                saveBtn.textContent = isCaptured ? "✓" : "✦";
+                saveBtn.textContent = isCaptured ? "✓ 已存" : "✦ 存常用";
                 saveBtn.title = isCaptured ? "已收录入常用库" : "一键收录入常用库 (Alt+S)";
                 saveBtn.setAttribute("aria-label", isCaptured ? "已收录入常用库" : "一键收录入常用库");
                 saveBtn.disabled = isCaptured;
@@ -3263,27 +3283,80 @@ export class CommonSearchDialog {
                             const ok = await this.deps.createFromOmni(entry);
                             if (ok) {
                                 this.capturedOmniIds.add(entry.id);
-                                saveBtn.textContent = "✓";
+                                saveBtn.textContent = "✓ 已存";
                                 saveBtn.disabled = true;
                                 saveBtn.title = "已收录入常用库";
                                 this.syncPaneActions();
                             } else {
                                 saveBtn.disabled = false;
-                                saveBtn.textContent = "✦";
+                                saveBtn.textContent = "✦ 存常用";
                             }
                         } catch {
                             saveBtn.disabled = false;
-                            saveBtn.textContent = "✦";
+                            saveBtn.textContent = "✦ 存常用";
                         }
                     } else {
                         saveBtn.disabled = false;
-                        saveBtn.textContent = "✦";
+                        saveBtn.textContent = "✦ 存常用";
                     }
                 });
                 actionsWrap.appendChild(saveBtn);
+
+                if (this.deps.openDocBlock) {
+                    const locateBtn = document.createElement("button");
+                    locateBtn.type = "button";
+                    locateBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill";
+                    locateBtn.dataset.xlcControl = "item.locate-source";
+                    locateBtn.textContent = "↗ 原文";
+                    locateBtn.title = "在思源笔记中打开并定位到此原始块";
+                    locateBtn.setAttribute("aria-label", "在思源中定位源块");
+                    locateBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        void this.deps.openDocBlock?.(entry.targetBlockId || entry.id);
+                    });
+                    actionsWrap.appendChild(locateBtn);
+                }
+
                 row.appendChild(actionsWrap);
             }
         } else {
+            const actionsWrap = document.createElement("div");
+            actionsWrap.className = "xlc-row-action-wrap";
+            actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
+
+            if (this.miniMode || this.lastQueryText.trim().length > 0) {
+                const insertBtn = document.createElement("button");
+                insertBtn.type = "button";
+                insertBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill xlc-row-action--primary";
+                insertBtn.dataset.xlcControl = "item.insert-common";
+                insertBtn.textContent = "↵ 插入";
+                insertBtn.title = "将此常用语插入到当前光标处 (Enter)";
+                insertBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    void this.runPrimary(entry);
+                });
+                actionsWrap.appendChild(insertBtn);
+
+                const copyBtn = document.createElement("button");
+                copyBtn.type = "button";
+                copyBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill";
+                copyBtn.dataset.xlcControl = "item.copy-common";
+                copyBtn.textContent = "复制";
+                copyBtn.title = "复制此常用语到剪贴板 (Ctrl+Enter)";
+                copyBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const text = entry.content || entry.summary || entry.title || "";
+                    void this.deps.copyText(text).then((ok) => {
+                        if (ok) {
+                            copyBtn.textContent = "✓ 已复制";
+                            lvNotify.inline(copyBtn, "已复制");
+                            setTimeout(() => { copyBtn.textContent = "复制"; }, 1400);
+                        }
+                    });
+                });
+                actionsWrap.appendChild(copyBtn);
+            }
+
             const star = document.createElement("button");
             star.type = "button";
             star.className = "b3-button b3-button--small xlc-row-action";
@@ -3298,7 +3371,7 @@ export class CommonSearchDialog {
                 lvNotify.inline(star, isFav ? "已收藏" : "已取消收藏");
                 void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
             });
-            row.appendChild(star);
+            actionsWrap.appendChild(star);
 
             // 常用语购物车暂存托盘按钮（仅桌面端展示，手机端隐藏 · CAND-019 / Mobile Spec v1）
             if (!this.deps.isMobile()) {
@@ -3317,8 +3390,9 @@ export class CommonSearchDialog {
                     trayBtn.textContent = nowIn ? "✓" : "🛒";
                     lvNotify.inline(trayBtn, nowIn ? "已暂存" : "已移出");
                 });
-                row.appendChild(trayBtn);
+                actionsWrap.appendChild(trayBtn);
             }
+            row.appendChild(actionsWrap);
         }
         return row;
     }
@@ -3880,15 +3954,15 @@ export class CommonSearchDialog {
                     const cHead = document.createElement("div");
                     cHead.className = "xlc-group-head xlc-group-head--common";
                     const commonCount = this.results.filter((r) => !r.isOmni).length;
-                    cHead.textContent = `📌 常用语资产 (${commonCount})`;
+                    cHead.innerHTML = `<span>📌 常用语资产 (${commonCount})</span><span class="xlc-group-head-tip">点击直接插入 · 右侧可复制</span>`;
                     list.appendChild(cHead);
                 }
-                if (entry && entry.isOmni && !omniHeaderPlaced && hasCommon) {
+                if (entry && entry.isOmni && !omniHeaderPlaced) {
                     omniHeaderPlaced = true;
                     const omniHead = document.createElement("div");
                     omniHead.className = "xlc-group-head xlc-group-head--omni";
                     const omniCount = this.results.filter((r) => r.isOmni).length;
-                    omniHead.textContent = `🔍 思源全库匹配内容块 (${omniCount})`;
+                    omniHead.innerHTML = `<span>🔍 思源全库匹配内容块 (${omniCount})</span><span class="xlc-group-head-tip">点击直接插入 · 点右侧「复制 / 存常用 / 原文」</span>`;
                     list.appendChild(omniHead);
                 }
                 if (entry) list.appendChild(this.createEntryRow(entry, i));
@@ -7721,10 +7795,35 @@ export class CommonSearchDialog {
         if (pinBtn) {
             pinBtn.classList.toggle("xlc-search-pin--active", this.pinWindow);
             pinBtn.setAttribute("aria-pressed", String(this.pinWindow));
-            pinBtn.title = this.pinWindow ? "已固定窗口（连续复制/插入不关闭，Alt+P 切换）" : "固定窗口（连续复制/插入不关闭，Alt+P 切换）";
+            pinBtn.title = this.pinWindow ? "已固定窗口（底层页面可自由点击编辑，连续复制/插入不关闭，Alt+P 切换）" : "固定窗口（连续复制/插入不关闭，Alt+P 切换）";
         }
-        this.deps.notify?.("info", this.pinWindow ? "已开启窗口固定：连续复制或插入将保持窗口打开 (Alt+P 切换)" : "已关闭窗口固定");
+        this.syncPassthroughMask();
+        this.deps.notify?.("info", this.pinWindow ? "已开启窗口固定：底层笔记可自由点击编辑，连续复制或插入保持窗口打开 (Alt+P 切换)" : "已关闭窗口固定");
         return this.pinWindow;
+    }
+
+    private syncPassthroughMask(): void {
+        const dialogWrap = this.dialog?.element;
+        if (!dialogWrap) return;
+        const passthrough = Boolean(this.miniMode || this.pinWindow);
+        // 防御性清理：早期逻辑曾误将 xlc-dialog-mask--passthrough 加到 document.body，导致全页不可点
+        try {
+            if (typeof document !== "undefined") {
+                document.body?.classList?.remove("xlc-dialog-mask--passthrough");
+                document.documentElement?.classList?.remove("xlc-dialog-mask--passthrough");
+            }
+        } catch {
+            // ignore
+        }
+        dialogWrap.classList.toggle("xlc-dialog-mask--passthrough", passthrough);
+        const maskEl = dialogWrap.parentElement;
+        if (maskEl && maskEl.tagName !== "BODY" && maskEl.tagName !== "HTML") {
+            maskEl.classList.toggle("xlc-dialog-mask--passthrough", passthrough);
+        }
+        const containerEl = dialogWrap.querySelector<HTMLElement>(".b3-dialog__container");
+        if (containerEl) {
+            containerEl.classList.toggle("xlc-dialog--pinned", this.pinWindow);
+        }
     }
 
     public toggleDensity(): "comfortable" | "compact" {
@@ -7766,29 +7865,53 @@ export class CommonSearchDialog {
 
     private applyMiniMode(): void {
         const dialogWrap = this.dialog?.element;
-        const maskEl = dialogWrap?.parentElement;
+        const containerEl = dialogWrap?.querySelector<HTMLElement>(".b3-dialog__container") ?? dialogWrap;
+        const rootEl = dialogWrap?.querySelector<HTMLElement>(".xlc-dialog");
         if (dialogWrap) {
             dialogWrap.classList.toggle("xlc-dialog--mini", this.miniMode);
-            if (this.miniMode && this.miniPosition) {
-                dialogWrap.style.position = "fixed";
-                dialogWrap.style.left = `${this.miniPosition.x}px`;
-                dialogWrap.style.top = `${this.miniPosition.y}px`;
-                dialogWrap.style.margin = "0";
-                dialogWrap.style.transform = "none";
-            } else if (!this.miniMode) {
-                dialogWrap.style.position = "";
-                dialogWrap.style.left = "";
-                dialogWrap.style.top = "";
-                dialogWrap.style.margin = "";
-                dialogWrap.style.transform = "";
+        }
+        if (containerEl && containerEl !== dialogWrap) {
+            containerEl.classList.toggle("xlc-dialog--mini", this.miniMode);
+        }
+        if (rootEl) {
+            rootEl.classList.toggle("xlc-dialog--mini", this.miniMode);
+        }
+        if (containerEl) {
+            if (this.miniMode) {
+                containerEl.style.width = "min(380px, 92vw)";
+                containerEl.style.maxWidth = "380px";
+                containerEl.style.minWidth = "0";
+                containerEl.style.height = "min(560px, 82vh)";
+                containerEl.style.position = "fixed";
+                if (this.miniPosition) {
+                    containerEl.style.left = `${this.miniPosition.x}px`;
+                    containerEl.style.top = `${this.miniPosition.y}px`;
+                    containerEl.style.right = "auto";
+                } else {
+                    containerEl.style.right = "24px";
+                    containerEl.style.top = "72px";
+                    containerEl.style.left = "auto";
+                }
+                containerEl.style.margin = "0";
+                containerEl.style.transform = "none";
+            } else {
+                const isMobile = this.deps.isMobile();
+                containerEl.style.width = isMobile ? "100vw" : "min(960px, 94vw)";
+                containerEl.style.maxWidth = "";
+                containerEl.style.minWidth = "";
+                containerEl.style.height = isMobile ? "100dvh" : "min(820px, 92vh)";
+                containerEl.style.position = "";
+                containerEl.style.left = "";
+                containerEl.style.right = "";
+                containerEl.style.top = "";
+                containerEl.style.margin = "";
+                containerEl.style.transform = "";
             }
         }
 
         // 非模态穿透协同（CAND-021 / TODO-FEAT-019）：
-        // 迷你模式下开启背景遮罩穿透，用户可自由在编辑器中打字
-        if (maskEl) {
-            maskEl.classList.toggle("xlc-dialog-mask--passthrough", this.miniMode);
-        }
+        // 迷你模式或固定窗口下开启背景遮罩穿透，用户可自由在底层编辑器中点击与打字
+        this.syncPassthroughMask();
 
         if (this.miniModeBtn) {
             this.miniModeBtn.classList.toggle("xlc-search-mini-btn--active", this.miniMode);
@@ -7837,6 +7960,10 @@ export class CommonSearchDialog {
         if (!dialogWrap) return;
         const isCollapsed = this.miniMode && this.miniCollapsed;
         dialogWrap.classList.toggle("xlc-dialog--collapsed", isCollapsed);
+        const containerEl = dialogWrap.querySelector<HTMLElement>(".b3-dialog__container");
+        if (containerEl) {
+            containerEl.classList.toggle("xlc-dialog--collapsed", isCollapsed);
+        }
     }
 
     public togglePasteTrayItem(entry: SearchEntry): void {
