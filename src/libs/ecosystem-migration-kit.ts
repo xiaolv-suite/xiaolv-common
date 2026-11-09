@@ -67,18 +67,92 @@ export interface SiyuanApiAdapter {
     setBlockAttrs?: (blockId: string, attrs: Record<string, string>) => Promise<boolean>;
 }
 
-const DEFAULT_XIAOLV_NOTEBOOK_NAME = "🐴 小驴空间";
+export const DEFAULT_XIAOLV_NOTEBOOK_NAME = "🐴 小驴空间";
 
-export const STANDARD_SUBDIR_MAP: Record<string, { folder: string; title: string }> = Object.freeze({
-    "siyuan-checkin": { folder: "/01-日记与打卡", title: "日记与打卡" },
-    "siyuan-home": { folder: "/02-生活与管家", title: "生活与管家" },
-    "siyuan-contacts": { folder: "/03-人脉与交往", title: "人脉与交往" },
-    "siyuan-glean": { folder: "/04-拾遗与阅读", title: "拾遗与阅读" },
-    "siyuan-lv-cards": { folder: "/05-闪卡与复习", title: "闪卡与复习" },
-    "siyuan-exam": { folder: "/06-考试与题库", title: "考试与题库" },
-    "xiaolv-common": { folder: "/07-常用与模板", title: "常用与模板" },
-    "siyuan-speed-switch": { folder: "/08-雷切与动作", title: "雷切与动作" },
+export interface PluginSubdirSpec {
+    folder: string;
+    title: string;
+    aliases: readonly string[];
+}
+
+export const STANDARD_SUBDIR_MAP: Record<string, PluginSubdirSpec> = Object.freeze({
+    "siyuan-checkin": {
+        folder: "/01-小驴打卡",
+        title: "01-小驴打卡 · 习惯与自律",
+        aliases: ["/01-小驴打卡", "/01-日记与打卡", "/02-小驴打卡 (siyuan-checkin)"],
+    },
+    "siyuan-home": {
+        folder: "/02-小驴管家",
+        title: "02-小驴管家 · 家庭与资产",
+        aliases: ["/02-小驴管家", "/02-生活与管家", "/05-小驴管家 (siyuan-home)"],
+    },
+    "siyuan-contacts": {
+        folder: "/03-小驴人脉",
+        title: "03-小驴人脉 · 关系与交往",
+        aliases: ["/03-小驴人脉", "/03-人脉与交往", "/03-小驴人脉 (siyuan-contacts)"],
+    },
+    "siyuan-glean": {
+        folder: "/04-小驴拾遗",
+        title: "04-小驴拾遗 · 剪藏与阅读",
+        aliases: ["/04-小驴拾遗", "/04-拾遗与阅读", "/08-小驴拾遗 (siyuan-glean)"],
+    },
+    "siyuan-lv-cards": {
+        folder: "/05-小驴闪卡",
+        title: "05-小驴闪卡 · 记忆与复习",
+        aliases: ["/05-小驴闪卡", "/05-闪卡与复习", "/06-小驴闪卡 (siyuan-lv-cards)"],
+    },
+    "siyuan-exam": {
+        folder: "/06-小驴考试",
+        title: "06-小驴考试 · 题库与模考",
+        aliases: ["/06-小驴考试", "/06-考试与题库", "/07-小驴考试 (siyuan-exam)"],
+    },
+    "xiaolv-common": {
+        folder: "/07-小驴常用",
+        title: "07-小驴常用 · 片段与模板",
+        aliases: ["/07-小驴常用", "/07-常用与模板", "/01-小驴常用 (xiaolv-common)"],
+    },
+    "siyuan-speed-switch": {
+        folder: "/08-小驴雷切",
+        title: "08-小驴雷切 · 枢纽与工作台",
+        aliases: ["/08-小驴雷切", "/08-雷切与动作", "/04-小驴雷切 (siyuan-plugin-task-horizon)"],
+    },
 });
+
+export function isXiaoLvHubNotebookName(name: string): boolean {
+    if (!name) return false;
+    return (
+        name.includes("小驴空间") ||
+        name.includes("小驴笔记本") ||
+        name.includes("小驴生态统一测试空间")
+    );
+}
+
+export function findDedicatedXiaoLvNotebook<T extends { id: string; name: string; closed?: boolean }>(
+    notebooks: readonly T[],
+    preferredId?: string,
+): T | undefined {
+    const openList = (notebooks || []).filter(nb => nb && !nb.closed);
+    if (preferredId) {
+        const matchedById = openList.find(nb => nb.id === preferredId);
+        if (matchedById) return matchedById;
+    }
+    try {
+        if (typeof window !== "undefined" && window.localStorage) {
+            const cachedHubId = window.localStorage.getItem("lv-ecosystem-hub-notebook-id");
+            if (cachedHubId) {
+                const matchedCached = openList.find(nb => nb.id === cachedHubId);
+                if (matchedCached) return matchedCached;
+            }
+        }
+    } catch {
+        // ignore storage errors
+    }
+    return openList.find(nb => isXiaoLvHubNotebookName(nb.name));
+}
+
+export function resolvePluginRootPath(pluginId: string): string {
+    return STANDARD_SUBDIR_MAP[pluginId]?.folder || "/99-生态杂项";
+}
 
 /**
  * 纯函数：根据扫描结果生成迁移与归拢执行计划

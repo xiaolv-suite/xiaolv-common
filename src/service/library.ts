@@ -397,13 +397,17 @@ export class LibraryService {
     }
 
     /** 创建库文档（首次引导；UI 层负责先向用户确认）。返回新文档 ID。 */
-    async createLibraryDoc(notebookId: string, title: string, options: WriteOptions = {}): Promise<Receipt<{docId: string}>> {
+    async createLibraryDoc(notebookId: string, title: string, options: WriteOptions & { rootPath?: string } = {}): Promise<Receipt<{docId: string}>> {
         if (!notebookId || !title.trim()) return fail("invalid-input", "notebook/title required");
         const normalizedTitle = title.trim();
+        const rootPrefix = typeof options.rootPath === "string" && options.rootPath.trim()
+            ? "/" + options.rootPath.trim().replace(/^\/+|\/+$/g, "")
+            : "";
+        const targetDocPath = `${rootPrefix}/${normalizedTitle.replace(/\//g, "-")}`;
         const idempotencyKey = typeof options.idempotencyKey === "string" && options.idempotencyKey.length >= 8
             && options.idempotencyKey.length <= 128 ? options.idempotencyKey : "";
         const receiptKey = idempotencyKey ? `${notebookId}:${idempotencyKey}` : "";
-        const key = `library-doc:${notebookId}:${normalizedTitle}`;
+        const key = `library-doc:${notebookId}:${targetDocPath}`;
         const action = async (): Promise<Receipt<{docId: string}>> => {
             if (receiptKey) {
                 const previous = this.libraryDocReceipts.get(receiptKey);
@@ -415,7 +419,7 @@ export class LibraryService {
                     : `# ${normalizedTitle}\n\n`;
                 const docId = parseDocId(await this.kernel.request("createDocWithMd", {
                     notebook: notebookId,
-                    path: "/" + normalizedTitle.replace(/\//g, "-"),
+                    path: targetDocPath,
                     markdown: initialMd,
                 }, {idempotencyKey: idempotencyKey || undefined, maxRetries: 0}));
                 if (!docId) return fail("kernel-error", "createDocWithMd returned no id");

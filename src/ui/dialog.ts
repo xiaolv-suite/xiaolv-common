@@ -7864,20 +7864,22 @@ export class CommonSearchDialog {
     }
 
     private applyMiniMode(): void {
+        const isMobile = this.deps.isMobile();
+        const effectiveMini = this.miniMode && !isMobile;
         const dialogWrap = this.dialog?.element;
         const containerEl = dialogWrap?.querySelector<HTMLElement>(".b3-dialog__container") ?? dialogWrap;
         const rootEl = dialogWrap?.querySelector<HTMLElement>(".xlc-dialog");
         if (dialogWrap) {
-            dialogWrap.classList.toggle("xlc-dialog--mini", this.miniMode);
+            dialogWrap.classList.toggle("xlc-dialog--mini", effectiveMini);
         }
         if (containerEl && containerEl !== dialogWrap) {
-            containerEl.classList.toggle("xlc-dialog--mini", this.miniMode);
+            containerEl.classList.toggle("xlc-dialog--mini", effectiveMini);
         }
         if (rootEl) {
-            rootEl.classList.toggle("xlc-dialog--mini", this.miniMode);
+            rootEl.classList.toggle("xlc-dialog--mini", effectiveMini);
         }
         if (containerEl) {
-            if (this.miniMode) {
+            if (effectiveMini) {
                 containerEl.style.width = "min(380px, 92vw)";
                 containerEl.style.maxWidth = "380px";
                 containerEl.style.minWidth = "0";
@@ -7895,7 +7897,6 @@ export class CommonSearchDialog {
                 containerEl.style.margin = "0";
                 containerEl.style.transform = "none";
             } else {
-                const isMobile = this.deps.isMobile();
                 containerEl.style.width = isMobile ? "100vw" : "min(960px, 94vw)";
                 containerEl.style.maxWidth = "";
                 containerEl.style.minWidth = "";

@@ -4246,8 +4246,10 @@
 .b3-dialog__container.xlc-mobile-modal {
   width: 100vw !important;
   max-width: 100vw !important;
+  height: 100dvh !important;
   max-height: 100dvh !important;
   margin: 0 !important;
+  border-radius: 0 !important;
   box-sizing: border-box;
 
   > .b3-dialog__close {
@@ -4318,8 +4320,10 @@
   .b3-dialog__container.xlc-sync-diff-modal {
     width: 100vw !important;
     max-width: 100vw !important;
+    height: 100dvh !important;
     max-height: 100dvh !important;
     margin: 0 !important;
+    border-radius: 0 !important;
     box-sizing: border-box;
 
     > .b3-dialog__close {
@@ -4333,6 +4337,14 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
+  }
+
+  .xlc-settings {
+    padding-top: var(--xlc-space-2) !important;
+  }
+
+  .xlc-menu-text-tools-panel {
+    display: none !important;
   }
 
   .b3-dialog__container.xlc-form-host:not(.xlc-discovery-host) > .b3-dialog__header,
@@ -4548,8 +4560,8 @@
     height: 100vh;
     height: 100dvh;
     max-height: 100dvh !important;
-    padding-top: max(0px, env(safe-area-inset-top, 0px));
-    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    padding-top: 0;
+    padding-bottom: 0;
     padding-left: max(0px, env(safe-area-inset-left, 0px));
     padding-right: max(0px, env(safe-area-inset-right, 0px));
     box-sizing: border-box;
@@ -5178,14 +5190,14 @@
 
   .xlc-empty { padding: var(--xlc-space-6) var(--xlc-space-3); gap: var(--xlc-space-1); }
 
-  // 操作钮行（触控目标 ≥42px；在手势条上方留足安全边距防遮挡且4键同排不截断）
+  // 操作钮行（触控目标 ≥42px；外层 .xlc-footer 已留 safe-area-inset-bottom，内部不再重复叠加）
   .xlc-mobile-foot {
     display: flex;
     flex: 1 1 auto;
     min-width: 0;
     gap: 6px;
     width: auto;
-    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    padding-bottom: 0;
     box-sizing: border-box;
 
     .b3-button {
@@ -5242,7 +5254,7 @@
   .xlc-varform-field .b3-text-field,
   .xlc-ct-name,
   .xlc-ct-prompt {
-    font-size: var(--xlc-font-xl);
+    font-size: var(--xlc-font-md, 15px);
   }
 
   .xlc-setting-row { padding: var(--xlc-space-2) var(--xlc-space-0); }
