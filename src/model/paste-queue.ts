@@ -11,6 +11,29 @@ export interface PasteQueueItem {
 
 export class PasteQueue {
     private queue: PasteQueueItem[] = [];
+    private consuming = false;
+
+    /** Commit dequeue only after the output has confirmed success. One output
+     * owns the head at a time; failure preserves its position for an explicit retry. */
+    async consume(output: (item: PasteQueueItem) => Promise<boolean>): Promise<{
+        ok: boolean; reason?: "empty" | "busy" | "output-failed" | "queue-changed";
+        item?: PasteQueueItem; remaining: number;
+    }> {
+        if (this.consuming) return {ok: false, reason: "busy", remaining: this.size()};
+        const item = this.queue[0];
+        if (!item) return {ok: false, reason: "empty", remaining: 0};
+        this.consuming = true;
+        try {
+            if (!await output(item)) return {ok: false, reason: "output-failed", remaining: this.size()};
+            if (this.queue[0] !== item) return {ok: false, reason: "queue-changed", remaining: this.size()};
+            this.queue.shift();
+            return {ok: true, item, remaining: this.size()};
+        } catch {
+            return {ok: false, reason: "output-failed", remaining: this.size()};
+        } finally {
+            this.consuming = false;
+        }
+    }
 
     /**
      * 重置并设置新的取用队列

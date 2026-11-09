@@ -1244,6 +1244,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     const tidyInitiallyDisabled = await page.locator("[data-xlc-control='capture.ai.tidy']").isDisabled();
     await page.locator("[data-xlc-control='capture.content']").fill("项目延期通知模板内容");
     const tidyEnabledForContent = !(await page.locator("[data-xlc-control='capture.ai.tidy']").isDisabled());
+    await page.evaluate(() => window.XlcHarness.holdOperation("capture.tidy"));
     await page.locator("[data-xlc-control='capture.ai.tidy']").click();
     const tidyBusyLocked = await page.evaluate(() => {
         const tidy = document.querySelector("[data-xlc-control='capture.ai.tidy']");
@@ -1251,6 +1252,8 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
         tidy?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
         return locked;
     });
+    assert.deepEqual(await page.evaluate(() => window.XlcHarness.operationState("capture.tidy")), {started: 1, released: false});
+    await page.evaluate(() => window.XlcHarness.releaseOperation("capture.tidy"));
     await page.waitForFunction(() => {
         const calls = JSON.parse(document.body.dataset.xlcCaptureAiTidyCalls ?? "[]");
         return calls.length === 1 && document.querySelector(".xlc-sugrow")?.offsetParent !== null;
@@ -1304,6 +1307,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     if (!(await draftButton.isDisabled())) throw new Error("capture AI draft should be disabled until a description is entered");
     await draftInput.fill("客户延期回复");
     if (await draftButton.isDisabled()) throw new Error("capture AI draft did not enable for a non-empty description");
+    await page.evaluate(() => window.XlcHarness.holdOperation("capture.draft"));
     await draftButton.click();
     const draftBusyLocked = await page.evaluate(() => {
         const button = document.querySelector("[data-xlc-control='capture.ai.draft.generate']");
@@ -1311,6 +1315,8 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
         button?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
         return locked;
     });
+    assert.deepEqual(await page.evaluate(() => window.XlcHarness.operationState("capture.draft")), {started: 1, released: false});
+    await page.evaluate(() => window.XlcHarness.releaseOperation("capture.draft"));
     await page.waitForFunction(() => JSON.parse(document.body.dataset.xlcCaptureAiDraftCalls ?? "[]").length === 1, undefined, {timeout: 3000});
     await page.waitForTimeout(200);
     const draftRequestCount = await page.evaluate(() => JSON.parse(document.body.dataset.xlcCaptureAiDraftCalls ?? "[]").length);
@@ -1819,6 +1825,12 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     }
     await page.waitForTimeout(120);
     console.log("  smoke ✓ mobile: 6 assertions");
+    const mobileRowActions = await page.locator("[data-xlc-control='item.insert-common'], [data-xlc-control='item.insert-omni']").evaluateAll((buttons) => buttons.map((button) => ({
+        text: button.textContent?.trim(), title: button.getAttribute("title"), label: button.getAttribute("aria-label"),
+    })));
+    assert.ok(mobileRowActions.length > 0, "mobile search should expose a row action for this query fixture");
+    assert.ok(mobileRowActions.every((action) => action.text === zhI18n.copy && action.label === zhI18n.copy
+        && !action.title?.includes("当前光标")), "mobile row action must promise copy consistently with its execution capability");
     await page.screenshot({path: path.join(OUT, "production-mobile-light.png")});
 
     await page.evaluate(() => {
@@ -2003,6 +2015,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
         throw new Error("discovery clear-filters action did not restore candidates");
     }
     console.log("  smoke ✓ on-demand discovery empty-list semantics and filter recovery");
+    await page.evaluate(() => window.XlcHarness.holdOperation("discovery.notebook"));
     await page.locator(".xlc-discovery-scope-select").selectOption("notebook");
     await page.waitForTimeout(20);
     const notebookProgressAssertion = await page.locator(".xlc-discovery-status-row").textContent();
@@ -2025,6 +2038,8 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     if (!isWaiting && !isStopped) {
         throw new Error("discovery stop should wait for the current request: " + JSON.stringify(stopPending));
     }
+    assert.deepEqual(await page.evaluate(() => window.XlcHarness.operationState("discovery.notebook")), {started: 1, released: false});
+    await page.evaluate(() => window.XlcHarness.releaseOperation("discovery.notebook"));
     const closeDuringScan = await page.locator("[data-xlc-discovery-action='close']").isDisabled();
     if (closeDuringScan) throw new Error("discovery close should remain available during scanning");
     await page.waitForFunction(() => document.querySelector(".xlc-discovery-status-row")?.textContent?.includes("已停止扫描，保留 2 条候选") === true);
@@ -2147,6 +2162,7 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
     await page.locator(".xlc-discovery-row[data-xlc-discovery-key='candidate-1'] input[type='checkbox']").check();
     await page.locator(".xlc-discovery-row[data-xlc-discovery-key='candidate-2'] input[type='checkbox']").check();
     await page.locator(".xlc-discovery-force input[type='checkbox']").check();
+    await page.evaluate(() => window.XlcHarness.holdOperation("discovery.add"));
     await page.locator("[data-xlc-discovery-action='add-selected']").click();
     await page.waitForFunction(() => document.querySelector("[data-xlc-discovery-action='close']")?.disabled === true);
     const closeDuringAdd = await page.locator("[data-xlc-discovery-action='close']").isDisabled();
@@ -2156,6 +2172,8 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
             && document.querySelector("[data-xlc-discovery-action='candidate-category']")?.disabled === true,
     );
     if (!categoryControlsDisabledDuringAdd) throw new Error("category controls should be locked during batch add");
+    assert.deepEqual(await page.evaluate(() => window.XlcHarness.operationState("discovery.add")), {started: 1, released: false});
+    await page.evaluate(() => window.XlcHarness.releaseOperation("discovery.add"));
     await page.waitForFunction(() => (window.__xlcDiscoveryCategories?.length ?? 0) >= 3);
     const batchCategories = await page.evaluate(() => window.__xlcDiscoveryCategories?.slice(-2));
     if (batchCategories?.[0]?.key !== "candidate-1" || batchCategories[0].category !== "本条分类"

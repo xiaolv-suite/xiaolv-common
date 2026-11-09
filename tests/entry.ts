@@ -55,6 +55,7 @@ import * as syncDiffModal from "../src/ui/sync-diff-modal";
 import * as ecosystem from "../src/service/ecosystem";
 import * as clipboardCleaner from "../src/model/clipboard-cleaner";
 import * as pasteQueue from "../src/model/paste-queue";
+import * as pasteQueueService from "../src/service/paste-queue";
 import * as templateWizard from "../src/model/template-wizard";
 import * as textMetrics from "../src/model/text-metrics";
 import * as dockView from "../src/ui/dock-view";
@@ -122,6 +123,7 @@ export {
     ecosystem,
     clipboardCleaner,
     pasteQueue,
+    pasteQueueService,
     templateWizard,
     textMetrics,
     textFormatting,

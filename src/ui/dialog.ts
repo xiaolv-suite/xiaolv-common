@@ -3235,9 +3235,9 @@ export class CommonSearchDialog {
                 insertBtn.type = "button";
                 insertBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill xlc-row-action--primary";
                 insertBtn.dataset.xlcControl = "item.insert-omni";
-                insertBtn.textContent = "↵ 插入";
-                insertBtn.title = "直接将此内容块插入到当前光标处 (Enter)";
-                insertBtn.setAttribute("aria-label", "插入内容块");
+                insertBtn.textContent = this.mobilePrimaryIsCopy() ? this.deps.t("copy") : "↵ 插入";
+                insertBtn.title = this.mobilePrimaryIsCopy() ? this.deps.t("insertMobileActionHint") : "直接将此内容块插入到当前光标处 (Enter)";
+                insertBtn.setAttribute("aria-label", this.mobilePrimaryIsCopy() ? this.deps.t("copy") : "插入内容块");
                 insertBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
                     void this.runPrimary(entry);
@@ -3329,8 +3329,9 @@ export class CommonSearchDialog {
                 insertBtn.type = "button";
                 insertBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill xlc-row-action--primary";
                 insertBtn.dataset.xlcControl = "item.insert-common";
-                insertBtn.textContent = "↵ 插入";
-                insertBtn.title = "将此常用语插入到当前光标处 (Enter)";
+                insertBtn.textContent = this.mobilePrimaryIsCopy() ? this.deps.t("copy") : "↵ 插入";
+                insertBtn.title = this.mobilePrimaryIsCopy() ? this.deps.t("insertMobileActionHint") : "将此常用语插入到当前光标处 (Enter)";
+                insertBtn.setAttribute("aria-label", this.mobilePrimaryIsCopy() ? this.deps.t("copy") : "插入常用语");
                 insertBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
                     void this.runPrimary(entry);

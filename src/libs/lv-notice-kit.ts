@@ -167,6 +167,9 @@ export interface LvEcosystemFullBackup {
     ecosystem: "xiaolv";
     exportedAt: string;
     plugins: Record<string, LvPluginBackupPayload>;
+    expectedPlugins?: string[];
+    failed?: string[];
+    partial?: boolean;
 }
 
 export interface LvEcosystemDiagnostics {
@@ -264,8 +267,9 @@ interface LvActivityStreamHub {
 interface LvBackupHub {
     version: number;
     register: (plugin: string, backupFn: () => Promise<Record<string, unknown>>, restoreFn: (data: Record<string, unknown>) => Promise<boolean>) => () => void;
-    exportFull: () => Promise<LvEcosystemFullBackup>;
+    exportFull: (options?: { timeoutMs?: number }) => Promise<LvEcosystemFullBackup>;
     restoreFull: (bundle: LvEcosystemFullBackup) => Promise<{ success: string[]; failed: string[] }>;
+    getRegisteredPlugins?: () => string[];
 }
 
 interface LvLaunchpadHub {
@@ -282,12 +286,14 @@ interface LvLaunchpadHub {
 
 interface LvOmnisearchHub {
     version: number;
+    ownerSafe?: true;
     registerProvider: (plugin: string, provider: LvSearchProvider) => () => void;
     search: (keyword: string) => Promise<LvSearchResultItem[]>;
 }
 
 interface LvAutomationHub {
     version: number;
+    ownerSafe?: true;
     registerRule: (rule: LvAutomationRule) => () => void;
     trigger: (source: string, type: string, payload: unknown) => Promise<{ triggered: number; success: number }>;
     getRules: () => LvAutomationRule[];
@@ -1008,6 +1014,14 @@ body.dark {
     color: var(--lv-lp-accent);
     font-weight: 600;
 }
+/* Keep compact visuals while giving phone actions their own usable hit areas. */
+#lv-launchpad-sheet-mask button,
+#lv-launchpad-sheet-mask .lv-sheet-search {
+    min-height: 44px;
+}
+#lv-launchpad-sheet-mask .lv-sheet-close { width: 44px; height: 44px; }
+#lv-launchpad-sheet-mask .lv-sheet-search { font-size: 16px; }
+#lv-launchpad-sheet-mask .lv-sheet-action-chip { min-width: 44px; }
 @media (prefers-reduced-motion: reduce) {
     #lv-launchpad-mobile-ball { transition: none; }
 }
@@ -1649,8 +1663,8 @@ function getDocLockMap(): Map<string, Promise<unknown>> {
 }
 
 /**
- * 思源文档排队互斥锁：同一文档 ID 的异步写入自动串行化，彻底消除 document is locked 错误
- * 支持超时自动熔断（默认 20s），杜绝异常挂起任务永久死锁文档
+ * 同一窗口、同一文档的写入串行化。超时只结束调用者等待；底层写入settle前继续持锁。
+ * 永久挂起的写入需要对账/重启处理，不能用提前释放制造并发写入。
  */
 export async function withDocLock<T>(docId: string, task: () => Promise<T>, timeoutMs = 20000): Promise<T> {
     if (!docId) return task();
@@ -1662,27 +1676,38 @@ export async function withDocLock<T>(docId: string, task: () => Promise<T>, time
     const chained = prev.then(() => current, () => current);
     map.set(docId, chained);
 
-    let timer: any = null;
-    try {
-        await prev;
-        const taskPromise = task();
-        if (timeoutMs > 0 && typeof setTimeout === "function") {
-            const timeoutPromise = new Promise<never>((_, reject) => {
-                timer = setTimeout(() => {
-                    reject(new Error(`[withDocLock] 写入任务超时 (${timeoutMs}ms) 强制释放: ${docId}`));
-                }, timeoutMs);
-            });
-            return await Promise.race([taskPromise, timeoutPromise]);
-        }
-        return await taskPromise;
-    } finally {
-        if (timer !== null) {
-            clearTimeout(timer);
-        }
+    const cleanup = () => {
+        if (map.get(docId) === chained) map.delete(docId);
+    };
+    const finish = () => {
         release();
-        if (map.get(docId) === chained) {
-            map.delete(docId);
-        }
+        void chained.then(cleanup, cleanup);
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        if (timeoutMs <= 0) await prev;
+        else await Promise.race([
+            prev,
+            new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`[withDocLock] 等待写锁超时，尚未发送: ${docId}`)), timeoutMs); }),
+        ]);
+    } catch (error) {
+        // Cancel this queue slot; never send its task after a caller has stopped waiting.
+        finish();
+        throw error;
+    } finally { if (timer !== undefined) clearTimeout(timer); }
+    const taskPromise = Promise.resolve().then(task);
+    // Use both handlers: a detached finally would create an unhandled rejection.
+    void taskPromise.then(finish, finish);
+    try {
+        if (timeoutMs <= 0) return await taskPromise;
+        return await Promise.race([
+            taskPromise,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(`[withDocLock] 写入任务超时 (${timeoutMs}ms)，结果待确认，仍保持互斥: ${docId}`)), timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timer !== undefined) clearTimeout(timer);
     }
 }
 
@@ -2237,48 +2262,51 @@ interface BackupProvider {
 
 const backupRegistry = new Map<string, BackupProvider>();
 
-function getBackupHub(): LvBackupHub {
-    if (typeof window === "undefined") {
-        return {
-            version: PROTOCOL_VERSION,
-            register: (plugin, backup, restore) => {
-                backupRegistry.set(plugin, { plugin, backup, restore });
-                return () => backupRegistry.delete(plugin);
-            },
-            exportFull: async () => ({
-                v: 1,
-                ecosystem: "xiaolv",
-                exportedAt: new Date().toISOString(),
-                plugins: {},
-            }),
-            restoreFull: async () => ({ success: [], failed: [] }),
-        };
-    }
+/** Registries belong to the shared window, not whichever bundle loaded first. */
+function getSharedRegistry<T>(key: string, local: Map<string, T>): Map<string, T> {
+    if (typeof window === "undefined") return local;
+    const host = window as unknown as Record<string, unknown>;
+    const existing = host[key] as Map<string, T> | undefined;
+    if (existing && typeof existing.get === "function" && typeof existing.set === "function") return existing;
+    host[key] = local;
+    return local;
+}
 
-    if (window.__LV_BACKUP_HUB__ && window.__LV_BACKUP_HUB__.version >= PROTOCOL_VERSION) {
+function registerOwned<T>(registry: Map<string, T>, key: string, value: T): () => void {
+    registry.set(key, value);
+    return () => { if (registry.get(key) === value) registry.delete(key); };
+}
+
+function getBackupHub(): LvBackupHub {
+    if (typeof window !== "undefined" && window.__LV_BACKUP_HUB__ && window.__LV_BACKUP_HUB__.version >= PROTOCOL_VERSION && typeof window.__LV_BACKUP_HUB__.getRegisteredPlugins === "function") {
         return window.__LV_BACKUP_HUB__;
     }
+    const registry = getSharedRegistry("__LV_BACKUP_PROVIDERS__", backupRegistry);
 
     const hub: LvBackupHub = {
         version: PROTOCOL_VERSION,
         register(plugin: string, backup: () => Promise<Record<string, unknown>>, restore: (data: Record<string, unknown>) => Promise<boolean>): () => void {
-            backupRegistry.set(plugin, { plugin, backup, restore });
-            return () => backupRegistry.delete(plugin);
+            return registerOwned(registry, plugin, { plugin, backup, restore });
         },
+        getRegisteredPlugins: () => Array.from(registry.keys()),
 
-        async exportFull(): Promise<LvEcosystemFullBackup> {
+        async exportFull(options?: { timeoutMs?: number }): Promise<LvEcosystemFullBackup> {
             const bundle: LvEcosystemFullBackup = {
                 v: 1,
                 ecosystem: "xiaolv",
                 exportedAt: new Date().toISOString(),
-                plugins: {},
+                plugins: {}, expectedPlugins: Array.from(registry.keys()), failed: [], partial: false,
             };
 
-            const entries = Array.from(backupRegistry.entries());
+            const entries = Array.from(registry.entries());
             await Promise.all(
                 entries.map(async ([plugin, provider]) => {
+                    let timer: ReturnType<typeof setTimeout> | undefined;
                     try {
-                        const data = await provider.backup();
+                        const data = await Promise.race([
+                            Promise.resolve().then(() => provider.backup()),
+                            new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("backup-timeout")), options?.timeoutMs ?? 10000); }),
+                        ]);
                         bundle.plugins[plugin] = {
                             plugin,
                             version: "latest",
@@ -2286,7 +2314,11 @@ function getBackupHub(): LvBackupHub {
                             data,
                         };
                     } catch (err) {
+                        bundle.failed!.push(plugin);
+                        bundle.partial = true;
                         console.error(`[LvBackup] 备份插件 ${plugin} 失败:`, err);
+                    } finally {
+                        if (timer !== undefined) clearTimeout(timer);
                     }
                 })
             );
@@ -2295,15 +2327,21 @@ function getBackupHub(): LvBackupHub {
         },
 
         async restoreFull(bundle: LvEcosystemFullBackup): Promise<{ success: string[]; failed: string[] }> {
-            if (!bundle || bundle.ecosystem !== "xiaolv" || !bundle.plugins) {
+            if (!bundle || bundle.v !== 1 || bundle.ecosystem !== "xiaolv" || !bundle.plugins || typeof bundle.plugins !== "object" || Array.isArray(bundle.plugins)) {
                 throw new Error("[LvBackup] 非合法的小驴全生态灾备包格式");
             }
 
             const success: string[] = [];
-            const failed: string[] = [];
+            const failed: string[] = Array.isArray(bundle.failed) ? [...bundle.failed] : [];
+            for (const expected of bundle.expectedPlugins ?? []) {
+                if (!Object.prototype.hasOwnProperty.call(bundle.plugins, expected) && !failed.includes(expected)) failed.push(expected);
+            }
 
             for (const [plugin, payload] of Object.entries(bundle.plugins)) {
-                const provider = backupRegistry.get(plugin);
+                if (!payload || payload.plugin !== plugin || !payload.data || typeof payload.data !== "object" || Array.isArray(payload.data)) {
+                    failed.push(`${plugin}(备份数据格式无效)`); continue;
+                }
+                const provider = registry.get(plugin);
                 if (!provider) {
                     failed.push(`${plugin}(未安装或未注册恢复切面)`);
                     continue;
@@ -2322,7 +2360,7 @@ function getBackupHub(): LvBackupHub {
         }
     };
 
-    window.__LV_BACKUP_HUB__ = hub;
+    if (typeof window !== "undefined") window.__LV_BACKUP_HUB__ = hub;
     return hub;
 }
 
@@ -2337,8 +2375,8 @@ export const lvBackup = {
     },
 
     /** 导出当前已安装并启用的所有小驴插件全量联合备份包 */
-    exportFull(): Promise<LvEcosystemFullBackup> {
-        return getBackupHub().exportFull();
+    exportFull(options?: { timeoutMs?: number }): Promise<LvEcosystemFullBackup> {
+        return getBackupHub().exportFull(options);
     },
 
     /** 将联合备份包一键恢复到各个插件 */
@@ -2358,7 +2396,7 @@ export const lvEcosystem = {
         const aiHub = typeof window !== "undefined" ? window.__LV_AI_GATEWAY__ : undefined;
         const aiCfg = aiHub?.getConfig();
         const activities = typeof window !== "undefined" ? window.__LV_ACTIVITY_STREAM__?.getTodayRecords() ?? [] : [];
-        const registered = Array.from(backupRegistry.keys());
+        const registered = getBackupHub().getRegisteredPlugins?.() ?? [];
 
         return {
             version: PROTOCOL_VERSION,
@@ -2375,7 +2413,7 @@ export const lvEcosystem = {
         const diag = this.getDiagnostics();
         const count = diag.registeredPlugins.length;
         const pluginText = count > 0 ? `${count} 插件已联结` : "单机模式";
-        return `🐴 小驴全家桶协同正常 · ${pluginText} · 今日活动 ${diag.todayActivitiesCount} 项`;
+        return `🐴 小驴全家桶 · ${pluginText} · 今日活动 ${diag.todayActivitiesCount} 项`;
     }
 };
 
@@ -2537,7 +2575,7 @@ function getLaunchpadHub(): LvLaunchpadHub {
             maybeShowOnboardingCard();
             syncTopBarConvergence();
             return () => {
-                reg.delete(item.id);
+                if (reg.get(item.id) === item) reg.delete(item.id);
                 syncTopBarConvergence();
             };
         },
@@ -3902,6 +3940,11 @@ function ensureDesktopStyles(): void {
   margin-right: 5px;
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
 }
+@media (max-width: 460px) {
+  .lv-desktop-launchpad-popover .lv-pop-header { flex-wrap: wrap; row-gap: 8px; }
+  .lv-desktop-launchpad-popover .lv-pop-header > div:last-child { width: 100%; flex-wrap: wrap; }
+  .lv-desktop-launchpad-popover .lv-pop-footer { flex-wrap: wrap; }
+}
 `;
         if (!existing) document.head.appendChild(style);
     } catch { /* ignore */ }
@@ -4139,7 +4182,7 @@ export function buildLaunchpadPopoverHtml(
                 chipsHtml += `
                   <button type="button" class="lv-pop-strip-chip lv-pop-today-chip" data-recent-id="${escapeHtml(it.id)}" title="今日待办直达：${escapeHtml(it.fullName || it.name)}">
                     <span style="width:6px;height:6px;border-radius:50%;background:${tColor};display:inline-block;"></span>
-                    <span>${tName} <strong>${escapeHtml(m![1])}</strong></span>
+                    <span>${tName} <strong>${escapeHtml(m?.[1] ?? "")}</strong></span>
                   </button>
                 `;
             });
@@ -4695,9 +4738,10 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                         a.click();
                         a.remove();
                         setTimeout(() => URL.revokeObjectURL(url), 1000);
-                        lvNotify.capsule({ source: "罗盘", message: "💾 已导出小驴全生态联合灾备包", duration: 2800 });
+                        const missing = bundle.failed?.length ?? 0;
+                        lvNotify.capsule({ source: "罗盘", message: missing > 0 ? `已发起部分备份下载：${Object.keys(bundle.plugins).length} 项成功，${missing} 项失败；详见备份清单` : "💾 已发起小驴联合备份下载，请核对下载文件", duration: 4000 });
                     } catch {
-                        lvNotify.capsule({ source: "罗盘", message: "全生态备份已生成", duration: 2500 });
+                        lvNotify.card({ source: "罗盘", level: "error", message: "备份导出失败，尚未生成可下载文件，请重试", duration: 5000 });
                     }
                 })();
                 return;
@@ -5893,27 +5937,27 @@ export function showMessage(message: string, timeout = 3000, type: "info" | "err
 const searchProviders = new Map<string, LvSearchProvider>();
 
 function getOmnisearchHub(): LvOmnisearchHub {
+    const registry = getSharedRegistry("__LV_SEARCH_PROVIDERS__", searchProviders);
     if (typeof window === "undefined") {
         return {
             version: PROTOCOL_VERSION,
             registerProvider: (plugin, provider) => {
-                searchProviders.set(plugin, provider);
-                return () => searchProviders.delete(plugin);
+                return registerOwned(registry, plugin, provider);
             },
             search: async () => [],
         };
     }
 
-    if (window.__LV_OMNISEARCH__ && window.__LV_OMNISEARCH__.version >= PROTOCOL_VERSION) {
+    if (window.__LV_OMNISEARCH__ && window.__LV_OMNISEARCH__.version >= PROTOCOL_VERSION && window.__LV_OMNISEARCH__.ownerSafe === true) {
         return window.__LV_OMNISEARCH__;
     }
 
     const hub: LvOmnisearchHub = {
         version: PROTOCOL_VERSION,
+        ownerSafe: true,
 
         registerProvider(plugin: string, provider: LvSearchProvider): () => void {
-            searchProviders.set(plugin, provider);
-            return () => searchProviders.delete(plugin);
+            return registerOwned(registry, plugin, provider);
         },
 
         async search(keyword: string): Promise<LvSearchResultItem[]> {
@@ -5921,7 +5965,7 @@ function getOmnisearchHub(): LvOmnisearchHub {
             if (!kw) return [];
 
             const results: LvSearchResultItem[] = [];
-            const providers = Array.from(searchProviders.entries());
+            const providers = Array.from(registry.entries());
 
             // 并发向所有已注册插件发起穿透检索，带 1000ms 超时熔断保护（finally 清除定时器句柄，消减挂起任务）
             await Promise.all(
@@ -5997,35 +6041,35 @@ function saveStoredRuleStates(states: Record<string, boolean>): void {
 }
 
 function getAutomationHub(): LvAutomationHub {
+    const registry = getSharedRegistry("__LV_AUTOMATION_RULES__", automationRules);
     if (typeof window === "undefined") {
         return {
             version: PROTOCOL_VERSION,
             registerRule: (rule) => {
-                automationRules.set(rule.id, rule);
-                return () => automationRules.delete(rule.id);
+                return registerOwned(registry, rule.id, rule);
             },
             trigger: async () => ({ triggered: 0, success: 0 }),
-            getRules: () => Array.from(automationRules.values()),
+            getRules: () => Array.from(registry.values()),
             toggleRule: () => {},
         };
     }
 
-    if (window.__LV_AUTOMATION__ && window.__LV_AUTOMATION__.version >= PROTOCOL_VERSION) {
+    if (window.__LV_AUTOMATION__ && window.__LV_AUTOMATION__.version >= PROTOCOL_VERSION && window.__LV_AUTOMATION__.ownerSafe === true) {
         return window.__LV_AUTOMATION__;
     }
 
     const hub: LvAutomationHub = {
         version: PROTOCOL_VERSION,
+        ownerSafe: true,
 
         registerRule(rule: LvAutomationRule): () => void {
             const states = getStoredRuleStates();
             const isEnabled = states[rule.id] !== undefined ? Boolean(states[rule.id]) : rule.enabled;
-            automationRules.set(rule.id, { ...rule, enabled: isEnabled });
-            return () => automationRules.delete(rule.id);
+            return registerOwned(registry, rule.id, { ...rule, enabled: isEnabled });
         },
 
         async trigger(source: string, type: string, payload: unknown): Promise<{ triggered: number; success: number }> {
-            const matched = Array.from(automationRules.values()).filter(
+            const matched = Array.from(registry.values()).filter(
                 r => r.enabled && (r.triggerSource === source || r.triggerSource === "*") && r.triggerType === type
             );
 
@@ -6046,7 +6090,7 @@ function getAutomationHub(): LvAutomationHub {
 
         getRules(): LvAutomationRule[] {
             const states = getStoredRuleStates();
-            return Array.from(automationRules.values()).map(r => ({
+            return Array.from(registry.values()).map(r => ({
                 ...r,
                 enabled: states[r.id] !== undefined ? Boolean(states[r.id]) : r.enabled,
             }));
@@ -6056,7 +6100,7 @@ function getAutomationHub(): LvAutomationHub {
             const states = getStoredRuleStates();
             states[ruleId] = enabled;
             saveStoredRuleStates(states);
-            const r = automationRules.get(ruleId);
+            const r = registry.get(ruleId);
             if (r) r.enabled = enabled;
         }
     };

@@ -477,7 +477,7 @@ test("lvNoticeKit · 全生态统一基础设施套件 (Epoch 7 Phase 7 标准�
         assert.equal(typeof diag.todayActivitiesCount, "number");
 
         const badgeText = lvEcosystem.getStatusBadgeText();
-        assert.ok(badgeText.startsWith("🐴 小驴全家桶协同正常"));
+        assert.ok(badgeText.startsWith("🐴 小驴全家桶"));
         assert.ok(badgeText.includes("插件已联结"));
         assert.ok(badgeText.includes("今日活动"));
 

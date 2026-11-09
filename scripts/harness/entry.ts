@@ -13,6 +13,16 @@ import type {TransformKind} from "../../src/service/ai";
 import type {SavedDiscoveryView} from "../../src/model/storage";
 import zhI18n from "../../src/i18n/zh-CN.json";
 
+// Explicit in-flight barriers for interaction tests. Tests release each mocked
+// operation only after inspecting the production busy/cancel state; wall-clock
+// delays cannot guarantee that state still exists when Chrome dispatches a click.
+const operationGates = new Map<string, {promise: Promise<void>; release: () => void; started: number; released: boolean}>();
+async function waitHarnessOperation(name: string, delayMs: number): Promise<void> {
+    const gate = operationGates.get(name);
+    if (gate && !gate.released) { gate.started++; await gate.promise; }
+    else if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
 const ENTRIES: SearchEntry[] = [
     {id: "xlc-demo0000001", blockId: "20240101120000-aaaaaaa", libraryDocId: "20240101120001-hijklmn", itemType: "markdown", title: "项目延期道歉与补偿方案", alias: "延期道歉", tags: ["客户沟通", "模板"], category: "客服", summary: "尊敬的王总：关于本期交付延期……", createdAt: 1, updatedAt: Date.now() - 3 * 86_400_000, sourceDocId: "20240101120001-hijklmn", sourceBlockId: "20240101120002-bbbbbbb", varCount: 2},
     {id: "xlc-demo0000002", blockId: "20240101120000-ccccccc", libraryDocId: "20240101120001-hijklmn", itemType: "text", title: "延期简短版（IM 用）", alias: "", tags: [], category: "", summary: "您好，本次迭代因联调超期，上线推迟 2 天……", createdAt: 1, updatedAt: Date.now() - 7 * 86_400_000},
@@ -458,6 +468,19 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
 }
 
 (window as unknown as {XlcHarness: unknown}).XlcHarness = {
+    holdOperation(name: string) {
+        let release!: () => void;
+        const promise = new Promise<void>((resolve) => { release = resolve; });
+        operationGates.set(name, {promise, release, started: 0, released: false});
+    },
+    operationState(name: string) {
+        const gate = operationGates.get(name);
+        return {started: gate?.started ?? 0, released: gate?.released ?? true};
+    },
+    releaseOperation(name: string) {
+        const gate = operationGates.get(name);
+        if (gate) { gate.released = true; gate.release(); }
+    },
     openDialog(overrides?: {aiEnabled?: boolean; missing?: boolean; scope?: "all" | "favorites"; query?: string; mobile?: boolean; empty?: boolean; largeResults?: boolean; insertTarget?: {docId: string; hPath: string}; filters?: {type: string; tag: string; category: string}; newItemAction?: string; activeEditor?: boolean; insertTargetAvailable?: boolean; actionDelayMs?: number; promptVariables?: boolean; realExecutor?: boolean; realClipboardAvailable?: boolean; pinWindow?: boolean}): CommonSearchDialog {
         const dialog = new CommonSearchDialog(makeDeps(overrides));
         lastSearchDialog = dialog;
@@ -645,7 +668,7 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
                         document.body.dataset.xlcDeferredTidyPending = "true";
                     });
                 }
-                if (aiDelayMs) await new Promise((resolve) => setTimeout(resolve, aiDelayMs));
+                await waitHarnessOperation("capture.tidy", aiDelayMs);
                 captureAiTidyCalls.push(content);
                 document.body.dataset.xlcCaptureAiTidyCalls = JSON.stringify(captureAiTidyCalls);
                 if (options?.tidyFailureCall === tidyCall) {
@@ -656,7 +679,7 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
             },
             aiDraft: async (desc: string) => {
                 draftCall++;
-                if (aiDelayMs) await new Promise((resolve) => setTimeout(resolve, aiDelayMs));
+                await waitHarnessOperation("capture.draft", aiDelayMs);
                 captureAiDraftCalls.push(desc);
                 document.body.dataset.xlcCaptureAiDraftCalls = JSON.stringify(captureAiDraftCalls);
                 if (options?.draftFailureCall === draftCall) {
@@ -721,7 +744,7 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
                 stopRequested = false;
                 options?.onProgress?.({phase: "enumerating", scannedDocs: 0, scannedBlocks: 0, discoveredDocs: 3});
                 options?.onProgress?.({phase: "scanning", scannedDocs: 1, scannedBlocks: 4, discoveredDocs: 3, totalDocs: 3});
-                await new Promise((resolve) => setTimeout(resolve, 300));
+                await waitHarnessOperation("discovery.notebook", 300);
                 return {ok: true as const, data: {...makeView("notebook", stopRequested), scannedBlocks: 12, scannedDocs: 3, skippedEmpty: 2}};
             },
             discoverTree: async (docId: string) => {
@@ -752,7 +775,7 @@ function makeDeps(overrides: {aiEnabled?: boolean; missing?: boolean; mobile?: b
                 if (candidate.status === "same-content" && !options?.allowSameContent) {
                     return {ok: true as const, data: {status: "same-content" as const, itemId: "xlc-existing0001", title: "已有收件地址"}};
                 }
-                await new Promise((resolve) => setTimeout(resolve, 120));
+                await waitHarnessOperation("discovery.add", 120);
                 const id = key === "candidate-2" ? "xlc-discovered0002" : "xlc-discovered0001";
                 return {ok: true as const, data: {status: "added" as const, item: {id, title: candidate.title} as never, batchId: options?.batchId ?? "batch-harness"}};
             },

@@ -305,6 +305,8 @@ export function formatTaskHorizonItem(quote: string, docId: string, title: strin
 }
 
 export interface CreateCardInput {
+    requestId?: string;
+    sourceBlockId?: string;
     deckName?: string;
     front: string;
     back: string;
@@ -322,14 +324,15 @@ export interface CardsBridgeApi {
     getDueSummary(): Promise<ActionResult<CardsDueSummary>>;
     openHub?(tab?: string): Promise<ActionResult<boolean>>;
     openReview?(options?: unknown): Promise<ActionResult<boolean>>;
-    createCard?(input: CreateCardInput): Promise<ActionResult<boolean>>;
+    createCard?(input: CreateCardInput): Promise<ActionResult<boolean | { kind?: "atomic"; createdBlockID?: string; blockID?: string; enrolled?: boolean; ok?: boolean }>>;
     receiveExtract?(envelope: {
+        requestId?: string;
         content: string;
         sourceBlockId: string;
         sourceDocId?: string;
         sourceTitle?: string;
         tags?: string[];
-    }): Promise<ActionResult<{ blockID?: string; enrolled?: boolean }>>;
+    }): Promise<ActionResult<{ kind?: "extract" | "atomic"; createdBlockID?: string; blockID?: string; enrolled?: boolean; ok?: boolean }>>;
 }
 
 // --- ⑧ 小驴常用 (xiaolv-common) ---
@@ -481,6 +484,56 @@ export function getBridgeSafely<T = unknown>(target: keyof typeof BRIDGE_ALIASES
 /**
  * 跨插件安全执行器（核心范式：自动就绪等待、能力协商、超时熔断、全异常隔离、优雅降级）
  */
+export interface BridgeCallOutcome<T> {
+    state: "applied" | "unavailable" | "not_ready" | "unsupported" | "rejected" | "unknown";
+    data?: T;
+    operationId?: string;
+    message?: string;
+}
+
+/** A write timeout ends the wait, not the operation. Consumers must reconcile unknown results. */
+export async function callBridgeOutcome<TBridge, TResult>(
+    target: keyof typeof BRIDGE_ALIASES,
+    requiredCapability: string,
+    caller: (bridge: TBridge) => Promise<TResult> | TResult,
+    options: { timeoutMs?: number; operationId?: string } = {},
+): Promise<BridgeCallOutcome<TResult>> {
+    const timeoutMs = options.timeoutMs ?? 2500;
+    const outcome = (state: BridgeCallOutcome<TResult>["state"], message?: string): BridgeCallOutcome<TResult> => ({ state, operationId: options.operationId, message });
+    const timeoutSentinel = {};
+    const bounded = async <T>(task: () => Promise<T> | T): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            return await Promise.race([
+                Promise.resolve().then(task),
+                new Promise<never>((_, reject) => { timer = setTimeout(() => reject(timeoutSentinel), timeoutMs); }),
+            ]);
+        } finally { if (timer !== undefined) clearTimeout(timer); }
+    };
+    let bridge: TBridge | undefined;
+    try {
+        bridge = getBridgeSafely<TBridge>(target);
+        if (!bridge) return outcome("unavailable");
+        const probe = bridge as Record<string, unknown>;
+        if (typeof probe.whenReady === "function") {
+            try {
+                const ready = await bounded(() => (probe.whenReady as () => unknown)());
+                if (ready === false) return outcome("not_ready");
+            } catch { return outcome("not_ready"); }
+        }
+        if (typeof probe.hasCapability === "function" && !(probe.hasCapability as (name: string) => boolean)(requiredCapability)) {
+            return outcome("unsupported");
+        }
+    } catch { return outcome("unavailable", "bridge-probe-failed"); }
+    try {
+        return { state: "applied", data: await bounded(() => caller(bridge!)), operationId: options.operationId };
+    } catch (error) {
+        // A thrown transport error may arrive after the side effect committed.
+        return outcome("unknown", error === timeoutSentinel ? "operation-timeout" : "operation-result-unconfirmed");
+    }
+}
+
+/** Legacy read/boolean adapter. Write callers needing reconciliation use callBridgeOutcome. */
 export async function callBridge<TBridge, TResult>(
     target: keyof typeof BRIDGE_ALIASES,
     requiredCapability: string,
@@ -488,44 +541,8 @@ export async function callBridge<TBridge, TResult>(
     fallback: () => TResult,
     timeoutMs = 2500
 ): Promise<TResult> {
-    const bridge = getBridgeSafely<TBridge>(target);
-    if (!bridge) return fallback();
-
-    const anyBridge = bridge as Record<string, unknown>;
-
-    // 1. 就绪等待（带熔断保护，防止卡死）
-    if (typeof anyBridge.whenReady === "function") {
-        try {
-            const readyP = Promise.resolve(anyBridge.whenReady());
-            const timeoutP = new Promise((_, reject) => setTimeout(() => reject(new Error("ready-timeout")), timeoutMs));
-            await Promise.race([readyP, timeoutP]);
-        } catch {
-            return fallback();
-        }
-    }
-
-    // 2. 能力协商
-    if (typeof anyBridge.hasCapability === "function") {
-        if (!(anyBridge.hasCapability as (c: string) => boolean)(requiredCapability)) {
-            return fallback();
-        }
-    }
-
-    // 3. 业务调用（带熔断保护，防止目标插件内部任务悬挂）
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-        const callerP = Promise.resolve(caller(bridge));
-        const timeoutP = new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error("caller-timeout")), timeoutMs);
-        });
-        const result = await Promise.race([callerP, timeoutP]);
-        if (timer !== undefined) clearTimeout(timer);
-        return result;
-    } catch (err) {
-        if (timer !== undefined) clearTimeout(timer);
-        console.warn(`[小驴生态联邦] 调用 ${target}.${requiredCapability} 失败，已优雅降级:`, err);
-        return fallback();
-    }
+    const result = await callBridgeOutcome(target, requiredCapability, caller, { timeoutMs });
+    return result.state === "applied" ? result.data as TResult : fallback();
 }
 
 /* ========================================================================= */
@@ -567,43 +584,50 @@ export async function logCheckinEventSafely(options: {
 /**
  * 向小驴闪卡（siyuan-lv-cards）安全推送制卡（IDEA-15 联动）
  */
-export async function pushFlashcardSafely(options: {
+export async function createCardSafely(options: {
+    requestId?: string;
+    sourceBlockId?: string;
     front: string;
     back: string;
     tags?: string[];
     deckName?: string;
     sourceDocId?: string;
-}): Promise<boolean> {
-    return await callBridge<CardsBridgeApi, boolean>(
+}): Promise<{ ok: boolean; state: BridgeCallOutcome<unknown>["state"]; createdBlockID?: string; createdDocID?: string; message?: string }> {
+    const outcome = await callBridgeOutcome<CardsBridgeApi, ActionResult<boolean | { kind?: string; enrolled?: boolean; createdBlockID?: string; blockID?: string; ok?: boolean }>>(
         "cards",
-        "cards.create",
+        "createCard",
         async (bridge) => {
-            if (typeof (bridge as any).createCard === "function") {
-                const res = await (bridge as any).createCard({
+            if (typeof bridge.createCard === "function") {
+                return await bridge.createCard({
+                    requestId: options.requestId,
+                    sourceBlockId: options.sourceBlockId,
                     deckName: options.deckName ?? "人脉常识",
                     front: options.front,
                     back: options.back,
                     tags: options.tags ?? ["人脉常识"],
                     sourceDocId: options.sourceDocId,
                 });
-                return Boolean(res && res.ok);
             }
-            if (typeof (bridge as any).receiveExtract === "function") {
-                const content = options.back?.trim()
-                    ? `${options.front.trim()} ==${options.back.trim()}==`
-                    : options.front.trim();
-                const res = await (bridge as any).receiveExtract({
-                    content,
-                    sourceBlockId: options.sourceDocId ?? "",
-                    sourceTitle: options.deckName || "外部同步",
-                    tags: options.tags ?? ["人脉常识"],
-                });
-                return Boolean(res && (res.ok !== false && (res.ok || res.data?.enrolled !== false)));
-            }
-            return false;
+            return { ok: false, message: "createCard-not-supported" };
         },
-        () => false
+        { operationId: options.requestId },
     );
+    if (outcome.state !== "applied") return { ok: false, state: outcome.state, message: outcome.message };
+    const res = outcome.data;
+    const failedData = res?.data && typeof res.data === "object" ? res.data : undefined;
+    const details = res?.details && typeof res.details === "object" ? res.details as { createdBlockID?: string; docID?: string } : undefined;
+    const partialId = failedData?.createdBlockID || failedData?.blockID || details?.createdBlockID;
+    if (res?.ok !== true || res.data === false) return { ok: false, state: partialId || details?.docID || res?.code === "write-unknown" ? "unknown" : "rejected", createdBlockID: partialId, createdDocID: details?.docID, message: res?.message };
+    const data = typeof res.data === "object" ? res.data : undefined;
+    const createdBlockID = data?.createdBlockID || data?.blockID;
+    if (!createdBlockID) return { ok: false, state: "unknown", message: "missing-created-card-id" };
+    const confirmed = data?.enrolled === true && data.ok !== false && data.kind !== "extract";
+    return { ok: confirmed, state: confirmed ? "applied" : "unknown", createdBlockID, message: res.message };
+}
+
+/** Boolean compatibility adapter for older UI consumers. */
+export async function pushFlashcardSafely(options: Parameters<typeof createCardSafely>[0]): Promise<boolean> {
+    return (await createCardSafely(options)).ok;
 }
 
 /**
@@ -615,44 +639,28 @@ export async function pushToGleanReadingSafely(options: {
     title: string;
     module: string;
     summary?: string;
-}): Promise<{ mode: "bridge" | "clipboard"; text: string }> {
+}): Promise<{ mode: "bridge" | "clipboard"; text: string; state?: BridgeCallOutcome<unknown>["state"]; docId?: string }> {
     const fallbackText = `📖 【渐进阅读切片 · ${options.title}】\n* 来源：小驴管家 · ${options.module}\n${options.docId ? `* 关联文档：((${options.docId} '${options.title}'))\n` : ""}${options.summary ? `* 要点摘要：${options.summary}\n` : ""}* 渐进建议：每日消化 1~2 个条款切片，厘清权益与免责条款。`;
 
     if (typeof window === "undefined") {
         return { mode: "clipboard", text: fallbackText };
     }
 
-    const glean = getBridgeSafely<any>("glean");
-    if (glean && typeof glean.ingestClip === "function") {
-        try {
-            await glean.ingestClip({
+    const result = await callBridgeOutcome<any, { ok: boolean; docId?: string }>("glean", "ingestClip", async (glean) => {
+            if (typeof glean.ingestClip !== "function") return { ok: false };
+            return await glean.ingestClip({
                 title: options.title,
                 docId: options.docId,
                 blockId: options.blockId,
                 tags: ["管家资产", options.module],
                 summary: options.summary,
             });
-            return { mode: "bridge", text: fallbackText };
-        } catch {
-            /* 回退 */
-        }
+    });
+    if (result.state === "applied" && result.data?.ok === true && result.data.docId) {
+        return { mode: "bridge", text: fallbackText, state: "applied", docId: result.data.docId };
     }
-
-    try {
-        window.dispatchEvent(new CustomEvent("lv-glean:add-clip", {
-            detail: {
-                title: options.title,
-                docId: options.docId,
-                blockId: options.blockId,
-                tags: ["管家资产", options.module],
-                summary: options.summary,
-            },
-        }));
-    } catch {
-        /* soft */
-    }
-
-    return { mode: glean ? "bridge" : "clipboard", text: fallbackText };
+    const partial = result.data?.docId;
+    return { mode: "clipboard", text: fallbackText, docId: partial, state: result.state === "applied" ? (partial ? "unknown" : "rejected") : result.state };
 }
 
 /**
@@ -850,23 +858,29 @@ export async function completeCheckinOccasionSafely(id: string, occurrenceDate: 
  * 自动建立双向反链血缘并纳入轻量级渐进学习轮转箱，绝不破坏 FSRS 主队列
  */
 export async function sendExtractToCardsSafely(envelope: {
+    requestId?: string;
     content: string;
     sourceBlockId: string;
     sourceDocId?: string;
     sourceTitle?: string;
     tags?: string[];
-}): Promise<{ ok: boolean; message?: string }> {
-    return await callBridge<CardsBridgeApi, { ok: boolean; message?: string }>(
+}): Promise<{ ok: boolean; message?: string; state?: BridgeCallOutcome<unknown>["state"]; createdBlockID?: string; createdDocID?: string }> {
+    const outcome = await callBridgeOutcome<CardsBridgeApi, ActionResult<{ kind?: string; createdBlockID?: string; blockID?: string; enrolled?: boolean; ok?: boolean }>>(
         "cards",
         "receiveExtract",
         async (bridge) => {
             if (typeof bridge.receiveExtract !== "function") return { ok: false, message: "not-supported" };
-            const res = await bridge.receiveExtract(envelope);
-            const isOk = Boolean(res?.ok ?? (res as any)?.enrolled ?? (res as any)?.data?.enrolled ?? (res as any)?.data?.ok);
-            return { ok: isOk, message: (res as any)?.message };
+            return await bridge.receiveExtract(envelope);
         },
-        () => ({ ok: false, message: "cards-not-available" })
+        { operationId: envelope.requestId },
     );
+    if (outcome.state !== "applied") return { ok: false, state: outcome.state, message: outcome.message || "cards-not-available" };
+    const res = outcome.data;
+    const data = res?.data;
+    const details = res?.details && typeof res.details === "object" ? res.details as { createdBlockID?: string; docID?: string } : undefined;
+    const createdBlockID = data?.createdBlockID || data?.blockID || details?.createdBlockID;
+    const confirmed = res?.ok === true && Boolean(createdBlockID) && data?.ok !== false && (data?.kind === "extract" || data?.enrolled === true);
+    return { ok: confirmed, state: confirmed ? "applied" : (createdBlockID || details?.docID || res?.code === "write-unknown" ? "unknown" : "rejected"), createdBlockID, createdDocID: details?.docID, message: res?.message };
 }
 
 /**
@@ -882,7 +896,9 @@ export async function getCardsDueSummarySafely(): Promise<{ ok: boolean; unrevie
             if (res?.ok && res.data) {
                 return {
                     ok: true,
-                    unreviewedCount: (res.data.unreviewedCount ?? 0) + (res.data.unreviewedNewCardCount ?? 0) + (res.data.unreviewedOldCardCount ?? 0),
+                    unreviewedCount: Number.isFinite(res.data.unreviewedCount) && res.data.unreviewedCount >= 0
+                        ? res.data.unreviewedCount
+                        : Math.max(0, Number(res.data.unreviewedNewCardCount) || 0) + Math.max(0, Number(res.data.unreviewedOldCardCount) || 0),
                     todayReviewedCount: res.data.todayReviewedCount ?? 0,
                 };
             }

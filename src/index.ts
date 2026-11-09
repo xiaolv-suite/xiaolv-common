@@ -52,7 +52,7 @@ import type {TransformKind} from "./service/ai";
 import {mountXlcBridge} from "./service/external-bridge";
 import {queryEcosystemItems} from "./service/ecosystem";
 import {registerRaikiriModuleSafely} from "./ecosystem-bridge-kit";
-import {getActivePasteQueue} from "./model/paste-queue";
+import {outputNextPasteQueueItem} from "./service/paste-queue";
 import {DockView, type DockViewDeps} from "./ui/dock-view";
 import {buildDedicatedDocMarkdown, StarterPackMeta} from "./service/prompt-pack";
 
@@ -466,18 +466,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             return this.service.captureQuote(payload as any);
         };
         this.protocolCommands["xiaolv.common.pasteQueueNext"] = async () => {
-            const queue = getActivePasteQueue();
-            const item = queue.pop();
-            if (!item) return {ok: false, reason: "empty"};
-            if (this.host.hasActiveEditor()) {
-                const docId = this.host.currentDocId() || "";
-                await withDocLock(docId, async () => {
-                    await this.host.insertMarkdown(item.content);
-                });
-            } else {
-                await this.host.writeClipboard(item.content);
-            }
-            return {ok: true, item, remaining: queue.size()};
+            return outputNextPasteQueueItem(this.host);
         };
         // 按需发现协议面：提供当前文档/笔记本扫描、候选预览、收录与批次撤销。
         this.protocolCommands["xiaolv.common.discoverCurrentDocument"] = async () => this.discoverCurrentDocument();
@@ -1036,24 +1025,19 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.addCommand({
             langKey: "pasteQueueNext",
             hotkey: "⌥⇧Q",
-            callback: () => {
-                const queue = getActivePasteQueue();
-                const item = queue.pop();
-                if (!item) {
+            callback: async () => {
+                const result = await outputNextPasteQueueItem(this.host);
+                if (result.reason === "empty") {
                     this.notify("info", this.i18nFn()("pasteQueueEmpty"));
                     return;
                 }
-                const hasEditor = this.host.hasActiveEditor();
-                if (hasEditor) {
-                    const docId = this.host.currentDocId() || "";
-                    void withDocLock(docId, async () => {
-                        this.host.insertMarkdown(item.content);
-                    });
-                } else {
-                    void this.host.writeClipboard(item.content);
+                if (!result.ok) {
+                    if (result.reason !== "busy") this.notify("error", result.reason === "queue-changed"
+                        ? "输出期间队列已变化，请核实已输出内容；没有移除新队首。"
+                        : "输出失败，条目仍在队首，请核实编辑器或剪贴板后重试。");
+                    return;
                 }
-                const remaining = queue.size();
-                this.notify("info", this.i18nFn()("pasteQueuePopped", item.title, String(remaining)));
+                this.notify("info", this.i18nFn()("pasteQueuePopped", result.item!.title, String(result.remaining)));
             },
         });
         this.addCommand({
