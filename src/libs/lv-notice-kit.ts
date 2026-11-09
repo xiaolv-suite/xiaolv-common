@@ -653,7 +653,7 @@ body.dark {
 }
 #lv-launchpad-sheet-mask .lv-sheet {
     width: 100%;
-    max-height: min(88dvh, 740px);
+    max-height: min(92dvh, 780px);
     overflow-y: auto;
     overscroll-behavior: contain;
     background: var(--lv-lp-bg);
@@ -661,21 +661,21 @@ body.dark {
     border-radius: 22px 22px 0 0;
     border-top: 1px solid var(--lv-lp-border-strong);
     box-shadow: 0 -16px 48px rgba(15, 23, 42, 0.24);
-    padding: 8px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px));
     box-sizing: border-box;
     animation: lvSheetUp 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
     will-change: transform;
 }
 /* 磁贴徽记胶囊：高对比度清透微胶囊 */
 .lv-sheet-tile-badge {
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 600;
-    padding: 1.5px 8px;
+    padding: 1px 7px;
     border-radius: 999px;
     background: var(--lv-lp-accent-soft);
     color: var(--lv-lp-accent);
     border: 1px solid color-mix(in srgb, var(--lv-lp-accent) 18%, transparent);
-    line-height: 1.4;
+    line-height: 1.35;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -687,7 +687,7 @@ body.dark {
 /* 穿透结果分组头（按来源） */
 .lv-sheet-result-group { font-size: 11px; font-weight: 700; color: var(--lv-lp-accent); padding: 6px 2px 2px; }
 /* 搜索历史 chips */
-.lv-sheet-histrow { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 6px; overscroll-behavior-x: contain; scrollbar-width: none; }
+.lv-sheet-histrow { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 5px; overscroll-behavior-x: contain; scrollbar-width: none; }
 .lv-sheet-histrow::-webkit-scrollbar { display: none; }
 .lv-sheet-histrow-label { flex-shrink: 0; font-size: 11px; color: var(--lv-lp-text-sub); }
 .lv-sheet-histrow-chip {
@@ -704,15 +704,15 @@ body.dark {
 }
 .lv-sheet-histrow-chip:active { background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); }
 /* 生态直达行（今日回顾 / 雷切画板） */
-.lv-sheet-eco-row { display: flex; gap: 8px; margin: 0 0 8px; }
+.lv-sheet-eco-row { display: flex; gap: 6px; margin: 0 0 6px; }
 .lv-sheet-eco-chip {
     flex: 1;
     border: 1px solid var(--lv-lp-border);
     background: var(--lv-lp-card-bg);
     box-shadow: var(--lv-lp-card-shadow);
-    border-radius: 11px;
-    padding: 7px 10px;
-    font-size: 12.5px;
+    border-radius: 10px;
+    padding: 5px 8px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--lv-lp-text);
     cursor: pointer;
@@ -722,7 +722,7 @@ body.dark {
 }
 .lv-sheet-eco-chip:active { transform: scale(0.97); background: var(--lv-lp-accent-soft); border-color: var(--lv-lp-accent); }
 /* 最近直达行：上次使用的插件一键再达 */
-.lv-sheet-recent { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 8px; padding-bottom: 2px; overscroll-behavior-x: contain; scrollbar-width: none; }
+.lv-sheet-recent { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin: 0 0 6px; padding-bottom: 1px; overscroll-behavior-x: contain; scrollbar-width: none; }
 .lv-sheet-recent::-webkit-scrollbar { display: none; }
 .lv-sheet-recent-label { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--lv-lp-text-sub); }
 .lv-sheet-recent-chip {
@@ -731,8 +731,8 @@ body.dark {
     background: var(--lv-lp-card-bg);
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
     border-radius: 999px;
-    padding: 4px 11px;
-    font-size: 12px;
+    padding: 3px 10px;
+    font-size: 11.5px;
     font-weight: 500;
     color: var(--lv-lp-text);
     cursor: pointer;
@@ -741,9 +741,9 @@ body.dark {
 }
 .lv-sheet-recent-chip:active { background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); }
 .lv-sheet-handle {
-    width: 40px;
+    width: 36px;
     height: 4px;
-    margin: 0 auto 8px;
+    margin: 0 auto 6px;
     border-radius: 999px;
     background: var(--lv-lp-border-strong);
 }
@@ -752,18 +752,18 @@ body.dark {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
-.lv-sheet-title { font-size: 16px; font-weight: 700; color: var(--lv-lp-text); letter-spacing: -0.01em; }
+.lv-sheet-title { font-size: 15px; font-weight: 700; color: var(--lv-lp-text); letter-spacing: -0.01em; }
 .lv-sheet-close {
     border: 1px solid var(--lv-lp-border);
     background: var(--lv-lp-card-bg);
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     border-radius: 999px;
     display: inline-grid;
     place-items: center;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     padding: 0;
     color: var(--lv-lp-text-sub);
@@ -772,15 +772,15 @@ body.dark {
 .lv-sheet-search.b3-text-field,
 .lv-sheet-search {
     width: 100%;
-    height: 36px;
+    height: 34px;
     box-sizing: border-box;
-    margin-bottom: 8px;
-    padding: 6px 12px;
+    margin-bottom: 6px;
+    padding: 5px 11px;
     border-radius: 10px;
     border: 1px solid var(--lv-lp-border-strong);
     background: var(--lv-lp-panel-bg);
     color: var(--lv-lp-text);
-    font-size: 13px;
+    font-size: 12.5px;
     box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 .lv-sheet-search:focus {
@@ -789,7 +789,7 @@ body.dark {
     box-shadow: 0 0 0 3px var(--lv-lp-accent-soft);
     outline: none;
 }
-.lv-sheet-results { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+.lv-sheet-results { display: flex; flex-direction: column; gap: 5px; margin-bottom: 6px; }
 .lv-sheet-result {
     display: flex;
     align-items: flex-start;
@@ -799,7 +799,7 @@ body.dark {
     background: var(--lv-lp-card-bg);
     box-shadow: var(--lv-lp-card-shadow);
     border-radius: 10px;
-    padding: 8px 10px;
+    padding: 7px 10px;
     text-align: left;
     cursor: pointer;
 }
@@ -813,30 +813,30 @@ body.dark {
     color: var(--lv-lp-accent);
 }
 .lv-sheet-result-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lv-sheet-result-title { font-size: 13.5px; font-weight: 600; color: var(--lv-lp-text); }
+.lv-sheet-result-title { font-size: 13px; font-weight: 600; color: var(--lv-lp-text); }
 .lv-sheet-result-snippet {
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--lv-lp-text-sub);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 /* 磁贴网格自适应列数：1~2 个插件时自动放宽为居中大卡，3+ 恢复三列，杜绝孤卡稀疏 */
-.lv-sheet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+.lv-sheet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-bottom: 6px; }
 .lv-sheet-grid--sparse { grid-template-columns: repeat(auto-fit, minmax(150px, 190px)); justify-content: center; }
-.lv-sheet-subtitle { font-size: 11.5px; color: var(--lv-lp-text-sub); margin: 0 0 6px; font-weight: 500; }
+.lv-sheet-subtitle { font-size: 11px; color: var(--lv-lp-text-sub); margin: 0 0 4px; font-weight: 500; }
 .lv-sheet-tile {
     --tile-brand: #3b82f6;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 2.5px;
     border: 1px solid var(--lv-lp-border);
     background: var(--lv-lp-card-bg);
     background-image: radial-gradient(80px circle at 85% 15%, color-mix(in srgb, var(--tile-brand) 9%, transparent), transparent 70%);
     box-shadow: var(--lv-lp-card-shadow);
-    border-radius: 14px;
-    padding: 11px 6px 9px;
+    border-radius: 12px;
+    padding: 8px 5px 7px;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     position: relative;
@@ -848,9 +848,9 @@ body.dark {
     border-color: color-mix(in srgb, var(--tile-brand) 55%, transparent);
 }
 .lv-sheet-tile-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--lv-lp-accent); }
-.lv-sheet-tile-name { font-size: 13.5px; font-weight: 650; color: var(--lv-lp-text); text-align: center; line-height: 1.25; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-sheet-tile-name { font-size: 13px; font-weight: 650; color: var(--lv-lp-text); text-align: center; line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lv-sheet-tile-desc {
-    font-size: 11px;
+    font-size: 10.5px;
     color: var(--lv-lp-text-sub);
     text-align: center;
     max-width: 100%;
@@ -858,20 +858,20 @@ body.dark {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.lv-sheet-tile--expanded { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; padding: 12px; }
+.lv-sheet-tile--expanded { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; padding: 10px; }
 .lv-sheet-tile-icon {
     display: grid;
     place-items: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 11px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
     background: linear-gradient(135deg, color-mix(in srgb, currentColor 16%, var(--lv-lp-card-bg)) 0%, color-mix(in srgb, currentColor 7%, var(--lv-lp-card-bg)) 100%);
     border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
     box-shadow: 0 4px 10px -2px color-mix(in srgb, currentColor 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.65);
     color: var(--lv-lp-accent);
-    margin-bottom: 2px;
+    margin-bottom: 1px;
 }
-.lv-sheet-tile-icon svg { width: 18px; height: 18px; }
+.lv-sheet-tile-icon svg { width: 17px; height: 17px; }
 .lv-sheet-tile-actions { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 6px; }
 .lv-sheet-action-chip {
     border: 1px solid var(--lv-lp-border-strong);
@@ -1018,15 +1018,15 @@ function ensureStyles(): void {
     const styleId = "lv-notice-styles";
     const existing = document.getElementById(styleId);
     if (existing) {
-        if (existing.getAttribute?.("data-lv-ver") !== "2.1" || (existing.textContent?.length ?? 0) < STYLES.length) {
+        if (existing.getAttribute?.("data-lv-ver") !== "2.2" || (existing.textContent?.length ?? 0) < STYLES.length) {
             existing.textContent = STYLES;
-            existing.setAttribute?.("data-lv-ver", "2.1");
+            existing.setAttribute?.("data-lv-ver", "2.2");
         }
         return;
     }
     const styleEl = document.createElement("style");
     styleEl.id = styleId;
-    styleEl.setAttribute?.("data-lv-ver", "2.1");
+    styleEl.setAttribute?.("data-lv-ver", "2.2");
     styleEl.textContent = STYLES;
     document.head.appendChild(styleEl);
 }
@@ -2509,7 +2509,7 @@ function getLaunchpadHub(): LvLaunchpadHub {
 
     const sharedRegistry = getSharedLaunchpadRegistry();
 
-    if (window.__LV_LAUNCHPAD__ && window.__LV_LAUNCHPAD__.version >= PROTOCOL_VERSION && (window.__LV_LAUNCHPAD__ as any).__v210 === true) {
+    if (window.__LV_LAUNCHPAD__ && window.__LV_LAUNCHPAD__.version >= PROTOCOL_VERSION && (window.__LV_LAUNCHPAD__ as any).__v220 === true) {
         return window.__LV_LAUNCHPAD__;
     }
 
@@ -2605,6 +2605,7 @@ function getLaunchpadHub(): LvLaunchpadHub {
         }
     };
 
+    (hub as any).__v220 = true;
     (hub as any).__v210 = true;
     (hub as any).__v180 = true;
     (hub as any).openMobileSheet = () => openMobileSheet();
@@ -3543,9 +3544,9 @@ function ensureDesktopStyles(): void {
     const existing = document.getElementById("lv-launchpad-desktop-styles");
     try {
         const style = existing ?? document.createElement("style");
-        if (existing && existing.getAttribute?.("data-lv-ver") === "2.1") return;
+        if (existing && existing.getAttribute?.("data-lv-ver") === "2.2") return;
         style.id = "lv-launchpad-desktop-styles";
-        style.setAttribute?.("data-lv-ver", "2.1");
+        style.setAttribute?.("data-lv-ver", "2.2");
         style.textContent = cssText + `
 .lv-desktop-launchpad-popover * {
   box-sizing: border-box;
@@ -3564,7 +3565,7 @@ function ensureDesktopStyles(): void {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 13px 16px 11px;
+  padding: 10px 14px 9px;
   border-bottom: 1px solid var(--lv-lp-border);
   background: var(--lv-lp-card-bg);
   flex-shrink: 0;
@@ -3631,8 +3632,8 @@ function ensureDesktopStyles(): void {
   overscroll-behavior: contain;
 }
 .lv-pop-search-bar {
-  margin: 10px 14px 6px;
-  padding: 7px 12px;
+  margin: 8px 14px 5px;
+  padding: 6px 11px;
   border-radius: 10px;
   border: 1px solid var(--lv-lp-border-strong);
   display: flex;
@@ -3676,7 +3677,7 @@ function ensureDesktopStyles(): void {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 14px 8px;
+  padding: 3px 14px 6px;
   border-bottom: 1px solid var(--lv-lp-border);
   overflow-x: auto;
   scrollbar-width: none;
@@ -3722,8 +3723,8 @@ function ensureDesktopStyles(): void {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 14px 8px 11px;
-  border-radius: 14px;
+  padding: 9px 8px 8px;
+  border-radius: 13px;
   border: 1px solid var(--lv-lp-border);
   background: var(--lv-lp-card-bg);
   background-image: radial-gradient(96px circle at 86% 14%, color-mix(in srgb, var(--tile-brand) 9%, transparent), transparent 72%);
@@ -3746,13 +3747,13 @@ function ensureDesktopStyles(): void {
   transform: scale(0.97);
 }
 .lv-pop-icon-wrap {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 7px;
+  margin-bottom: 4px;
   background: linear-gradient(135deg, color-mix(in srgb, currentColor 16%, var(--lv-lp-card-bg)) 0%, color-mix(in srgb, currentColor 7%, var(--lv-lp-card-bg)) 100%);
   border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
   box-shadow: 0 4px 10px -2px color-mix(in srgb, currentColor 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.65);
@@ -3782,7 +3783,7 @@ function ensureDesktopStyles(): void {
   flex-direction: row;
   justify-content: space-between;
   text-align: left;
-  padding: 8px 12px;
+  padding: 7px 11px;
   border-radius: 10px;
 }
 .lv-pop-tile.lv-pop-list-item:hover,
@@ -3802,9 +3803,9 @@ function ensureDesktopStyles(): void {
   color: var(--lv-lp-accent) !important;
 }
 .lv-pop-badge {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
-  padding: 1.5px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
   display: inline-block;
   width: fit-content;
@@ -3812,8 +3813,8 @@ function ensureDesktopStyles(): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: 5px;
-  line-height: 1.4;
+  margin-top: 3px;
+  line-height: 1.35;
 }
 .lv-pop-badge.lv-badge-primary {
   background: var(--lv-lp-accent-soft);
@@ -3838,19 +3839,19 @@ function ensureDesktopStyles(): void {
 .lv-pop-actions-drawer {
   border-top: 1px solid var(--lv-lp-border);
   background: var(--lv-lp-panel-bg);
-  padding: 10px 14px;
+  padding: 8px 14px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   flex-shrink: 0;
 }
 .lv-pop-action-row {
-  padding: 6px 10px;
+  padding: 5px 8px;
   border-radius: 8px;
   border: 1px solid var(--lv-lp-border);
   background: var(--lv-lp-card-bg);
   color: var(--lv-lp-text);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -3859,6 +3860,7 @@ function ensureDesktopStyles(): void {
   justify-content: space-between;
   text-align: left;
   width: 100%;
+  min-width: 0;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
   transition: all 0.14s ease;
 }
@@ -3867,7 +3869,7 @@ function ensureDesktopStyles(): void {
   border-color: var(--lv-lp-accent);
   color: var(--lv-lp-accent);
   box-shadow: 0 3px 8px rgba(37, 99, 235, 0.08);
-  transform: translateX(1.5px);
+  transform: translateY(-1px);
 }
 .lv-pop-hit-item {
   padding: 8px 12px;
@@ -3962,22 +3964,27 @@ function buildActionsDrawerInnerHtml(
         : (total > displayActions.length ? `精选前 ${displayActions.length} 项 · 展开全部 (${total})` : `共 ${total} 项快捷行动`);
 
     let rowsHtml = "";
+    const isCompactRow = actionLimit !== "all" && displayActions.length >= 2;
     displayActions.forEach((act) => {
         const safeAct = escapeHtml(String(act));
         rowsHtml += `
-          <button type="button" class="lv-pop-action-row" data-action-plugin="${safePluginId}" data-action-name="${safeAct}">
+          <button type="button" class="lv-pop-action-row" data-action-plugin="${safePluginId}" data-action-name="${safeAct}" title="${safeAct}">
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⚡ ${safeAct}</span>
-            <span style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);flex-shrink:0;margin-left:8px;">↵ 执行</span>
+            ${isCompactRow ? "" : `<span style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);flex-shrink:0;margin-left:8px;">↵ 执行</span>`}
           </button>
         `;
     });
 
+    const listGridStyle = isCompactRow
+        ? `display:grid;grid-template-columns:repeat(${Math.min(3, displayActions.length)},minmax(0,1fr));gap:6px;`
+        : (displayActions.length >= 4 ? `display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;` : `display:flex;flex-direction:column;gap:4px;`);
+
     return `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-        <span class="lv-pop-actions-title" style="font-size:11.5px;font-weight:700;color:var(--lv-lp-accent,#2563eb);">⚡ ${safeTitle} · 极速二级行动直达</span>
-        <button type="button" class="lv-pop-actions-limit-btn" style="border:none;background:transparent;font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);cursor:pointer;padding:2px 4px;font-family:inherit;">${escapeHtml(limitToggleLabel)}</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+        <span class="lv-pop-actions-title" style="font-size:11px;font-weight:700;color:var(--lv-lp-accent,#2563eb);">⚡ ${safeTitle} · 极速二级行动直达</span>
+        <button type="button" class="lv-pop-actions-limit-btn" style="border:none;background:transparent;font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);cursor:pointer;padding:1px 4px;font-family:inherit;">${escapeHtml(limitToggleLabel)}</button>
       </div>
-      <div class="lv-pop-actions-list" style="display:flex;flex-direction:column;gap:4px;">
+      <div class="lv-pop-actions-list" style="${listGridStyle}">
         ${rowsHtml}
       </div>
     `;
@@ -4143,7 +4150,7 @@ export function buildLaunchpadPopoverHtml(
     // 核心呈现区：9宫格微磁贴 vs 紧凑列表视图
     let mainViewHtml = "";
     if (view === "list") {
-        mainViewHtml = `<div class="lv-pop-list" style="display:flex;flex-direction:column;gap:5px;padding:8px 12px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:310px;">`;
+        mainViewHtml = `<div class="lv-pop-list" style="display:flex;flex-direction:column;gap:5px;padding:8px 12px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:440px;">`;
         items.forEach((item, idx) => {
             const digit = idx + 1;
             const isPinned = item.state === "pinned";
@@ -4181,7 +4188,7 @@ export function buildLaunchpadPopoverHtml(
         mainViewHtml += `</div>`;
     } else {
         const cols = items.length >= 3 ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))";
-        mainViewHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:${cols};gap:10px;padding:10px 14px 12px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:330px;">`;
+        mainViewHtml = `<div class="lv-pop-grid" style="display:grid;grid-template-columns:${cols};gap:8px;padding:8px 14px 10px;flex:1 1 auto;min-height:0;overflow-y:auto;">`;
 
         items.forEach((item, idx) => {
             const digit = idx + 1;
