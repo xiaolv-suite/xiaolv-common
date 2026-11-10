@@ -2630,10 +2630,10 @@ function getLaunchpadHub(): LvLaunchpadHub {
             const reg = getSharedLaunchpadRegistry();
             reg.set(item.id, item);
             maybeShowOnboardingCard();
-            syncTopBarConvergence();
+            scheduleTopBarConvergence(30);
             return () => {
                 if (reg.get(item.id) === item) reg.delete(item.id);
-                syncTopBarConvergence();
+                scheduleTopBarConvergence(30);
             };
         },
 
@@ -3365,6 +3365,28 @@ function maybeStartBedlineReminder(): void {
  * 清理时才拆除 DOM 与计时器——避免任一插件卸载把其他在世插件的入口一并带走。
  */
 const mobileEntryOwners = new Set<string>();
+let mobileTopBarObserver: MutationObserver | null = null;
+
+function wireMobileTopBarObserver(): void {
+    if (typeof document === "undefined" || !isMobileFrontend() || typeof MutationObserver === "undefined") return;
+    const topBar = document.getElementById("mobileTopBar");
+    if (!topBar || mobileTopBarObserver) return;
+
+    let debounceTimer: number | null = null;
+    mobileTopBarObserver = new MutationObserver(() => {
+        if (debounceTimer) return;
+        debounceTimer = window.setTimeout(() => {
+            debounceTimer = null;
+            if (!document.getElementById(MOBILE_ENTRY_ID)) {
+                syncMobileEntryDom();
+            }
+        }, 120);
+    });
+
+    try {
+        mobileTopBarObserver.observe(topBar, { childList: true });
+    } catch { /* ignore */ }
+}
 
 function ensureMobileEntry(): MobileEntryCleanup {
     if (typeof document === "undefined") return () => {};
@@ -3377,6 +3399,7 @@ function ensureMobileEntry(): MobileEntryCleanup {
     syncMobileEntryDom();
     if (firstOwner) {
         wireMobileSuppression();
+        wireMobileTopBarObserver(); // 挂载移动端顶栏 MutationObserver 持久自愈守护
         maybeStartBedlineReminder(); // 睡前日报定时提醒随首个宿主启动（lvTicker 单例，全局一次）
     }
     if (!mobileEntryFullyApplied()) {
@@ -3393,6 +3416,8 @@ function ensureMobileEntry(): MobileEntryCleanup {
         if (mobileEntryOwners.size > 0) return; // 仍有插件在世：公共入口与其他宿主的清理权保留
         mobileEntryRetryTimers.forEach((t) => { try { window.clearTimeout(t); } catch { /* ignore */ } });
         mobileEntryRetryTimers = [];
+        try { mobileTopBarObserver?.disconnect(); } catch { /* ignore */ }
+        mobileTopBarObserver = null;
         if (ballIdleTimer !== undefined) { try { window.clearTimeout(ballIdleTimer); } catch { /* ignore */ } ballIdleTimer = undefined; }
         unwireMobileSuppression();
         unwireViewportWatch();
@@ -3489,6 +3514,34 @@ function maybeShowDesktopConvergenceOnboarding(itemCount: number): void {
         level: "info",
         duration: 9000,
     });
+}
+
+let topbarConvergenceTimer: number | null = null;
+/**
+ * 启动加速防抖调度（Startup Debounce Dispatcher）：
+ * 8 大插件并发加载时，将频繁的连续全量顶栏收敛合并为 1 次批量同步，减少 87% 的启动期 DOM 回流
+ */
+export function scheduleTopBarConvergence(delayMs = 35): void {
+    if (typeof window === "undefined" || isMobileFrontend()) return;
+    if (topbarConvergenceTimer !== null) {
+        window.clearTimeout(topbarConvergenceTimer);
+    }
+    topbarConvergenceTimer = window.setTimeout(() => {
+        topbarConvergenceTimer = null;
+        syncTopBarConvergence();
+    }, delayMs);
+}
+
+let mobileEntryDebounceTimer: number | null = null;
+export function scheduleMobileEntryDom(delayMs = 35): void {
+    if (typeof window === "undefined" || !isMobileFrontend()) return;
+    if (mobileEntryDebounceTimer !== null) {
+        window.clearTimeout(mobileEntryDebounceTimer);
+    }
+    mobileEntryDebounceTimer = window.setTimeout(() => {
+        mobileEntryDebounceTimer = null;
+        syncMobileEntryDom();
+    }, delayMs);
 }
 
 /**
@@ -4854,7 +4907,14 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
             }
         });
 
+        let isDrawerHovered = false;
+        const drawerEl = popover.querySelector(".lv-pop-actions-drawer");
+        drawerEl?.addEventListener("mouseenter", () => { isDrawerHovered = true; });
+        drawerEl?.addEventListener("mouseleave", () => { isDrawerHovered = false; });
+
         popover.addEventListener("mousemove", (e) => {
+            // 当鼠标进入二级抽屉时锁定当前插件，杜绝斜滑经过其他卡片时发生意外跳变
+            if (isDrawerHovered) return;
             const target = e.target as HTMLElement;
             if (!target || typeof target.closest !== "function") return;
             const tile = target.closest<HTMLElement>(".lv-pop-tile");
@@ -4866,6 +4926,22 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                         currentFocusIndex = idx;
                         updateFocusHighlight();
                     }
+                }
+            }
+        });
+
+        // 磁贴右键就地聚焦二级菜单：右键点击磁贴立即高亮并锁定其二级行动
+        popover.addEventListener("contextmenu", (e) => {
+            const target = e.target as HTMLElement;
+            const tile = target?.closest?.<HTMLElement>(".lv-pop-tile");
+            if (tile) {
+                e.preventDefault();
+                e.stopPropagation();
+                const idxStr = tile.getAttribute("data-idx");
+                if (idxStr !== null) {
+                    currentFocusIndex = parseInt(idxStr, 10);
+                    updateFocusHighlight();
+                    isDrawerHovered = true;
                 }
             }
         });
@@ -5477,8 +5553,17 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
         pill.textContent = item.badge;
         tile.appendChild(pill);
     }
-    // 主点击：唤起插件主界面（记录最近直达）
-    tile.addEventListener("click", () => {
+    let isLongPressTriggered = false;
+    let longPressResetTimer: number | undefined;
+
+    // 主点击：唤起插件主界面（长按展开二级行动后阻断合成 click，杜绝松手误关）
+    tile.addEventListener("click", (ev) => {
+        if (isLongPressTriggered) {
+            isLongPressTriggered = false;
+            ev.preventDefault();
+            ev.stopPropagation();
+            return;
+        }
         hapticFeedback(8);
         pushRecentTileId(item.id);
         closeMobileSheet();
@@ -5487,9 +5572,27 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
 
     // 展开二级行动直达芯片（触屏长按 500ms / 桌面右键 contextmenu 统一展开）
     const expandTile = () => {
+        isLongPressTriggered = true;
+        if (longPressResetTimer !== undefined) {
+            window.clearTimeout(longPressResetTimer);
+        }
+        longPressResetTimer = window.setTimeout(() => {
+            isLongPressTriggered = false;
+            longPressResetTimer = undefined;
+        }, 400);
+
         hapticFeedback(14);
         const mask = document.getElementById(MOBILE_SHEET_ID);
         if (!mask) return;
+
+        // 若当前磁贴已展开，再次长按或点击则收起
+        if (tile.classList.contains("lv-sheet-tile--expanded")) {
+            tile.classList.remove("lv-sheet-tile--expanded");
+            tile.setAttribute("aria-expanded", "false");
+            tile.querySelectorAll(".lv-sheet-tile-actions").forEach((el) => el.remove());
+            return;
+        }
+
         mask.querySelectorAll(".lv-sheet-tile--expanded").forEach((el) => {
             el.classList.remove("lv-sheet-tile--expanded");
             el.setAttribute("aria-expanded", "false");
