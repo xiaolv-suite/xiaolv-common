@@ -362,8 +362,8 @@ body.dark {
 #lv-notice-host {
     position: fixed;
     right: 20px;
-    bottom: 24px;
-    z-index: 220;
+    bottom: max(38px, calc(var(--b3-toolbar-height, 0px) + 12px));
+    z-index: 999;
     pointer-events: none;
     font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     display: flex;
@@ -371,7 +371,7 @@ body.dark {
     align-items: flex-end;
     gap: 8px;
     /* 堆叠上限：长文卡可展开至全文，多卡同时存在时向内滚动收纳，不遮整个工作区 */
-    max-height: calc(100vh - 48px);
+    max-height: calc(100vh - 64px);
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: none;
@@ -600,13 +600,13 @@ body.dark {
     #lv-notice-host {
         right: 0;
         left: 0;
-        top: max(10px, env(safe-area-inset-top, 10px));
+        top: calc(var(--mobile-topbar-height, 48px) + env(safe-area-inset-top, 0px) + 8px);
         bottom: auto;
         align-items: center;
         padding: 0 12px;
         /* 小屏堆叠上限：3 张长卡（每张可展开至全文）会占近半屏遮挡正文——
            限高滚动收纳，最新卡在可视区顶部，旧卡滚动可达 */
-        max-height: calc(100dvh - 160px);
+        max-height: calc(100dvh - 140px);
         overflow-y: auto;
         overscroll-behavior: contain;
     }
@@ -614,6 +614,34 @@ body.dark {
         width: 100%;
         max-width: 380px;
         box-shadow: 0 6px 20px rgba(0,0,0,0.16);
+        touch-action: pan-y;
+    }
+    .lv-notice-capsule {
+        max-width: calc(100vw - 24px);
+        touch-action: pan-y;
+    }
+    .lv-notice-close-btn {
+        min-width: 38px !important;
+        min-height: 38px !important;
+        padding: 8px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        touch-action: manipulation !important;
+        -webkit-tap-highlight-color: transparent !important;
+    }
+    .lv-notice-btn {
+        min-height: 38px !important;
+        padding: 6px 14px !important;
+        font-size: 12px !important;
+        touch-action: manipulation !important;
+        -webkit-tap-highlight-color: transparent !important;
+    }
+    .lv-notice-capsule-action {
+        min-height: 32px !important;
+        padding: 4px 12px !important;
+        font-size: 12px !important;
+        touch-action: manipulation !important;
     }
 }
 
@@ -1100,11 +1128,13 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
     function render() {
         syncNoticeSurface();
         if (!hostEl) return;
-        // 动态提升 z-index，避免在长会话或多弹窗后被思源递增的 window.siyuan.zIndex 反盖
+        // 动态提升 z-index，保障通知全局浮于所有弹窗/抽屉/蒙层之上
         try {
             const currentZ = typeof window !== "undefined" && (window as any).siyuan?.zIndex;
-            if (typeof currentZ === "number" && currentZ > 200) {
-                hostEl.style.zIndex = String(Math.max(999, currentZ + 20));
+            if (typeof currentZ === "number") {
+                hostEl.style.zIndex = String(Math.max(999, currentZ + 50));
+            } else {
+                hostEl.style.zIndex = "999";
             }
         } catch { /* ignore */ }
         hostEl.innerHTML = "";
@@ -1204,17 +1234,30 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                 });
             }
 
-            // 移动端 Touch 上滑手势支持
+            // 移动端 Touch 滑动手势与快速划掉支持（支持向上推划、左右滑走）
+            let touchStartX = 0;
             let touchStartY = 0;
             card.addEventListener("touchstart", (e) => {
+                touchStartX = e.touches[0]?.clientX ?? 0;
                 touchStartY = e.touches[0]?.clientY ?? 0;
             }, { passive: true });
             card.addEventListener("touchend", (e) => {
+                const diffX = (e.changedTouches[0]?.clientX ?? 0) - touchStartX;
                 const diffY = (e.changedTouches[0]?.clientY ?? 0) - touchStartY;
-                if (diffY < -40) {
+                if (diffY < -35 || Math.abs(diffX) > 60) {
+                    hapticFeedback(10);
                     hub.dismiss(packet.id);
                 }
             }, { passive: true });
+
+            if (packet.mode === "capsule") {
+                card.addEventListener("click", (e) => {
+                    const isBtn = (e.target as HTMLElement)?.closest?.("[data-role='capsule-action']");
+                    if (!isBtn) {
+                        hub.dismiss(packet.id);
+                    }
+                });
+            }
 
             hostEl?.appendChild(card);
         });
@@ -1839,6 +1882,20 @@ export const lvNotify = {
                 target.removeAttribute("title");
             }
         }, 1000);
+
+        // 移动端无鼠标 Hover 能力，设置 title 无法被用户感知；自动联动微胶囊实现触控反馈闭环
+        if (tipText) {
+            try {
+                if (typeof isMobileFrontend === "function" && isMobileFrontend()) {
+                    this.capsule({
+                        source: "提示",
+                        message: tipText,
+                        duration: 1600,
+                        level: isSuccess ? "success" : "error"
+                    });
+                }
+            } catch { /* ignore */ }
+        }
     },
 
     silent(options: SilentNoticeOptions): void {
@@ -2768,8 +2825,10 @@ const MOBILE_SHEET_ID = "lv-launchpad-sheet-mask";
 
 /** 思源移动端检测：手机宿主渲染 #mobileTopBar 或挂载 window.siyuan.mobile 对象；UA 兜底覆盖 browser-mobile 场景 */
 export function isMobileFrontend(): boolean {
-    if (typeof document === "undefined") return false;
-    if (document.getElementById("mobileTopBar")) return true;
+    if (typeof document === "undefined" || typeof document.getElementById !== "function") return false;
+    try {
+        if (document.getElementById("mobileTopBar")) return true;
+    } catch { /* ignore */ }
     try {
         const syMobile = (globalThis as { siyuan?: { mobile?: unknown } }).siyuan?.mobile;
         if (syMobile === true || (typeof syMobile === "object" && syMobile !== null)) return true;
