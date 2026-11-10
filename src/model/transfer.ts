@@ -1,0 +1,314 @@
+// 导入导出 v1：JSON 捆绑包。导入前校验 → 冲突分类 → 逐项回执；失败不落库（不覆盖原始数据）。
+import {EXPORT_SCHEMA_VERSION, LIMITS, PROTOCOL_NAME} from "../constants";
+import {CommonItem, isItemType, isLogicalId, isSafeHttpUrl, isSourceType, newLogicalId} from "./item";
+import {SanitizerOptions, sanitizeTextForExport} from "./export-sanitizer";
+import {calculateChecksum} from "./clipboard-cleaner";
+
+export interface ExportBundle {
+    protocol: typeof PROTOCOL_NAME;
+    schemaVersion: typeof EXPORT_SCHEMA_VERSION;
+    exportedAt: number;
+    items: ExportedItem[];
+    /** 内容完整性校验和 (CRC-32 哈希签名，防伪与防篡改) */
+    checksum?: string;
+}
+
+export interface ExportedItem {
+    /** 稳定逻辑 ID */
+    id: string;
+    itemType: string;
+    title: string;
+    alias: string;
+    shortcode?: string;
+    tags: string[];
+    category: string;
+    /** 库块 kramdown（内容真源随包走；不导出插件侧车偏好） */
+    kramdown: string;
+    source: {sourceDocId: string; sourceBlockId: string; sourceType: string};
+    url: string;
+    targetBlockId: string;
+    createdAt: number;
+    updatedAt: number;
+    /** 未来版本字段在导出时保留在 extensions，导入时忽略（未知字段策略） */
+    extensions?: Record<string, unknown>;
+}
+
+/** 计算条目集合的防伪哈希签名与校验和 (CRC-32) */
+export function computeBundleChecksum(items: readonly ExportedItem[]): string {
+    const raw = items.map((i) => `${i.id}::${i.title}::${i.kramdown}::${i.itemType}::${i.alias}${i.shortcode ? `::${i.shortcode}` : ""}`).join(";;");
+    return calculateChecksum(raw, "crc32");
+}
+
+/** 校验模板包签名是否匹配（无签名时宽容通过，有签名时严格核验） */
+export function verifyBundleChecksum(bundle: ExportBundle): boolean {
+    if (!bundle.checksum) return true;
+    return computeBundleChecksum(bundle.items) === bundle.checksum;
+}
+
+export function buildBundle(
+    items: readonly CommonItem[],
+    kramdownById: ReadonlyMap<string, string>,
+    now: number,
+    sanitizer?: SanitizerOptions,
+): ExportBundle {
+    const exportedItems: ExportedItem[] = items.map((item) => {
+        let body = (kramdownById.get(item.id) ?? "").slice(0, LIMITS.contentChars);
+        if (sanitizer && item.itemType !== "code") {
+            body = sanitizeTextForExport(body, sanitizer).text;
+        }
+        return {
+            id: item.id,
+            itemType: item.itemType,
+            title: item.title,
+            alias: item.alias,
+            ...(item.shortcode ? {shortcode: item.shortcode} : {}),
+            tags: Array.isArray(item.tags) ? [...item.tags] : [],
+            category: item.category,
+            kramdown: body,
+            source: {...item.source},
+            url: item.url,
+            targetBlockId: item.targetBlockId,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+        };
+    });
+
+    return {
+        protocol: PROTOCOL_NAME,
+        schemaVersion: EXPORT_SCHEMA_VERSION,
+        exportedAt: now,
+        items: exportedItems,
+        checksum: computeBundleChecksum(exportedItems),
+    };
+}
+
+function utf8ToBase64(str: string): string {
+    const bytes = new TextEncoder().encode(str);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]!);
+    }
+    return btoa(binary);
+}
+
+function base64ToUtf8(b64: string): string {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+}
+
+export const COMPACT_BUNDLE_PREFIX = "xlc-bundle:";
+
+/** 将模板包序列化为便于剪贴板/IM快速分享的紧凑 Base64 字符串（S5）。 */
+export function serializeCompactBundle(bundle: ExportBundle): string {
+    const json = JSON.stringify(bundle);
+    return `${COMPACT_BUNDLE_PREFIX}${utf8ToBase64(json)}`;
+}
+
+/** 反序列化紧凑分享字符串（支持 xlc-bundle: 前缀与 xlc://import?bundle= 协议）。 */
+export function deserializeCompactBundle(text: string): ExportBundle | null {
+    const trimmed = text.trim();
+    let b64 = "";
+    if (trimmed.startsWith(COMPACT_BUNDLE_PREFIX)) {
+        b64 = trimmed.slice(COMPACT_BUNDLE_PREFIX.length).trim();
+    } else if (trimmed.startsWith("xlc://import?")) {
+        const query = trimmed.slice("xlc://import?".length);
+        const params = new URLSearchParams(query);
+        b64 = params.get("bundle") ?? params.get("data") ?? "";
+        // 兼容 URL 参数解析将 base64 中的 '+' 误替换为空格
+        b64 = b64.replace(/ /g, "+");
+    }
+    if (!b64) return null;
+    try {
+        const json = base64ToUtf8(b64);
+        const obj = JSON.parse(json);
+        if (obj && typeof obj === "object" && (obj as Record<string, unknown>).protocol === PROTOCOL_NAME) {
+            return obj as ExportBundle;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+// ---- 导入 ----
+
+export type ConflictPolicy = "skip" | "overwrite" | "rename";
+
+export interface ParsedImport {
+    schemaVersion: number;
+    items: ExportedItem[];
+    /** 原始 JSON 中未知顶层字段（如未来版本的 meta）——保留计数，不阻断 */
+    unknownTopFields: string[];
+}
+
+export interface ImportIssue {
+    index: number;
+    reason: string;
+}
+
+export interface ImportValidation {
+    ok: boolean;
+    reason?: string;
+    parsed?: ParsedImport;
+    issues: ImportIssue[];
+}
+
+/** 导入时间戳守卫：负数/Infinity/NaN 一律归 0，保证 JSON 往返保真（R144） */
+function toTimestamp(v: unknown): number {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export function validateImport(jsonText: string): ImportValidation {
+    const issues: ImportIssue[] = [];
+    // 聚合体积上限前移到模型层：UI 把关之外，协议路径同样受保护（R139）
+    if (jsonText.length > LIMITS.maxImportBytes) {
+        return {ok: false, reason: "file-too-large", issues};
+    }
+    let textToParse = jsonText.trim();
+    if (textToParse.startsWith(COMPACT_BUNDLE_PREFIX) || textToParse.startsWith("xlc://import?")) {
+        const compact = deserializeCompactBundle(textToParse);
+        if (!compact) {
+            return {ok: false, reason: "compact-parse", issues};
+        }
+        textToParse = JSON.stringify(compact);
+    }
+    let obj: unknown;
+    try {
+        obj = JSON.parse(textToParse);
+    } catch (e) {
+        return {ok: false, reason: "json-parse", issues};
+    }
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+        return {ok: false, reason: "not-an-object", issues};
+    }
+    const record = obj as Record<string, unknown>;
+    if (record.protocol !== PROTOCOL_NAME) {
+        return {ok: false, reason: "protocol-mismatch", issues};
+    }
+    const schemaVersion = record.schemaVersion;
+    if (schemaVersion !== EXPORT_SCHEMA_VERSION) {
+        // v1 只接受精确版本：更高版本拒绝降级导入，更低版本无历史
+        return {ok: false, reason: "schema-version-unsupported", issues};
+    }
+    if (!Array.isArray(record.items)) {
+        return {ok: false, reason: "items-not-array", issues};
+    }
+    if (record.items.length > LIMITS.maxItems) {
+        return {ok: false, reason: "too-many-items", issues};
+    }
+    const knownTop = ["protocol", "schemaVersion", "exportedAt", "items", "checksum"];
+    const unknownTopFields = Object.keys(record).filter((k) => !knownTop.includes(k));
+    const items: ExportedItem[] = [];
+    const seenIds = new Set<string>();
+    record.items.forEach((raw, index) => {
+        const item = normalizeExportedItem(raw);
+        if (!item) {
+            issues.push({index, reason: "invalid-item"});
+            return;
+        }
+        if (seenIds.has(item.id)) {
+            issues.push({index, reason: "duplicate-id"});
+            return;
+        }
+        seenIds.add(item.id);
+        items.push(item);
+    });
+
+    // 完整性校验：若包含防伪哈希签名，校验条目内容是否与签名严格匹配
+    if (typeof record.checksum === "string" && record.checksum.length > 0) {
+        const computed = computeBundleChecksum(items);
+        if (computed !== record.checksum) {
+            issues.push({index: -1, reason: "checksum-mismatch"});
+        }
+    }
+
+    return {ok: true, parsed: {schemaVersion: EXPORT_SCHEMA_VERSION, items, unknownTopFields}, issues};
+}
+
+function normalizeExportedItem(raw: unknown): ExportedItem | null {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const obj = raw as Record<string, unknown>;
+    if (!isLogicalId(obj.id)) return null;
+    if (typeof obj.kramdown !== "string" || obj.kramdown.length > LIMITS.contentChars) return null;
+    if (!isItemType(obj.itemType)) return null;
+    const sourceRaw = (obj.source ?? {}) as Record<string, unknown>;
+    const known = ["id", "itemType", "title", "alias", "shortcode", "tags", "category", "kramdown", "source", "url", "targetBlockId", "createdAt", "updatedAt"];
+    // null 原型：__proto__ 键进入扩展集合时成为自有属性而非原型操作（R144）
+    const extensions: Record<string, unknown> = Object.create(null);
+    for (const [k, v] of Object.entries(obj)) {
+        if (!known.includes(k)) extensions[k] = v;
+    }
+    const str = (v: unknown, cap: number): string => (typeof v === "string" ? v.slice(0, cap) : "");
+    const tags = Array.isArray(obj.tags) ? obj.tags.filter((t): t is string => typeof t === "string").slice(0, LIMITS.tags) : [];
+    const url = str(obj.url, 2048);
+    if (url && !isSafeHttpUrl(url)) return null;
+    const shortcode = str(obj.shortcode, LIMITS.shortcode);
+    return {
+        id: obj.id,
+        itemType: obj.itemType,
+        title: str(obj.title, LIMITS.title),
+        alias: str(obj.alias, LIMITS.alias),
+        ...(shortcode ? {shortcode} : {}),
+        tags,
+        category: str(obj.category, LIMITS.category),
+        kramdown: obj.kramdown,
+        source: {
+            sourceDocId: str(sourceRaw.sourceDocId, 32),
+            sourceBlockId: str(sourceRaw.sourceBlockId, 32),
+            sourceType: isSourceType(sourceRaw.sourceType) ? sourceRaw.sourceType : "external",
+        },
+        url,
+        targetBlockId: str(obj.targetBlockId, 32),
+        createdAt: toTimestamp(obj.createdAt),
+        updatedAt: toTimestamp(obj.updatedAt),
+        extensions: Object.keys(extensions).length ? extensions : undefined,
+    };
+}
+
+// ---- 冲突分类（纯函数）----
+
+export type ConflictKind = "new" | "skip" | "overwrite" | "rename";
+
+export interface ConflictDecision {
+    kind: ConflictKind;
+    /** rename 时的新逻辑 ID */
+    newId?: string;
+}
+
+/**
+ * 判定单个导入条目与现有库的关系（按稳定逻辑 ID）：
+ * - ID 不存在 → new
+ * - ID 已存在 → 按用户策略：skip（保留现有）/ overwrite（覆盖现有条目块）/ rename（新 ID 并存）。
+ *   内容级 diff（同 ID 同内容自动 skip）需要逐条取 kramdown，首版不做并如实记录于已知限制。
+ */
+export function classifyConflict(_incomingId: string, idExists: boolean, policy: ConflictPolicy, random = Math.random): ConflictDecision {
+    if (!idExists) return {kind: "new"};
+    if (policy === "overwrite") return {kind: "overwrite"};
+    if (policy === "rename") return {kind: "rename", newId: newLogicalId(Date.now(), random)};
+    return {kind: "skip"};
+}
+
+export interface ImportReceiptLine {
+    id: string;
+    title: string;
+    action: ConflictKind;
+    ok: boolean;
+    error?: string;
+}
+
+export interface ImportReceipt {
+    total: number;
+    created: number;
+    skipped: number;
+    overwritten: number;
+    renamed: number;
+    failed: number;
+    lines: ImportReceiptLine[];
+    /** 写入已完成但索引刷新失败时保留部分成功回执，供 UI 展示可重试状态。 */
+    reindexError?: string;
+}
