@@ -3,8 +3,8 @@
 > **High-Frequency Content Asset Layer & Instant Cross-App Launcher for SiYuan Note**<br>
 > Consolidate scattered code snippets, customer service replies, Prompt engineering libraries, tables, and text templates into parametric, source-traceable native SiYuan block assets.
 
-[![CI](https://github.com/ai68298100/xiaolv-common/actions/workflows/ci.yml/badge.svg)](https://github.com/ai68298100/xiaolv-common/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/github/v/tag/ai68298100/xiaolv-common?label=version&sort=semver)](https://github.com/ai68298100/xiaolv-common/releases)
+[![CI](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/v/tag/xiaolv-suite/xiaolv-common?label=version&sort=semver)](https://github.com/xiaolv-suite/xiaolv-common/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
@@ -234,7 +234,7 @@ v0.10.81 Local Release: Default-on clipboard history with capacity tiers, 1-clic
 | **v0.10.69** | Visual and perceptual layer modernization, unified three-tier design tokens convergence, and accessibility hardening | [ADR 0151](./docs/adr/0151-visual-token-convergence-and-a11y-hierarchy.md) |
 | **v0.10.68** | Dock category tree folding, advanced drag-and-drop modalities, context menu, and end-to-end UX hardening | [ADR 0150](./docs/adr/0150-dock-tree-folding-and-drag-modes.md) |
 | **v0.10.66** | Quality hardening, context-aware context menu, enter-to-create empty state self-healing, and interaction reliability | [ADR 0148](./docs/adr/0148-quality-hardening-callout-preview-and-prototype-defense.md) |
-| **v0.10.65** | Table beautification (`beautifyMarkdownTable`), JSON path query macro (`queryJsonPath` / `{{xlc:json}}`), and Callout formatting | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callout-converter.md) |
+| **v0.10.65** | Table beautification (`beautifyMarkdownTable`), JSON path query macro (`queryJsonPath` / `{{xlc:json}}`), and Callout formatting | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callouts.md) |
 | **v0.10.64** | Comprehensive quality optimization, zero lifecycle leaks, syntax highlighting fix, and interaction reliability | [ADR 0146](./docs/adr/0146-comprehensive-quality-optimization-and-reliability.md) |
 | **v0.10.63** | Markdown heading numbering/stripping (`numberMarkdownHeadings`), task progress bar macro (`{{xlc:progress}}`), and table matrix transposition | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
 | **v0.10.62** | Markdown headings to list conversion (`convertHeadingsToList`), list shuffle macro (`shuffleList` / `{{xlc:shuffle}}`), and numeric range line filtering | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |
@@ -287,18 +287,18 @@ v0.10.81 Local Release: Default-on clipboard history with capacity tiers, 1-clic
 
 | Plugin | Core Purpose | Repository |
 | :--- | :--- | :--- |
-| **Lv Common** | Content asset layer, template parameterization & instant launcher | [ai68298100/xiaolv-common](https://github.com/ai68298100/xiaolv-common) |
-| **Lv SpeedSwitch** | Workspace navigator and switcher connecting tabs and snippets | [ai68298100/siyuan-speed-switch](https://github.com/ai68298100/siyuan-speed-switch) |
-| **Lv Checkin** | Local-first habit and goal check-in workbench | [ai68298100/siyuan-checkin](https://github.com/ai68298100/siyuan-checkin) |
-| **Lv Contacts** | Relationship network, contact profiles, and interaction logs | [ai68298100/siyuan-contacts](https://github.com/ai68298100/siyuan-contacts) |
-| **Lv Glean** | Clipping and deep reading review management | [ai68298100/siyuan-glean](https://github.com/ai68298100/siyuan-glean) |
-| **Lv Exam** | Local exam preparation, test banks, and wrong answer review | [ai68298100/siyuan-exam](https://github.com/ai68298100/siyuan-exam) |
-| **Lv Home** | Family records, living asset ledger, and reminder center | [ai68298100/siyuan-home](https://github.com/ai68298100/siyuan-home) |
+| **Lv Common** | Content asset layer, template parameterization & instant launcher | [xiaolv-suite/xiaolv-common](https://github.com/xiaolv-suite/xiaolv-common) |
+| **Lv SpeedSwitch** | Workspace navigator and switcher connecting tabs and snippets | [xiaolv-suite/siyuan-speed-switch](https://github.com/xiaolv-suite/siyuan-speed-switch) |
+| **Lv Checkin** | Local-first habit and goal check-in workbench | [xiaolv-suite/siyuan-checkin](https://github.com/xiaolv-suite/siyuan-checkin) |
+| **Lv Contacts** | Relationship network, contact profiles, and interaction logs | [xiaolv-suite/siyuan-contacts](https://github.com/xiaolv-suite/siyuan-contacts) |
+| **Lv Glean** | Clipping and deep reading review management | [xiaolv-suite/siyuan-glean](https://github.com/xiaolv-suite/siyuan-glean) |
+| **Lv Exam** | Local exam preparation, test banks, and wrong answer review | [xiaolv-suite/siyuan-exam](https://github.com/xiaolv-suite/siyuan-exam) |
+| **Lv Home** | Family records, living asset ledger, and reminder center | [xiaolv-suite/siyuan-home](https://github.com/xiaolv-suite/siyuan-home) |
 
 ---
 
 ## 💬 Community & Feedback
 
 - **Beta Tester QQ Group**: **871707735**
-- **Issue Tracker**: [GitHub Issues](https://github.com/ai68298100/xiaolv-common/issues)
+- **Issue Tracker**: [GitHub Issues](https://github.com/xiaolv-suite/xiaolv-common/issues)
 - **License**: [MIT License](./LICENSE)

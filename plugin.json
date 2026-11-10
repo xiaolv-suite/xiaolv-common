@@ -1,7 +1,7 @@
 {
   "name": "xiaolv-common",
-  "author": "ai68298100",
-  "url": "https://github.com/ai68298100/xiaolv-common",
+  "author": "xiaolv-suite",
+  "url": "https://github.com/xiaolv-suite/xiaolv-common",
   "version": "0.10.84",
   "minAppVersion": "3.8.4",
   "settingsWindow": true,

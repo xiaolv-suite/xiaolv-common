@@ -4929,7 +4929,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
         });
 
         let isDrawerHovered = false;
-        const drawerEl = popover.querySelector(".lv-pop-actions-drawer");
+        const drawerEl = typeof popover.querySelector === "function" ? popover.querySelector(".lv-pop-actions-drawer") : null;
         drawerEl?.addEventListener("mouseenter", () => { isDrawerHovered = true; });
         drawerEl?.addEventListener("mouseleave", () => { isDrawerHovered = false; });
 

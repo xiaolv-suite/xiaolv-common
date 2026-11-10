@@ -1,15 +1,15 @@
-> 当前开发/验收边界：[唯一状态摘要](docs/CURRENT-STATUS.md)。
-
 # 小驴常用 (Lv Common)
 
 > **思源笔记的高频内容资产层与跨平台极速调用中枢**<br>
 > 将零散的代码片段、客服话术、Prompt 提示词、常用表格、文本模板沉淀为有元数据、有来源追溯、可参数化动态求值的思源笔记原生块资产。
 
-[![CI](https://github.com/ai68298100/xiaolv-common/actions/workflows/ci.yml/badge.svg)](https://github.com/ai68298100/xiaolv-common/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/github/v/tag/ai68298100/xiaolv-common?label=%E7%89%88%E6%9C%AC&sort=semver)](https://github.com/ai68298100/xiaolv-common/releases)
+[![CI](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/v/tag/xiaolv-suite/xiaolv-common?label=%E7%89%88%E6%9C%AC&sort=semver)](https://github.com/xiaolv-suite/xiaolv-common/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
+
+![小驴常用界面预览](preview.png)
 
 ## 💡 为什么需要小驴常用？
 
@@ -44,6 +44,8 @@
 ---
 
 ## 📦 安装与升级方式
+
+> 宿主要求：**思源笔记 v3.8.4 及以上**（桌面端与手机端全支持）。
 
 1. **思源集市安装（推荐）**：在思源笔记中打开 `设置 → 集市 → 插件`，搜索 **「小驴常用」** 点击下载并启用。
 2. **离线包手动安装 / 回滚升级**：
@@ -227,6 +229,11 @@
 
 ---
 
+## 🔒 数据与隐私
+
+- **100% 本地优先**：全部条目与配置保存在您的思源工作空间与 `data/storage/petal/xiaolv-common/` 目录中，**绝不上云、零遥测、零埋点、零第三方统计 SDK**；唯一的例外是您主动配置并触发 AI 展开时，才会把对应条目文本发送给您自己配置的 AI 服务。
+- **随时可搬走**：条目本体是思源原生块，随工作空间自由同步与备份；侧车配置可随插件数据整体导出迁移。
+
 ## 🔒 设计安全与已知限制说明
 
 - **条目容器（超级块）**：每个条目是库文档里的一个顶层块，多段正文装进一个超级块，条目元数据只写在这个块的 `custom-xlc-*` 属性上。已在隔离思源内核 `v3.8.9` + 真实思源桌面前端完成写入、读回、更新、删除、5 个示例包逐条回读与 [24 步真实宿主回归清单](scripts/e2e-real-checklist.cjs)（25/25 全部通过）。
@@ -236,6 +243,15 @@
 ---
 
 ## 🆕 最新更新动态
+
+### [v0.10.84] — 2026-11-10（GitHub 组织迁移版）
+
+- **顶栏罗盘全面提速与自愈**：8 插件并发启动的顶栏收敛改为微任务防抖批量投影（重绘 8 次 → 1 次）；思源云同步/重启销毁罗盘节点后 100ms 自动重建；
+- **桌面端二级抽屉鼠标锁定**与磁贴右键就地聚焦；手机端长按二级菜单防合成 click 误入主界面；
+- **输入法与触控四重防线**：软键盘弹起、输入焦点与表单内滚动不再误触面板关闭；
+- 全生态按钮即时反馈补齐（记账/打卡视图/复制/分栏/排版微胶囊）；
+- 仓库与提交身份迁移至 xiaolv-suite 组织。
+
 
 ### [v0.10.83] — 2026-11-04（最新本地发版）
 
@@ -314,7 +330,7 @@ v0.10.81 本地发版：剪贴板历史开箱即用与上限档位设置、一�
 | **v0.10.69** | 视觉感知层现代化、系统三档设计令牌收敛与无障碍强化（0 hex/0 渐变残留、三档阴影、控件8态） | [ADR 0151](./docs/adr/0151-visual-token-convergence-and-a11y-hierarchy.md) |
 | **v0.10.68** | Dock分类树状折叠大纲、高级拖拽多模态注入、右键上下文菜单与端到端体验深度加固 | [ADR 0150](./docs/adr/0150-dock-tree-folding-and-drag-modes.md) |
 | **v0.10.66** | 质量加固、右键上下文分流、回车自愈新建、表格前后文转置保护、设置胶囊导航 | [ADR 0148](./docs/adr/0148-quality-hardening-callout-preview-and-prototype-defense.md) |
-| **v0.10.65** | 表格等宽美化 (`beautifyMarkdownTable`)、JSON 路径提取宏 (`queryJsonPath` / `{{xlc:json}}`) 与 Callout 转换 | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callout-converter.md) |
+| **v0.10.65** | 表格等宽美化 (`beautifyMarkdownTable`)、JSON 路径提取宏 (`queryJsonPath` / `{{xlc:json}}`) 与 Callout 转换 | [ADR 0147](./docs/adr/0147-table-beautify-json-macro-and-callouts.md) |
 | **v0.10.64** | 全面质量优化、生命周期治理 (零泄漏)、语法高亮对齐与交互稳定性提升 | [ADR 0146](./docs/adr/0146-comprehensive-quality-optimization-and-reliability.md) |
 | **v0.10.63** | Markdown 标题层级序号编排剥离 (`numberMarkdownHeadings`)、任务进度条宏 (`{{xlc:progress}}`) 与表格行列转置 | [ADR 0145](./docs/adr/0145-heading-numbers-progressbar-and-transpose-table.md) |
 | **v0.10.62** | Markdown 标题与列表双向互转 (`convertHeadingsToList`)、列表打乱宏 (`shuffleList` / `{{xlc:shuffle}}`) 与数值区间行过滤 | [ADR 0144](./docs/adr/0144-headings-to-list-shuffle-macro-and-numeric-filter.md) |
@@ -369,18 +385,18 @@ v0.10.81 本地发版：剪贴板历史开箱即用与上限档位设置、一�
 
 | 插件 | 核心定位 | 开源仓库 |
 | :--- | :--- | :--- |
-| **小驴常用** | 内容资产复用层、模板参数化与极速调用中枢 | [ai68298100/xiaolv-common](https://github.com/ai68298100/xiaolv-common) |
-| **小驴雷切** | 统一导航与工作上下文平台，连接页签、工作台与快捷入口 | [ai68298100/siyuan-speed-switch](https://github.com/ai68298100/siyuan-speed-switch) |
-| **小驴打卡** | 本地优先的习惯、目标打卡与复盘看板 | [ai68298100/siyuan-checkin](https://github.com/ai68298100/siyuan-checkin) |
-| **小驴人脉** | 在思源中沉淀人际网络、联系人画像与互动足迹 | [ai68298100/siyuan-contacts](https://github.com/ai68298100/siyuan-contacts) |
-| **小驴拾遗** | 思源剪藏与深度阅读管理工作台 | [ai68298100/siyuan-glean](https://github.com/ai68298100/siyuan-glean) |
-| **小驴考试** | 本地题库备考工作台，刷题、模考与错题本复盘 | [ai68298100/siyuan-exam](https://github.com/ai68298100/siyuan-exam) |
-| **小驴管家** | 家庭档案、生活资产台账与到期事务中枢 | [ai68298100/siyuan-home](https://github.com/ai68298100/siyuan-home) |
+| **小驴常用** | 内容资产复用层、模板参数化与极速调用中枢 | [xiaolv-suite/xiaolv-common](https://github.com/xiaolv-suite/xiaolv-common) |
+| **小驴雷切** | 统一导航与工作上下文平台，连接页签、工作台与快捷入口 | [xiaolv-suite/siyuan-speed-switch](https://github.com/xiaolv-suite/siyuan-speed-switch) |
+| **小驴打卡** | 本地优先的习惯、目标打卡与复盘看板 | [xiaolv-suite/siyuan-checkin](https://github.com/xiaolv-suite/siyuan-checkin) |
+| **小驴人脉** | 在思源中沉淀人际网络、联系人画像与互动足迹 | [xiaolv-suite/siyuan-contacts](https://github.com/xiaolv-suite/siyuan-contacts) |
+| **小驴拾遗** | 思源剪藏与深度阅读管理工作台 | [xiaolv-suite/siyuan-glean](https://github.com/xiaolv-suite/siyuan-glean) |
+| **小驴考试** | 本地题库备考工作台，刷题、模考与错题本复盘 | [xiaolv-suite/siyuan-exam](https://github.com/xiaolv-suite/siyuan-exam) |
+| **小驴管家** | 家庭档案、生活资产台账与到期事务中枢 | [xiaolv-suite/siyuan-home](https://github.com/xiaolv-suite/siyuan-home) |
 
 ---
 
 ## 💬 交流与反馈
 
 - **内测交流 QQ 群**：**871707735**（欢迎反馈 Bug、交流模板方案与提出新功能需求）
-- **Issue 讨论区**：[GitHub Issues](https://github.com/ai68298100/xiaolv-common/issues)
+- **Issue 讨论区**：[GitHub Issues](https://github.com/xiaolv-suite/xiaolv-common/issues)
 - **开源协议**：[MIT License](./LICENSE)

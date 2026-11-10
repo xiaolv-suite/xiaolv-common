@@ -1,7 +1,7 @@
 {
   "name": "xiaolv-provider-example",
-  "author": "ai68298100",
-  "url": "https://github.com/ai68298100/xiaolv-common",
+  "author": "xiaolv-suite",
+  "url": "https://github.com/xiaolv-suite/xiaolv-common",
   "version": "0.1.0",
   "minAppVersion": "3.8.0",
   "displayName": {

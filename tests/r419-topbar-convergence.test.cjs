@@ -43,6 +43,8 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
         globalThis.window = {
             __LV_LAUNCHPAD__: undefined,
             dispatchEvent: () => true,
+            setTimeout: () => 1,
+            clearTimeout: () => {},
         };
 
         try {
@@ -140,6 +142,8 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             innerWidth: 1920,
             addEventListener() {},
             removeEventListener() {},
+            setTimeout: () => 1,
+            clearTimeout: () => {},
         };
 
         try {
@@ -217,6 +221,8 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
         globalThis.window = {
             __LV_LAUNCHPAD__: undefined,
             dispatchEvent: () => true,
+            setTimeout: () => 1,
+            clearTimeout: () => {},
         };
 
         let unregister1 = () => {};
@@ -319,6 +325,8 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
                 if (ev === "keydown") keydownHandler = fn;
             },
             removeEventListener() {},
+            setTimeout: () => 1,
+            clearTimeout: () => {},
         };
 
         let unreg1 = () => {};
@@ -393,6 +401,8 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
         globalThis.window = {
             __LV_LAUNCHPAD__: undefined,
             dispatchEvent: () => true,
+            setTimeout: () => 1,
+            clearTimeout: () => {},
         };
 
         try {
@@ -466,6 +476,8 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
         globalThis.window = {
             __LV_LAUNCHPAD__: undefined,
             dispatchEvent: () => true,
+            setTimeout: () => 1,
+            clearTimeout: () => {},
         };
 
         let unreg1 = () => {};
