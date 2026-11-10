@@ -3510,9 +3510,30 @@ function maybeShowDesktopConvergenceOnboarding(itemCount: number): void {
     lvNotify.card({
         source: "小驴罗盘",
         title: "🧭 顶栏已升级为小驴罗盘中枢",
-        message: `已为您将 ${itemCount} 个插件自动收敛至顶栏罗盘图标，告别顶栏拥挤。点击罗盘可直达所有插件；若习惯老版独立图标，在罗盘内点击 📌 即可随时固定在顶栏！`,
+        message: `已为您将 ${itemCount} 个插件自动收敛至顶栏罗盘图标，告别顶栏拥挤。点击罗盘可直达所有插件；若习惯老版独立图标，可一键恢复平铺顶栏！`,
         level: "info",
-        duration: 9000,
+        duration: 12000,
+        actions: [
+            {
+                label: "打开罗盘看看",
+                primary: true,
+                onClick: () => {
+                    openDesktopLaunchpadPopover();
+                },
+            },
+            {
+                label: "一键恢复平铺顶栏",
+                onClick: () => {
+                    const hub = getLaunchpadHub();
+                    const allItems = hub.getItems();
+                    for (const it of allItems) {
+                        hub.setPluginState(it.id, "pinned");
+                    }
+                    syncTopBarConvergence();
+                    lvNotify.capsule({ source: "顶栏", message: "已恢复全部插件独立平铺于顶栏", duration: 2500 });
+                },
+            },
+        ],
     });
 }
 
