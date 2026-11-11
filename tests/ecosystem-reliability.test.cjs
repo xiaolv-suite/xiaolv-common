@@ -426,3 +426,15 @@ test('ECO-014: lvHostBridge handles host bridge calls and graceful fallbacks', a
         assert.equal(dockVisible, null);
     } finally { c.close(); }
 });
+
+test('ECO-015: 罗盘弹窗键盘导航在 IME 合成期整体让路 (isComposing/229 守卫)', () => {
+    const src = fs.readFileSync(find('lv-notice-kit.ts'), 'utf8');
+    const handlerIdx = src.indexOf('desktopPopoverKeyDownHandler = (e: KeyboardEvent) => {');
+    assert.ok(handlerIdx > 0, 'desktopPopoverKeyDownHandler 必须存在');
+    const handlerBody = src.slice(handlerIdx, handlerIdx + 400);
+    assert.match(handlerBody, /e\.isComposing \|\| e\.keyCode === 229/, 'handler 顶部必须有 IME 合成期守卫');
+    // 守卫必须位于 Escape 分支之前：合成期 Escape 优先归还输入法（取消候选），而非关闭弹窗
+    const guardIdx = handlerBody.indexOf('if (e.isComposing');
+    const escapeIdx = handlerBody.indexOf('e.key === "Escape"');
+    assert.ok(guardIdx >= 0 && escapeIdx > guardIdx, 'IME 守卫必须先于 Escape 分支');
+});

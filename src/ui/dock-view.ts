@@ -240,6 +240,8 @@ export class DockView {
             }, 180);
         });
         this.searchInput.addEventListener("keydown", (e) => {
+            /* IME 合成期让路：ArrowUp/Down 属候选导航，Enter 属确认选字，误触会误插切片。 */
+            if (e.isComposing || e.keyCode === 229) return;
             if (e.key === "ArrowDown") {
                 e.preventDefault();
                 if (this.results.length > 0) {

@@ -5731,6 +5731,9 @@ export function openDesktopLaunchpadPopover(
 
     desktopPopoverKeyDownHandler = (e: KeyboardEvent) => {
         if (!e || typeof e.key !== "string") return;
+        /* IME 合成期整体让路：ArrowUp/Down 属候选导航，Enter 属确认选字，
+           劫持会打断输入法选词并误触罗盘跳转（keyCode 229 兜底 Chromium 合成 keydown）。 */
+        if (e.isComposing || e.keyCode === 229) return;
 
         if (e.key === "Escape") {
             try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
