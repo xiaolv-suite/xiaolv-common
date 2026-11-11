@@ -8582,3 +8582,12 @@
     overflow-wrap: anywhere;
   }
 }
+
+// ══════════ 手机端专项：粘滞 hover 抑制（透明底页签，激活态保留） ══════════
+@media (hover: none) and (pointer: coarse) {
+  :is(.xlc-dialog, .xlc-form, .xlc-varform, .xlc-panel, .xlc-dock-view) {
+    :is(.xlc-tab, .xlc-tabbar__item):hover:not(.is-active):not(.on):not([aria-selected="true"]) {
+      background: transparent;
+    }
+  }
+}
