@@ -1459,7 +1459,9 @@ export class CommonSearchDialog {
         } else {
             count.textContent = "";
         }
-        footer.appendChild(count);
+        const footLeft = document.createElement("div");
+        footLeft.className = "xlc-footer-left";
+        footLeft.appendChild(count);
         if (!isMobile) {
             const claim = document.createElement("span");
             // 这是保存位置的静态状态说明，不应与可点击胶囊混淆。
@@ -1468,14 +1470,19 @@ export class CommonSearchDialog {
             claim.title = this.deps.t("dataTruthHint");
             claim.setAttribute("role", "note");
             claim.setAttribute("aria-label", this.deps.t("dataTruthHint"));
-            footer.appendChild(claim);
+            footLeft.appendChild(claim);
 
             const ecoBadge = document.createElement("span");
             ecoBadge.className = "xlc-footer-eco-badge";
             ecoBadge.textContent = lvEcosystem.getStatusBadgeText();
             ecoBadge.title = "小驴全生态协同健康指示器";
-            footer.appendChild(ecoBadge);
+            footLeft.appendChild(ecoBadge);
         }
+        footer.appendChild(footLeft);
+
+        const footRight = document.createElement("div");
+        footRight.className = "xlc-footer-right";
+
         // 使用说明双端可达：把常见的捕获、搜索、插入与整理路径放在弹窗内，降低首次上手成本。
         const guide = document.createElement("button");
         guide.type = "button";
@@ -1484,7 +1491,7 @@ export class CommonSearchDialog {
         guide.textContent = isMobile ? "ⓘ 帮助" : ("ⓘ " + this.deps.t("usageGuideBtn"));
         guide.setAttribute("aria-label", this.deps.t("usageGuideBtn"));
         guide.addEventListener("click", () => this.openUsageGuide());
-        footer.appendChild(guide);
+        footRight.appendChild(guide);
 
         // 新手分步实操指引与套件包市场（仅桌面端展示，手机端隐藏保持界面纯粹 · Mobile Spec v1）
         if (!isMobile) {
@@ -1501,7 +1508,7 @@ export class CommonSearchDialog {
                     onOpenSearch: () => this.focusInput(),
                 });
             });
-            footer.appendChild(stepGuide);
+            footRight.appendChild(stepGuide);
 
             // 开箱即用套件市场直达入口（随时自主挑选启用 · CAND-036 / TODO-FEAT-031）
             const starterPacksBtn = document.createElement("button");
@@ -1522,7 +1529,7 @@ export class CommonSearchDialog {
                     });
                 }
             });
-            footer.appendChild(starterPacksBtn);
+            footRight.appendChild(starterPacksBtn);
         }
 
         // 设置入口双端可达（移动端无顶栏/命令面板，此处是唯一设置路径）
@@ -1536,7 +1543,8 @@ export class CommonSearchDialog {
             this.destroy();
             this.deps.openSetup();
         });
-        footer.appendChild(gear);
+        footRight.appendChild(gear);
+        footer.appendChild(footRight);
         root.appendChild(footer);
 
         // 迷你模式贴边折叠灵动药丸胶囊（CAND-023 / TODO-FEAT-021）
@@ -4753,7 +4761,10 @@ export class CommonSearchDialog {
         this.paintPaneVars(null, entry?.itemType);
             paneBody.classList.add("xlc-pane-body--muted");
             paneBody.textContent = this.deps.t("loading"); // 本地内核预览不用「AI 处理中」文案，避免误导（R138）
-        void this.deps.preview(id).then((text) => {
+        const previewPromise = (entry?.isOmni && (entry.content || entry.summary))
+            ? this.deps.preview(id).then((t) => t || entry?.content || entry?.summary || "")
+            : this.deps.preview(id);
+        void previewPromise.then((text) => {
             if (seq !== this.previewSeq) return;
             const finalText = text || this.deps.t("previewUnavailable");
             // 占位（暂无预览）保持降调；真内容恢复主文字色

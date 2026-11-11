@@ -888,8 +888,9 @@
   }
 
   .xlc-list {
-    width: 330px;
-    flex-shrink: 0;
+    width: auto;
+    flex: 1 1 54%;
+    min-width: 320px;
     overflow: auto;
     border-right: 1px solid var(--b3-border-color);
     background-color: var(--b3-theme-background);
@@ -1237,6 +1238,11 @@
       align-items: center;
       gap: 4px;
       flex-shrink: 0;
+      flex-wrap: nowrap;
+      margin-left: auto;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
 
       .xlc-row-action {
         width: 24px;
@@ -1246,7 +1252,7 @@
         font-size: var(--xlc-font-sm);
         border-radius: var(--xlc-radius-sm);
         color: var(--b3-theme-primary);
-        opacity: 0.72;
+        opacity: 0.88;
 
         &:hover {
           opacity: 1;
@@ -1263,7 +1269,6 @@
           font-size: 11px !important;
           font-weight: 600;
           white-space: nowrap;
-          opacity: 0.92;
           border-radius: 6px;
           border: 1px solid color-mix(in srgb, var(--b3-theme-primary) 24%, var(--b3-border-color));
           background: var(--b3-theme-surface);
@@ -1284,13 +1289,14 @@
       }
     }
 
-    // 收藏行 / 触屏：星标常驻（不依赖 hover）
+    // 收藏行 / 触屏 / 悬停 / 激活行：操作按钮浮出
     &--fav .xlc-row-action,
-    &--active .xlc-row-action,
-    &--active .xlc-row-action-wrap .xlc-row-action { opacity: 1; }
-
-    &:hover .xlc-row-action,
-    &:hover .xlc-row-action-wrap .xlc-row-action { opacity: 1; }
+    &--active .xlc-row-action-wrap,
+    &:hover .xlc-row-action-wrap,
+    &:focus-within .xlc-row-action-wrap {
+      opacity: 1;
+      pointer-events: auto;
+    }
 
     &--active .xlc-row-action:hover { background-color: transparent; }
   }
@@ -1850,12 +1856,23 @@
   .xlc-footer {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--xlc-space-3);
     font-size: var(--xlc-font-xs);
     color: var(--b3-theme-on-surface);
     border-top: 1px solid var(--b3-border-color);
-    padding: var(--xlc-space-2) var(--xlc-space-0-5) var(--xlc-space-0);
-    flex-wrap: wrap;
+    padding: var(--xlc-space-2) var(--xlc-space-3);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+
+    .xlc-footer-left,
+    .xlc-footer-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
 
     .xlc-footer-count {
       font-variant-numeric: tabular-nums;
@@ -1864,8 +1881,7 @@
     }
 
     .xlc-footer-claim {
-      margin-left: auto;
-      padding: var(--xlc-space-1) var(--xlc-space-2);
+      padding: var(--xlc-space-0-5) var(--xlc-space-2);
       border: 1px solid var(--b3-border-color);
       border-radius: var(--xlc-radius-pill);
       background: var(--b3-theme-surface);
@@ -1886,10 +1902,40 @@
       background: transparent;
       color: var(--b3-theme-on-surface);
       font-size: var(--xlc-font-xs);
-      padding: var(--xlc-space-0-5) var(--xlc-space-2);
-      min-height: 26px;
+      padding: 2px 6px;
+      min-height: 24px;
       min-width: 24px;
       white-space: nowrap;
+      border-radius: 4px;
+      cursor: pointer;
+
+      &:hover {
+        background: color-mix(in srgb, var(--b3-theme-primary) 10%, var(--b3-theme-surface));
+        color: var(--b3-theme-primary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--xlc-accent);
+        outline-offset: 1px;
+      }
+    }
+
+    :is(.xlc-footer-stepguide, .xlc-footer-starter-packs) {
+      border: none;
+      background: transparent;
+      color: var(--b3-theme-on-surface);
+      font-size: var(--xlc-font-xs);
+      padding: 2px 6px;
+      min-height: 24px;
+      min-width: 24px;
+      white-space: nowrap;
+      border-radius: 4px;
+      cursor: pointer;
+
+      &:hover {
+        background: color-mix(in srgb, var(--b3-theme-primary) 10%, var(--b3-theme-surface));
+        color: var(--b3-theme-primary);
+      }
 
       &:focus-visible {
         outline: 2px solid var(--xlc-accent);

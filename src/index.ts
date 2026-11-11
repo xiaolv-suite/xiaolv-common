@@ -2801,10 +2801,21 @@ export default class XiaolvCommonPlugin extends Plugin {
                 let task!: Promise<string>;
                 task = (async (): Promise<string> => {
                     const got = await this.library.getItem(itemId);
-                    if (!got.ok) return "";
-                    const kd = await this.library.getItemKramdown(got.data);
-                    // 片段引用展开后预览（F5）：预览/填充卡所见 = 插入所得；变量仍保留给填充卡
-                    const text = kd.ok ? await this.library.expandSnippetRefs(kd.data) : "";
+                    let text = "";
+                    const rawId = String(itemId);
+                    if (got.ok) {
+                        const kd = await this.library.getItemKramdown(got.data);
+                        // 片段引用展开后预览（F5）：预览/填充卡所见 = 插入所得；变量仍保留给填充卡
+                        text = kd.ok ? await this.library.expandSnippetRefs(kd.data) : "";
+                    } else if (rawId.startsWith("xlc-omni-") || isBlockId(rawId)) {
+                        const cleanId = rawId.replace(/^xlc-omni-/, "");
+                        try {
+                            const res = await this.kernelClient.request<{kramdown?: string}>("getBlockKramdown", {id: cleanId});
+                            if (res && typeof res.kramdown === "string" && res.kramdown.trim()) {
+                                text = res.kramdown.trim();
+                            }
+                        } catch {}
+                    }
                     // 写入或换库发生后，旧异步读取不能把陈旧预览重新放回缓存。
                     if (text && generation === this.previewCacheGeneration && this.previewTasks.get(itemId) === task) {
                         this.previewCache.set(itemId, text);
