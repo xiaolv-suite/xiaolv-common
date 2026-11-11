@@ -365,8 +365,7 @@ const STYLES = `
     --lv-safe-text-muted: #64748b;
     --lv-safe-border: rgba(0, 0, 0, 0.08);
 }
-[data-theme-mode="dark"],
-body.dark {
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark, body.dark) {
     --lv-safe-surface: #1e222b;
     --lv-safe-surface-sub: #272c37;
     --lv-safe-text: #f1f5f9;
@@ -444,7 +443,7 @@ body.dark {
     position: relative;
     overflow: hidden;
 }
-:is([data-theme-mode="dark"], body.body--dark, html.dark) .lv-notice-card {
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) .lv-notice-card {
     --lv-nt-bg: rgba(28, 33, 45, 0.96);
     --lv-nt-border: rgba(255, 255, 255, 0.1);
     --lv-nt-text: #f8fafc;
@@ -593,7 +592,7 @@ body.dark {
     color: #0f172a;
     animation: lvNoticeFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
-:is([data-theme-mode="dark"], body.body--dark, html.dark) .lv-notice-capsule {
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) .lv-notice-capsule {
     background: rgba(28, 33, 45, 0.96);
     border-color: rgba(255, 255, 255, 0.1);
     color: #f8fafc;
@@ -717,7 +716,7 @@ body.dark {
     justify-content: center;
     animation: lvSheetMaskIn 160ms ease-out both;
 }
-:is([data-theme-mode="dark"], body.body--dark, html.dark) #lv-launchpad-sheet-mask {
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) #lv-launchpad-sheet-mask {
     --lv-lp-bg: linear-gradient(165deg, rgba(24, 28, 38, 0.98) 0%, rgba(15, 18, 26, 0.99) 100%);
     --lv-lp-panel-bg: rgba(30, 36, 49, 0.78);
     --lv-lp-card-bg: rgba(33, 39, 53, 0.92);
@@ -1012,7 +1011,7 @@ body.dark {
     cursor: pointer;
     transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease, box-shadow 200ms ease;
 }
-:is([data-theme-mode="dark"], body.body--dark, html.dark) #lv-launchpad-mobile-ball {
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) #lv-launchpad-mobile-ball {
     color: #f8fafc;
     background: rgba(30, 36, 49, 0.9);
     border-color: rgba(255, 255, 255, 0.12);
@@ -3936,7 +3935,7 @@ function ensureDesktopStyles(): void {
   outline: none;
   box-sizing: border-box;
 }
-:is([data-theme-mode="dark"], body.body--dark, html.dark) .lv-desktop-launchpad-popover {
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) .lv-desktop-launchpad-popover {
   --lv-lp-bg: linear-gradient(165deg, rgba(24, 28, 38, 0.97) 0%, rgba(15, 18, 26, 0.98) 100%);
   --lv-lp-panel-bg: rgba(30, 36, 49, 0.76);
   --lv-lp-card-bg: rgba(33, 39, 53, 0.92);
@@ -6178,9 +6177,15 @@ function disarmSheetHistory(): void {
     }
 }
 
+let sheetViewportCleanup: (() => void) | undefined;
+
 /** 关闭移动端底部弹射坞：下滑收场动画（动画中重开安全）+ 焦点栈注销 + 历史占位解除 */
 function closeMobileSheet(): void {
     if (typeof document === "undefined") return;
+    if (sheetViewportCleanup) {
+        try { sheetViewportCleanup(); } catch { /* ignore */ }
+        sheetViewportCleanup = undefined;
+    }
     disarmSheetHistory();
     const mask = document.getElementById(MOBILE_SHEET_ID);
     if (!mask) return;
@@ -6999,6 +7004,29 @@ function openMobileSheet(): void {
     } catch { /* ignore */ }
     document.body.appendChild(mask);
     recomputeBallSuppression();
+
+    // 移动端软键盘动态避让 (visualViewport)
+    if (typeof window !== "undefined" && window.visualViewport) {
+        const syncVisualViewport = () => {
+            const vv = window.visualViewport;
+            if (!vv || !mask.isConnected) return;
+            const keyboardOffset = Math.max(0, window.innerHeight - (vv.offsetTop + vv.height));
+            if (keyboardOffset > 100) {
+                mask.style.bottom = `${keyboardOffset}px`;
+                mask.style.height = `${vv.height}px`;
+            } else {
+                mask.style.bottom = "";
+                mask.style.height = "";
+            }
+        };
+        window.visualViewport.addEventListener("resize", syncVisualViewport);
+        window.visualViewport.addEventListener("scroll", syncVisualViewport);
+        sheetViewportCleanup = () => {
+            window.visualViewport?.removeEventListener("resize", syncVisualViewport);
+            window.visualViewport?.removeEventListener("scroll", syncVisualViewport);
+            sheetViewportCleanup = undefined;
+        };
+    }
     // 键盘循环（零依赖内联版 focus-trap）：Tab 在坞内循环，不外逸到底层文档
     mask.addEventListener("keydown", (ev) => {
         const kev = ev as KeyboardEvent;
