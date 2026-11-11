@@ -1877,6 +1877,7 @@ export class CommonSearchDialog {
         source.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
             if (entry) {
+                if (!this.pinWindow) this.destroy();
                 if (entry.isOmni && this.deps.openDocBlock) {
                     void this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
                 } else {
@@ -3333,6 +3334,7 @@ export class CommonSearchDialog {
                     locateBtn.setAttribute("aria-label", "在思源中定位源块");
                     locateBtn.addEventListener("click", (e) => {
                         e.stopPropagation();
+                        if (!this.pinWindow) this.destroy();
                         void this.deps.openDocBlock?.(entry.targetBlockId || entry.id);
                     });
                     locateBtn.addEventListener("contextmenu", (e) => {
@@ -5415,7 +5417,10 @@ export class CommonSearchDialog {
                     }
                 } else {
                     if (this.deps.openDocBlock) {
-                        addSilent("↗", this.deps.t("locateInDoc"), () => this.deps.openDocBlock!(resolveEntryBlockId(entry) || entry.id));
+                        addSilent("↗", this.deps.t("locateInDoc"), () => {
+                            if (!this.pinWindow) this.destroy();
+                            this.deps.openDocBlock!(resolveEntryBlockId(entry) || entry.id);
+                        });
                     }
                     if (this.deps.quickEditBlock) {
                         addSilent("✎", this.deps.t("quickEditBlock"), () => this.deps.quickEditBlock!(resolveEntryBlockId(entry) || entry.id, entry.content || entry.summary || ""));
@@ -5428,9 +5433,15 @@ export class CommonSearchDialog {
                     }
                 }
             } else {
-                addSilent("↗", this.deps.t("openSource"), () => this.deps.openSource(entry.id));
+                addSilent("↗", this.deps.t("openSource"), () => {
+                    if (!this.pinWindow) this.destroy();
+                    this.deps.openSource(entry.id);
+                });
                 if (this.deps.openDocBlock && isBlockId(entry.blockId) && isBlockId(entry.sourceDocId) && entry.sourceDocId !== entry.libraryDocId) {
-                    addSilent("📦", "在思源库文档中定位本体块", () => this.deps.openDocBlock!(entry.blockId));
+                    addSilent("📦", "在思源库文档中定位本体块", () => {
+                        if (!this.pinWindow) this.destroy();
+                        this.deps.openDocBlock!(entry.blockId);
+                    });
                 }
                 if (isBlockId(entry.sourceBlockId) && entry.sourceBlockId !== entry.blockId) {
                     if (this.deps.pullFromSource) {
