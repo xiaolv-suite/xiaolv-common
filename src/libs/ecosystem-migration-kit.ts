@@ -6,6 +6,11 @@
  * 2. 零损毁 (Zero Data Loss)：迁移前强制触发全生态联合快照 (lvBackup)，全流程支持错误隔离；
  * 3. 零断链 (Zero Broken Links)：利用思源块 ID 全局持久唯一性，moveDocs 后所有双链/反向引用/嵌入块 100% 完好；
  * 4. 纯逻辑+UI解耦：核心扫描与计划生成为纯函数，Node 单测 100% 可覆盖。
+ *
+ * 审查备注（2026-11-10）：本模块当前未被 src/ 内任何入口引用，属未接入的迁移工具；
+ * 其 SiyuanApiAdapter.sql 及 SELECT attributes 依赖与本仓「零 SQL」红线冲突。
+ * 若后续启用，必须先改为结构化 API（文档树/属性视图接口），并补齐调用方与测试；
+ * 在此之前保留原实现以免破坏既有导出面。
  */
 
 import { toErrorMessage } from "../model/errors.ts";

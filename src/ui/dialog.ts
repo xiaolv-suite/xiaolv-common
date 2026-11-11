@@ -71,6 +71,7 @@ export interface DialogDeps {
     captureOmniWithForm?: (entry: SearchEntry) => void;
     quickEditBlock?: (blockId: string, currentContent: string) => Promise<void> | void;
     openDocBlock?: (blockId: string) => Promise<void> | void;
+    openDocContextMenu?: (blockId: string, event: MouseEvent) => Promise<void> | void;
     getDocPath?: (docId: string) => Promise<string>;
     getAdjacentBlocks?: (blockId: string, docId: string) => Promise<AdjacentBlocksContext | null>;
     insertToDoc: (itemId: string, docId: string, hPath: string, fills?: Record<string, string>, mode?: "insert" | "insert-content" | "insert-ref" | "insert-embed") => Promise<boolean>;
@@ -1853,6 +1854,18 @@ export class CommonSearchDialog {
         source.dataset.xlcPaneAct = "source";
         source.dataset.xlcControl = "preview.source";
         source.setAttribute("aria-label", this.deps.t("openSource"));
+        source.title = `${this.deps.t("openSource")}（右键呼出原生菜单）`;
+        source.addEventListener("contextmenu", (e) => {
+            const entry = this.results[this.activeIndex];
+            if (entry && this.deps.openDocContextMenu) {
+                const targetBlockId = resolveEntryBlockId(entry) || entry.blockId || entry.sourceBlockId || entry.sourceDocId;
+                if (targetBlockId) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void this.deps.openDocContextMenu(targetBlockId, e);
+                }
+            }
+        });
         source.addEventListener("click", () => {
             const entry = this.results[this.activeIndex];
             if (entry) {
@@ -3308,11 +3321,19 @@ export class CommonSearchDialog {
                     locateBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill";
                     locateBtn.dataset.xlcControl = "item.locate-source";
                     locateBtn.textContent = "↗ 原文";
-                    locateBtn.title = "在思源笔记中打开并定位到此原始块";
+                    locateBtn.title = "在思源笔记中打开并定位到此原始块（右键呼出原生菜单）";
                     locateBtn.setAttribute("aria-label", "在思源中定位源块");
                     locateBtn.addEventListener("click", (e) => {
                         e.stopPropagation();
                         void this.deps.openDocBlock?.(entry.targetBlockId || entry.id);
+                    });
+                    locateBtn.addEventListener("contextmenu", (e) => {
+                        const targetId = entry.targetBlockId || entry.id;
+                        if (targetId && this.deps.openDocContextMenu) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void this.deps.openDocContextMenu(targetId, e);
+                        }
                     });
                     actionsWrap.appendChild(locateBtn);
                 }
@@ -4560,7 +4581,15 @@ export class CommonSearchDialog {
             pathBtn.className = "xlc-meta-chip xlc-meta-chip--path";
             pathBtn.dataset.xlcControl = "preview.open-path";
             pathBtn.textContent = "📄 " + (effectiveDocPath || "来源文档");
-            pathBtn.title = "点击在思源中打开并定位此文档或块 (Alt+D)";
+            pathBtn.title = "点击在思源中打开并定位此文档或块 (Alt+D)（右键呼出原生菜单）";
+            pathBtn.addEventListener("contextmenu", (e) => {
+                const targetId = (entry.isOmni ? resolveEntryBlockId(entry) : entry.sourceDocId || entry.blockId) || entry.id;
+                if (targetId && this.deps.openDocContextMenu) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void this.deps.openDocContextMenu(targetId, e);
+                }
+            });
             pathBtn.addEventListener("click", () => {
                 if (!this.pinWindow) this.destroy();
                 if (entry.isOmni && this.deps.openDocBlock) {
@@ -5249,8 +5278,8 @@ export class CommonSearchDialog {
                 }, "xlc-menu-item", !this.pinWindow);
             }
 
-            // 快捷复制清洗纯文本 (Alt+Shift+C)
-            addAction("📄", "复制纯文本 (Alt+Shift+C)", async () => {
+            // 快捷复制清洗纯文本 (Alt+Shift+R)
+            addAction("📄", "复制纯文本 (Alt+Shift+R)", async () => {
                 const raw = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
                 const plain = kramdownToPlainText(raw || entry.summary || "");
                 await this.deps.copyProviderPayload(plain);
@@ -7409,8 +7438,8 @@ export class CommonSearchDialog {
             } finally {
                 this.primaryBusy = false;
             }
-        } else if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C")) {
-            // Alt+Shift+C: 纯文本清洗复制（自动剥离任何 Markdown / Kramdown 语法，适用于微信、QQ 等纯文本输入框）
+        } else if ((e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R")) || (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C"))) {
+            // Alt+Shift+R / Alt+Shift+C: 纯文本清洗复制（自动剥离任何 Markdown / Kramdown 语法，兼顾不同热键偏好与无冲突回退）
             if (e.repeat || this.primaryBusy) return;
             this.primaryBusy = true;
             e.preventDefault();

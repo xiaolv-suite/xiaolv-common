@@ -10,6 +10,7 @@ import {itemBodyRestriction} from "../model/kramdown";
 import {LIMITS} from "../constants";
 import type {SearchEntry} from "../model/search";
 import {deriveOmniItemMetadata} from "../service/omni-search";
+import {safeDocTitleFromHPath} from "../libs/lv-notice-kit";
 
 /** 块引用目标校验（官方 data-id 属性值） */
 export function isBlockRefTarget(blockId: string): boolean {
@@ -385,7 +386,7 @@ export class CaptureDialog {
                 this.deps.notify("error", this.deps.t("captureDocEmpty"));
                 return;
             }
-            const title = doc.hPath.split("/").filter(Boolean).pop() ?? doc.hPath;
+            const title = safeDocTitleFromHPath(doc, doc.hPath);
             const content = doc.content;
             if (!this.checkCaptureSize(content)) return;
             this.openForm(content, "markdown", null, {title, docId, sourceType: "doc-fragment"});

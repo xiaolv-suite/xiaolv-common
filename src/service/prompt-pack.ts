@@ -746,7 +746,7 @@ export function buildInitialLibraryDocMarkdown(title: string): string {
         "- `{{xlc:cursor}}`：插入完成后将光标精确定位在此处",
         "",
         "### 3. 高效调用快捷方式",
-        "- **随时呼出**：按快捷键（默认 `Alt+Shift+C`，全局迷你条 `Alt+Shift+M`）或在思源编辑器输入 `/常用` 秒级唤出；",
+        "- **随时呼出**：按快捷键（默认 `Alt+Shift+A`，全局迷你条 `Alt+Shift+M`）或在思源编辑器输入 `/常用` 秒级唤出；",
         "- **闪电复用**：按 `Enter` 插入当前文档光标处，按 `Ctrl+Enter` 复制到剪贴板，**操作完成后窗口自动退出**；",
         "- **固定模式**：按 `Alt+P` 钉住面板，支持连续复用多个条目；",
         "- **数字直达**：`Alt + 1~9` 瞬时插入前 9 项，`Alt + Shift + 1~9` 瞬时复制。",

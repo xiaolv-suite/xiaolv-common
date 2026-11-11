@@ -135,12 +135,9 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
 :is(#{$roots}) {
   @include light-palette;
 
-  // 核心视觉修正：操作高亮与焦点状态全面遵循宿主原生主题色（原生蓝等），杜绝任何突兀紫框残留
-  --xlc-accent: var(--b3-theme-primary);
-  --xlc-accent-text: var(--b3-theme-primary);
-  --xlc-accent-contrast: var(--b3-theme-on-primary, #ffffff);
-  --xlc-lavender: var(--b3-list-hover);
-  --xlc-lavender-ink: var(--b3-theme-primary);
+  // 配色独立于宿主主题：固定使用本插件紫罗兰色板（见 light-palette mixin），
+  // 不再跟随思源主题色，避免宿主换主题时插件界面被污染。
+  // 旧组件中的 --b3-* 引用统一由下方别名映射解析到本插件自有色板。
 
   --xlc-font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   // Typography scale: seven product roles; half-pixel aliases were retired in R190.
@@ -269,7 +266,12 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
   --b3-theme-on-background: var(--xlc-ink);
   --b3-theme-on-surface: var(--xlc-muted);
   --b3-theme-on-surface-light: var(--xlc-muted);
+  --b3-theme-primary: var(--xlc-accent);
+  --b3-theme-on-primary: var(--xlc-accent-contrast);
   --b3-theme-primary-light: var(--xlc-line);
+  --b3-theme-primary-lightest: color-mix(in srgb, var(--xlc-accent) 5%, transparent);
+  --b3-theme-surface-lighter: var(--xlc-soft);
+  --b3-border-color: var(--xlc-line);
   --b3-theme-primary-lighter: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent);
   --b3-theme-success: var(--xlc-success);
   --b3-theme-warning: var(--xlc-warning);
@@ -287,11 +289,6 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
 :is(:root[data-theme-mode="dark"], [data-theme-mode="dark"], body.body--dark, .b3-theme-dark, [data-theme="dark"], .b3-scope.dark) :is(#{$roots}),
 :is(#{$roots}):is([data-theme-mode="dark"], .b3-theme-dark, [data-theme="dark"]) {
   @include dark-palette;
-  --xlc-accent: var(--b3-theme-primary);
-  --xlc-accent-text: var(--b3-theme-primary);
-  --xlc-accent-contrast: var(--b3-theme-on-primary, #161522);
-  --xlc-lavender: var(--b3-list-hover);
-  --xlc-lavender-ink: var(--b3-theme-primary);
 }
 
 // ---- 控件与公共任务面 ----
@@ -1366,6 +1363,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
 
 :is(#{$roots}).b3-dialog__container.xlc-form-host:has(.xlc-capture) {
   max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px); /* 移动端动态视口回退 */
   display: flex;
   flex-direction: column;
 

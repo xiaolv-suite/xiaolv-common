@@ -2,6 +2,13 @@
 
 本文件记录「小驴常用（内测版）」的面向用户的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### 思源 3.8.10+ 原生特性适配与检索增强
+- **原生文档树上下文菜单（Issue #21219）**：全域穿透搜索（OmniSearch）结果行「↗ 原文」定位钮、来源预览「📄 路径」标签与预览区标题支持右键呼出思源原生文档树菜单，并采用零 SQL 内核 `getBlockInfo` 实时解析笔记本；
+- **半角斜杠标题防截断（`safeDocTitleFromHPath`）**：全域搜索文档名称提取与文档上下文标题安全保留合法斜杠并自动剥离富文本标签；
+- **纯文本清洗复制热键（Alt+Shift+R / Alt+Shift+C）**：搜索结果快捷复制纯文本，剥离 Markdown / Kramdown 语法。
+
 ## [0.10.84] — 2026-11-08
 
 v0.10.84 本地发版：SiYuan 3.8.x 顶栏冲突根治与 UI 层级体系全面收敛（Protocol v1.7.6）：

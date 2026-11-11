@@ -6,7 +6,7 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock, lvTicker} from "./libs/lv-notice-kit";
+import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock, lvTicker, showDocTreeNativeMenu, safeDocTitleFromHPath} from "./libs/lv-notice-kit";
 import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {EXPORT_SCHEMA_VERSION, LIMITS, PLUGIN_VERSION, PROTOCOL_NAME, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -994,7 +994,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         const t = this.i18nFn();
         this.addCommand({
             langKey: "open",
-            hotkey: "⌥⇧C",
+            hotkey: "⌥⇧A",
             callback: () => this.openSearch(),
         });
         // 系统全局热键呼出常用语迷你条（跨软件/思源后台最小化可用 · CAND-027 / TODO-FEAT-022）
@@ -1009,7 +1009,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             hotkey: "⌥⇧D",
             callback: () => {
                 if (this.host.isMobile()) {
-                    this.notify("info", "移动端模式暂不支持侧边栏，请使用 Alt+Shift+C 呼出搜索面板");
+                    this.notify("info", "移动端模式暂不支持侧边栏，请使用 Alt+Shift+A 呼出搜索面板");
                     return;
                 }
                 const dockBtn = typeof document !== "undefined"
@@ -1054,7 +1054,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         });
         this.addCommand({
             langKey: "saveSelection",
-            hotkey: "⌥⇧S",
+            hotkey: "⌥⇧E",
             callback: () => void this.capture?.saveSelection(),
         });
         this.addCommand({
@@ -1180,7 +1180,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             this.protyleSlash = [
                 {
                     filter: ["常用", "常用语", "xiaolv", "cy", "changyong", "xlc", "snippet", "snippets"],
-                    html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("openSearch") || "小驴常用：搜索与插入常用语"}</span><span class="b3-list-item__meta">⌥⇧C</span></div>`,
+                    html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("openSearch") || "小驴常用：搜索与插入常用语"}</span><span class="b3-list-item__meta">⌥⇧A</span></div>`,
                     id: "xiaolv-common-slash-search",
                     callback: (protyle: any) => {
                         this.host?.recordActiveEditor(protyle);
@@ -1222,7 +1222,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         try {
             const topBarEl = this.addTopBar({
                 icon: "iconXlcCommon",
-                title: `${this.i18nFn()("openSearch")} (Alt+Shift+N / Alt+Shift+V)`,
+                title: `${this.i18nFn()("openSearch")} (Alt+Shift+A)`,
                 callback: () => this.openSearch(),
                 position: "right",
                 // 官方 contextMenu 通道：右键「快捷访问面板」并入思源原生顶栏条目菜单，
@@ -1762,7 +1762,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         const baseSlash = [
             {
                 filter: ["常用", "常用语", "xiaolv", "cy", "changyong", "xlc", "snippet", "snippets"],
-                html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("openSearch") || "小驴常用：搜索与插入常用语"}</span><span class="b3-list-item__meta">⌥⇧C</span></div>`,
+                html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18nFn()("openSearch") || "小驴常用：搜索与插入常用语"}</span><span class="b3-list-item__meta">⌥⇧A</span></div>`,
                 id: "xiaolv-common-slash-search",
                 callback: (protyle: any) => {
                     this.host?.recordActiveEditor(protyle);
@@ -2120,7 +2120,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         allBtn.type = "button";
         allBtn.className = "b3-button b3-button--text xlc-quick-popover-all-btn";
         allBtn.dataset.xlcControl = "host.quick-popover.open-all";
-        allBtn.textContent = "🔍 打开全部常用语（默认 Alt+Shift+C）";
+        allBtn.textContent = "🔍 打开全部常用语（默认 Alt+Shift+A）";
         allBtn.addEventListener("click", () => {
             this.closeQuickAccessPopover();
             this.openSearch();
@@ -2346,7 +2346,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 const info = this.host.currentDocInfo();
                 return {
                     docId: info?.docId,
-                    title: info?.hPath?.split("/").pop() || info?.hPath || "",
+                    title: safeDocTitleFromHPath(info?.hPath),
                     hPath: info?.hPath,
                 };
             },
@@ -2504,6 +2504,24 @@ export default class XiaolvCommonPlugin extends Plugin {
             },
             openDocBlock: (blockId: string) => {
                 this.host.openDoc("", blockId);
+            },
+            openDocContextMenu: async (blockId: string, event: MouseEvent) => {
+                let box = "";
+                let rootID = "";
+                try {
+                    const info = await this.kernelClient.request<{box?: string; rootID?: string}>("getBlockInfo", {id: blockId});
+                    if (info && typeof info.box === "string") {
+                        box = info.box;
+                        rootID = typeof info.rootID === "string" ? info.rootID : blockId;
+                    }
+                } catch {}
+                if (box) {
+                    await showDocTreeNativeMenu({
+                        notebookId: box,
+                        docId: rootID || blockId,
+                        position: { x: event.clientX, y: event.clientY },
+                    });
+                }
             },
             getDocPath: (docId: string) => {
                 return this.library.getDocPath(docId);

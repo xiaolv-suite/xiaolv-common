@@ -11,6 +11,7 @@ import {autoParameterizeText} from "../model/template-wizard";
 import {transformCase} from "../model/placeholders";
 import {escapeHtml} from "../model/clipboard";
 import {matchProfilePreset} from "../model/storage";
+import {openNativeAssetPicker} from "../libs/lv-notice-kit";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
     text: "TXT", markdown: "MD", url: "URL", code: "CODE",
@@ -59,11 +60,36 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     let liveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let container: HTMLElement | null = null;
 
-    // 移动端虚拟键盘避让（window.visualViewport 动态抬升，防遮挡按钮）
+    // 移动端虚拟键盘避让（window.visualViewport 动态抬升与输入框平滑居中避让）
+    const ensureInputVisible = (target: HTMLElement) => {
+        setTimeout(() => {
+            try {
+                if (typeof target.scrollIntoView === "function") {
+                    target.scrollIntoView({ block: "center", behavior: "smooth" });
+                }
+            } catch {
+                try { (target as any).scrollIntoView?.(); } catch { /* ignore */ }
+            }
+        }, 150);
+    };
+
     const handleViewport = () => {
         if (!container || typeof window === "undefined" || !window.visualViewport) return;
-        const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
-        container.style.paddingBottom = offset > 0 ? `${offset + 12}px` : "";
+        const vv = window.visualViewport;
+        const isMobile = isMobileDialogViewport();
+        if (isMobile && typeof container.style?.setProperty === "function") {
+            container.style.setProperty("--xlc-vv-height", `${vv.height}px`);
+        }
+        const offset = Math.max(0, window.innerHeight - vv.height);
+        if (container.style) {
+            container.style.paddingBottom = offset > 0 ? `${offset + 8}px` : "";
+        }
+        if (isMobile && offset > 0 && typeof document !== "undefined") {
+            const active = document.activeElement as HTMLElement | null;
+            if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) {
+                ensureInputVisible(active);
+            }
+        }
     };
 
     const isMobileModal = isMobileDialogViewport();
@@ -82,6 +108,9 @@ export function openVariableFillCard(options: VariableFillOptions): void {
             if (typeof window !== "undefined" && window.visualViewport) {
                 window.visualViewport.removeEventListener("resize", handleViewport);
                 window.visualViewport.removeEventListener("scroll", handleViewport);
+            }
+            if (typeof container?.style?.removeProperty === "function") {
+                container.style.removeProperty("--xlc-vv-height");
             }
             if (!settled) options.onCancel?.();
         },
@@ -238,6 +267,32 @@ export function openVariableFillCard(options: VariableFillOptions): void {
             });
             label.appendChild(recentChip);
         }
+
+        // 资源/附件原生选取器胶囊（对齐 SiYuan 3.8.10+ openAssetPicker · Issue #21115）
+        if (field.kind !== "toggle" && field.kind !== "multi" && (
+            options.itemType === "image" || options.itemType === "asset" ||
+            /(?:图片|附件|文件|资产|image|file|asset|photo|pic)/i.test(field.name)
+        )) {
+            const pickAssetBtn = document.createElement("button");
+            pickAssetBtn.type = "button";
+            pickAssetBtn.className = "xlc-varform-recent-chip";
+            pickAssetBtn.dataset.xlcControl = `varform.asset.${fieldIndex}`;
+            pickAssetBtn.title = "从思源资源库选取文件/附件路径 (SiYuan 3.8.10+)";
+            pickAssetBtn.setAttribute("aria-label", pickAssetBtn.title);
+            pickAssetBtn.innerHTML = `<span class="xlc-recent-prefix" aria-hidden="true">📁 选资源</span>`;
+            pickAssetBtn.addEventListener("click", async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const picked = await openNativeAssetPicker();
+                if (picked && picked.path) {
+                    input.value = picked.path;
+                    input.dispatchEvent(new Event("input", {bubbles: true}));
+                    input.dispatchEvent(new Event("change", {bubbles: true}));
+                    input.focus();
+                }
+            });
+            label.appendChild(pickAssetBtn);
+        }
         wrap.appendChild(input);
 
         if (field.kind === "toggle") {
@@ -373,6 +428,9 @@ export function openVariableFillCard(options: VariableFillOptions): void {
             wrap.appendChild(pillsWrap);
         }
 
+        input.addEventListener("focus", () => {
+            if (isMobileModal) ensureInputVisible(input);
+        });
         inputs.push(input);
         fieldsWrap.appendChild(wrap);
     }
@@ -501,6 +559,9 @@ export function openVariableFillCard(options: VariableFillOptions): void {
                 input.dispatchEvent(new Event("change", {bubbles: true}));
             }
         }
+    });
+    presetSelect.addEventListener("focus", () => {
+        if (isMobileModal) ensureInputVisible(presetSelect);
     });
     presetWrap.appendChild(presetSelect);
 

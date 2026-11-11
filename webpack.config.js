@@ -72,6 +72,11 @@ module.exports = (env, argv) => {
         },
         output: {
             path: path.resolve(__dirname, "dist"),
+            // 每次构建先清空 dist：避免历史异步 chunk（如 10 月残留的 6xx.js）
+            // 被下方 ZipPlugin 的 /\.js$/ 规则一并打进 package.zip。
+            // 不把 include 收窄为仅 index.js：本仓存在动态 import
+            // （settings-dialog / espanso-import / csv-tsv-import），会产生合法 chunk。
+            clean: true,
             // onload 会用宿主提供的插件 name 将运行时 publicPath 设为 /plugins/{name}/；
             // 保留相对初值只作为运行时尚未初始化时的构建默认值。
             publicPath: "./",

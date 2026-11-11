@@ -11,6 +11,7 @@ import {deriveTitle, deriveSummary, inferItemType, isBlockId, ItemType} from "..
 import {inferTypeFromText} from "../ui/capture";
 import {bodyWriteRestriction} from "../model/kramdown";
 import {getPinyinAdapter} from "../model/pinyin";
+import {safeDocTitleFromHPath} from "../libs/lv-notice-kit";
 
 export interface OmniSearchOptions {
     maxCurrentDocBlocks?: number;
@@ -256,7 +257,7 @@ export function blockHitToSearchEntry(hit: IBlockSearchHit): SearchEntry {
     if (hit.type === "h") {
         title = deriveTitle(cleanContent.replace(/^#{1,6}\s*/, ""), inferredType, {});
     } else {
-        const docName = hit.hPath ? hit.hPath.split("/").pop()?.replace(/\.sy$/, "") || "" : "";
+        const docName = safeDocTitleFromHPath(hit);
         const snippet = cleanContent.slice(0, 30).replace(/\s+/g, " ");
         title = docName ? `${docName}: ${snippet}` : deriveTitle(cleanContent, inferredType, {});
     }
@@ -408,8 +409,7 @@ export async function searchAllNotesDocuments(
     const limit = options.maxAllNotesDocs ?? 30;
 
     return hits.slice(0, limit).map((hit) => {
-        const lastSegment = hit.hPath.split("/").pop() || "";
-        const title = hit.name || lastSegment.replace(/\.sy$/, "") || hit.hPath;
+        const title = safeDocTitleFromHPath(hit, hit.hPath);
         const entry: SearchEntry = {
             id: `xlc-omni-${hit.id}`,
             blockId: hit.id,
@@ -442,7 +442,7 @@ export function rerankBlockHits(hits: IBlockSearchHit[], query: string): IBlockS
 
     const scored = hits.map((hit, originalIndex) => {
         const cleanContent = cleanSearchHighlight(hit.content).toLowerCase();
-        const docName = (hit.hPath || "").split("/").pop()?.replace(/\.sy$/, "").toLowerCase() || "";
+        const docName = safeDocTitleFromHPath(hit.hPath).toLowerCase();
         let score = 0;
 
         let titleMatchCount = 0;

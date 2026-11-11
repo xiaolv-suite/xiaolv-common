@@ -82,6 +82,7 @@ export interface LvNoticePacket extends CardNoticeOptions {
     mode: "card" | "capsule" | "silent";
     createdAt: number;
     repeatCount: number;
+    read?: boolean;
     action?: {
         label: string;
         onClick?: () => void | Promise<void>;
@@ -107,11 +108,39 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 170; // 1.7.0+ (Phase 12: Designed 9-Grid Launchpad 5.0 UI · Dual View · Recent & Today Strip · Persistent Secondary Actions Drawer · Omnisearch & IFTTT Settings Drawer)
+const PROTOCOL_VERSION = 182; // 1.8.2+ (Phase 15: SiYuan 3.8.10+ Native Adaptations · openDocTreeMenu, safeDocTitleFromHPath, openNativeAssetPicker, Native Dock Control)
 const STORAGE_PREFIX = "lv_notice_mute_";
+const HISTORY_STORAGE_PREFIX = "lv_notice_history_";
+const MAX_PERSISTED_HISTORY = 50;
 const AI_STORAGE_KEY = "lv_ai_shared_config";
 const LAUNCHPAD_STORAGE_KEY = "lv_launchpad_states";
 const AUTOMATION_RULES_KEY = "lv_automation_rules_config";
+
+export interface LvOmnisearchStreamStatus {
+    done: boolean;
+    pending: number;
+    total: number;
+}
+
+export interface LvTodayMetric {
+    id: "checkin" | "cards" | "home" | "glean" | string;
+    pluginId: string;
+    name: string;
+    shortName: string;
+    color: string;
+    iconSvg: string;
+    count: number;
+    total?: number;
+    badgeText: string;
+    label: string;
+    status: "done" | "pending" | "empty" | "uninstalled";
+}
+
+export interface LvTodaySummary {
+    date: string;
+    metrics: LvTodayMetric[];
+    allDone: boolean;
+}
 
 export interface LvSearchResultItem {
     id: string;
@@ -227,6 +256,10 @@ interface LvNoticeHub {
     muteToday: (category: string) => void;
     isMutedToday: (category: string) => boolean;
     getHistory: () => LvNoticePacket[];
+    clearHistory?: () => void;
+    markAllRead?: () => void;
+    markRead?: (id: string) => void;
+    getUnreadCount?: () => number;
     registerPlugin: (name: string, onRelinquish: () => void) => () => void;
     relinquish: (name: string) => void;
     destroy: () => void;
@@ -289,6 +322,10 @@ interface LvOmnisearchHub {
     ownerSafe?: true;
     registerProvider: (plugin: string, provider: LvSearchProvider) => () => void;
     search: (keyword: string) => Promise<LvSearchResultItem[]>;
+    searchStream?: (
+        keyword: string,
+        onUpdate: (hits: LvSearchResultItem[], status: LvOmnisearchStreamStatus) => void
+    ) => Promise<LvSearchResultItem[]>;
 }
 
 interface LvAutomationHub {
@@ -372,6 +409,7 @@ body.dark {
     gap: 8px;
     /* 堆叠上限：长文卡可展开至全文，多卡同时存在时向内滚动收纳，不遮整个工作区 */
     max-height: calc(100vh - 64px);
+    max-height: calc(100dvh - 64px); /* 移动端动态视口：浏览器工具栏伸缩时不溢出 */
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: none;
@@ -384,9 +422,13 @@ body.dark {
     --lv-nt-text: #0f172a;
     --lv-nt-text-sub: #475569;
     --lv-nt-pill-bg: #f1f5f9;
-    --lv-nt-accent: var(--b3-theme-primary, #2563eb);
+    /* 通知卡主题色固定为中性蓝（或插件 :root 级 --lv-brand），不读取宿主主题色，
+       避免宿主换主题时通知卡变色；罗盘入口等宿主 chrome 内元素仍跟随宿主（见文件尾）。 */
+    --lv-nt-accent: var(--lv-brand, #2563eb);
+    --lv-nt-on-accent: #ffffff;
     pointer-events: auto;
     width: min(380px, calc(100vw - 32px));
+    width: min(380px, calc(100dvw - 32px));
     box-sizing: border-box;
     padding: 13px 15px;
     border-radius: 14px;
@@ -559,8 +601,8 @@ body.dark {
 }
 
 .lv-notice-capsule-action {
-    background: var(--b3-theme-primary, #3576c7);
-    color: var(--b3-theme-on-primary, #ffffff);
+    background: var(--lv-nt-accent, #3576c7);
+    color: var(--lv-nt-on-accent, #ffffff);
     border: none;
     border-radius: 999px;
     padding: 2px 10px;
@@ -618,6 +660,7 @@ body.dark {
     }
     .lv-notice-capsule {
         max-width: calc(100vw - 24px);
+        max-width: calc(100dvw - 24px);
         touch-action: pan-y;
     }
     .lv-notice-close-btn {
@@ -920,6 +963,16 @@ body.dark {
     -webkit-tap-highlight-color: transparent;
 }
 .lv-sheet-action-chip:active { background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); border-color: var(--lv-lp-accent); }
+.lv-sheet-today-dashboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 4px 0 8px; }
+.lv-sheet-today-card { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 7px 10px; border-radius: 10px; background: var(--lv-lp-card-bg); border: 1px solid var(--lv-lp-border-strong); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); cursor: pointer; text-align: left; font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.lv-sheet-today-card:active { background: var(--lv-lp-accent-soft); }
+.lv-sheet-today-card.done { border-color: rgba(16, 185, 129, 0.35); background: linear-gradient(135deg, var(--lv-lp-card-bg) 0%, rgba(16, 185, 129, 0.06) 100%); }
+.lv-sheet-today-card-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--lv-lp-panel-bg); flex-shrink: 0; }
+.lv-sheet-today-card-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.lv-sheet-today-card-name { font-size: 11px; font-weight: 600; color: var(--lv-lp-text); }
+.lv-sheet-today-card-status { font-size: 10px; color: var(--lv-lp-text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-sheet-today-card.done .lv-sheet-today-card-status { color: #10b981; font-weight: 600; }
+.lv-sheet-inbox-panel { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; margin: 4px 0 8px; border-radius: 12px; background: var(--lv-lp-panel-bg); border: 1px solid var(--lv-lp-border); max-height: 240px; overflow-y: auto; }
 .lv-sheet-empty { grid-column: 1 / -1; text-align: center; font-size: 13px; color: var(--lv-lp-text-sub); padding: 14px 0; }
 .lv-sheet-hint { text-align: center; font-size: 11px; color: var(--lv-lp-text-sub); }
 @keyframes lvSheetMaskIn { from { opacity: 0; } to { opacity: 1; } }
@@ -1056,19 +1109,19 @@ body.dark {
 `;
 
 function ensureStyles(): void {
-    if (typeof document === "undefined") return;
+    if (typeof document === "undefined" || !document.head || typeof document.createElement !== "function") return;
     const styleId = "lv-notice-styles";
-    const existing = document.getElementById(styleId);
+    const existing = typeof document.getElementById === "function" ? document.getElementById(styleId) : null;
     if (existing) {
-        if (existing.getAttribute?.("data-lv-ver") !== "2.2" || (existing.textContent?.length ?? 0) < STYLES.length) {
+        if (existing.getAttribute?.("data-lv-ver") !== "2.3" || (existing.textContent?.length ?? 0) < STYLES.length) {
             existing.textContent = STYLES;
-            existing.setAttribute?.("data-lv-ver", "2.2");
+            existing.setAttribute?.("data-lv-ver", "2.3");
         }
         return;
     }
     const styleEl = document.createElement("style");
     styleEl.id = styleId;
-    styleEl.setAttribute?.("data-lv-ver", "2.2");
+    styleEl.setAttribute?.("data-lv-ver", "2.3");
     styleEl.textContent = STYLES;
     document.head.appendChild(styleEl);
 }
@@ -1081,11 +1134,65 @@ function getTodayKey(d = new Date()): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function getSafeLocalStorage(): Storage | null {
+    try {
+        return typeof localStorage !== "undefined" ? localStorage : null;
+    } catch {
+        return null;
+    }
+}
+
+function loadTodayNoticeHistory(): LvNoticePacket[] {
+    const ls = getSafeLocalStorage();
+    if (!ls) return [];
+    try {
+        const key = `${HISTORY_STORAGE_PREFIX}${getTodayKey()}`;
+        const raw = ls.getItem(key);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((p) => p && typeof p.id === "string" && typeof p.message === "string").slice(0, MAX_PERSISTED_HISTORY);
+    } catch {
+        return [];
+    }
+}
+
+function saveTodayNoticeHistory(list: ReadonlyArray<LvNoticePacket>): void {
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
+    try {
+        const key = `${HISTORY_STORAGE_PREFIX}${getTodayKey()}`;
+        try {
+            if (typeof ls.length === "number" && typeof ls.key === "function" && typeof ls.removeItem === "function") {
+                for (let i = ls.length - 1; i >= 0; i--) {
+                    const k = ls.key(i);
+                    if (k && k.startsWith(HISTORY_STORAGE_PREFIX) && k !== key) {
+                        ls.removeItem(k);
+                    }
+                }
+            }
+        } catch { /* ignore */ }
+        const serializable = list.slice(0, MAX_PERSISTED_HISTORY).map((p) => ({
+            id: p.id,
+            mode: p.mode,
+            source: p.source,
+            category: p.category,
+            title: p.title,
+            message: p.message,
+            level: p.level,
+            createdAt: p.createdAt,
+            repeatCount: p.repeatCount,
+            read: Boolean(p.read),
+        }));
+        ls.setItem(key, JSON.stringify(serializable));
+    } catch { /* ignore quota / private mode */ }
+}
+
 function createCoordinator(initialPlugin: string): LvNoticeHub {
     ensureStyles();
 
-    let hostEl = document.getElementById("lv-notice-host");
-    if (!hostEl) {
+    let hostEl = typeof document.getElementById === "function" ? document.getElementById("lv-notice-host") : null;
+    if (!hostEl && document.body && typeof document.createElement === "function") {
         hostEl = document.createElement("div");
         hostEl.id = "lv-notice-host";
         hostEl.setAttribute("role", "region");
@@ -1094,7 +1201,7 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
     }
 
     const activePackets: LvNoticePacket[] = [];
-    const historyList: LvNoticePacket[] = [];
+    const historyList: LvNoticePacket[] = loadTodayNoticeHistory();
     const timers = new Map<string, number>();
     const pluginRegistry = new Map<string, () => void>();
 
@@ -1268,6 +1375,7 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         hostPlugin: initialPlugin,
 
         post(packet: LvNoticePacket) {
+            packet.read = packet.read ?? false;
             if (packet.category && this.isMutedToday(packet.category)) {
                 return;
             }
@@ -1279,6 +1387,7 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
             if (effectiveMode === "silent") {
                 historyList.unshift(packet);
                 if (historyList.length > 100) historyList.pop();
+                saveTodayNoticeHistory(historyList);
                 return;
             }
 
@@ -1291,6 +1400,8 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                 existing.repeatCount += 1;
                 existing.message = packet.message;
                 existing.createdAt = Date.now();
+                existing.read = false;
+                saveTodayNoticeHistory(historyList);
                 render();
                 return;
             }
@@ -1298,6 +1409,7 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
             activePackets.push(packet);
             historyList.unshift(packet);
             if (historyList.length > 100) historyList.pop();
+            saveTodayNoticeHistory(historyList);
             render();
 
             const duration = packet.duration ?? (packet.level === "error" ? 0 : 8000);
@@ -1343,32 +1455,34 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         },
 
         muteToday(category: string) {
-            if (!category || typeof localStorage === "undefined") return;
+            const ls = getSafeLocalStorage();
+            if (!category || !ls) return;
             try {
                 const key = `${STORAGE_PREFIX}${getTodayKey()}`;
                 // 清理往日过期的 mute key，防止 localStorage 无限累积
                 try {
-                    for (let i = localStorage.length - 1; i >= 0; i--) {
-                        const k = localStorage.key(i);
+                    for (let i = ls.length - 1; i >= 0; i--) {
+                        const k = ls.key(i);
                         if (k && k.startsWith(STORAGE_PREFIX) && k !== key) {
-                            localStorage.removeItem(k);
+                            ls.removeItem(k);
                         }
                     }
                 } catch { /* ignore */ }
-                const raw = localStorage.getItem(key) || "[]";
+                const raw = ls.getItem(key) || "[]";
                 const list = JSON.parse(raw);
                 if (!list.includes(category)) {
                     list.push(category);
-                    localStorage.setItem(key, JSON.stringify(list));
+                    ls.setItem(key, JSON.stringify(list));
                 }
             } catch { /* storage fallback */ }
         },
 
         isMutedToday(category: string): boolean {
-            if (!category || typeof localStorage === "undefined") return false;
+            const ls = getSafeLocalStorage();
+            if (!category || !ls) return false;
             try {
                 const key = `${STORAGE_PREFIX}${getTodayKey()}`;
-                const raw = localStorage.getItem(key);
+                const raw = ls.getItem(key);
                 if (!raw) return false;
                 const list = JSON.parse(raw);
                 return Array.isArray(list) && list.includes(category);
@@ -1379,6 +1493,28 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
 
         getHistory() {
             return [...historyList];
+        },
+
+        clearHistory() {
+            historyList.length = 0;
+            saveTodayNoticeHistory(historyList);
+        },
+
+        markAllRead() {
+            historyList.forEach((p) => { p.read = true; });
+            saveTodayNoticeHistory(historyList);
+        },
+
+        markRead(id: string) {
+            const target = historyList.find((p) => p.id === id);
+            if (target && !target.read) {
+                target.read = true;
+                saveTodayNoticeHistory(historyList);
+            }
+        },
+
+        getUnreadCount() {
+            return historyList.filter((p) => !p.read).length;
         },
 
         registerPlugin(name: string, onRelinquish: () => void) {
@@ -1437,18 +1573,41 @@ let nodeHubInstance: LvNoticeHub | undefined;
 
 function getNodeHub(callerPlugin: string): LvNoticeHub {
     if (!nodeHubInstance) {
+        if (nodeHistoryList.length === 0) {
+            nodeHistoryList.push(...loadTodayNoticeHistory());
+        }
         nodeHubInstance = {
             version: PROTOCOL_VERSION,
             hostPlugin: callerPlugin,
             post(packet: LvNoticePacket) {
+                packet.read = packet.read ?? false;
                 nodeHistoryList.unshift(packet);
                 if (nodeHistoryList.length > 100) nodeHistoryList.pop();
+                saveTodayNoticeHistory(nodeHistoryList);
             },
             dismiss() {},
             snooze() {},
             muteToday() {},
             isMutedToday() { return false; },
             getHistory() { return [...nodeHistoryList]; },
+            clearHistory() {
+                nodeHistoryList.length = 0;
+                saveTodayNoticeHistory(nodeHistoryList);
+            },
+            markAllRead() {
+                nodeHistoryList.forEach((p) => { p.read = true; });
+                saveTodayNoticeHistory(nodeHistoryList);
+            },
+            markRead(id: string) {
+                const target = nodeHistoryList.find((p) => p.id === id);
+                if (target && !target.read) {
+                    target.read = true;
+                    saveTodayNoticeHistory(nodeHistoryList);
+                }
+            },
+            getUnreadCount() {
+                return nodeHistoryList.filter((p) => !p.read).length;
+            },
             registerPlugin() { return () => {}; },
             relinquish() {},
             destroy() {
@@ -1461,7 +1620,7 @@ function getNodeHub(callerPlugin: string): LvNoticeHub {
 }
 
 function getHub(callerPlugin = "小驴"): LvNoticeHub {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || typeof document === "undefined") {
         return getNodeHub(callerPlugin);
     }
 
@@ -1762,9 +1921,10 @@ export async function withDocLock<T>(docId: string, task: () => Promise<T>, time
 const NOTIFY_FOCUS_KEY = "lv_notify_focus_until";
 
 export function getNotifyFocusUntil(): number {
-    if (typeof localStorage === "undefined") return 0;
+    const ls = getSafeLocalStorage();
+    if (!ls) return 0;
     try {
-        const n = Number(localStorage.getItem(NOTIFY_FOCUS_KEY));
+        const n = Number(ls.getItem(NOTIFY_FOCUS_KEY));
         return Number.isFinite(n) && n > 0 ? n : 0;
     } catch { return 0; }
 }
@@ -1784,14 +1944,18 @@ function refreshEntryFocusState(): void {
 }
 
 export function setNotifyFocusUntil(ts: number): void {
-    if (typeof localStorage === "undefined") return;
-    try { localStorage.setItem(NOTIFY_FOCUS_KEY, String(Math.max(0, Math.round(ts)))); } catch { /* ignore */ }
+    const ls = getSafeLocalStorage();
+    if (ls) {
+        try { ls.setItem(NOTIFY_FOCUS_KEY, String(Math.max(0, Math.round(ts)))); } catch { /* ignore */ }
+    }
     refreshEntryFocusState();
 }
 
 export function clearNotifyFocus(): void {
-    if (typeof localStorage === "undefined") return;
-    try { localStorage.removeItem(NOTIFY_FOCUS_KEY); } catch { /* ignore */ }
+    const ls = getSafeLocalStorage();
+    if (ls) {
+        try { ls.removeItem(NOTIFY_FOCUS_KEY); } catch { /* ignore */ }
+    }
     refreshEntryFocusState();
 }
 
@@ -1926,10 +2090,11 @@ export const lvNotify = {
     },
 
     isMutedToday(category: string): boolean {
-        if (!category || typeof localStorage === "undefined") return false;
+        const ls = getSafeLocalStorage();
+        if (!category || !ls) return false;
         try {
             const key = `${STORAGE_PREFIX}${getTodayKey()}`;
-            const raw = localStorage.getItem(key);
+            const raw = ls.getItem(key);
             if (!raw) return false;
             const list = JSON.parse(raw);
             return Array.isArray(list) && list.includes(category);
@@ -1941,6 +2106,55 @@ export const lvNotify = {
     registerPlugin(pluginName: string, onRelinquish: () => void = () => {}): () => void {
         const hub = getHub(pluginName);
         return hub.registerPlugin(pluginName, onRelinquish);
+    },
+
+    /** 读取当前全生态通知历史留档列表（最近 100 条） */
+    getHistory(): LvNoticePacket[] {
+        if (typeof window !== "undefined" && typeof document !== "undefined") {
+            const existingHub = window.__LV_NOTICE_HUB__;
+            if (existingHub) return existingHub.getHistory?.() ?? [];
+            return loadTodayNoticeHistory();
+        }
+        const hub = getHub();
+        return hub.getHistory?.() ?? [];
+    },
+
+    /** 清空全生态通知历史留档 */
+    clearHistory(): void {
+        const hub = getHub();
+        hub.clearHistory?.();
+    },
+
+    /** 将所有通知历史标记为已读 */
+    markAllRead(): void {
+        const hub = getHub();
+        hub.markAllRead?.();
+    },
+
+    /** 将指定通知标记为已读 */
+    markRead(id: string): void {
+        if (!id) return;
+        const hub = getHub();
+        if (hub.markRead) {
+            hub.markRead(id);
+        } else {
+            const list = hub.getHistory?.() ?? [];
+            const target = list.find((p) => p.id === id);
+            if (target) target.read = true;
+        }
+    },
+
+    /** 获取当前未读通知总数 */
+    getUnreadCount(): number {
+        if (typeof window !== "undefined" && typeof document !== "undefined") {
+            const existingHub = window.__LV_NOTICE_HUB__;
+            if (existingHub) {
+                return existingHub.getUnreadCount?.() ?? existingHub.getHistory?.().filter((p) => !p.read).length ?? 0;
+            }
+            return loadTodayNoticeHistory().filter((p) => !p.read).length;
+        }
+        const hub = getHub();
+        return hub.getUnreadCount?.() ?? hub.getHistory?.().filter((p) => !p.read).length ?? 0;
     }
 };
 
@@ -2552,9 +2766,10 @@ function healMissingPluginsFromHost(reg: Map<string, LvLaunchpadItem>): void {
 }
 
 function getLaunchpadStates(): Record<string, "pinned" | "docked" | "hidden"> {
-    if (typeof localStorage === "undefined") return { ...memoryLaunchpadStates };
+    const ls = getSafeLocalStorage();
+    if (!ls) return { ...memoryLaunchpadStates };
     try {
-        const raw = localStorage.getItem(LAUNCHPAD_STORAGE_KEY);
+        const raw = ls.getItem(LAUNCHPAD_STORAGE_KEY);
         if (raw) return { ...memoryLaunchpadStates, ...JSON.parse(raw) };
     } catch { /* ignore */ }
     return { ...memoryLaunchpadStates };
@@ -2562,9 +2777,10 @@ function getLaunchpadStates(): Record<string, "pinned" | "docked" | "hidden"> {
 
 function saveLaunchpadStates(states: Record<string, "pinned" | "docked" | "hidden">): void {
     memoryLaunchpadStates = { ...states };
-    if (typeof localStorage === "undefined") return;
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
     try {
-        localStorage.setItem(LAUNCHPAD_STORAGE_KEY, JSON.stringify(states));
+        ls.setItem(LAUNCHPAD_STORAGE_KEY, JSON.stringify(states));
     } catch { /* ignore */ }
 }
 
@@ -2747,6 +2963,11 @@ export const lvLaunchpad = {
         getLaunchpadHub().close();
     },
 
+    /** 获取今日 4 合 1 晨昏知识看板聚合状态（打卡/闪卡/管家/拾遗） */
+    getTodaySummary(): LvTodaySummary {
+        return getTodaySummary(getLaunchpadHub().getItems());
+    },
+
     /** 判定当前是否思源移动端前端（手机端宿主渲染 #mobileTopBar；UA 兜底） */
     isMobileFrontend(): boolean {
         return isMobileFrontend();
@@ -2863,17 +3084,19 @@ const MOBILE_BALL_LONG_PRESS_MS = 600;
 const MOBILE_BALL_DRAG_SLOP_PX = 8;
 
 export function getMobileEntryMode(): LvMobileEntryMode {
-    if (typeof localStorage === "undefined") return "both";
+    const ls = getSafeLocalStorage();
+    if (!ls) return "both";
     try {
-        const raw = localStorage.getItem(MOBILE_ENTRY_MODE_KEY);
+        const raw = ls.getItem(MOBILE_ENTRY_MODE_KEY);
         if (raw === "topbar" || raw === "ball" || raw === "both" || raw === "none") return raw;
     } catch { /* ignore */ }
-    return "both"; // 默认并行：顶栏罗盘 + 悬浮球双入口
+    return "both";
 }
 
 export function setMobileEntryMode(mode: LvMobileEntryMode): void {
-    if (typeof localStorage !== "undefined") {
-        try { localStorage.setItem(MOBILE_ENTRY_MODE_KEY, mode); } catch { /* ignore */ }
+    const ls = getSafeLocalStorage();
+    if (ls) {
+        try { ls.setItem(MOBILE_ENTRY_MODE_KEY, mode); } catch { /* ignore */ }
     }
     syncMobileEntryDom();
 }
@@ -3047,8 +3270,9 @@ function applyBallPosition(ball: HTMLElement, pos: LvBallPosition, idle: boolean
 }
 
 function persistBallPosition(pos: LvBallPosition): void {
-    if (typeof localStorage === "undefined") return;
-    try { localStorage.setItem(MOBILE_BALL_POS_KEY, JSON.stringify(pos)); } catch { /* ignore */ }
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
+    try { ls.setItem(MOBILE_BALL_POS_KEY, JSON.stringify(pos)); } catch { /* ignore */ }
 }
 
 function scheduleBallIdle(ball: HTMLElement, pos: LvBallPosition): void {
@@ -3264,11 +3488,12 @@ function mobileEntryFullyApplied(): boolean {
 const ONBOARDING_KEY = "lv_launchpad_onboarding_done";
 
 function maybeShowOnboardingCard(): void {
-    if (typeof localStorage === "undefined" || typeof document === "undefined") return;
-    try { if (localStorage.getItem(ONBOARDING_KEY) === "1") return; } catch { /* ignore */ }
+    const ls = getSafeLocalStorage();
+    if (!ls || typeof document === "undefined") return;
+    try { if (ls.getItem(ONBOARDING_KEY) === "1") return; } catch { /* ignore */ }
     const items = getLaunchpadHub().getItems();
     if (items.length < 3) return; // 单双插件用户不需要生态引导
-    try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    try { ls.setItem(ONBOARDING_KEY, "1"); } catch { /* ignore */ }
     lvNotify.card({
         source: "罗盘",
         title: "👋 欢迎使用小驴罗盘",
@@ -3504,9 +3729,10 @@ function findPluginTopBarElementInToolbar(item: LvLaunchpadItem): HTMLElement | 
 const DESKTOP_CONVERGENCE_ONBOARDING_KEY = "lv_desktop_convergence_onboarding_done";
 
 function maybeShowDesktopConvergenceOnboarding(itemCount: number): void {
-    if (typeof localStorage === "undefined" || typeof document === "undefined") return;
-    try { if (localStorage.getItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY) === "1") return; } catch { /* ignore */ }
-    try { localStorage.setItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    const ls = getSafeLocalStorage();
+    if (!ls || typeof document === "undefined") return;
+    try { if (ls.getItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY) === "1") return; } catch { /* ignore */ }
+    try { ls.setItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY, "1"); } catch { /* ignore */ }
     lvNotify.card({
         source: "小驴罗盘",
         title: "🧭 顶栏已升级为小驴罗盘中枢",
@@ -3647,27 +3873,31 @@ let desktopPopoverResizeHandler: (() => void) | null = null;
 let desktopGlobalHotkeyWired = false;
 
 function getLaunchpadViewMode(): "grid" | "list" {
-    if (typeof localStorage === "undefined") return "grid";
+    const ls = getSafeLocalStorage();
+    if (!ls) return "grid";
     try {
-        return localStorage.getItem(LAUNCHPAD_VIEW_KEY) === "list" ? "list" : "grid";
+        return ls.getItem(LAUNCHPAD_VIEW_KEY) === "list" ? "list" : "grid";
     } catch { return "grid"; }
 }
 
 function setLaunchpadViewMode(mode: "grid" | "list"): void {
-    if (typeof localStorage === "undefined") return;
-    try { localStorage.setItem(LAUNCHPAD_VIEW_KEY, mode); } catch { /* ignore */ }
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
+    try { ls.setItem(LAUNCHPAD_VIEW_KEY, mode); } catch { /* ignore */ }
 }
 
 function getLaunchpadActionLimit(): number | "all" {
-    if (typeof localStorage === "undefined") return 3;
+    const ls = getSafeLocalStorage();
+    if (!ls) return 3;
     try {
-        return localStorage.getItem(LAUNCHPAD_ACTION_LIMIT_KEY) === "all" ? "all" : 3;
+        return ls.getItem(LAUNCHPAD_ACTION_LIMIT_KEY) === "all" ? "all" : 3;
     } catch { return 3; }
 }
 
 function setLaunchpadActionLimit(limit: number | "all"): void {
-    if (typeof localStorage === "undefined") return;
-    try { localStorage.setItem(LAUNCHPAD_ACTION_LIMIT_KEY, String(limit)); } catch { /* ignore */ }
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
+    try { ls.setItem(LAUNCHPAD_ACTION_LIMIT_KEY, String(limit)); } catch { /* ignore */ }
 }
 
 function ensureDesktopStyles(): void {
@@ -3715,9 +3945,9 @@ function ensureDesktopStyles(): void {
     const existing = document.getElementById("lv-launchpad-desktop-styles");
     try {
         const style = existing ?? document.createElement("style");
-        if (existing && existing.getAttribute?.("data-lv-ver") === "2.2") return;
+        if (existing && existing.getAttribute?.("data-lv-ver") === "2.3") return;
         style.id = "lv-launchpad-desktop-styles";
-        style.setAttribute?.("data-lv-ver", "2.2");
+        style.setAttribute?.("data-lv-ver", "2.3");
         style.textContent = cssText + `
 .lv-desktop-launchpad-popover * {
   box-sizing: border-box;
@@ -4073,7 +4303,110 @@ function ensureDesktopStyles(): void {
   margin-right: 5px;
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
 }
+.lv-pop-inbox-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3.5px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 3px;
+}
+.lv-pop-today-dashboard {
+  margin: 6px 14px 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--lv-lp-panel-bg);
+  border: 1px solid var(--lv-lp-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.lv-pop-today-dashboard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+.lv-pop-today-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.lv-pop-today-card {
+  --card-brand: #2563eb;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 7px;
+  border-radius: 8px;
+  background: var(--lv-lp-card-bg);
+  border: 1px solid var(--lv-lp-border);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.lv-pop-today-card:hover {
+  border-color: var(--card-brand);
+  background: var(--lv-lp-card-hover-bg);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.08);
+}
+.lv-pop-today-card:active {
+  transform: scale(0.97);
+}
+.lv-pop-today-card.done {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: linear-gradient(135deg, var(--lv-lp-card-bg) 0%, rgba(16, 185, 129, 0.06) 100%);
+}
+.lv-pop-today-card.uninstalled {
+  opacity: 0.55;
+  cursor: default;
+}
+.lv-pop-today-card-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lv-lp-text);
+}
+.lv-pop-today-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.lv-pop-today-card-status {
+  font-size: 10px;
+  color: var(--lv-lp-text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lv-pop-today-card.done .lv-pop-today-card-status {
+  color: #10b981;
+  font-weight: 600;
+}
+.lv-pop-inbox-drawer {
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+.lv-inbox-item.unread {
+  background: var(--lv-lp-accent-soft) !important;
+  border-color: rgba(37, 99, 235, 0.25) !important;
+}
 @media (max-width: 460px) {
+  .lv-desktop-launchpad-popover .lv-pop-today-dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lv-desktop-launchpad-popover .lv-pop-header { flex-wrap: wrap; row-gap: 8px; }
   .lv-desktop-launchpad-popover .lv-pop-header > div:last-child { width: 100%; flex-wrap: wrap; }
   .lv-desktop-launchpad-popover .lv-pop-footer { flex-wrap: wrap; }
@@ -4085,10 +4418,11 @@ function ensureDesktopStyles(): void {
 
 export function isDesktopPopoverOpen(): boolean {
     if (typeof document === "undefined") return false;
-    return Boolean(document.getElementById(DESKTOP_POPOVER_ID));
+    const el = document.getElementById(DESKTOP_POPOVER_ID);
+    return Boolean(el && !el.classList?.contains?.("lv-popover-closing"));
 }
 
-export function closeDesktopLaunchpadPopover(): void {
+export function closeDesktopLaunchpadPopover(immediate = false): void {
     if (typeof document === "undefined") return;
     const el = document.getElementById(DESKTOP_POPOVER_ID);
     if (!el) return;
@@ -4106,6 +4440,11 @@ export function closeDesktopLaunchpadPopover(): void {
         desktopPopoverResizeHandler = null;
     }
 
+    if (immediate) {
+        try { el.remove(); } catch { /* ignore */ }
+        return;
+    }
+
     if (el.classList && typeof el.classList.add === "function") {
         el.classList.add("lv-popover-closing");
     }
@@ -4118,9 +4457,316 @@ export interface LvPopoverBuildOptions {
     view?: "grid" | "list";
     focusedIndex?: number;
     showPrefDrawer?: boolean;
+    showInboxDrawer?: boolean;
+    inboxFilter?: "all" | "unread" | "alert";
     actionLimit?: number | "all";
     recentIds?: string[];
     allItems?: ReadonlyArray<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }>;
+    todaySummary?: LvTodaySummary;
+}
+
+/**
+ * 格式化通知历史时间戳（今天显示 HH:mm，非今天显示 M/D HH:mm）
+ */
+function formatNoticeTime(ts: number): string {
+    const d = new Date(ts);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    if (isToday) return `${hh}:${mm}`;
+    return `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}`;
+}
+
+/**
+ * 构建罗盘通知中心历史抽屉 HTML
+ */
+function buildInboxDrawerHtml(
+    history: LvNoticePacket[],
+    unreadCount: number,
+    filter: "all" | "unread" | "alert" = "all"
+): string {
+    const alertCount = history.filter((p) => p.level === "warn" || p.level === "error").length;
+    const filtered = history.filter((p) => {
+        if (filter === "unread") return !p.read;
+        if (filter === "alert") return p.level === "warn" || p.level === "error";
+        return true;
+    });
+
+    let rowsHtml = "";
+    if (filtered.length === 0) {
+        const emptyMsg = filter === "unread"
+            ? "✨ 太棒了，所有通知均已阅读"
+            : (filter === "alert" ? "🛡️ 今日暂无告警或异常消息" : "🌱 今日通知中心暂无消息，工作区静悄悄");
+        rowsHtml = `
+          <div class="lv-inbox-empty" style="text-align:center;padding:22px 12px;color:var(--lv-lp-text-sub,#64748b);font-size:12px;">
+            ${emptyMsg}
+          </div>
+        `;
+    } else {
+        filtered.slice(0, 30).forEach((packet) => {
+            const isUnread = !packet.read;
+            const safeSource = escapeHtml(packet.source || "小驴");
+            const safeTitle = packet.title ? escapeHtml(packet.title) : "";
+            const safeMsg = escapeHtml(packet.message || "");
+            const timeStr = formatNoticeTime(packet.createdAt || Date.now());
+            const levelIcon = packet.level === "error" ? "🛑" : (packet.level === "warn" ? "⚠️" : (packet.level === "success" ? "✅" : "ℹ️"));
+
+            let actionHtml = "";
+            if (packet.action && packet.action.label) {
+                const safeActionLabel = escapeHtml(packet.action.label);
+                actionHtml = `
+                  <button type="button" class="lv-pop-sub-btn lv-inbox-action-btn" data-inbox-id="${escapeHtml(packet.id)}" style="padding:2px 7px;font-size:10.5px;color:var(--lv-lp-accent,#2563eb);border-color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">
+                    ${safeActionLabel}
+                  </button>
+                `;
+            }
+
+            rowsHtml += `
+              <div class="lv-inbox-item ${isUnread ? "unread" : ""}" data-inbox-id="${escapeHtml(packet.id)}" ${isUnread ? `title="点击标为已读"` : ""} style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));position:relative;margin-bottom:5px;${isUnread ? "cursor:pointer;" : ""}">
+                ${isUnread ? `<span style="width:6px;height:6px;border-radius:50%;background:var(--lv-lp-accent,#2563eb);position:absolute;top:8px;left:4px;" title="未读"></span>` : ""}
+                <span style="font-size:13px;line-height:1;margin-top:2px;" aria-hidden="true">${levelIcon}</span>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                    <div style="display:flex;align-items:center;gap:5px;">
+                      <span class="lv-inbox-source-tag" style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);">${safeSource}</span>
+                      ${safeTitle ? `<strong style="font-size:12px;color:var(--lv-lp-text,#0f172a);">${safeTitle}</strong>` : ""}
+                    </div>
+                    <span style="font-size:10px;color:var(--lv-lp-text-sub,#64748b);">${timeStr}</span>
+                  </div>
+                  <div style="font-size:11.5px;color:var(--lv-lp-text,#0f172a);line-height:1.4;word-break:break-word;">
+                    ${safeMsg}
+                  </div>
+                </div>
+                ${actionHtml}
+              </div>
+            `;
+        });
+    }
+
+    return `
+      <div class="lv-pop-inbox-drawer" style="padding:10px 14px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));background:var(--lv-lp-panel-bg,#f8fafc);display:flex;flex-direction:column;gap:6px;max-height:350px;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:6px;border-bottom:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));flex-wrap:wrap;gap:6px;">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span style="font-weight:700;font-size:12.5px;color:var(--lv-lp-accent,#2563eb);">🔔 通知中心</span>
+            <div class="lv-pop-view-tabs" role="tablist" aria-label="通知筛选">
+              <button type="button" class="lv-pop-view-tab lv-inbox-filter-btn ${filter === "all" ? "active" : ""}" data-inbox-filter="all">全部 ${history.length}</button>
+              <button type="button" class="lv-pop-view-tab lv-inbox-filter-btn ${filter === "unread" ? "active" : ""}" data-inbox-filter="unread">未读 ${unreadCount}</button>
+              <button type="button" class="lv-pop-view-tab lv-inbox-filter-btn ${filter === "alert" ? "active" : ""}" data-inbox-filter="alert">告警 ${alertCount}</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <button type="button" class="lv-pop-sub-btn lv-inbox-mark-all-btn" title="标记全部为已读" style="padding:2.5px 7px;font-size:10.5px;">全部已读</button>
+            <button type="button" class="lv-pop-sub-btn lv-inbox-clear-btn" title="清空全部通知历史" style="padding:2.5px 7px;font-size:10.5px;">清空</button>
+          </div>
+        </div>
+        <div class="lv-inbox-rows" style="display:flex;flex-direction:column;padding-top:2px;">
+          ${rowsHtml}
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:2px;">
+          <button type="button" class="lv-pop-sub-btn lv-pop-inbox-btn active" style="padding:3.5px 10px;font-weight:600;font-size:11px;">返回罗盘 ➔</button>
+        </div>
+      </div>
+    `;
+}
+
+/**
+ * 计算全生态今日 4 合 1 知识聚合指标（打卡/闪卡/管家/拾遗）
+ */
+export function getTodaySummary(items: ReadonlyArray<LvLaunchpadItem & { state?: "pinned" | "docked" | "hidden" }>): LvTodaySummary {
+    const pillars = [
+        {
+            id: "checkin",
+            pluginId: "siyuan-checkin",
+            name: "习惯打卡",
+            shortName: "打卡",
+            color: "#10b981",
+            iconSvg: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
+        },
+        {
+            id: "cards",
+            pluginId: "siyuan-lv-cards",
+            name: "卡片复习",
+            shortName: "闪卡",
+            color: "#f59e0b",
+            iconSvg: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 15h4M7 9h10"/></svg>`,
+        },
+        {
+            id: "home",
+            pluginId: "siyuan-home",
+            name: "生活到期",
+            shortName: "管家",
+            color: "#3b82f6",
+            iconSvg: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`,
+        },
+        {
+            id: "glean",
+            pluginId: "siyuan-glean",
+            name: "稍后阅读",
+            shortName: "拾遗",
+            color: "#8b5cf6",
+            iconSvg: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10M6 10h10"/></svg>`,
+        },
+    ];
+
+    const metrics: LvTodayMetric[] = pillars.map((p) => {
+        const item = items.find((it) => it.id === p.pluginId);
+        if (!item) {
+            return {
+                ...p,
+                count: 0,
+                badgeText: "",
+                label: "未开启",
+                status: "uninstalled" as const,
+            };
+        }
+
+        const rawBadge = String(item.badge ?? "").trim();
+        let count = 0;
+        let total: number | undefined;
+        let status: "done" | "pending" | "empty" = "empty";
+        let label = "暂无待办";
+
+        if (p.id === "checkin") {
+            const slashMatch = /(\d+)\s*\/\s*(\d+)/.exec(rawBadge);
+            if (slashMatch) {
+                count = Number(slashMatch[1]);
+                total = Number(slashMatch[2]);
+                if (total > 0 && count >= total) {
+                    status = "done";
+                    label = `${count}/${total} 全部达成 ✓`;
+                } else {
+                    status = count > 0 ? "pending" : "empty";
+                    label = `${count}/${total} 项打卡`;
+                }
+            } else {
+                const numMatch = /(\d+)/.exec(rawBadge);
+                if (numMatch) {
+                    count = Number(numMatch[1]);
+                    if (count === 0 || rawBadge.includes("✓")) {
+                        status = "done";
+                        label = "今日全达成 ✓";
+                    } else {
+                        status = "pending";
+                        label = `${count} 项已打卡`;
+                    }
+                } else if (rawBadge.includes("✓")) {
+                    status = "done";
+                    label = "今日全达成 ✓";
+                }
+            }
+        } else if (p.id === "cards") {
+            const numMatch = /(\d+)/.exec(rawBadge);
+            if (numMatch) {
+                count = Number(numMatch[1]);
+                if (count === 0 || rawBadge.includes("✓")) {
+                    status = "done";
+                    label = "复习完成 ✓";
+                } else {
+                    status = "pending";
+                    label = `${count} 张待复习`;
+                }
+            } else if (rawBadge.includes("✓")) {
+                status = "done";
+                label = "复习完成 ✓";
+            }
+        } else if (p.id === "home") {
+            const numMatch = /(\d+)/.exec(rawBadge);
+            if (numMatch) {
+                count = Number(numMatch[1]);
+                if (count === 0 || rawBadge.includes("✓")) {
+                    status = "done";
+                    label = "无临期事务 ✓";
+                } else {
+                    status = "pending";
+                    label = `${count} 项临期待办`;
+                }
+            } else if (rawBadge.includes("✓")) {
+                status = "done";
+                label = "无临期事务 ✓";
+            }
+        } else if (p.id === "glean") {
+            const numMatch = /(\d+)/.exec(rawBadge);
+            if (numMatch) {
+                count = Number(numMatch[1]);
+                if (count === 0 || rawBadge.includes("✓")) {
+                    status = "done";
+                    label = "阅读已清空 ✓";
+                } else {
+                    status = "pending";
+                    label = `${count} 篇稍后读`;
+                }
+            } else if (rawBadge.includes("✓")) {
+                status = "done";
+                label = "阅读已清空 ✓";
+            }
+        }
+
+        return {
+            ...p,
+            count,
+            total,
+            badgeText: rawBadge,
+            label,
+            status,
+        };
+    });
+
+    const activePillars = metrics.filter((m) => m.status !== "uninstalled");
+    const allDone = activePillars.length > 0 && activePillars.every((m) => m.status === "done");
+
+    return {
+        date: getTodayKey(),
+        metrics,
+        allDone,
+    };
+}
+
+/**
+ * 构建今日 4 合 1 晨昏看板 HTML
+ */
+function buildToday4in1DashboardHtml(summary: LvTodaySummary): string {
+    let cardsHtml = "";
+    summary.metrics.forEach((m) => {
+        const isDone = m.status === "done";
+        const isUninstalled = m.status === "uninstalled";
+        const statusClass = isDone ? "done" : (m.status === "pending" ? "pending" : (isUninstalled ? "uninstalled" : "empty"));
+        const titleAttr = isUninstalled ? `${escapeHtml(m.name)} (未安装/未加载)` : `${escapeHtml(m.name)}：点击直达`;
+        const safeColor = resolveSafeBrandColor(m.pluginId, m.color);
+
+        cardsHtml += `
+          <button type="button" class="lv-pop-today-card ${statusClass}" data-recent-id="${escapeHtml(m.pluginId)}" title="${titleAttr}" style="--card-brand:${safeColor};">
+            <div class="lv-pop-today-card-top">
+              <span class="lv-pop-today-card-icon" style="color:${safeColor};">${m.iconSvg}</span>
+              <span class="lv-pop-today-card-name">${escapeHtml(m.shortName)}</span>
+              ${isDone ? `<span class="lv-pop-today-card-check" style="color:#10b981;font-size:10px;font-weight:700;">✓</span>` : ""}
+            </div>
+            <div class="lv-pop-today-card-status">
+              ${escapeHtml(m.label)}
+            </div>
+          </button>
+        `;
+    });
+
+    const subTitle = summary.allDone
+        ? `<span style="color:#10b981;font-weight:600;">🎉 今日全生态任务全达成！</span>`
+        : `<span>4 大主线晨昏协同</span>`;
+
+    return `
+      <div class="lv-pop-today-dashboard">
+        <div class="lv-pop-today-dashboard-head">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span style="font-size:11px;font-weight:700;color:var(--lv-lp-text,#0f172a);">☀️ 今日晨昏知识看板</span>
+          </div>
+          <div style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);">
+            ${subTitle}
+          </div>
+        </div>
+        <div class="lv-pop-today-dashboard-grid">
+          ${cardsHtml}
+        </div>
+      </div>
+    `;
 }
 
 function buildActionsDrawerInnerHtml(
@@ -4179,34 +4825,38 @@ export function buildLaunchpadPopoverHtml(
     const view = opts?.view || "grid";
     const focusedIdx = Math.max(0, Math.min(opts?.focusedIndex ?? 0, Math.max(0, items.length - 1)));
     const showPref = Boolean(opts?.showPrefDrawer);
+    const showInbox = Boolean(opts?.showInboxDrawer);
+    const inboxFilter = opts?.inboxFilter || "all";
     const actionLimit = opts?.actionLimit ?? 3;
     const recentIds = opts?.recentIds ?? getRecentTileIds();
     const allItemsForPref = opts?.allItems ?? items;
     const focusActive = isNotifyFocusActive();
     const focusUntil = getNotifyFocusUntil();
+    const unreadCount = lvNotify.getUnreadCount();
 
     const toggleAllTitle = allPinned ? "收敛全部到小驴罗盘 (新版极简模式)" : "平铺全部独立图标到顶栏 (恢复老版布局)";
-    const toggleAllText = allPinned ? "收敛全部" : "平铺顶栏";
+    const toggleAllText = allPinned ? "收敛" : "平铺";
     const pinSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;fill:none!important;stroke:currentColor!important;vertical-align:-1px;" aria-hidden="true"><path d="M12 17v5" fill="none"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" fill="none"/></svg>`;
     const searchSvg = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;fill:none!important;stroke:currentColor!important;flex-shrink:0;color:var(--lv-lp-text-sub,#64748b);" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none"/><line x1="21" y1="21" x2="16.65" y2="16.65" fill="none"/></svg>`;
 
     const focusLabel = focusActive ? `🌙 至${new Date(focusUntil).toTimeString().slice(0, 5)}` : "🌙 专注";
     const headerHtml = `
       <div class="lv-pop-header">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <div style="display:flex;align-items:center;gap:7px;min-width:0;">
           <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">${COMPASS_SVG}</span>
           <span style="font-weight:700;font-size:14px;color:var(--lv-lp-text,#0f172a);white-space:nowrap;letter-spacing:-0.01em;">小驴罗盘</span>
-          <span style="font-size:10.5px;font-weight:600;padding:1.5px 7px;border-radius:999px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);white-space:nowrap;">${items.length} 插件联结</span>
+          <span style="font-size:10.5px;font-weight:600;padding:1.5px 7px;border-radius:999px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);white-space:nowrap;">${items.length} 联结</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
           <div class="lv-pop-view-tabs" role="tablist" aria-label="视图切换">
             <button type="button" class="lv-pop-view-tab ${view === "grid" ? "active" : ""}" data-view="grid">九宫格</button>
             <button type="button" class="lv-pop-view-tab ${view === "list" ? "active" : ""}" data-view="list">列表</button>
           </div>
           <button type="button" class="lv-pop-sub-btn lv-pop-focus-btn ${focusActive ? "active" : ""}" title="${focusActive ? "点击退出全局专注模式" : "开启全局专注模式（静音通知至今晚）"}">${escapeHtml(focusLabel)}</button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-pref-btn ${showPref ? "active" : ""}" title="顶栏与罗盘坞内显隐及跨插件联动设置">⚙ 设置</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-inbox-btn ${showInbox ? "active" : ""}" aria-label="通知中心" title="全生态通知中心历史（${unreadCount} 未读）">🔔${unreadCount > 0 ? `<span class="lv-pop-inbox-badge">${unreadCount}</span>` : ""}</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-pref-btn ${showPref ? "active" : ""}" aria-label="设置" title="顶栏与罗盘坞内显隐及跨插件联动设置">⚙ 设置</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-toggle-all-btn" title="${toggleAllTitle}">${pinSvg}<span>${toggleAllText}</span></button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-close-btn" title="关闭 (Esc)" style="padding:3.5px 7px;">✕</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-close-btn" aria-label="关闭" title="关闭 (Esc)" style="padding:3.5px 7px;">✕</button>
         </div>
       </div>
     `;
@@ -4269,6 +4919,12 @@ export function buildLaunchpadPopoverHtml(
         `;
     }
 
+    // 【通知中心历史】抽屉：通知历史收件箱留档与已读/清空/筛选/行动操作
+    let inboxDrawerHtml = "";
+    if (showInbox) {
+        inboxDrawerHtml = buildInboxDrawerHtml(lvNotify.getHistory(), unreadCount, inboxFilter);
+    }
+
     // 万物穿透搜索直达栏
     const searchBarHtml = `
       <div class="lv-pop-search-bar">
@@ -4280,46 +4936,29 @@ export function buildLaunchpadPopoverHtml(
       </div>
     `;
 
-    // 最近使用 + 今日待办聚合条（达到用户最近的使用体验）
+    // 今日 4 合 1 晨昏知识看板（打卡/闪卡/管家/拾遗）
+    const todaySummary = opts?.todaySummary ?? getTodaySummary(items);
+    const todayDashboardHtml = buildToday4in1DashboardHtml(todaySummary);
+
+    // 最近使用快捷胶囊行
     const recentItems = recentIds
         .map((id) => items.find((it) => it.id === id))
         .filter((it): it is typeof items[number] => Boolean(it))
         .slice(0, 4);
-    const todayItems = items
-        .map((it) => ({ it, m: /(\d+)/.exec(it.badge ?? "") }))
-        .filter((x) => x.m !== null && Number(x.m![1]) > 0)
-        .slice(0, 4);
 
     let stripHtml = "";
-    if ((recentItems.length > 0 && items.length > 1) || todayItems.length > 0) {
-        let chipsHtml = "";
-        if (recentItems.length > 0 && items.length > 1) {
-            chipsHtml += `<span class="lv-pop-strip-label">⟲ 最近</span>`;
-            recentItems.forEach((rit, rIdx) => {
-                const rColor = resolveSafeBrandColor(rit.id, rit.color);
-                const rTitle = escapeHtml((rit.fullName && !rit.fullName.includes("<")) ? rit.fullName : rit.name);
-                chipsHtml += `
-                  <button type="button" class="lv-pop-strip-chip lv-pop-recent-chip" data-recent-id="${escapeHtml(rit.id)}" title="最近使用：点击直达 ${rTitle}">
-                    <span style="width:6px;height:6px;border-radius:50%;background:${rColor};display:inline-block;"></span>
-                    <span>${rIdx === 0 ? "★ " : ""}${rTitle}</span>
-                  </button>
-                `;
-            });
-        }
-        if (todayItems.length > 0) {
-            if (chipsHtml) chipsHtml += `<span style="width:1px;height:12px;background:var(--lv-lp-border-strong,rgba(15,23,42,0.12));margin:0 2px;flex-shrink:0;"></span>`;
-            chipsHtml += `<span class="lv-pop-strip-label" style="color:var(--lv-lp-accent,#2563eb);">今日</span>`;
-            todayItems.forEach(({ it, m }) => {
-                const tColor = resolveSafeBrandColor(it.id, it.color);
-                const tName = escapeHtml(it.name);
-                chipsHtml += `
-                  <button type="button" class="lv-pop-strip-chip lv-pop-today-chip" data-recent-id="${escapeHtml(it.id)}" title="今日待办直达：${escapeHtml(it.fullName || it.name)}">
-                    <span style="width:6px;height:6px;border-radius:50%;background:${tColor};display:inline-block;"></span>
-                    <span>${tName} <strong>${escapeHtml(m?.[1] ?? "")}</strong></span>
-                  </button>
-                `;
-            });
-        }
+    if (recentItems.length > 0 && items.length > 1) {
+        let chipsHtml = `<span class="lv-pop-strip-label">⟲ 最近</span>`;
+        recentItems.forEach((rit, rIdx) => {
+            const rColor = resolveSafeBrandColor(rit.id, rit.color);
+            const rTitle = escapeHtml((rit.fullName && !rit.fullName.includes("<")) ? rit.fullName : rit.name);
+            chipsHtml += `
+              <button type="button" class="lv-pop-strip-chip lv-pop-recent-chip" data-recent-id="${escapeHtml(rit.id)}" title="最近使用：点击直达 ${rTitle}">
+                <span style="width:6px;height:6px;border-radius:50%;background:${rColor};display:inline-block;"></span>
+                <span>${rIdx === 0 ? "★ " : ""}${rTitle}</span>
+              </button>
+            `;
+        });
         stripHtml = `<div class="lv-pop-strip">${chipsHtml}</div>`;
     }
 
@@ -4437,12 +5076,18 @@ export function buildLaunchpadPopoverHtml(
       </div>
     `;
 
-    return headerHtml + prefDrawerHtml + searchBarHtml + stripHtml + omniResultsContainerHtml + mainViewHtml + actionsDrawerHtml + footerHtml;
+    return headerHtml + prefDrawerHtml + inboxDrawerHtml + searchBarHtml + todayDashboardHtml + stripHtml + omniResultsContainerHtml + mainViewHtml + actionsDrawerHtml + footerHtml;
 }
 
-export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initialFocusIndex?: number, initialShowPref = false): void {
+export function openDesktopLaunchpadPopover(
+    anchorEl?: HTMLElement | null,
+    initialFocusIndex?: number,
+    initialShowPref = false,
+    initialShowInbox = false,
+    initialInboxFilter: "all" | "unread" | "alert" = "all",
+): void {
     if (typeof document === "undefined") return;
-    closeDesktopLaunchpadPopover();
+    closeDesktopLaunchpadPopover(true);
     ensureDesktopStyles();
 
     const anchor = anchorEl || document.getElementById(DESKTOP_ENTRY_ID);
@@ -4457,7 +5102,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
     popover.setAttribute("aria-label", "小驴罗盘全家桶弹射坞");
     if ("tabIndex" in popover) popover.tabIndex = -1;
 
-    const targetWidth = items.length >= 3 ? 488 : 420;
+    const targetWidth = items.length >= 3 ? 520 : 440;
 
     const reposition = () => {
         if (!popover || !popover.style) return;
@@ -4510,50 +5155,76 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
     let currentView: "grid" | "list" = getLaunchpadViewMode();
     let currentActionLimit: number | "all" = getLaunchpadActionLimit();
     let showPrefDrawer = initialShowPref || (items.length === 0 && allItems.length > 0);
+    let showInboxDrawer = initialShowInbox;
+    let inboxFilter: "all" | "unread" | "alert" = initialInboxFilter;
     let currentFocusIndex = Math.max(0, Math.min(initialFocusIndex ?? 0, Math.max(0, items.length - 1)));
     let isSearchingOmni = false;
     let omniHitsList: Array<{ label: string; onSelect: () => void }> = [];
     let omniFocusIndex = 0;
     let searchSeq = 0;
 
-    const allPinned = items.length > 0 && items.every(it => it.state === "pinned");
-    popover.innerHTML = buildLaunchpadPopoverHtml(items, allPinned, {
-        view: currentView,
-        focusedIndex: currentFocusIndex,
-        showPrefDrawer,
-        actionLimit: currentActionLimit,
-        allItems,
-    });
-
-    // 动态徽标异步探针自动刷新
+    // 预探测同步 badgeProvider 并收集异步探针（避免首帧展示陈旧缓存）
+    const pendingBadgeProbes: Array<{ item: typeof items[number]; promise: Promise<string> }> = [];
     items.forEach((item) => {
         if (typeof item.badgeProvider === "function") {
             try {
                 const res = item.badgeProvider();
                 if (res instanceof Promise) {
-                    res.then((dynamicBadge) => {
-                        if (dynamicBadge && typeof dynamicBadge === "string") {
-                            item.badge = dynamicBadge;
-                            if (typeof popover.querySelector === "function") {
-                                const tileEl = popover.querySelector(`[data-id="${item.id}"]`);
-                                if (tileEl) {
-                                    let bEl = tileEl.querySelector(".lv-pop-badge");
-                                    if (!bEl) {
-                                        bEl = document.createElement("span");
-                                        bEl.className = `lv-pop-badge ${item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary"}`;
-                                        tileEl.appendChild(bEl);
-                                    }
-                                    bEl.textContent = dynamicBadge;
-                                }
-                            }
-                            refreshEntryBadgeDot();
-                        }
-                    }).catch(() => { /* ignore */ });
+                    pendingBadgeProbes.push({ item, promise: res });
                 } else if (res && typeof res === "string") {
                     item.badge = res;
                 }
             } catch { /* ignore */ }
         }
+    });
+
+    const allPinned = items.length > 0 && items.every(it => it.state === "pinned");
+    popover.innerHTML = buildLaunchpadPopoverHtml(items, allPinned, {
+        view: currentView,
+        focusedIndex: currentFocusIndex,
+        showPrefDrawer,
+        showInboxDrawer,
+        inboxFilter,
+        actionLimit: currentActionLimit,
+        allItems,
+    });
+
+    const syncTodayDashboardDom = () => {
+        if (typeof popover.querySelector !== "function") return;
+        try {
+            const dash = popover.querySelector(".lv-pop-today-dashboard");
+            if (dash && dash.parentNode) {
+                const wrapper = document.createElement("div");
+                wrapper.innerHTML = buildToday4in1DashboardHtml(getTodaySummary(items));
+                const nextDash = wrapper.firstElementChild;
+                if (nextDash) {
+                    dash.parentNode.replaceChild(nextDash, dash);
+                }
+            }
+        } catch { /* ignore */ }
+    };
+
+    // 动态徽标异步探针自动刷新：同时更新九宫格磁贴徽标与今日 4 合 1 晨昏看板
+    pendingBadgeProbes.forEach(({ item, promise }) => {
+        promise.then((dynamicBadge) => {
+            if (dynamicBadge && typeof dynamicBadge === "string") {
+                item.badge = dynamicBadge;
+                if (typeof popover.querySelector === "function") {
+                    const tileEl = popover.querySelector(`[data-id="${item.id}"]`);
+                    if (tileEl) {
+                        let bEl = tileEl.querySelector(".lv-pop-badge");
+                        if (!bEl) {
+                            bEl = document.createElement("span");
+                            bEl.className = `lv-pop-badge ${item.badgeType ? `lv-badge-${item.badgeType}` : "lv-badge-primary"}`;
+                            tileEl.appendChild(bEl);
+                        }
+                        bEl.textContent = dynamicBadge;
+                    }
+                    syncTodayDashboardDom();
+                }
+                refreshEntryBadgeDot();
+            }
+        }).catch(() => { /* ignore */ });
     });
 
     const syncActionsDrawerDom = () => {
@@ -4609,7 +5280,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
             if (mainView) mainView.style.display = "none";
             omniBox.style.display = "flex";
 
-            // 1. 立即匹配已安装插件与二级快捷行动
+            // 1. 立即匹配已安装插件与二级快捷行动，瞬时首屏渲染
             const matchedPlugins = items.filter(p =>
                 p.name.toLowerCase().includes(kw) ||
                 (p.fullName && p.fullName.toLowerCase().includes(kw)) ||
@@ -4624,16 +5295,14 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                 });
             });
 
-            void lvOmnisearch.search(kw).then((hits) => {
+            const renderOmniState = (hits: LvSearchResultItem[], status: LvOmnisearchStreamStatus) => {
                 if (seq !== searchSeq) return;
                 omniHitsList = [];
-                omniFocusIndex = 0;
                 let html = "";
 
-                // 先渲染命中的插件与二级行动
                 matchedPlugins.forEach((p) => {
                     const idx = omniHitsList.length;
-                    const pColor = /^#[0-9a-fA-F]{3,8}$/.test(p.color ?? "") ? p.color : "var(--b3-theme-primary)";
+                    const pColor = resolveSafeBrandColor(p.id, p.color);
                     omniHitsList.push({
                         label: p.fullName || p.name,
                         onSelect: () => {
@@ -4643,7 +5312,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                         },
                     });
                     html += `
-                      <button type="button" class="lv-pop-hit-item ${idx === 0 ? "focused" : ""}" data-omni-idx="${idx}">
+                      <button type="button" class="lv-pop-hit-item ${idx === omniFocusIndex ? "focused" : ""}" data-omni-idx="${idx}">
                         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                           <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:${pColor};flex-shrink:0;">插件</span>
                           <span style="font-size:12.5px;font-weight:600;color:var(--lv-lp-text,#0f172a);white-space:nowrap;">${escapeHtml(p.fullName || p.name)}</span>
@@ -4665,7 +5334,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                         },
                     });
                     html += `
-                      <button type="button" class="lv-pop-hit-item ${idx === 0 ? "focused" : ""}" data-omni-idx="${idx}">
+                      <button type="button" class="lv-pop-hit-item ${idx === omniFocusIndex ? "focused" : ""}" data-omni-idx="${idx}">
                         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                           <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.14);color:#059669;flex-shrink:0;">⚡ ${escapeHtml(p.name)}</span>
                           <span style="font-size:12.5px;font-weight:600;color:var(--lv-lp-text,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(action)}</span>
@@ -4675,7 +5344,6 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                     `;
                 });
 
-                // 渲染跨插件穿透检索命中的知识条目
                 hits.slice(0, 12).forEach((hit) => {
                     const idx = omniHitsList.length;
                     omniHitsList.push({
@@ -4687,7 +5355,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                         },
                     });
                     html += `
-                      <button type="button" class="lv-pop-hit-item ${idx === 0 ? "focused" : ""}" data-omni-idx="${idx}">
+                      <button type="button" class="lv-pop-hit-item ${idx === omniFocusIndex ? "focused" : ""}" data-omni-idx="${idx}">
                         <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">
                           <span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">${escapeHtml(hit.source || hit.badge || "小驴")}</span>
                           <span style="font-size:12.5px;font-weight:600;color:var(--lv-lp-text,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(hit.title)}</span>
@@ -4698,15 +5366,29 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                     `;
                 });
 
-                if (omniHitsList.length === 0) {
+                if (omniFocusIndex >= omniHitsList.length) {
+                    omniFocusIndex = Math.max(0, omniHitsList.length - 1);
+                }
+
+                if (!status.done) {
+                    html += `<div style="text-align:center;padding:6px 12px;font-size:11px;color:var(--lv-lp-text-sub,#64748b);">🔍 正在流式检索全生态知识库 (${status.pending} 项进行中)…</div>`;
+                } else if (omniHitsList.length === 0) {
                     html = `<div style="text-align:center;padding:28px 12px;font-size:12px;color:var(--lv-lp-text-sub,#64748b);">未在小驴全家桶中穿透检索到与 “<strong style="color:var(--lv-lp-text,#0f172a);">${escapeHtml(searchInput.value.trim())}</strong>” 相关的条目</div>`;
                 }
 
                 omniBox.innerHTML = html;
                 const drawerTitle = popover.querySelector(".lv-pop-actions-title");
                 if (drawerTitle) {
-                    drawerTitle.textContent = `🔍 全生态万物穿透检索 · 命中 ${omniHitsList.length} 条 (↑↓ 选择 · ↵ 直达)`;
+                    drawerTitle.textContent = status.done
+                        ? `🔍 全生态万物穿透检索 · 命中 ${omniHitsList.length} 条 (↑↓ 选择 · ↵ 直达)`
+                        : `🔍 正在流式检索… 已命中 ${omniHitsList.length} 条`;
                 }
+            };
+
+            omniFocusIndex = 0;
+            renderOmniState([], { done: false, pending: 1, total: 1 });
+            void lvOmnisearch.searchStream(kw, (hits, status) => {
+                renderOmniState(hits, status);
             }).catch(() => { /* ignore */ });
         });
     };
@@ -4743,12 +5425,23 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
             const target = e.target as HTMLElement;
             if (!target || typeof target.closest !== "function") return;
 
-            const viewTab = target.closest<HTMLElement>(".lv-pop-view-tab");
+            const inboxFilterBtn = target.closest<HTMLElement>(".lv-inbox-filter-btn");
+            if (inboxFilterBtn) {
+                e.stopPropagation();
+                const nextFilter = inboxFilterBtn.getAttribute("data-inbox-filter");
+                if (nextFilter === "all" || nextFilter === "unread" || nextFilter === "alert") {
+                    inboxFilter = nextFilter;
+                    openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer, showInboxDrawer, inboxFilter);
+                }
+                return;
+            }
+
+            const viewTab = target.closest<HTMLElement>(".lv-pop-view-tab[data-view]");
             if (viewTab) {
                 e.stopPropagation();
                 const nextView = viewTab.getAttribute("data-view") === "list" ? "list" : "grid";
                 setLaunchpadViewMode(nextView);
-                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer);
+                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer, showInboxDrawer, inboxFilter);
                 return;
             }
 
@@ -4767,7 +5460,60 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                     lvNotify.capsule({ source: "罗盘", message: `已开启专注模式至 ${until.toTimeString().slice(0, 5)}`, duration: 2500 });
                 }
                 refreshEntryBadgeDot();
-                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer);
+                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer, showInboxDrawer, inboxFilter);
+                return;
+            }
+
+            const inboxBtn = target.closest<HTMLElement>(".lv-pop-inbox-btn");
+            if (inboxBtn) {
+                e.stopPropagation();
+                showInboxDrawer = !showInboxDrawer;
+                if (showInboxDrawer) showPrefDrawer = false;
+                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer, showInboxDrawer, inboxFilter);
+                return;
+            }
+
+            const markAllBtn = target.closest<HTMLElement>(".lv-inbox-mark-all-btn");
+            if (markAllBtn) {
+                e.stopPropagation();
+                lvNotify.markAllRead();
+                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer, showInboxDrawer, inboxFilter);
+                return;
+            }
+
+            const clearInboxBtn = target.closest<HTMLElement>(".lv-inbox-clear-btn");
+            if (clearInboxBtn) {
+                e.stopPropagation();
+                lvNotify.clearHistory();
+                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer, showInboxDrawer, inboxFilter);
+                return;
+            }
+
+            const inboxActionBtn = target.closest<HTMLElement>(".lv-inbox-action-btn");
+            if (inboxActionBtn) {
+                e.stopPropagation();
+                const packetId = inboxActionBtn.getAttribute("data-inbox-id");
+                if (packetId) lvNotify.markRead(packetId);
+                const packet = lvNotify.getHistory().find((p) => p.id === packetId);
+                if (packet && packet.action?.onClick) {
+                    closeDesktopLaunchpadPopover();
+                    try {
+                        void packet.action.onClick();
+                    } catch (err) {
+                        console.warn("[LvNotify] 通知行动执行失败:", err);
+                    }
+                }
+                return;
+            }
+
+            const inboxItem = target.closest<HTMLElement>(".lv-inbox-item.unread");
+            if (inboxItem) {
+                e.stopPropagation();
+                const packetId = inboxItem.getAttribute("data-inbox-id");
+                if (packetId) {
+                    lvNotify.markRead(packetId);
+                    openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer, showInboxDrawer, inboxFilter);
+                }
                 return;
             }
 
@@ -4775,7 +5521,8 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
             if (prefBtn) {
                 e.stopPropagation();
                 showPrefDrawer = !showPrefDrawer;
-                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer);
+                if (showPrefDrawer) showInboxDrawer = false;
+                openDesktopLaunchpadPopover(anchor, currentFocusIndex, showPrefDrawer, showInboxDrawer, inboxFilter);
                 return;
             }
 
@@ -4810,7 +5557,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                 return;
             }
 
-            const stripChip = target.closest<HTMLElement>(".lv-pop-strip-chip");
+            const stripChip = target.closest<HTMLElement>(".lv-pop-strip-chip, .lv-pop-today-card");
             if (stripChip) {
                 e.stopPropagation();
                 const rid = stripChip.getAttribute("data-recent-id");
@@ -4818,7 +5565,7 @@ export function openDesktopLaunchpadPopover(anchorEl?: HTMLElement | null, initi
                 if (targetItem) {
                     pushRecentTileId(targetItem.id);
                     closeDesktopLaunchpadPopover();
-                    try { targetItem.onClick(); } catch (err) { console.warn("[LvLaunchpad] 快捷胶囊启动失败:", err); }
+                    try { targetItem.onClick(); } catch (err) { console.warn("[LvLaunchpad] 快捷启动失败:", err); }
                 }
                 return;
             }
@@ -5457,37 +6204,41 @@ const MOBILE_SEARCH_HISTORY_MAX = 6;
 
 /** 穿透搜索历史：读取（新在前，去重裁剪） */
 function getSearchHistory(): string[] {
-    if (typeof localStorage === "undefined") return [];
+    const ls = getSafeLocalStorage();
+    if (!ls) return [];
     try {
-        const list = JSON.parse(localStorage.getItem(MOBILE_SEARCH_HISTORY_KEY) ?? "[]");
+        const list = JSON.parse(ls.getItem(MOBILE_SEARCH_HISTORY_KEY) ?? "[]");
         return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string" && x.trim() !== "") : [];
     } catch { return []; }
 }
 
 function pushSearchHistory(kw: string): void {
     const k = kw.trim();
-    if (typeof localStorage === "undefined" || !k) return;
+    const ls = getSafeLocalStorage();
+    if (!ls || !k) return;
     try {
         const next = [k, ...getSearchHistory().filter((x) => x !== k)].slice(0, MOBILE_SEARCH_HISTORY_MAX);
-        localStorage.setItem(MOBILE_SEARCH_HISTORY_KEY, JSON.stringify(next));
+        ls.setItem(MOBILE_SEARCH_HISTORY_KEY, JSON.stringify(next));
     } catch { /* ignore */ }
 }
 
 /** 最近直达：读取上次使用过的罗盘条目 id（新在前，去重裁剪） */
 function getRecentTileIds(): string[] {
-    if (typeof localStorage === "undefined") return [];
+    const ls = getSafeLocalStorage();
+    if (!ls) return [];
     try {
-        const raw = localStorage.getItem(MOBILE_RECENT_KEY);
+        const raw = ls.getItem(MOBILE_RECENT_KEY);
         const list = raw ? JSON.parse(raw) : [];
         return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : [];
     } catch { return []; }
 }
 
 function pushRecentTileId(id: string): void {
-    if (typeof localStorage === "undefined" || !id) return;
+    const ls = getSafeLocalStorage();
+    if (!ls || !id) return;
     try {
         const next = [id, ...getRecentTileIds().filter((x) => x !== id)].slice(0, MOBILE_RECENT_MAX);
-        localStorage.setItem(MOBILE_RECENT_KEY, JSON.stringify(next));
+        ls.setItem(MOBILE_RECENT_KEY, JSON.stringify(next));
     } catch { /* ignore */ }
 }
 
@@ -5733,6 +6484,16 @@ function openMobileSheet(): void {
     });
     head.appendChild(moonBtn);
 
+    // 全生态通知中心历史按钮
+    const inboxBtn = document.createElement("button");
+    inboxBtn.type = "button";
+    inboxBtn.className = "lv-sheet-moon lv-sheet-inbox-btn";
+    const unreadNoticeCount = lvNotify.getUnreadCount();
+    inboxBtn.textContent = `🔔${unreadNoticeCount > 0 ? ` ${unreadNoticeCount}` : ""}`;
+    inboxBtn.setAttribute("aria-label", "全生态通知中心");
+    inboxBtn.title = `通知中心历史 (${unreadNoticeCount} 未读)`;
+    head.appendChild(inboxBtn);
+
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "lv-sheet-close";
@@ -5742,8 +6503,153 @@ function openMobileSheet(): void {
     head.appendChild(closeBtn);
     sheet.appendChild(head);
 
-    // 今日一站式聚合条：解析各插件徽记数字，一眼总览今日待办，点 chip 直达对应插件
+    // 移动端通知中心收件箱面板（默认隐藏，点击 🔔 展开）
+    const inboxPanel = document.createElement("div");
+    inboxPanel.className = "lv-sheet-inbox-panel";
+    inboxPanel.style.display = "none";
+    const renderMobileInbox = () => {
+        inboxPanel.innerHTML = "";
+        const history = lvNotify.getHistory();
+        const unread = lvNotify.getUnreadCount();
+
+        const topBar = document.createElement("div");
+        topBar.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding-bottom:4px;border-bottom:1px dashed var(--lv-lp-border,rgba(15,23,42,0.1));";
+        topBar.innerHTML = `
+          <span style="font-size:12px;font-weight:700;color:var(--lv-lp-accent,#2563eb);">🔔 通知中心 (${unread} 未读)</span>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="lv-sheet-action-chip lv-mobile-inbox-mark" style="padding:4px 10px;font-size:11px;">全读</button>
+            <button type="button" class="lv-sheet-action-chip lv-mobile-inbox-clear" style="padding:4px 10px;font-size:11px;">清空</button>
+          </div>
+        `;
+        topBar.querySelector(".lv-mobile-inbox-mark")?.addEventListener("click", () => {
+            lvNotify.markAllRead();
+            inboxBtn.textContent = "🔔";
+            renderMobileInbox();
+        });
+        topBar.querySelector(".lv-mobile-inbox-clear")?.addEventListener("click", () => {
+            lvNotify.clearHistory();
+            inboxBtn.textContent = "🔔";
+            renderMobileInbox();
+        });
+        inboxPanel.appendChild(topBar);
+
+        if (history.length === 0) {
+            const emptyEl = document.createElement("div");
+            emptyEl.style.cssText = "text-align:center;padding:14px;color:var(--lv-lp-text-sub,#64748b);font-size:11.5px;";
+            emptyEl.textContent = "🌱 今日通知中心暂无消息";
+            inboxPanel.appendChild(emptyEl);
+        } else {
+            history.slice(0, 15).forEach((packet) => {
+                const itemEl = document.createElement("div");
+                itemEl.style.cssText = `display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:8px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));font-size:11px;${!packet.read ? "border-left:3px solid var(--lv-lp-accent,#2563eb);cursor:pointer;" : ""}`;
+                itemEl.innerHTML = `
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-weight:600;color:var(--lv-lp-accent,#2563eb);">${escapeHtml(packet.source || "小驴")}</span>
+                    <span style="font-size:10px;color:var(--lv-lp-text-sub,#64748b);">${formatNoticeTime(packet.createdAt || Date.now())}</span>
+                  </div>
+                  <div style="color:var(--lv-lp-text,#0f172a);word-break:break-word;">${escapeHtml(packet.message)}</div>
+                `;
+                if (!packet.read) {
+                    itemEl.addEventListener("click", (ev) => {
+                        const t = ev.target as HTMLElement | null;
+                        if (t?.closest?.("button")) return;
+                        lvNotify.markRead(packet.id);
+                        const nextUnread = lvNotify.getUnreadCount();
+                        inboxBtn.textContent = `🔔${nextUnread > 0 ? ` ${nextUnread}` : ""}`;
+                        renderMobileInbox();
+                    });
+                }
+                if (packet.action && packet.action.label) {
+                    const actBtn = document.createElement("button");
+                    actBtn.type = "button";
+                    actBtn.className = "lv-sheet-action-chip";
+                    actBtn.style.cssText = "margin-top:4px;align-self:flex-start;padding:4px 10px;font-size:11px;color:var(--lv-lp-accent);";
+                    actBtn.textContent = packet.action.label;
+                    actBtn.addEventListener("click", () => {
+                        lvNotify.markRead(packet.id);
+                        closeMobileSheet();
+                        try { void packet.action?.onClick?.(); } catch { /* ignore */ }
+                    });
+                    itemEl.appendChild(actBtn);
+                }
+                inboxPanel.appendChild(itemEl);
+            });
+        }
+    };
+    inboxBtn.addEventListener("click", () => {
+        hapticFeedback(8);
+        const isOpen = inboxPanel.style.display !== "none";
+        inboxPanel.style.display = isOpen ? "none" : "flex";
+        inboxBtn.setAttribute("aria-pressed", String(!isOpen));
+        if (!isOpen) renderMobileInbox();
+    });
+    sheet.appendChild(inboxPanel);
+
+    // 预探测同步徽标并异步刷新移动 4 合 1 看板
+    const mobilePendingProbes: Array<{ item: typeof items[number]; promise: Promise<string> }> = [];
+    items.forEach((item) => {
+        if (typeof item.badgeProvider === "function") {
+            try {
+                const res = item.badgeProvider();
+                if (res instanceof Promise) {
+                    mobilePendingProbes.push({ item, promise: res });
+                } else if (res && typeof res === "string") {
+                    item.badge = res;
+                }
+            } catch { /* ignore */ }
+        }
+    });
+
+    // 今日 4 合 1 晨昏知识看板（移动端触控卡片）
+    const dashboardEl = document.createElement("div");
+    dashboardEl.className = "lv-sheet-today-dashboard";
+    const renderMobileDashboard = () => {
+        dashboardEl.textContent = "";
+        const todaySummary = getTodaySummary(items);
+        todaySummary.metrics.forEach((m) => {
+            const card = document.createElement("button");
+            card.type = "button";
+            card.className = `lv-sheet-today-card ${m.status}`;
+            card.setAttribute("aria-label", `${m.name}：${m.label}`);
+            const safeColor = resolveSafeBrandColor(m.pluginId, m.color);
+            card.innerHTML = `
+              <div class="lv-sheet-today-card-icon" style="color:${safeColor};">${m.iconSvg}</div>
+              <div class="lv-sheet-today-card-info">
+                <span class="lv-sheet-today-card-name">${escapeHtml(m.shortName)}</span>
+                <span class="lv-sheet-today-card-status">${escapeHtml(m.label)}</span>
+              </div>
+            `;
+            card.addEventListener("click", () => {
+                hapticFeedback(8);
+                const targetItem = items.find((it) => it.id === m.pluginId);
+                if (targetItem) {
+                    pushRecentTileId(targetItem.id);
+                    closeMobileSheet();
+                    try { targetItem.onClick(); } catch (err) { console.warn("[LvLaunchpad] 今日直达失败:", err); }
+                }
+            });
+            dashboardEl.appendChild(card);
+        });
+    };
+    renderMobileDashboard();
+    sheet.appendChild(dashboardEl);
+
+    mobilePendingProbes.forEach(({ item, promise }) => {
+        promise.then((dynamicBadge) => {
+            if (dynamicBadge && typeof dynamicBadge === "string") {
+                item.badge = dynamicBadge;
+                if (document.getElementById(MOBILE_SHEET_ID)) {
+                    renderMobileDashboard();
+                    refreshEntryBadgeDot();
+                }
+            }
+        }).catch(() => { /* ignore */ });
+    });
+
+    // 补充待办聚合条：仅展示非 4 大主线插件（如考试/人脉）的今日待办徽记，避免与 4 合 1 看板重复
+    const coreDashboardIds = new Set(["siyuan-checkin", "siyuan-lv-cards", "siyuan-home", "siyuan-glean"]);
     const todayItems = items
+        .filter((it) => !coreDashboardIds.has(it.id))
         .map((it) => ({ it, m: /(\d+)/.exec(it.badge ?? "") }))
         .filter((x) => x.m !== null && Number(x.m![1]) > 0)
         .slice(0, 5);
@@ -5887,12 +6793,20 @@ function openMobileSheet(): void {
         results.textContent = "";
         if (!kw) { renderHistory(); return; }
         histRow.style.display = "none";
-        void lvOmnisearch.search(kw).then((hits) => {
+
+        const loadingHint = document.createElement("div");
+        loadingHint.className = "lv-sheet-result-count";
+        loadingHint.textContent = "🔍 正在流式检索全生态…";
+        results.appendChild(loadingHint);
+
+        void lvOmnisearch.searchStream(kw, (hits, status) => {
             if (seq !== searchSeq || !document.getElementById(MOBILE_SHEET_ID)) return; // 过期响应或坞已关
+            results.textContent = "";
             if (hits.length > 0) {
                 const count = document.createElement("div");
                 count.className = "lv-sheet-result-count";
-                count.textContent = hits.length > 12 ? `共 ${hits.length} 条穿透结果 · 显示前 12 条` : `${hits.length} 条穿透结果`;
+                const suffix = status.done ? "" : ` · ${status.pending} 项检索中`;
+                count.textContent = (hits.length > 12 ? `共 ${hits.length} 条穿透结果 · 显示前 12 条` : `${hits.length} 条穿透结果`) + suffix;
                 results.appendChild(count);
             }
             // 按来源分组渲染（打卡/管家/… 各成一组，组内保持相关度序）
@@ -5945,8 +6859,8 @@ function openMobileSheet(): void {
             }
             if (!hits.length) {
                 const empty = document.createElement("div");
-                empty.className = "lv-sheet-empty";
-                empty.textContent = "未找到匹配结果";
+                empty.className = status.done ? "lv-sheet-empty" : "lv-sheet-result-count";
+                empty.textContent = status.done ? "未找到匹配结果" : `🔍 正在流式检索全生态 (${status.pending} 项进行中)…`;
                 results.appendChild(empty);
             }
         }).catch(() => { /* 检索异常静默 */ });
@@ -6119,15 +7033,79 @@ export function showMessage(message: string, timeout = 3000, type: "info" | "err
 
 const searchProviders = new Map<string, LvSearchProvider>();
 
+function sortOmniResults(results: LvSearchResultItem[], kw: string): LvSearchResultItem[] {
+    return [...results].sort((a, b) => {
+        const aTitle = a.title.toLowerCase();
+        const bTitle = b.title.toLowerCase();
+        const aScore = aTitle === kw ? 3 : aTitle.startsWith(kw) ? 2 : aTitle.includes(kw) ? 1 : 0;
+        const bScore = bTitle === kw ? 3 : bTitle.startsWith(kw) ? 2 : bTitle.includes(kw) ? 1 : 0;
+        if (bScore !== aScore) return bScore - aScore;
+        return aTitle.length - bTitle.length;
+    });
+}
+
 function getOmnisearchHub(): LvOmnisearchHub {
     const registry = getSharedRegistry("__LV_SEARCH_PROVIDERS__", searchProviders);
+    const runSearchStream = async (
+        keyword: string,
+        onUpdate: (hits: LvSearchResultItem[], status: LvOmnisearchStreamStatus) => void
+    ): Promise<LvSearchResultItem[]> => {
+        const kw = keyword.trim().toLowerCase();
+        if (!kw) {
+            onUpdate([], { done: true, pending: 0, total: 0 });
+            return [];
+        }
+
+        const accumulated: LvSearchResultItem[] = [];
+        const providers = Array.from(registry.entries());
+        const total = providers.length;
+        if (total === 0) {
+            onUpdate([], { done: true, pending: 0, total: 0 });
+            return [];
+        }
+
+        let remaining = total;
+        await Promise.all(
+            providers.map(async ([plugin, provider]) => {
+                let timerId: any = null;
+                try {
+                    const timeoutPromise = new Promise<LvSearchResultItem[]>((_, reject) => {
+                        timerId = setTimeout(() => reject(new Error("Timeout")), 1000);
+                    });
+                    const providerPromise = Promise.resolve(provider(kw));
+                    const items = await Promise.race([providerPromise, timeoutPromise]);
+                    if (Array.isArray(items) && items.length > 0) {
+                        accumulated.push(...items);
+                    }
+                } catch (err) {
+                    console.warn(`[LvOmnisearch] 插件 ${plugin} 检索异常或超时:`, err);
+                } finally {
+                    if (timerId !== null) {
+                        clearTimeout(timerId);
+                    }
+                    remaining -= 1;
+                    try {
+                        onUpdate(sortOmniResults(accumulated, kw), {
+                            done: remaining <= 0,
+                            pending: Math.max(0, remaining),
+                            total,
+                        });
+                    } catch { /* ignore subscriber error */ }
+                }
+            })
+        );
+
+        return sortOmniResults(accumulated, kw);
+    };
+
     if (typeof window === "undefined") {
         return {
             version: PROTOCOL_VERSION,
             registerProvider: (plugin, provider) => {
                 return registerOwned(registry, plugin, provider);
             },
-            search: async () => [],
+            search: (keyword: string) => runSearchStream(keyword, () => {}),
+            searchStream: runSearchStream,
         };
     }
 
@@ -6144,45 +7122,15 @@ function getOmnisearchHub(): LvOmnisearchHub {
         },
 
         async search(keyword: string): Promise<LvSearchResultItem[]> {
-            const kw = keyword.trim().toLowerCase();
-            if (!kw) return [];
+            return runSearchStream(keyword, () => {});
+        },
 
-            const results: LvSearchResultItem[] = [];
-            const providers = Array.from(registry.entries());
-
-            // 并发向所有已注册插件发起穿透检索，带 1000ms 超时熔断保护（finally 清除定时器句柄，消减挂起任务）
-            await Promise.all(
-                providers.map(async ([plugin, provider]) => {
-                    let timerId: any = null;
-                    try {
-                        const timeoutPromise = new Promise<LvSearchResultItem[]>((_, reject) => {
-                            timerId = setTimeout(() => reject(new Error("Timeout")), 1000);
-                        });
-                        const providerPromise = Promise.resolve(provider(kw));
-                        const items = await Promise.race([providerPromise, timeoutPromise]);
-                        if (Array.isArray(items)) {
-                            results.push(...items);
-                        }
-                    } catch (err) {
-                        console.warn(`[LvOmnisearch] 插件 ${plugin} 检索异常或超时:`, err);
-                    } finally {
-                        if (timerId !== null) {
-                            clearTimeout(timerId);
-                        }
-                    }
-                })
-            );
-
-            // 相关度排序：标题完全匹配 (3) > 前缀匹配 (2) > 包含匹配 (1)；平局时较短标题优先
-            return results.sort((a, b) => {
-                const aTitle = a.title.toLowerCase();
-                const bTitle = b.title.toLowerCase();
-                const aScore = aTitle === kw ? 3 : aTitle.startsWith(kw) ? 2 : aTitle.includes(kw) ? 1 : 0;
-                const bScore = bTitle === kw ? 3 : bTitle.startsWith(kw) ? 2 : bTitle.includes(kw) ? 1 : 0;
-                if (bScore !== aScore) return bScore - aScore;
-                return aTitle.length - bTitle.length;
-            });
-        }
+        async searchStream(
+            keyword: string,
+            onUpdate: (hits: LvSearchResultItem[], status: LvOmnisearchStreamStatus) => void
+        ): Promise<LvSearchResultItem[]> {
+            return runSearchStream(keyword, onUpdate);
+        },
     };
 
     window.__LV_OMNISEARCH__ = hub;
@@ -6198,6 +7146,21 @@ export const lvOmnisearch = {
     /** 跨插件穿透全文检索 */
     search(keyword: string): Promise<LvSearchResultItem[]> {
         return getOmnisearchHub().search(keyword);
+    },
+
+    /** 流式分段穿透检索：每个提供者完成即刻回调 onUpdate，消灭慢插件阻塞首屏 */
+    searchStream(
+        keyword: string,
+        onUpdate: (hits: LvSearchResultItem[], status: LvOmnisearchStreamStatus) => void
+    ): Promise<LvSearchResultItem[]> {
+        const hub = getOmnisearchHub();
+        if (typeof hub.searchStream === "function") {
+            return hub.searchStream(keyword, onUpdate);
+        }
+        return hub.search(keyword).then((hits) => {
+            onUpdate(hits, { done: true, pending: 0, total: 1 });
+            return hits;
+        });
     }
 };
 
@@ -6208,18 +7171,20 @@ export const lvOmnisearch = {
 const automationRules = new Map<string, LvAutomationRule>();
 
 function getStoredRuleStates(): Record<string, boolean> {
-    if (typeof localStorage === "undefined") return {};
+    const ls = getSafeLocalStorage();
+    if (!ls) return {};
     try {
-        const raw = localStorage.getItem(AUTOMATION_RULES_KEY);
+        const raw = ls.getItem(AUTOMATION_RULES_KEY);
         if (raw) return JSON.parse(raw);
     } catch { /* ignore */ }
     return {};
 }
 
 function saveStoredRuleStates(states: Record<string, boolean>): void {
-    if (typeof localStorage === "undefined") return;
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
     try {
-        localStorage.setItem(AUTOMATION_RULES_KEY, JSON.stringify(states));
+        ls.setItem(AUTOMATION_RULES_KEY, JSON.stringify(states));
     } catch { /* ignore */ }
 }
 
@@ -6312,4 +7277,174 @@ export const lvAutomation = {
     toggleRule(ruleId: string, enabled: boolean): void {
         getAutomationHub().toggleRule(ruleId, enabled);
     }
+};
+
+/* ========================================================================= */
+/* 14. 思源宿主新特性适配桥接 (SiYuan Host Native Bridge · v3.8.10+)         */
+/* ========================================================================= */
+
+/**
+ * 健壮的思源文档标题提取器（对齐 SiYuan 3.8.10+ 富文本文档标题与半角斜杠 `/` 保留规范 · Issue #20837）
+ * 彻底废弃易被截断的单纯 `hPath.split("/").pop()`：
+ * 1. 优先提取物理对象的 `title` / `name`（思源内核在标题包含 `/` 时会完整保留在 title/name 字段中）；
+ * 2. 次之提取 `hPath` / `path`，安全去除 `.sy` 尾缀并截取最后有效段；
+ * 3. 自动剥离行内富文本标签（如 `<span ...>`、`<em>`）与两端空格，并保证回退安全。
+ */
+export function safeDocTitleFromHPath(docOrPath: unknown, fallback = ""): string {
+    if (!docOrPath) return fallback;
+
+    let rawTitle = "";
+    let rawPath = "";
+
+    if (typeof docOrPath === "object" && docOrPath !== null) {
+        const obj = docOrPath as Record<string, unknown>;
+        if (typeof obj.title === "string" && obj.title.trim()) {
+            rawTitle = obj.title.trim();
+        } else if (typeof obj.name === "string" && obj.name.trim()) {
+            rawTitle = obj.name.trim();
+        }
+
+        if (!rawTitle) {
+            if (typeof obj.hPath === "string") rawPath = obj.hPath;
+            else if (typeof obj.hpath === "string") rawPath = obj.hpath;
+            else if (typeof obj.path === "string") rawPath = obj.path;
+        }
+    } else if (typeof docOrPath === "string") {
+        rawPath = docOrPath;
+    }
+
+    if (!rawTitle && rawPath) {
+        let clean = rawPath.trim().replace(/\.sy$/i, "");
+        if (clean.endsWith("/")) clean = clean.slice(0, -1);
+        const lastSlash = clean.lastIndexOf("/");
+        rawTitle = lastSlash >= 0 ? clean.slice(lastSlash + 1) : clean;
+    }
+
+    if (!rawTitle) return fallback;
+
+    // 剥离富文本 HTML 标签（对齐 3.8.10 富文本文档标题规范）
+    const plain = rawTitle.replace(/<[^>]+>/g, "").trim();
+    return plain || fallback;
+}
+
+function getHostSiyuan(): any {
+    try {
+        let req: any = null;
+        if (typeof globalThis !== "undefined") {
+            const g = globalThis as any;
+            if (typeof g.require === "function") req = g.require;
+            else if (g.window && typeof g.window.require === "function") req = g.window.require;
+        }
+        if (!req && typeof window !== "undefined") {
+            const w = window as any;
+            if (typeof w.require === "function") req = w.require;
+        }
+        if (typeof req === "function") {
+            try {
+                const s = req("siyuan");
+                if (s) return s;
+            } catch { /* ignore */ }
+        }
+        if (typeof globalThis !== "undefined") {
+            const g = globalThis as any;
+            if (g.siyuan) return g.siyuan;
+            if (g.window && g.window.siyuan) return g.window.siyuan;
+        }
+        if (typeof window !== "undefined") {
+            const w = window as any;
+            if (w.siyuan) return w.siyuan;
+        }
+    } catch { /* ignore */ }
+    return null;
+}
+
+/**
+ * 唤起官方文档树右键原生上下文菜单（SiYuan 3.8.10+ 新增 API · Issue #21219）
+ * 彻底解决自绘文档卡片/搜索结果无法触发原生重命名、移动、属性、导出菜单的问题：
+ * - 桌面端：在指定的鼠标坐标或目标元素位置弹出官方原生右键菜单；
+ * - 移动端：自动作为原生底部抽屉（Bottom Sheet）展现。
+ * 若当前运行于低版本思源（< 3.8.10），优雅返回 false 供调用方降级。
+ */
+export async function showDocTreeNativeMenu(options: {
+    notebookId: string;
+    docId?: string;
+    position?: { x: number; y: number; w?: number; h?: number };
+}): Promise<boolean> {
+    if (!options || !options.notebookId) return false;
+    try {
+        const siyuan = getHostSiyuan();
+        const fn = siyuan?.openDocTreeMenu;
+        if (typeof fn === "function") {
+            const res = await fn({
+                items: [{ notebookId: options.notebookId, id: options.docId }],
+                position: options.position,
+            });
+            return Boolean(res);
+        }
+    } catch (e) {
+        console.warn("[lvKit] showDocTreeNativeMenu 调用失败:", e);
+    }
+    return false;
+}
+
+/**
+ * 唤起思源原生资源/附件选择器（SiYuan 3.8.10+ 新增 API · Issue #21115）
+ * 支持异步选取库内图片、文件、音视频等资源，成功返回选中的相对资产路径（如 "assets/image-xxx.png"）。
+ */
+export async function openNativeAssetPicker(options?: {
+    exts?: string[];
+    match?: string;
+}): Promise<{ path: string } | null> {
+    try {
+        const siyuan = getHostSiyuan();
+        const fn = siyuan?.openAssetPicker;
+        if (typeof fn === "function") {
+            const res = await fn(options || {});
+            return res && typeof res.path === "string" ? { path: res.path } : null;
+        }
+    } catch (e) {
+        console.warn("[lvKit] openNativeAssetPicker 调用失败:", e);
+    }
+    return null;
+}
+
+export type NativeDockDirection = "Left" | "Right" | "Bottom" | "left" | "right" | "bottom";
+
+/**
+ * 切换思源原生停靠栏展开/收起状态（SiYuan 3.8.10+ API · Issue #21097）
+ */
+export function toggleNativeDock(dock: NativeDockDirection, visible?: boolean): boolean {
+    try {
+        const siyuan = getHostSiyuan();
+        const norm = (dock.charAt(0).toUpperCase() + dock.slice(1).toLowerCase()) as "Left" | "Right" | "Bottom";
+        const fn = siyuan?.[`toggle${norm}Dock`];
+        if (typeof fn === "function") {
+            fn(visible);
+            return true;
+        }
+    } catch { /* ignore */ }
+    return false;
+}
+
+/**
+ * 查询思源原生停靠栏当前可见性（SiYuan 3.8.10+ API · Issue #21097）
+ */
+export function isNativeDockVisible(dock: NativeDockDirection): boolean | null {
+    try {
+        const siyuan = getHostSiyuan();
+        const norm = (dock.charAt(0).toUpperCase() + dock.slice(1).toLowerCase()) as "Left" | "Right" | "Bottom";
+        const fn = siyuan?.[`is${norm}DockVisible`];
+        if (typeof fn === "function") {
+            return Boolean(fn());
+        }
+    } catch { /* ignore */ }
+    return null;
+}
+
+export const lvHostBridge = {
+    safeDocTitleFromHPath,
+    showDocTreeNativeMenu,
+    openNativeAssetPicker,
+    toggleNativeDock,
+    isNativeDockVisible,
 };
