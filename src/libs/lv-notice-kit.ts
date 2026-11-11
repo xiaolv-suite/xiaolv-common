@@ -512,7 +512,7 @@ const STYLES = `
     font-size: 14px;
     line-height: 1;
     border-radius: 4px;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .lv-notice-close-btn:hover {
     background: var(--lv-nt-pill-bg);
@@ -3994,7 +3994,7 @@ function ensureDesktopStyles(): void {
   border-radius: 5px;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.14s ease;
+  transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
 .lv-pop-view-tab.active {
   background: var(--lv-lp-card-bg);
@@ -4016,7 +4016,7 @@ function ensureDesktopStyles(): void {
   color: var(--lv-lp-text);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
   font-family: inherit;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, color 0.14s ease;
   user-select: none;
 }
 .lv-pop-sub-btn:hover,
@@ -4050,7 +4050,7 @@ function ensureDesktopStyles(): void {
   background: var(--lv-lp-panel-bg);
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
   flex-shrink: 0;
-  transition: all 0.16s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 .lv-pop-search-bar:focus-within {
   background: var(--lv-lp-card-bg);
@@ -4116,7 +4116,7 @@ function ensureDesktopStyles(): void {
   white-space: nowrap;
   flex-shrink: 0;
   font-family: inherit;
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, color 0.14s ease;
 }
 .lv-pop-strip-chip:hover {
   border-color: var(--lv-lp-accent);
@@ -4139,7 +4139,7 @@ function ensureDesktopStyles(): void {
   box-shadow: var(--lv-lp-card-shadow);
   cursor: pointer;
   user-select: none;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background 0.18s ease, background-image 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
   outline: none;
   min-width: 0;
 }
@@ -4270,7 +4270,7 @@ function ensureDesktopStyles(): void {
   width: 100%;
   min-width: 0;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
-  transition: all 0.14s ease;
+  transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, color 0.14s ease;
 }
 .lv-pop-action-row:hover {
   background: var(--lv-lp-card-hover-bg);
@@ -4293,7 +4293,7 @@ function ensureDesktopStyles(): void {
   width: 100%;
   text-align: left;
   font-family: inherit;
-  transition: all 0.14s ease;
+  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 .lv-pop-hit-item:hover,
 .lv-pop-hit-item.focused {
@@ -4360,7 +4360,7 @@ function ensureDesktopStyles(): void {
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   user-select: none;
 }
 .lv-pop-today-card:hover {

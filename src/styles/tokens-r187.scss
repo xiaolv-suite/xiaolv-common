@@ -471,7 +471,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
     font-weight: var(--xlc-weight-semibold);
     cursor: pointer;
     box-shadow: none;
-    transition: all var(--xlc-dur-fast) ease;
+    transition: transform var(--xlc-dur-fast) ease, background var(--xlc-dur-fast) ease, border-color var(--xlc-dur-fast) ease, box-shadow var(--xlc-dur-fast) ease, color var(--xlc-dur-fast) ease, opacity var(--xlc-dur-fast) ease;
 
     &:hover {
       background: var(--xlc-lavender);
