@@ -1298,6 +1298,13 @@
       pointer-events: auto;
     }
 
+    @media (hover: none), (pointer: coarse) {
+      .xlc-row-action-wrap {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    }
+
     &--active .xlc-row-action:hover { background-color: transparent; }
   }
 
@@ -4296,6 +4303,7 @@
   max-height: 100dvh !important;
   margin: 0 !important;
   border-radius: 0 !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   box-sizing: border-box;
 
   > .b3-dialog__close {
@@ -4370,6 +4378,7 @@
     max-height: var(--xlc-vv-height, 100dvh) !important;
     margin: 0 !important;
     border-radius: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
     box-sizing: border-box;
 
     > .b3-dialog__close {
@@ -4688,7 +4697,7 @@
   .xlc-list.xlc-list--virtual .xlc-row { min-height: 64px; height: 64px; }
 
   .xlc-dialog:not(.xlc-dialog--mobile) {
-    .xlc-list { width: 100%; border-right: none; }
+    .xlc-list { width: 100%; min-width: 0; border-right: none; }
     .xlc-pane { display: none; }
     .xlc-kbdrow { display: none; }
   }
@@ -5124,6 +5133,7 @@
   .xlc-list {
     flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
     width: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -5134,6 +5144,7 @@
 
   .xlc-row {
     align-items: center;
+    flex-wrap: wrap;
     border: 1px solid var(--b3-border-color);
     border-radius: var(--xlc-radius);
     margin-bottom: 6px;
@@ -5142,6 +5153,11 @@
     touch-action: manipulation;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+
+    .xlc-row-main {
+      flex: 1 1 180px;
+      min-width: 0;
+    }
 
     &:last-child { border-bottom: 1px solid var(--b3-border-color); }
 
@@ -5171,6 +5187,12 @@
       margin-top: 3px;
     }
 
+    .xlc-row-action-wrap {
+      opacity: 1;
+      pointer-events: auto;
+      flex-wrap: wrap;
+    }
+
     // 移动端操作按钮保持紧凑可触控尺寸，避免两个 44px 按钮吞掉半行标题宽度
     .xlc-row-action {
       opacity: 1;
@@ -5181,6 +5203,15 @@
       margin: 0;
       font-size: var(--xlc-font-base);
       touch-action: manipulation;
+
+      &--pill {
+        width: auto !important;
+        min-width: auto !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 10px !important;
+        font-size: 12px !important;
+      }
     }
   }
 
