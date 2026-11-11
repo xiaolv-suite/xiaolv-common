@@ -6418,8 +6418,8 @@
     gap: 6px;
 
     .b3-button {
-      min-height: 28px;
-      padding: 2px 8px;
+      min-height: 32px;
+      padding: 4px 9px;
       font-size: var(--xlc-font-xs);
       white-space: nowrap;
       flex-shrink: 0;
@@ -6538,7 +6538,8 @@
       .xlc-sync-strategy-select {
         min-width: min(220px, 100%);
         max-width: 100%;
-        font-size: 12px;
+        /* ≥16px 防 iOS 聚焦自动放大 */
+        font-size: 16px;
       }
 
       .xlc-mirror-checkbox-label {

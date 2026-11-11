@@ -1389,7 +1389,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
     z-index: 4;
     background: var(--xlc-canvas);
     padding-top: var(--xlc-space-3);
-    padding-bottom: var(--xlc-space-1);
+    padding-bottom: max(var(--xlc-space-1), env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -1439,7 +1439,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
       z-index: 4;
       background: var(--xlc-canvas);
       padding-top: var(--xlc-space-2);
-      padding-bottom: var(--xlc-space-1);
+      padding-bottom: max(var(--xlc-space-1), env(safe-area-inset-bottom, 0px));
     }
   }
 
