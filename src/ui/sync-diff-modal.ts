@@ -472,9 +472,16 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
         });
 
         const searchInput = container.querySelector(".xlc-diff-search-input") as HTMLInputElement | null;
+        let filterRenderTimer: ReturnType<typeof setTimeout> | undefined;
         searchInput?.addEventListener("input", () => {
             searchKeyword = searchInput.value;
-            updateView();
+            // 差异表重建防抖：连续输入只触发一次全量视图更新
+            if (filterRenderTimer) clearTimeout(filterRenderTimer);
+            filterRenderTimer = setTimeout(() => {
+                filterRenderTimer = undefined;
+                if (!searchInput.isConnected) return;
+                updateView();
+            }, 150);
         });
 
         const cancelBtn = container.querySelector(".b3-button--cancel");

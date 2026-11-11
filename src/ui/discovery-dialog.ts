@@ -257,6 +257,17 @@ export class DiscoveryDialog implements DiscoveryDialogController {
     private targetNotebookId = "";
     private allConfirmed = false;
     private scopeLoadSeq = 0;
+    private filterRenderTimer?: ReturnType<typeof setTimeout>;
+
+    /* 列表重渲染防抖：连续输入只触发一次，避免每键全量重建长列表 */
+    private scheduleFilterRender(delay = 180): void {
+        if (this.filterRenderTimer) clearTimeout(this.filterRenderTimer);
+        this.filterRenderTimer = setTimeout(() => {
+            this.filterRenderTimer = undefined;
+            if (this.closed) return;
+            this.renderList();
+        }, delay);
+    }
     private page = 0;
     private readonly pageSize = 100;
     private undoableBatchIds = new Set<string>();
@@ -340,6 +351,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
                 this.surfaceUnregister = undefined;
                 if (this.closed) return;
                 this.closed = true;
+                if (this.filterRenderTimer) { clearTimeout(this.filterRenderTimer); this.filterRenderTimer = undefined; }
                 this.saveViewDialog?.destroy();
                 this.saveViewDialog = null;
                 this.closeConfirmationDialog?.destroy();
@@ -751,7 +763,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.filterText.addEventListener("input", () => {
             this.filter.text = this.filterText?.value.trim().toLocaleLowerCase() ?? "";
             this.page = 0;
-            this.renderList();
+            this.scheduleFilterRender();
         });
         filters.appendChild(this.filterText);
         this.filterTag = document.createElement("input");
@@ -762,7 +774,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.filterTag.addEventListener("input", () => {
             this.filter.tag = this.filterTag?.value.trim().toLocaleLowerCase() ?? "";
             this.page = 0;
-            this.renderList();
+            this.scheduleFilterRender();
         });
         if (this.filter.tag) this.filterTag.value = this.options.initialTag?.trim().slice(0, 64) ?? "";
         filters.appendChild(this.filterTag);

@@ -33,8 +33,9 @@ test("UI/UX Pro Max · 设置中心吸顶胶囊导航 Tablist / Tab 语义与状
     assert.match(settingsTs, /pill\.setAttribute\("role",\s*"tab"\);/);
     assert.match(settingsTs, /pill\.setAttribute\("aria-selected",\s*isActive \? "true" : "false"\);/);
     assert.match(settingsTs, /pill\.setAttribute\("aria-controls",\s*tab\.id\);/);
-    assert.match(settingsTs, /p\.setAttribute\("aria-selected",\s*"false"\);/);
-    assert.match(settingsTs, /pill\.setAttribute\("aria-selected",\s*"true"\);/);
+    // R-统一激活入口：点击与 scroll-spy 共用 setActiveNav，遍历所有胶囊互斥置位（true/false 成对出现）
+    assert.match(settingsTs, /const setActiveNav = \(id: string\) => \{/);
+    assert.match(settingsTs, /p\.setAttribute\("aria-selected",\s*on \? "true" : "false"\);/);
 });
 
 test("UI/UX Pro Max · 触控靶点、可见焦点轮廓 (:focus-visible) 规范断言", () => {

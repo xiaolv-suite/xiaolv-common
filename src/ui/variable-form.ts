@@ -65,7 +65,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         setTimeout(() => {
             try {
                 if (typeof target.scrollIntoView === "function") {
-                    target.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+                    target.scrollIntoView({ block: "center", behavior: (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) ? "auto" : "smooth" });
                 }
             } catch {
                 try { (target as any).scrollIntoView?.(); } catch { /* ignore */ }
