@@ -175,7 +175,7 @@ test("Mobile Fix: 双顶栏消除、visualViewport 软键盘监听清理、筛�
 
     // 2) visualViewport 绑定与移除监听 + data-keyboard-open 软键盘减负
     assert.ok(dialogSrc.includes("addEventListener(\"resize\", syncViewport)") && dialogSrc.includes("removeEventListener(\"resize\", syncViewport)"));
-    assert.ok(dialogSrc.includes("addEventListener(\"scroll\", syncViewport)") && dialogSrc.includes("removeEventListener(\"scroll\", syncViewport)"));
+    assert.ok(dialogSrc.includes("addEventListener(\"scroll\", syncViewport, { passive: true })") && dialogSrc.includes("removeEventListener(\"scroll\", syncViewport)"));
     assert.ok(dialogSrc.includes("dataset.keyboardOpen = \"true\""));
     assert.ok(scss.includes("[data-keyboard-open=\"true\"]"));
 

@@ -175,7 +175,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
         };
         syncKeyboardViewport();
         vv.addEventListener("resize", syncKeyboardViewport);
-        vv.addEventListener("scroll", syncKeyboardViewport);
+        vv.addEventListener("scroll", syncKeyboardViewport, { passive: true });
         window.addEventListener("resize", syncKeyboardViewport, {passive: true});
         vvCleanup = () => {
             vv.removeEventListener("resize", syncKeyboardViewport);

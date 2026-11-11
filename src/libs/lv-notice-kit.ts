@@ -7027,7 +7027,7 @@ function openMobileSheet(): void {
             }
         };
         window.visualViewport.addEventListener("resize", syncVisualViewport);
-        window.visualViewport.addEventListener("scroll", syncVisualViewport);
+        window.visualViewport.addEventListener("scroll", syncVisualViewport, { passive: true });
         sheetViewportCleanup = () => {
             window.visualViewport?.removeEventListener("resize", syncVisualViewport);
             window.visualViewport?.removeEventListener("scroll", syncVisualViewport);

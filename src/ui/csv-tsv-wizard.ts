@@ -69,7 +69,7 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
     };
     if (typeof window !== "undefined" && window.visualViewport) {
         window.visualViewport.addEventListener("resize", handleViewport);
-        window.visualViewport.addEventListener("scroll", handleViewport);
+        window.visualViewport.addEventListener("scroll", handleViewport, { passive: true });
     }
     const body = getDialogBody(dialog.element);
     if (!body) {

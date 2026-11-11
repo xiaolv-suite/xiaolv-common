@@ -439,7 +439,7 @@ export class CommonSearchDialog {
         syncViewport();
         if (vv && typeof vv.addEventListener === "function") {
             vv.addEventListener("resize", syncViewport);
-            vv.addEventListener("scroll", syncViewport);
+            vv.addEventListener("scroll", syncViewport, { passive: true });
         }
         if (typeof window.addEventListener === "function") {
             window.addEventListener("resize", syncViewport);
