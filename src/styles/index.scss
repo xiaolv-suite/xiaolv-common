@@ -8533,3 +8533,29 @@
     position: static !important;
   }
 }
+
+// ══════════ 按钮专项：按压反馈 / 忙碌态拦截 / 文字显示 ══════════
+:is(.xlc-dialog, .xlc-form, .xlc-varform, .xlc-settings, .xlc-panel, .xlc-dock-view) {
+    /* 主次按钮按压反馈（禁用/忙碌态不响应） */
+    :is(.b3-button, button):not(:disabled):not([aria-busy="true"]):active {
+        transform: scale(0.97);
+    }
+
+    /* 忙碌态：拦截连点 + 视觉降透明 */
+    button[aria-busy="true"] {
+        pointer-events: none;
+        opacity: 0.72;
+    }
+
+    button {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    /* 设置行内文字按钮：长文案单行截断（完整文案由 title 兜底） */
+    .xlc-setting-row :is(.b3-button, .xlc-lib-btn-wrap .b3-button) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
