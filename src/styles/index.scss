@@ -8559,3 +8559,15 @@
         white-space: nowrap;
     }
 }
+
+// ══════════ 下拉菜单专项：选项可读性 / 光标 ══════════
+:is(.xlc-dialog, .xlc-form, .xlc-varform, .xlc-settings, .xlc-panel, .xlc-dock-view) {
+  :is(select, .b3-select) {
+    cursor: pointer;
+  }
+
+  :is(select, .b3-select) :is(option, optgroup) {
+    background-color: var(--xlc-surface, var(--b3-theme-background));
+    color: var(--xlc-ink, var(--b3-theme-on-background));
+  }
+}
