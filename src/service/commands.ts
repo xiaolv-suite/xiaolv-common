@@ -413,7 +413,7 @@ export class HostBridge implements IHostBridge {
             if (this.isMobile()) {
                 const openMobile = (siyuan as any).openMobileFileById;
                 if (typeof openMobile === "function") {
-                    openMobile(this.app, targetId);
+                    openMobile(this.app, targetId, blockId ? ["cb-get-focus", "cb-get-hl"] : undefined);
                     return true;
                 }
             }

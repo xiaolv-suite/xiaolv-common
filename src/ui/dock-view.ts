@@ -1112,7 +1112,10 @@ export class DockView {
         if (typeof openBtn.setAttribute === "function") {
             openBtn.setAttribute("aria-label", openBtn.title);
         }
-        openBtn.addEventListener("click", () => void this.deps.openSource(entry.id));
+        openBtn.addEventListener("click", () => {
+            this.closeDrawer();
+            void this.deps.openSource(entry.id);
+        });
         foot.appendChild(openBtn);
 
         this.drawerContainer.appendChild(foot);

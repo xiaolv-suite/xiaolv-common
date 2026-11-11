@@ -4855,7 +4855,11 @@ export class CommonSearchDialog {
             this.primaryBusy = true;
             try {
                 if (!this.pinWindow) this.destroy();
-                await this.deps.openSource(entry.id);
+                if (entry.isOmni && this.deps.openDocBlock) {
+                    await this.deps.openDocBlock(resolveEntryBlockId(entry) || entry.id);
+                } else {
+                    await this.deps.openSource(entry.id);
+                }
             } finally {
                 this.primaryBusy = false;
             }
@@ -7562,8 +7566,12 @@ export class CommonSearchDialog {
             this.toggleMultiSelectMode();
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
-            // Alt+M: 复制条目原始 Markdown 语法到剪贴板
+            // Alt+M: 切换极窄迷你模式；选中条目时复制条目原始 Markdown 语法到剪贴板
             e.preventDefault();
+            if (this.miniMode) {
+                this.toggleMiniMode();
+                return;
+            }
             if (this.quickLookOpen) this.closeQuickLook();
             const entry = this.results[this.activeIndex];
             if (entry) {
@@ -7571,6 +7579,8 @@ export class CommonSearchDialog {
                 await this.deps.copyProviderPayload(text || entry.summary || "");
                 if (!this.pinWindow) this.destroy();
                 this.deps.notify?.("info", this.pinWindow ? "已复制原始 Markdown（窗口已固定，可连续取用）" : "已复制原始 Markdown 语法到剪贴板");
+            } else {
+                this.toggleMiniMode();
             }
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "j" || e.key === "J")) {
@@ -7602,11 +7612,6 @@ export class CommonSearchDialog {
             // Alt+V: 切换搜索结果显示密度（紧凑单行 / 舒适卡片 · CAND-012 / TODO-FEAT-011）
             e.preventDefault();
             this.toggleDensity();
-            return;
-        } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
-            // Alt+M: 切换极窄悬浮迷你模式（CAND-018 / TODO-FEAT-017）
-            e.preventDefault();
-            this.toggleMiniMode();
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "a" || e.key === "A")) {
             // Alt+A: 切换当前条目的暂存托盘状态（CAND-019 / TODO-FEAT-018）

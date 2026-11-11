@@ -398,9 +398,9 @@ body.dark {
 
 #lv-notice-host {
     position: fixed;
-    right: 20px;
-    bottom: max(38px, calc(var(--b3-toolbar-height, 0px) + 12px));
-    z-index: 999;
+    right: max(20px, env(safe-area-inset-right, 0px));
+    bottom: max(38px, calc(var(--b3-toolbar-height, 0px) + 12px + env(safe-area-inset-bottom, 0px)));
+    z-index: 2100;
     pointer-events: none;
     font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     display: flex;
@@ -1239,9 +1239,9 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         try {
             const currentZ = typeof window !== "undefined" && (window as any).siyuan?.zIndex;
             if (typeof currentZ === "number") {
-                hostEl.style.zIndex = String(Math.max(999, currentZ + 50));
+                hostEl.style.zIndex = String(Math.max(2100, currentZ + 50));
             } else {
-                hostEl.style.zIndex = "999";
+                hostEl.style.zIndex = "2100";
             }
         } catch { /* ignore */ }
         hostEl.innerHTML = "";
@@ -5122,17 +5122,17 @@ export function openDesktopLaunchpadPopover(
                     const rawRight = Math.round(winW - (rect.right || 0) - 8);
                     const rightOffset = Math.max(12, Math.min(rawRight, maxRightOffset));
                     popover.style.right = `${rightOffset}px`;
-                    const availableHeight = Math.max(320, winH - rect.bottom - 16);
+                    const availableHeight = Math.max(180, Math.min(winH - rect.bottom - 16, winH - 24));
                     popover.style.maxHeight = `${availableHeight}px`;
                 } else {
                     popover.style.top = "42px";
                     popover.style.right = "16px";
-                    popover.style.maxHeight = `${Math.max(320, winH - 58)}px`;
+                    popover.style.maxHeight = `${Math.max(180, winH - 58)}px`;
                 }
             } else {
                 popover.style.top = "42px";
                 popover.style.right = "16px";
-                popover.style.maxHeight = `${Math.max(320, winH - 58)}px`;
+                popover.style.maxHeight = `${Math.max(180, winH - 58)}px`;
             }
             // 动态层级：跟随思源递增的 window.siyuan.zIndex，保证盖过内容流但不压住原生 dialog/搜索
             try {

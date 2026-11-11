@@ -7108,6 +7108,19 @@
       z-index: 2;
     }
 
+    @media (hover: none), (pointer: coarse) {
+      .xlc-dock-row-actions {
+        opacity: 0.95;
+        pointer-events: auto;
+      }
+      .xlc-dock-act-btn {
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        min-height: 36px !important;
+      }
+    }
+
     .xlc-dock-act-btn {
       width: 24px;
       height: 24px;
