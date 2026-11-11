@@ -400,7 +400,7 @@ body.dark {
     position: fixed;
     right: max(20px, env(safe-area-inset-right, 0px));
     bottom: max(38px, calc(var(--b3-toolbar-height, 0px) + 12px + env(safe-area-inset-bottom, 0px)));
-    z-index: 2100;
+    z-index: 999;
     pointer-events: none;
     font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     display: flex;
@@ -1238,10 +1238,10 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         // 动态提升 z-index，保障通知全局浮于所有弹窗/抽屉/蒙层之上
         try {
             const currentZ = typeof window !== "undefined" && (window as any).siyuan?.zIndex;
-            if (typeof currentZ === "number") {
-                hostEl.style.zIndex = String(Math.max(2100, currentZ + 50));
+            if (typeof currentZ === "number" && currentZ > 0) {
+                hostEl.style.zIndex = String(Math.max(1050, currentZ + 50));
             } else {
-                hostEl.style.zIndex = "2100";
+                hostEl.style.zIndex = "999";
             }
         } catch { /* ignore */ }
         hostEl.innerHTML = "";
