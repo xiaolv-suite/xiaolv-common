@@ -8592,3 +8592,17 @@
     }
   }
 }
+
+/* R14 桌面 hover 收口（触屏不生效） */
+@media (hover: hover) {
+    .xlc-dialog-close-btn:hover,
+    .xlc-banner-close:hover,
+    .xlc-menu-close-btn:hover,
+    .xlc-dock-drawer-close:hover {
+        background: var(--b3-theme-surface-lighter);
+    }
+    .xlc-top-chip:hover,
+    .xlc-breadcrumb-item:hover {
+        background: color-mix(in srgb, var(--xlc-accent) 8%, transparent);
+    }
+}
