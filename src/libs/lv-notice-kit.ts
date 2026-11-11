@@ -638,6 +638,7 @@ body.dark {
     color: #ef4444 !important;
 }
 
+:is(body.body--mobile, [data-is-mobile="true"]) #lv-notice-host,
 @media (max-width: 640px) {
     #lv-notice-host {
         right: 0;
@@ -645,7 +646,7 @@ body.dark {
         top: calc(var(--mobile-topbar-height, 48px) + env(safe-area-inset-top, 0px) + 8px);
         bottom: auto;
         align-items: center;
-        padding: 0 12px;
+        padding: 0 max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
         /* 小屏堆叠上限：3 张长卡（每张可展开至全文）会占近半屏遮挡正文——
            限高滚动收纳，最新卡在可视区顶部，旧卡滚动可达 */
         max-height: calc(100dvh - 140px);
@@ -738,7 +739,7 @@ body.dark {
     border-radius: 22px 22px 0 0;
     border-top: 1px solid var(--lv-lp-border-strong);
     box-shadow: 0 -16px 48px rgba(15, 23, 42, 0.24);
-    padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 6px max(12px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
     box-sizing: border-box;
     animation: lvSheetUp 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
     will-change: transform;
@@ -3053,6 +3054,13 @@ export function isMobileFrontend(): boolean {
     try {
         const syMobile = (globalThis as { siyuan?: { mobile?: unknown } }).siyuan?.mobile;
         if (syMobile === true || (typeof syMobile === "object" && syMobile !== null)) return true;
+    } catch { /* ignore */ }
+    try {
+        const syConfig = (globalThis as { siyuan?: { config?: { system?: { container?: string; isMobile?: boolean } } } }).siyuan?.config?.system;
+        if (syConfig?.container === "mobile" || syConfig?.isMobile) return true;
+    } catch { /* ignore */ }
+    try {
+        if (typeof document !== "undefined" && (document.body?.classList?.contains("body--mobile") || Boolean(document.querySelector(".toolbar__mobile")))) return true;
     } catch { /* ignore */ }
     if (typeof navigator === "undefined") return false;
     const ua = navigator.userAgent || "";
