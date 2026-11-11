@@ -2611,7 +2611,9 @@
   gap: var(--xlc-space-1);
   padding: var(--xlc-space-2) 0;
   margin-bottom: var(--xlc-space-3);
-  background: var(--b3-theme-background);
+  background: color-mix(in srgb, var(--b3-theme-surface, var(--b3-theme-background)) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   overflow-x: auto;
   scrollbar-width: none;
   border-bottom: 1px solid var(--xlc-line);
@@ -2640,7 +2642,7 @@
     }
 
     &:active {
-      transform: scale(0.98);
+      transform: scale(0.96);
     }
 
     &:focus-visible {
@@ -4508,6 +4510,8 @@
     flex-wrap: nowrap !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    padding-inline: calc(var(--xlc-space-2) + env(safe-area-inset-left, 0px)) calc(var(--xlc-space-2) + env(safe-area-inset-right, 0px)) !important;
 
     .xlc-settings-nav-pill {
       flex-shrink: 0;
@@ -4515,6 +4519,8 @@
   }
 
   .xlc-settings {
+    padding-bottom: calc(var(--xlc-space-5) + env(safe-area-inset-bottom, 0px)) !important;
+
     .xlc-card {
       padding: var(--xlc-space-3) var(--xlc-space-3);
     }
