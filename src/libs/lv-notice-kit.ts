@@ -989,6 +989,13 @@ const STYLES = `
 }
 @media (prefers-reduced-motion: reduce) {
     #lv-launchpad-sheet-mask, #lv-launchpad-sheet-mask .lv-sheet { animation: none; }
+    /* 通知卡滑入、胶囊弹出、桌面罗盘 popover 入场：系统开启「减弱动态效果」时全部直出 */
+    #lv-notice-host .lv-notice-card,
+    #lv-notice-host .lv-notice-capsule,
+    .lv-desktop-launchpad-popover {
+        animation: none !important;
+        transition: none !important;
+    }
 }
 
 /* ===== 小驴罗盘悬浮球（Compass FAB）：拖拽 / 贴边 / 闲置半隐 / 沉浸模式 ===== */

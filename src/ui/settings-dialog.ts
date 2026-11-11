@@ -233,7 +233,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
                 // sticky 导航条跳转落点补偿（R431）：按实际吸顶高度写入 scroll-margin，
                 // 否则目标章节标题会被导航条盖住
                 root.style.setProperty("--xlc-nav-h", `${navBar.offsetHeight + 8}px`);
-                el.scrollIntoView({behavior: "smooth", block: "start"});
+                el.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"});
             }
         });
         pill.addEventListener("keydown", (e) => {
