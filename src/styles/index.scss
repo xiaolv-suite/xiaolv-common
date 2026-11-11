@@ -3772,6 +3772,52 @@
   padding-top: 0;
 }
 
+// ══ 移动端软键盘弹起（守卫：settings-dialog.ts 标记 lv-keyboard-open）：
+//    设置弹窗随 visualViewport 收缩，焦点输入框不再被键盘遮挡 ══
+.b3-dialog.lv-keyboard-open .b3-dialog__container.xlc-settings-root-host,
+.b3-dialog.lv-keyboard-open:has(> .b3-dialog__body > .xlc-settings) .b3-dialog__container {
+  height: var(--lv-vv-h, 100dvh) !important;
+  max-height: var(--lv-vv-h, 100dvh) !important;
+}
+
+// ══ 输入框专项精修：光标 / 占位符 / 自旋钮 / 搜索清除钮 / 禁用态 ══
+:is(.xlc-dialog, .xlc-form, .xlc-varform, .xlc-settings, .b3-dialog__container.xlc-form-host) {
+  :is(input[type="text"], input[type="search"], input[type="number"], input[type="time"], input[type="date"], input:not([type]), textarea, .b3-text-field) {
+    caret-color: var(--xlc-accent, var(--b3-theme-primary));
+    min-width: 0;
+  }
+
+  :is(input, textarea, .b3-text-field)::placeholder {
+    color: var(--xlc-muted, var(--b3-theme-on-surface-light));
+    opacity: 1;
+  }
+
+  :is(input, textarea, select, .b3-text-field, .b3-select):disabled,
+  :is(input, textarea):read-only {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--xlc-accent, var(--b3-theme-primary)) 26%, transparent);
+  }
+}
+
 // ---------- 剪贴板转正常用微弹窗宿主 (.xlc-promote-clip-host) ----------
 .b3-dialog__container.xlc-promote-clip-host {
   max-width: min(480px, 92vw);
@@ -5016,6 +5062,21 @@
 
   // 移动端搜索输入 16px：低于该值 iOS 聚焦时整页缩放（R109）
   .xlc-search-input { font-size: 16px; }
+
+  // ══ 输入框专项（移动端）：全部文本输入 ≥16px 防 iOS 聚焦缩放 + 触控高度基线 ══
+  :is(.xlc-dialog, .xlc-form, .xlc-varform, .b3-dialog__container.xlc-form-host) {
+    :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, .b3-text-field, .b3-select, select) {
+      font-size: 16px !important;
+    }
+
+    :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .b3-text-field, .b3-select, select) {
+      min-height: 38px;
+    }
+
+    textarea {
+      min-height: 72px;
+    }
+  }
 
   // 触控命中：清空 × 提至 38px 大热区
   .xlc-search-clear {

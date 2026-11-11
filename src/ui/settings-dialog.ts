@@ -146,14 +146,43 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     activeSettingsDialog = null;
     const t = ctx.t;
     const isMobileModal = isMobileDialogViewport();
+    // 移动端软键盘视口守卫：键盘弹起时同步 --lv-vv-h 并标记 lv-keyboard-open（销毁时解绑）
+    let vvCleanup: (() => void) | undefined;
     const dialog = new Dialog({
         title: t("openSettings"),
         content: "",
         width: isMobileModal ? "100vw" : "min(720px, 92vw)",
         height: isMobileModal ? "100dvh" : "min(860px, 92vh)", // 固定高：展开/收起/提示行显隐不再顶跳弹窗（R146）
+        destroyCallback: () => {
+            vvCleanup?.();
+            vvCleanup = undefined;
+            if (activeSettingsDialog === dialog) activeSettingsDialog = null;
+        },
     });
     activeSettingsDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
+    if (isMobileModal && typeof window !== "undefined" && window.visualViewport) {
+        const vv = window.visualViewport;
+        let baseHeight = Math.max(window.innerHeight || 0, Math.round(vv.height || 0));
+        const syncKeyboardViewport = () => {
+            if (!dialog.element?.isConnected) return;
+            const currentInner = window.innerHeight || 0;
+            const currentH = Math.round(vv.height || currentInner);
+            if (currentH > baseHeight) baseHeight = currentH;
+            dialog.element.style.setProperty("--lv-vv-h", `${currentH}px`);
+            const keyboardOpen = Math.max(baseHeight, currentInner) - currentH > 110;
+            dialog.element.classList.toggle("lv-keyboard-open", keyboardOpen);
+        };
+        syncKeyboardViewport();
+        vv.addEventListener("resize", syncKeyboardViewport);
+        vv.addEventListener("scroll", syncKeyboardViewport);
+        window.addEventListener("resize", syncKeyboardViewport, {passive: true});
+        vvCleanup = () => {
+            vv.removeEventListener("resize", syncKeyboardViewport);
+            vv.removeEventListener("scroll", syncKeyboardViewport);
+            window.removeEventListener("resize", syncKeyboardViewport);
+        };
+    }
     mountPlatformDialogTitleWrap(dialog.element, t("openSettings"));
     adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
