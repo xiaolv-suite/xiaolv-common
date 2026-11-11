@@ -7123,7 +7123,7 @@
     }
 
     .xlc-badge {
-      font-size: 9px;
+      font-size: 10px;
       padding: 1px 4px;
       flex-shrink: 0;
       line-height: 1.2;
@@ -8569,5 +8569,16 @@
   :is(select, .b3-select) :is(option, optgroup) {
     background-color: var(--xlc-surface, var(--b3-theme-background));
     color: var(--xlc-ink, var(--b3-theme-on-background));
+  }
+}
+
+// ══════════ 文字专项：等宽数字对齐 / 行高节奏 / 换行保护 ══════════
+:is(.xlc-dialog, .xlc-form, .xlc-varform, .xlc-settings, .xlc-panel, .xlc-dock-view) {
+  font-variant-numeric: tabular-nums;
+
+  .xlc-page-intro,
+  .xlc-form-hint {
+    line-height: 1.6;
+    overflow-wrap: anywhere;
   }
 }
