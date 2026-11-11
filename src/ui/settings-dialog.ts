@@ -180,6 +180,14 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
         {id: "xlc-settings-ext", label: "⚡ 外部联动"},
         {id: "xlc-settings-data", label: "💾 数据导入导出"},
     ];
+    // 激活态统一入口：点击导航与滚动感知（scroll-spy）共用，避免两处口径漂移。
+    const setActiveNav = (id: string) => {
+        navBar.querySelectorAll<HTMLButtonElement>(".xlc-settings-nav-pill").forEach((p) => {
+            const on = p.getAttribute("aria-controls") === id;
+            p.classList.toggle("xlc-settings-nav-pill--active", on);
+            p.setAttribute("aria-selected", on ? "true" : "false");
+        });
+    };
     for (const tab of navTabs) {
         const pill = document.createElement("button");
         pill.type = "button";
@@ -190,12 +198,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
         pill.setAttribute("aria-selected", isActive ? "true" : "false");
         pill.setAttribute("aria-controls", tab.id);
         pill.addEventListener("click", () => {
-            navBar.querySelectorAll(".xlc-settings-nav-pill").forEach((p) => {
-                p.classList.remove("xlc-settings-nav-pill--active");
-                p.setAttribute("aria-selected", "false");
-            });
-            pill.classList.add("xlc-settings-nav-pill--active");
-            pill.setAttribute("aria-selected", "true");
+            setActiveNav(tab.id);
             const el = root.querySelector<HTMLElement>(`#${tab.id}`);
             if (el) {
                 // sticky 导航条跳转落点补偿（R431）：按实际吸顶高度写入 scroll-margin，
@@ -344,6 +347,48 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     ecoOverviewBadge.textContent = lvEcosystem.getStatusBadgeText();
     root.appendChild(ecoOverviewBadge);
     body.appendChild(root);
+
+    // 滚动感知（分类排版）：滚动时让吸顶胶囊跟随当前分区高亮，长表单不再"盲滚"。
+    const findScroller = (): HTMLElement | null => {
+        let node: HTMLElement | null = root;
+        while (node && node !== document.body) {
+            const style = getComputedStyle(node);
+            if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) return node;
+            node = node.parentElement;
+        }
+        return body;
+    };
+    const spySections = navTabs
+        .map((tab) => ({tab, el: root.querySelector<HTMLElement>(`#${tab.id}`)}))
+        .filter((entry): entry is {tab: typeof navTabs[number]; el: HTMLElement} => Boolean(entry.el));
+    if (spySections.length) {
+        const scroller = findScroller();
+        if (scroller) {
+            let spyFrame = 0;
+            const runSpy = () => {
+                spyFrame = 0;
+                const navBottom = scroller.getBoundingClientRect().top + navBar.offsetHeight + 12;
+                let current = spySections[0]!;
+                for (const entry of spySections) {
+                    if (entry.el.getBoundingClientRect().top <= navBottom) current = entry;
+                    else break;
+                }
+                setActiveNav(current.tab.id);
+                // 吸顶胶囊条同步横滑，保证当前分区始终可见（对齐打卡设置导航行为）。
+                const pill = navBar.querySelector<HTMLButtonElement>(`.xlc-settings-nav-pill[aria-controls="${current.tab.id}"]`);
+                if (pill) {
+                    const navRect = navBar.getBoundingClientRect();
+                    const pillRect = pill.getBoundingClientRect();
+                    if (pillRect.left < navRect.left + 4) navBar.scrollLeft += pillRect.left - navRect.left - 4;
+                    else if (pillRect.right > navRect.right - 4) navBar.scrollLeft += pillRect.right - navRect.right + 4;
+                }
+            };
+            scroller.addEventListener("scroll", () => {
+                if (spyFrame) return;
+                spyFrame = requestAnimationFrame(runSpy);
+            }, {passive: true});
+        }
+    }
 }
 
 /** 模板包导出（F6，原型屏 8 右帧）：包名 / 分类筛选 / 内容清单 → items.md+assets ZIP。
