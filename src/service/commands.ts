@@ -408,9 +408,18 @@ export class HostBridge implements IHostBridge {
 
     openDoc(docId: string, blockId?: string): boolean {
         try {
+            const targetId = blockId || docId;
+            if (!targetId) return false;
+            if (this.isMobile()) {
+                const openMobile = (siyuan as any).openMobileFileById;
+                if (typeof openMobile === "function") {
+                    openMobile(this.app, targetId);
+                    return true;
+                }
+            }
             openTab({
                 app: this.app,
-                doc: blockId ? {id: blockId} : {id: docId},
+                doc: blockId ? {id: blockId, action: ["cb-get-focus", "cb-get-hl"]} : {id: docId},
             });
             return true;
         } catch {
