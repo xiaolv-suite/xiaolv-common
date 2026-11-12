@@ -2381,7 +2381,7 @@ export const lvAi = {
 /* 11. 今日全生态活动主干流 (Lv Unified Daily Activity Stream)                */
 /* ========================================================================= */
 
-let fallbackActivities: LvActivityRecord[] = [];
+const fallbackActivities: LvActivityRecord[] = [];
 
 function getActivityHub(): LvActivityStreamHub {
     if (typeof window === "undefined") {
@@ -5166,7 +5166,7 @@ export function openDesktopLaunchpadPopover(
         popover.style.overflow = "hidden";
     }
 
-    let currentView: "grid" | "list" = getLaunchpadViewMode();
+    const currentView: "grid" | "list" = getLaunchpadViewMode();
     let currentActionLimit: number | "all" = getLaunchpadActionLimit();
     let showPrefDrawer = initialShowPref || (items.length === 0 && allItems.length > 0);
     let showInboxDrawer = initialShowInbox;
