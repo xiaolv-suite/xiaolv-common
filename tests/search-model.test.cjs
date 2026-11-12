@@ -1,0 +1,198 @@
+// 搜索模型测试：打分排序、筛选、收藏/最近 scope、置顶（manualOrder）、拼音适配层接入点。
+const test = require("node:test");
+const assert = require("node:assert");
+const search = require("./.build/entry.cjs").search;
+const pinyin = require("./.build/entry.cjs").pinyin;
+
+function entry(overrides = {}) {
+    return {
+        id: "xlc-e1", blockId: "20240101120000-abcdefg", libraryDocId: "20240101120001-hijklmn",
+        itemType: "text", title: "", alias: "", tags: [], category: "", summary: "",
+        createdAt: 0, updatedAt: 0, ...overrides,
+    };
+}
+
+const CTX = {favorites: new Set(), recents: new Map(), now: 1000};
+
+test("空查询返回全部（有界）", () => {
+    const entries = [entry({id: "xlc-a", title: "甲"}), entry({id: "xlc-b", title: "乙"})];
+    const results = search.searchEntries(entries, {text: "", scope: "all"}, CTX);
+    assert.equal(results.length, 2);
+});
+
+test("中文关键词命中标题/摘要，标题权重更高", () => {
+    const titleHit = entry({id: "xlc-title", title: "客服常用回复"});
+    const summaryHit = entry({id: "xlc-summary", title: "其他", summary: "客服相关摘要"});
+    const results = search.searchEntries([titleHit, summaryHit], {text: "客服", scope: "all"}, CTX);
+    assert.equal(results[0].entry.id, "xlc-title");
+    assert.ok(results[0].score > results[1].score);
+});
+
+test("别名/标签/分类可命中", () => {
+    const e = entry({id: "xlc-alias", title: "无", alias: "问候语", tags: ["社交"], category: "模板"});
+    assert.ok(search.matchEntry(e, "问候"));
+    assert.ok(search.matchEntry(e, "社交"));
+    assert.ok(search.matchEntry(e, "模板"));
+    assert.equal(search.matchEntry(e, "不存在的词"), null);
+});
+
+test("类型与标签筛选", () => {
+    const entries = [
+        entry({id: "xlc-code", itemType: "code", title: "片段"}),
+        entry({id: "xlc-text", itemType: "text", title: "文字", tags: ["工作"]}),
+    ];
+    const byType = search.searchEntries(entries, {text: "", itemType: "code", scope: "all"}, CTX);
+    assert.deepEqual(byType.map((r) => r.entry.id), ["xlc-code"]);
+    const byTag = search.searchEntries(entries, {text: "", tag: "工作", scope: "all"}, CTX);
+    assert.deepEqual(byTag.map((r) => r.entry.id), ["xlc-text"]);
+});
+
+test("收藏/最近 scope 与置顶顺序", () => {
+    const ctx = {
+        favorites: new Set(["xlc-fav"]),
+        recents: new Map([["xlc-recent", 500]]),
+        manualOrder: new Map([["xlc-pinned", 0]]),
+        now: 1000,
+    };
+    const entries = [
+        entry({id: "xlc-plain", title: "普通"}),
+        entry({id: "xlc-fav", title: "已收藏"}),
+        entry({id: "xlc-recent", title: "最近用"}),
+        entry({id: "xlc-pinned", title: "置顶项"}),
+    ];
+    const favs = search.listByScope(entries, "favorites", ctx);
+    assert.deepEqual(favs.map((e) => e.id), ["xlc-fav"]);
+    const recents = search.listByScope(entries, "recent", ctx);
+    assert.deepEqual(recents.map((e) => e.id), ["xlc-recent"]);
+    const recentSearch = search.searchEntries(entries, {text: "", scope: "recent"}, ctx);
+    assert.deepEqual(recentSearch.map((r) => r.entry.id), ["xlc-recent"]);
+    // 置顶项在混合搜索里排最前
+    const ranked = search.searchEntries(entries, {text: "", scope: "all"}, ctx);
+    assert.equal(ranked[0].entry.id, "xlc-pinned");
+});
+
+test("最近排序只改变浏览顺序，关键词搜索仍优先匹配度", () => {
+    const entries = [
+        entry({id: "xlc-old", title: "客服延期回复", updatedAt: 1}),
+        entry({id: "xlc-new", title: "其他模板", summary: "客服相关", updatedAt: 2}),
+    ];
+    const ctx = {favorites: new Set(), recents: new Map([["xlc-old", 10], ["xlc-new", 20]]), sort: "recent", now: 1000};
+    const browse = search.searchEntries(entries, {text: "", scope: "all"}, ctx);
+    assert.deepEqual(browse.map((r) => r.entry.id), ["xlc-new", "xlc-old"]);
+    const query = search.searchEntries(entries, {text: "客服", scope: "all"}, ctx);
+    assert.deepEqual(query.map((r) => r.entry.id), ["xlc-old", "xlc-new"]);
+});
+
+test("拼音适配层：默认实现原样返回；自定义实现参与匹配", () => {
+    // 默认：noop —— "kx" 不命中「常用」
+    assert.equal(pinyin.getPinyinAdapter().capabilities.initials, false);
+    const e = entry({id: "xlc-cy", title: "常用语"});
+    assert.equal(search.matchEntry(e, "cy"), null);
+    // 注入首字母适配器（未来 tiny-pinyin 的等价替身）
+    pinyin.setPinyinAdapter({
+        capabilities: {initials: true, fullPinyin: false},
+        expand: (q) => [q, "常用语"],
+    });
+    assert.ok(search.matchEntry(e, "cy"));
+    // 还原默认（不影响其他用例）
+    pinyin.setPinyinAdapter(pinyin.createNoopPinyinAdapter());
+    assert.equal(search.matchEntry(e, "cy"), null);
+});
+
+test("collectTags 聚合去重", () => {
+    const tags = search.collectTags([
+        entry({tags: ["工作", "常用"]}),
+        entry({tags: ["工作", "生活"]}),
+    ]);
+    assert.deepEqual(tags, ["常用", "工作", "生活"]);
+});
+
+test("超长查询词被裁剪且不抛异常", () => {
+    const results = search.searchEntries([entry({title: "甲"})], {text: "长".repeat(5000), scope: "all"}, CTX);
+    assert.equal(results.length, 0);
+});
+
+test("dateRange 搜索时间范围筛选：闭区间过滤、createdAt/updatedAt 分野与非法参数容错", () => {
+    const entries = [
+        entry({id: "xlc-e1", title: "条目一", createdAt: 1000, updatedAt: 2000}),
+        entry({id: "xlc-e2", title: "条目二", createdAt: 3000, updatedAt: 4000}),
+        entry({id: "xlc-e3", title: "条目三", createdAt: 5000, updatedAt: 6000}),
+    ];
+
+    // 默认 updatedAt 过滤：闭区间 [2000, 4000]
+    const midUpdated = search.searchEntries(entries, {
+        text: "",
+        dateRange: {from: 2000, to: 4000},
+    }, CTX);
+    assert.deepEqual(midUpdated.map((r) => r.entry.id), ["xlc-e2", "xlc-e1"]);
+
+    // 单边 from：>= 4000
+    const fromUpdated = search.searchEntries(entries, {
+        text: "",
+        dateRange: {from: 4000},
+    }, CTX);
+    assert.deepEqual(fromUpdated.map((r) => r.entry.id), ["xlc-e3", "xlc-e2"]);
+
+    // 单边 to：<= 2000
+    const toUpdated = search.searchEntries(entries, {
+        text: "",
+        dateRange: {to: 2000},
+    }, CTX);
+    assert.deepEqual(toUpdated.map((r) => r.entry.id), ["xlc-e1"]);
+
+    // 指定 field: "createdAt"：[1000, 3000]
+    const createdFilter = search.searchEntries(entries, {
+        text: "",
+        dateRange: {from: 1000, to: 3000, field: "createdAt"},
+    }, CTX);
+    assert.deepEqual(createdFilter.map((r) => r.entry.id), ["xlc-e2", "xlc-e1"]);
+
+    // 矛盾区间 from > to：返回空
+    const contradictory = search.searchEntries(entries, {
+        text: "",
+        dateRange: {from: 5000, to: 1000},
+    }, CTX);
+    assert.equal(contradictory.length, 0);
+
+    // applyBasicFilters 也同样生效
+    const basic = search.applyBasicFilters(entries, {
+        dateRange: {from: 3500, to: 4500},
+    }, CTX);
+    assert.deepEqual(basic.map((e) => e.id), ["xlc-e2"]);
+});
+
+test("半衰期衰减与模糊容错检索算法专项测试", () => {
+    // 1. calculateRecencyDecay 计算与边界
+    assert.equal(search.calculateRecencyDecay(undefined, 1000), 0);
+    assert.equal(search.calculateRecencyDecay(0, 1000), 0);
+    assert.equal(search.calculateRecencyDecay(-1, 1000), 0);
+    // 刚使用（delta = 0）衰减系数为 1.0
+    assert.equal(search.calculateRecencyDecay(1000, 1000), 1.0);
+    // 恰好经历一个半衰期（delta = halfLife）衰减系数为 0.5
+    const halfLife = 7 * 24 * 3600 * 1000;
+    const oneHalf = search.calculateRecencyDecay(1000, 1000 + halfLife, halfLife);
+    assert.ok(Math.abs(oneHalf - 0.5) < 0.001);
+
+    // 2. levenshteinDistance 最小编辑距离
+    assert.equal(search.levenshteinDistance("", ""), 0);
+    assert.equal(search.levenshteinDistance("a", ""), 1);
+    assert.equal(search.levenshteinDistance("", "b"), 1);
+    assert.equal(search.levenshteinDistance("kitten", "sitting"), 3);
+    assert.equal(search.levenshteinDistance("延期致歉", "延期道歉"), 1);
+
+    // 3. fuzzyMatchHaystack 滑动窗口模糊匹配 (maxDistance=1)
+    assert.equal(search.fuzzyMatchHaystack("延期致歉回复", "延期道歉").matched, true);
+    assert.equal(search.fuzzyMatchHaystack("延期致歉回复", "延期道歉").distance, 1);
+    assert.equal(search.fuzzyMatchHaystack("项目交付通知", "交付").matched, true);
+    assert.equal(search.fuzzyMatchHaystack("项目交付通知", "交付").distance, 0);
+    // 距离超过 1 不匹配
+    assert.equal(search.fuzzyMatchHaystack("延期致歉回复", "完全无关").matched, false);
+
+    // 4. matchEntry 模糊容错降级
+    const eFuzzy = entry({id: "xlc-fz1", title: "客户延期说明", alias: "致歉回复", tags: ["客服"]});
+    // 错别字 “延琪” 距离 “延期” 为 1，且拼音/精确未命中时，触发 fuzzy-title
+    const matchRes = search.matchEntry(eFuzzy, "延琪");
+    assert.ok(matchRes);
+    assert.equal(matchRes.matchedBy, "fuzzy-title");
+    assert.equal(matchRes.score, 3);
+});

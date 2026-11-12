@@ -1,0 +1,80 @@
+// 全局常量：属性命名、上限、协议版本。改持久化语义必须同步迁移函数与测试。
+export const PLUGIN_NAME = "xiaolv-common";
+export const PLUGIN_VERSION = "0.10.85";
+export const PLUGIN_DISPLAY_VERSION = `v${PLUGIN_VERSION}`;
+
+export const PROTOCOL_NAME = "xiaolv-common";
+export const PROTOCOL_VERSION = 1;
+
+// 块属性前缀（思源自定义属性形如 custom-xxx，用户可在属性面板查看编辑）
+export const ATTR_PREFIX = "custom-xlc-";
+export const ATTR = {
+    id: "custom-xlc-id",
+    type: "custom-xlc-type",
+    title: "custom-xlc-title",
+    alias: "custom-xlc-alias",
+    shortcode: "custom-xlc-shortcode",
+    tags: "custom-xlc-tags",
+    category: "custom-xlc-category",
+    srcDoc: "custom-xlc-src-doc",
+    srcBlock: "custom-xlc-src-block",
+    srcType: "custom-xlc-src-type",
+    vars: "custom-xlc-vars",
+    url: "custom-xlc-url",
+    target: "custom-xlc-target",
+    /** 实验期有序物理块清单；只用于经归属检查的读取，不证明完整性或授权删除。 */
+    parts: "custom-xlc-parts",
+    created: "custom-xlc-created",
+    updated: "custom-xlc-updated",
+} as const;
+
+// 容量上限（防失控增长；索引/摘要是有界可丢弃缓存）
+export const LIMITS = {
+    title: 512,
+    alias: 256,
+    shortcode: 64,
+    tag: 64,
+    tags: 32,
+    category: 64,
+    summary: 240,
+    contentChars: 100_000,
+    queryChars: 200,
+    maxItems: 2000,
+    maxDocs: 200,
+    maxFavorites: 500,
+    maxRecents: 200,
+    maxProviders: 32,
+    maxImportBytes: 4 * 1024 * 1024,
+    walkDepth: 8,
+    kernelTimeoutMs: 8000,
+    askValueChars: 2000,
+    maxUsage: 2000,
+    maxAskFields: 16,
+    maxCustomTransforms: 10,
+    /** 读取实验期 parts 清单的上限；不据此推断 appendBlock 返回了全部物理块。 */
+    maxItemParts: 64,
+    maxSavedDiscoveryViews: 20,
+    savedViewNameChars: 32,
+    savedViewPathChars: 256,
+    customNameChars: 20,
+    customPromptChars: 500,
+} as const;
+
+// 宿主侧车读取异常时不能阻塞插件入口注册；超时后使用安全默认值并保留入口。
+export const SIDECAR_LOAD_TIMEOUT_MS = 3000;
+
+export const STORAGE_KEYS = {
+    config: "config.json",
+    state: "state.json",
+} as const;
+
+export const STATE_SCHEMA_VERSION = 2;
+export const EXPORT_SCHEMA_VERSION = 1;
+
+// 事件名（window CustomEvent；detail 带 protocolVersion）
+export const EVENTS = {
+    itemCreated: "xiaolv:common:item-created",
+    itemUpdated: "xiaolv:common:item-updated",
+    itemDeleted: "xiaolv:common:item-deleted",
+    itemInserted: "xiaolv:common:item-inserted",
+} as const;

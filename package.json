@@ -1,0 +1,67 @@
+{
+  "name": "xiaolv-common",
+  "version": "0.10.85",
+  "description": "SiYuan plugin: quick recall and reuse of common content anchored to real SiYuan blocks.",
+  "main": "index.js",
+  "scripts": {
+    "test:ecosystem:reliability": "node --test tests/ecosystem-reliability.test.cjs",
+    "dev": "webpack --config webpack.config.js --mode development",
+    "build": "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js --config webpack.config.js --mode production",
+    "check": "tsc --noEmit",
+    "test": "node tests/run-tests.cjs",
+    "test:ui": "node scripts/render-production.cjs",
+    "test:ix": "node scripts/ui-interaction-audit.cjs",
+    "e2e": "node scripts/e2e-acceptance.cjs",
+    "e2e:iso": "node scripts/e2e-isolated.cjs",
+    "e2e:isolated": "node scripts/e2e-isolated.cjs && node scripts/e2e-isolated.cjs --discovery-only && node scripts/e2e-real-checklist.cjs",
+    "e2e:real": "node scripts/e2e-real-checklist.cjs",
+    "e2e:discovery": "node scripts/e2e-discovery.cjs",
+    "e2e:discovery:iso": "node scripts/e2e-isolated.cjs --discovery-only",
+    "scan": "node scripts/secret-scan.cjs",
+    "check:errors": "node scripts/check-error-handling.cjs",
+    "check:ui": "node scripts/check-ui-contracts.cjs",
+    "check:viewport": "node scripts/check-viewport-actions.cjs",
+    "check:changelog": "node scripts/check-changelog.cjs",
+    "check:package": "node scripts/check-package.cjs",
+    "it:kernel": "node scripts/integration-kernel.cjs",
+    "test:scale": "node scripts/scale-test.cjs --n 500",
+    "benchmark": "node scripts/benchmark-resource-performance.cjs",
+    "serve:isolated": "node scripts/serve-isolated.cjs",
+    "serve:isolated:stop": "node scripts/serve-isolated.cjs --stop"
+  },
+  "keywords": [
+    "siyuan",
+    "plugin",
+    "snippets",
+    "common-phrases",
+    "小驴常用",
+    "小驴常用（内测版）"
+  ],
+  "author": "xiaolv-suite",
+  "license": "MIT",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "axe-core": "^4.14.0",
+    "copy-webpack-plugin": "^14.0.0",
+    "css-loader": "^7.1.4",
+    "esbuild": "^0.28.2",
+    "esbuild-loader": "^4.4.3",
+    "mini-css-extract-plugin": "^2.10.2",
+    "playwright": "^1.63.0",
+    "sass": "^1.105.0",
+    "sass-loader": "^17.0.0",
+    "siyuan": "1.2.9",
+    "tslib": "^2.8.1",
+    "typescript": "^7.0.2",
+    "webpack": "^5.111.1",
+    "webpack-cli": "^7.0.3",
+    "zip-webpack-plugin": "^4.0.3"
+  },
+  "dependencies": {
+    "js-yaml": "^5.4.3",
+    "tiny-pinyin": "^1.3.2"
+  }
+}
