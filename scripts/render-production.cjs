@@ -794,7 +794,12 @@ fs.writeFileSync(path.join(OUT, "harness.html"), html);
         const orphanBox = document.querySelector("[data-xlc-control='setup.independent.orphan-notebook']");
         const copyBtn = document.querySelector("[data-xlc-control='setup.independent.copy-orphan-id']");
         const copyBtnVisible = !!copyBtn;
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText: async () => undefined },
+            configurable: true,
+        });
         copyBtn?.click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
         const copyBtnUpdated = copyBtn?.textContent === "已复制笔记本 ID";
         notebookName.value = "再次尝试库";
         notebookName.dispatchEvent(new Event("input", {bubbles: true}));
