@@ -6,7 +6,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
 
 jobs:
@@ -16,12 +15,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 12.5.1
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: 安装依赖
@@ -50,33 +47,3 @@ jobs:
 
       - name: UI 生产渲染冒烟
         run: pnpm run test:ui
-
-  release:
-    needs: gates
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 12.5.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --ignore-scripts
-      - run: pnpm run build
-      - name: 发布包结构检查
-        run: pnpm run check:package
-      - name: 提取发布说明（按 tag 对应的 CHANGELOG 段落）
-        id: notes
-        run: node scripts/extract-release-notes.cjs "${GITHUB_REF_NAME#v}"
-      - name: 创建 Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          body: ${{ steps.notes.outputs.body }}
-          files: dist/package.zip
