@@ -159,7 +159,18 @@ Upon first launch, an onboarding dialog will appear:
 
 ## 🆕 Latest Release Highlights
 
-### [v0.10.83] — 2026-11-04 (Latest Local Release)
+- **SiYuan 3.8.10+ Native Adaptations**: OmniSearch result rows, preview location chips, and preview headers support native document tree context menus (`showDocTreeNativeMenu`) via zero-SQL `getBlockInfo`; `safeDocTitleFromHPath` prevents title truncation on slashes; added plain-text stripping shortcuts (`Alt+Shift+R` / `Alt+Shift+C`).
+- **Input Method & Clipboard Resilience**: Snippet Dock search box yields to IME composition so candidate selection isn't intercepted; Settings code exports (Quicker/AHK/cURL/Raycast) and orphan notebook ID copy buttons now surface explicit error notices on clipboard failure (clipboard coverage contract enforced).
+- **Mobile & Touch Polish**: Capture form action bar clears iOS bottom safe area; tag chips enforce 32px touch floor; sync strategy select uses 16px anti-zoom baseline.
+- **Performance & Engineering Gates**: Discovery filtering and Sync Diff view rebuilds debounced; desktop hover affordances added for close buttons, chips, and breadcrumbs; i18n parity and passive scroll listeners formalized as contracts.
+
+<details>
+<summary><b>📜 Historical Release Highlights (v0.10.84 and earlier)</b></summary>
+
+### [v0.10.84] — 2026-11-10
+- Launchpad microtask convergence debounce, SiYuan topbar self-healing, desktop hover drawer locking, mobile pull-down keyboard defense, and `xiaolv-suite` organization migration.
+
+### [v0.10.83] — 2026-11-04
 
 v0.10.83 Local Release: Epoch 7 Lv Ecosystem Federation Core Kit integration (in-place inline micro-animations, ephemeral capsules, unified heartbeat ticker, kernel document write mutex, top-surface & Esc stack, AI gateway, full backup orchestrator, dynamic Launchpad badges, and Omnisearch engine), concurrent generational promise index cache & write-lock memory leak elimination, multi-level Esc arbitration fix, AI template expansion graceful degradation, and kernel retry resilience hardening:
 - **Epoch 7 Lv Ecosystem Federation Core Kit Integration**:
@@ -215,9 +226,6 @@ v0.10.81 Local Release: Default-on clipboard history with capacity tiers, 1-clic
 - **Dedicated Real-World Samples & Step Guide (T-0773)**: 17 production-grade snippets generated on first run with interactive 4-step guide dialog (`guide-dialog.ts`) showing live before/after annotation stripping.
 - **Settings Typography & Template Cards Modernization (T-0774)**: Normalized row typography to 14px body and 12.5px hints; redesigned template packs into bounded, comfortable cards.
 - **Full Verification Suite**: 1182/1182 unit tests, 79/79 interaction audits, 12/12 viewport visibility tests, and 21/21 isolated real-kernel checklist tests all passing.
-
-<details>
-<summary><b>📜 Click to expand historical evolution records (v0.1.0 ~ v0.10.80, collapsed)</b></summary>
 
 | Milestone | Highlights | ADR |
 | :--- | :--- | :--- |

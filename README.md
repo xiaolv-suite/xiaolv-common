@@ -8,7 +8,7 @@
 
 将零散的代码片段、客服话术、Prompt 提示词、常用表格、文本模板沉淀为有元数据、有来源追溯、可参数化动态求值的思源笔记原生块资产
 
-**当前版本：v0.10.84** ｜ [English Documentation](README.en-US.md) ｜ [更新日志](CHANGELOG.md)
+**当前版本：v0.10.85** ｜ [English Documentation](README.en-US.md) ｜ [更新日志](CHANGELOG.md)
 
 [![CI](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/github/v/tag/xiaolv-suite/xiaolv-common?label=%E7%89%88%E6%9C%AC&sort=semver)](https://github.com/xiaolv-suite/xiaolv-common/releases)
@@ -200,6 +200,14 @@
 ---
 
 ## 📝 最近更新动态
+
+- **思源 3.8.10+ 原生特性适配**：全域穿透搜索结果行、来源预览与标题支持右键呼出原生文档树菜单（`showDocTreeNativeMenu`），零 SQL 内核实时解析笔记本归属；半角斜杠标题防截断保留；支持快捷复制纯文本（`Alt+Shift+R` / `Alt+Shift+C`）。
+- **输入法与剪贴板健壮性**：片段 Dock 搜索框增加 IME 合成期守卫，方向键选字不再被劫持误插切片；设置页 Quicker/AHK/cURL/Raycast 脚本导出与独立孤儿笔记本 ID 复制补齐失败捕获与错误提示（全生态剪贴板覆盖契约固化）。
+- **移动端与触控打磨**：收录表单操作条补齐 iOS 安全区内边距；标签芯片达 32px 舒适触控下限；同步策略下拉框统一 16px 防自动缩放。
+- **检索性能与交互**：发现页筛选渲染与同步比对视图重建防抖；关闭按钮、芯片与面包屑增加桌面端 hover 悬停高亮；i18n 键集与无障碍滚动监听契约收编。
+
+<details>
+<summary>展开查看历史版本更新（v0.10.84 及更早版本 · 完整记录见 <a href="./CHANGELOG.md">CHANGELOG.md</a>）</summary>
 
 ### [v0.10.84] — 2026-11-10（GitHub 组织迁移与体验加固）
 
