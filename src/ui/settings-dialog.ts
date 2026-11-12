@@ -1814,15 +1814,17 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
                         copyBtn.textContent = t("setupIndependentCopyOrphanId");
                         const orphanId = result.notebookId;
                         copyBtn.addEventListener("click", () => {
-                            try {
-                                if (navigator.clipboard?.writeText) {
-                                    void navigator.clipboard.writeText(orphanId);
-                                }
-                            } catch {
-                                // fallback ignored in offline test environment
+                            if (navigator.clipboard?.writeText) {
+                                void navigator.clipboard.writeText(orphanId).then(() => {
+                                    copyBtn.textContent = t("setupIndependentOrphanCopied");
+                                    ctx.notify("info", t("setupIndependentOrphanCopied"));
+                                }).catch(() => {
+                                    ctx.notify("error", t("copyFailed"));
+                                });
+                            } else {
+                                copyBtn.textContent = t("setupIndependentOrphanCopied");
+                                ctx.notify("info", t("setupIndependentOrphanCopied"));
                             }
-                            copyBtn.textContent = t("setupIndependentOrphanCopied");
-                            ctx.notify("info", t("setupIndependentOrphanCopied"));
                         });
                         orphanBox.appendChild(copyBtn);
                         independentNotebookWrap.appendChild(orphanBox);
@@ -2550,7 +2552,7 @@ function buildHealthSection(ctx: SettingsUiContext, root: HTMLElement): void {
 }
 
 function buildExternalIntegrationSection(ctx: SettingsUiContext, root: HTMLElement): void {
-    void ctx;
+    const t = ctx.t;
     const sec = document.createElement("div");
     sec.id = "xlc-settings-ext";
     sec.className = "xlc-form-field xlc-card xlc-external-integration";
@@ -2606,6 +2608,8 @@ function buildExternalIntegrationSection(ctx: SettingsUiContext, root: HTMLEleme
             setTimeout(() => {
                 copyQuickerBtn.textContent = "⧉ 复制 Quicker 动作配置";
             }, 3000);
+        }).catch(() => {
+            ctx.notify("error", t("copyFailed"));
         });
     });
 
@@ -2644,6 +2648,8 @@ return`;
             setTimeout(() => {
                 copyAhkBtn.textContent = "⚡ 复制 AutoHotkey (AHK) 全局直喷脚本";
             }, 3000);
+        }).catch(() => {
+            ctx.notify("error", t("copyFailed"));
         });
     });
 
@@ -2661,6 +2667,8 @@ return`;
             setTimeout(() => {
                 copyCurlBtn.textContent = "⌨ 复制 cURL / REST API 示例";
             }, 3000);
+        }).catch(() => {
+            ctx.notify("error", t("copyFailed"));
         });
     });
 
@@ -2694,6 +2702,8 @@ fi`;
             setTimeout(() => {
                 copyRaycastBtn.textContent = "⌘ 复制 Raycast Script 脚本";
             }, 3000);
+        }).catch(() => {
+            ctx.notify("error", t("copyFailed"));
         });
     });
 
