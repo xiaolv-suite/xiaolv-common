@@ -851,5 +851,10 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /document\.querySelector<HTMLElement>\("\.lv-qw-lightbox"\)/, 'Escape keyHandler must dismiss lightbox first without closing quick modal');
         assert.match(src, /lv-omni-empty-note-btn/, 'Desktop omni empty state must offer quick note creation');
         assert.match(src, /lv-mobile-empty-note/, 'Mobile omni empty state must offer quick note creation');
+        // Round-19：全思源文档级全能查重与段落排重加强
+        assert.match(src, /scanDuplicateDocTitles/, 'Deduplicator must support full-workspace duplicate doc titles scan');
+        assert.match(src, /scanDocDuplicateBlocks/, 'Deduplicator must support within-document duplicate blocks scan');
+        assert.match(src, /safeRemoveDocToRecycle/, 'Deduplicator must provide safe removal to recycle bin');
+        assert.match(src, /lv-conflict-tab/, 'Conflict resolver dialog must support multi-tab workspace deduplication');
     } finally { c.close(); }
 });
