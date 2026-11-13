@@ -1,0 +1,205 @@
+# 小驴常用状态审计（2026-10-18）
+
+## 结论
+
+当前发布基线是 GitHub `v0.5.0`（2026-10-19，T-0118/T-0119 发版）；包含自 v0.4.2 以来累积的 34 项重大增强。插件已覆盖捕获、搜索、预览、调用和导入导出主链，但多块正文不能认作完整可用。
+
+**R238 更正**：上游源码表明 appendBlock 可只返回首块 insert，且可能附带已有块 setAttrs；更新还可能只采用首个正文块。撤回 R237“全部 operation ID 可构成完整 parts 清单”的结论。当前新建、正文更新和导入写前仅接受单行内容或一个完整代码围栏，其余多行/结构、空白和超限正文拒绝；只采目标文档 insert，不盲删异常响应 ID。已有 parts 经同文档、连续顶层顺序和独立条目冲突检查读取，正文更新和自动删除暂停；旧无清单条目仍不能推断历史尾块。依据见 [ADR 0058](adr/0058-restrict-unverified-multiblock-writes.md)。
+
+## 证据分层
+
+| 层级 | 本轮状态 | 可以声称 | 不能声称 |
+| --- | --- | --- | --- |
+| 源码/模型 | `pnpm run check`、`pnpm run check:errors` 通过；单元门禁最终 560/560 | 纯函数、服务装配和错误边界符合当前测试 | 不能代替宿主行为 |
+| Chrome 离线生产 UI | `test:ui` 通过；`test:ix` 交互 74/74；0 pageerror/console；基线文件已恢复 | 原型对应的桌面、暗色、窄屏、移动、设置、首跑、捕获、发现、导入和动作菜单状态可渲染并可操作 | 不能代替思源 Electron/Android |
+| 隔离内核/历史 Electron | 复用既有 v3.8.8-alpha.1 与固定 Electron 3.8.7 证据 | 桌面核心块读写、协议入口、普通/引用动作和无编辑器复制降级已有局部证据 | B-005 使镜像整体隔离声明失效；不能外推到日常工作区或 Android |
+| 真实服务/provider/AI | provider 合同和 AI 失败边界已实现；真实模型端到端未完成 | 默认关、正文出域双开关、原文不变、失败可见 | 不能称真实 AI 已验收；第三方 provider 仍依赖兄弟插件接入 |
+
+## 功能可用性矩阵
+
+| 功能 | 当前判定 | 证据/边界 |
+| --- | --- | --- |
+| 首次设置、文档/文档树/笔记本内容库 | 已实现；独立笔记本设置 UI 已接入离线契约与补偿编排 | GitHub issue #1 的真实宿主权限/生命周期验收仍未完成，不能声称 issue 已关闭 |
+| 选区、块、文档、剪贴板、拖拽/粘贴捕获 | 已实现源码/UI；宿主现场分层 | 多段内容受 B-006；移动端和系统权限按 B-002/B-003 待验证 |
+| 图片/附件捕获 | 单块真实 `assets/` 路径可用 | 复制为 Markdown 链接，打开走资源；不支持位图剪贴板、文件本体复制、自动上传 |
+| 条目 CRUD、标题/别名/标签/分类/收藏/最近/频次 | 单行/完整代码围栏写入及元数据编辑已实现，多行写入受限 | 已有 parts 可经归属检查读取，正文更新和自动删除暂停；缓存锚块移出原文档后拒绝读取/更新/删除。侧车保护已修复 |
+| 实时搜索、中文关键词、拼音、类型/标签/分类筛选 | 已实现并有测试/UI 证据 | 搜索预览使用文本节点；不是富文本/Office 阅读器 |
+| 键盘导航、Alt+1~9 插入、Alt+Shift+1~9 复制、Tab | 桌面已实现；Chrome 74/74 | 真宿主快捷键与移动触控仍按现场边界解释 |
+| 移动底部主动作 | 语义已修正：点按只选择，底栏按钮执行 | 无目标时复制降级；移动端直接插入仍待 B-002 |
+| 变量填充、日期/剪贴板/文档上下文、片段嵌套 | 已实现源码和单测 | code 类型按字面保留，不展开变量；多段模板整体性仍受 B-006 |
+| 块引用/嵌入/源正文 | 单块真实引用入口有桌面证据 | 连续嵌入后宿主选区可能失效，后续动作会诚实降级复制 |
+| AI 整理、草稿、变换、语义找、标签体检 | UI/边界已实现 | 真实思源模型端到端未验收；默认关闭，正文出域需双开关 |
+| JSON 导入导出、Markdown/资源包 | 导入受相同正文限制；导出拒绝不完整索引/正文/超长内容 | 覆盖导入在删旧前检查新正文和备份均可写；不能修复历史尾块；没有跨工作区资源自动安装/路径重写 |
+| provider `xiaolv-common/v1` | 合同和窗口桥已实现 | 真实第三方 provider 接入依赖其他插件，不修改兄弟插件 |
+| Android | 未验收 | B-002 开放；图片位图剪贴板 B-003 开放 |
+
+## UI 与原型核对
+
+原型事实源为 `docs/design/prototype.html` 与 `docs/design/design-spec.md`。本轮已同步 B-006 写前限制与模板入口说明。当前示例包25条中8条符合格式限制（原有3条加上邮箱、地址、无效身份占位、网址和 JSON 入门5条），17条原多行模板会拒绝，不能称全包可用。生产 UI 已覆盖搜索双栏、动作菜单、捕获表单、变量卡、设置/首跑、发现、导入策略、移动底部 sheet、空态/错误/来源失效/目标横幅/暗色/窄屏等主要屏幕。
+
+Chrome 离线审计上一轮暴露的搜索 `role=option` 嵌套交互和客服徽标对比度问题已修复：搜索行改为 `list/listitem` + `aria-current`，客服浅色徽标使用 `#166534`，暗色保持高亮色。最新搜索亮色/暗色/移动 axe 矩阵为 0 violations；发现页与其他表面仍以既有专项诊断为准，不能把单一搜索矩阵外推成全插件无障碍全绿。完整历史诊断保存在 `docs/design/audit-2026-10-18/accessibility-diagnostics.json`。
+
+当前 `docs/design/harness-bundle.js` 与 `docs/design/audit-2026-10-18/audit-harness.js` 已由生产源码重建并包含 25 条示例包；审计目录中的历史截图仍标注为当日离线证据，不能当作真实思源宿主或设备验收。
+
+## 代码问题与本轮修复
+
+本轮修复了：
+
+- 未来版本或读取失败的 state 侧车不再被默认状态写回；设置层明确提示只读保护。
+- JSON/Markdown 导出遇到不完整索引、正文读取失败、缺正文或超过上限时终止，不再生成缺项却报告成功的备份。
+- 设置文案已与当前示例包实际 25 条（其中 8 条可写、17 条因 B-006 拒绝）同步；移动端说明改为“点按选择后由底栏主按钮执行”；媒体和多块完整性限制在预览/帮助/捕获表单可见。
+- Quicker 调研结论写入 `docs/research-content-examples-2026-10-18.md`，并修正定位文档对竞品“纯文本收藏”的过度概括。
+- R239 续审纠正了截图夹具的旧文案：限制提示直接读取生产语言文件，全部8类型可见。捕获超限内容不再截断，表单对受限正文显示行内错误并保留输入，引用捕获写真实引用标记；编辑正文前要求旧正文可读取且可恢复。7类新增源码负向均检出，恢复后509/509。R240 新增 25 条示例包的 8/17 写入统计、重复跳过回执和复制/插入载荷断言。R242 新增 create/remove notebook 严格回包、幂等写锁、两步补偿及畸形响应测试；R244 新增本机使用统计聚合与设置摘要；R245 修复导入逐条异常和重建索引异常在遇到非 `Error` thrown value 时可能二次抛错的问题，并以 `null`、字符串、普通对象完成负向回归，本轮单元最终 523/523。
+- R239 续审纠正了截图夹具的旧文案：限制提示直接读取生产语言文件，全部8类型可见。捕获超限内容不再截断，表单对受限正文显示行内错误并保留输入，引用捕获写真实引用标记；编辑正文前要求旧正文可读取且可恢复。7类新增源码负向均检出，恢复后509/509。R240 新增 25 条示例包的 8/17 写入统计、重复跳过回执和复制/插入载荷断言。R242 新增 create/remove notebook 严格回包、幂等写锁、两步补偿及畸形响应测试；R244 新增本机使用统计聚合与设置摘要；R245 修复导入逐条异常和重建索引异常在遇到非 `Error` thrown value 时可能二次抛错；R246 统一入口、内核、服务和 UI 的异常文本转换并覆盖循环对象/hostile Proxy，本轮单元最终 524/524。
+
+## R246 异常文本转换共享重构
+
+- 新增无依赖的 `src/model/errors.ts`，所有源码旧的 `(err as Error).message` 和重复三元转换已迁移到 `toErrorMessage`；协议、导入、捕获、搜索、设置、启动和提供方错误均保持可见回执。
+- 新增直接边界测试，覆盖 `Error`、`null`、字符串、普通对象、循环对象和 hostile Proxy；生产包体保持约 353 KiB JS / 495 KiB ZIP。
+
+## R247 异常处理源码门禁与开发者路径
+
+- `scripts/check-error-handling.cjs` 现覆盖任意变量名、可选链、不安全对象断言和重复 `Error`/字符串三元转换，并忽略注释以避免维护文档示例误报。
+- `pnpm run check:errors` 已加入 GitHub Actions gates、README 和交付脚本索引；负向夹具注入四类违规后均能以非零退出，恢复源码后门禁通过。
+- 该门禁只约束源码静态模式，不能替代 `toErrorMessage` 的运行时 hostile Proxy 测试；真实宿主、Android、AI、B-005 和 B-006 边界保持不变。
+
+## R248 独立笔记本两步进度与补偿失败凭据展示
+
+- 服务层 `createIndependentLibrary` 现支持 `onProgress` 进度回调，通知 `creating-notebook`、`creating-doc` 及补偿删除 `rolling-back`。
+- 设置向导 UI 动态显示分步文案（第 1/2 步新建笔记本、第 2/2 步新建库文档、回滚清理未完成笔记本）。
+- 当补偿删除失败（`compensation === "failed"`）时，UI 结构化展示 `data-xlc-control="setup.independent.orphan-notebook"` 警示区，提供残留 `notebookId` 及一键复制按钮 `setup.independent.copy-orphan-id`。
+- 单元测试（526/526）与生产 UI smoke（9/9）均增加对应断言并通过负向验证；Issue #1 真实宿主权限与生命周期验收仍待沙箱环境具备。
+
+## R249 B-006 单行结构标记写前防御与代码围栏空白清洗
+
+- 增强 `bodyWriteRestriction` 结构标记过滤（拦截引用块 `>`、列表项、任务列表、表格行 `|`、水平分隔线、思源超级块分界 `{{{`/`}}}` 与物理 IAL 标记 `{: `），防止思源隐式派生多层嵌套容器块。
+- 增强代码围栏首尾空白行清洗（支持包含空格与制表符的空白行 `line.trim() === ""`），避免合法代码围栏被误拒。
+- 新增独立专项测试 `tests/kramdown-restriction.test.cjs`（单元门禁 530/530 全部通过），并通过移除引用块规则的严格负向验证。
+- B-006 宿主完整 AST/DOM 解析验收仍待安全沙箱环境具备。
+
+## R250 Espanso 导入类型推断与元数据字段对齐
+
+- `src/service/espanso-import.ts` 接入自动类型推断，告别硬编码 `itemType: "text"`。
+- 识别完整代码围栏（` ``` ` 或 `~~~`）为 `itemType: "code"`，使导入的代码片段享有语言徽标与专属复制/插入通道；识别安全 HTTP/HTTPS 单行链接为 `itemType: "url"` 并同步提取填充 `url` 属性，使网址项在动作菜单中直接具备“打开外链”能力；识别富文本单行为 `markdown`，其余安全回退为 `text`。
+- 新增 `tests/r164-espanso-import.test.cjs` 专项断言（单元门禁 531/531 全部通过），并通过故意跳过 URL 类型推断逻辑的严格负向验证。
+
+## R251 G4 搜索时间范围筛选模型与闭区间过滤
+
+- `src/model/search.ts` 扩展 `DateRangeFilter` 与 `SearchQuery.dateRange`，支持 `from`、`to` 闭区间时间过滤与 `createdAt`/`updatedAt` 字段维度。
+- `passesFilters` 与 `applyBasicFilters` 实现数值安全性校验、矛盾区间过滤（`from > to` 返回空）与时间范围判定。
+- 新增 `tests/search-model.test.cjs` 专项断言（单元门禁 532/532 全部通过），并通过颠倒 `ts < from` 逻辑的严格负向验证。
+
+## R252 捕获查重算法健全性与自我误报防御
+
+- `src/model/dedupe.ts` 导出 `DedupeOptions` 接口，支持 `excludeId` 排除指定条目以杜绝编辑条目自我误撞。
+- `normalizeForCompare` 支持全角空格 `\u3000` 归一化；支持大小写敏感/不敏感双模式（默认不区分大小写更易发现重复）。
+- 在 `src/ui/capture.ts` 与 `src/index.ts` 依赖链中透传 options。
+- 新增 `tests/r14-dedupe-agent.test.cjs` 专项断言（单元门禁 533/533 全部通过），并通过故意跳过 `excludeId` 检查的严格负向验证。
+
+## R253 F5 片段引用解析与语法诊断工具健全化
+
+- `src/model/variables.ts` 导出 `SnippetRefDiagnosis` 接口与 `listSnippetRefs` / `diagnoseSnippetRefs` 纯函数。
+- 统一支持片段引用标题去重提取（上限 16 条）与缺失目标核对（兼容 Set/Map/数组三种可用标题源）。
+- 新增 `tests/r72-snippet.test.cjs` 专项断言（单元门禁 534/534 全部通过），并通过故意跳过缺失核对逻辑的严格负向验证。
+
+## R254 S1 变量填充卡默认值与预填支持
+
+- `src/model/variables.ts` 扩展 `AskField` 模型，新增 `defaultValue?: string` 属性。
+- `parseAskField` 支持等号语法（`name=defaultValue`）与单选项回退默认值语法，保留 `date`/`textarea` 特异解析。
+- `expandAsks` 接入默认值优先展开；`variable-form.ts` 渲染时为输入框预填 `defaultValue`。
+- 新增 `tests/r67-variables.test.cjs` 专项断言（单元门禁 535/535 全部通过），并通过故意跳过默认值展开逻辑的严格负向验证。
+
+## R255 拼音前缀连续音节高亮定位平滑化
+
+- 重构 `src/model/pinyin-tiny.ts` 的 `findPinyinMatches` 全拼音节定位算法，支持连续音节末字前缀拼音平滑匹配（`item.py.startsWith(remainingToken)`）与单字前缀匹配，消除打词输入中标题高亮闪断（闪烁）。
+- 单字母规则隔离：单字母仅走首字母匹配，不触发单字前缀匹配，避免高亮泛滥。
+- 新增 `tests/r212-pinyin-highlighting.test.cjs` 专项断言（单元门禁 536/536 全部通过），并通过故意跳过末字前缀匹配的严格负向验证。
+
+## R256 预览窗格嵌套片段语法回显与可视化
+
+- `src/ui/dialog.ts` 的 `paintPaneVars` 接入 `listSnippetRefs`，提取并渲染嵌套片段说明与 `preview.snippet-tag` 代码芯片。
+- 增补中英国际化资源 `paneSnippetsLabel`，保持与变量芯片、光标提示的优雅隔点分隔，纯文本安全防注入。
+- 扩展 `scripts/render-production.cjs` 桌面冒烟断言（20/20），并通过故意跳过片段芯片渲染的严格双向负向验证。
+
+## R257 F6 模板包嵌套片段清单声明与导入解析双向闭环
+
+- `src/service/export-markdown.ts` 聚合非代码条目的片段引用（`snippetNames`，上限 16 条），并在 `<!-- xlc-pack` 首部清单中声明 `snippets:` 字段。
+- `src/service/import-markdown.ts` 的 `parsePackManifest` 互逆解析 `snippets:` 声明，并在 `openImportPolicyDialog` 策略卡片中展示 `packSnippetsBadge` 徽标。
+- 新增 `tests/r13-export-md.test.cjs` 专项断言（单元门禁 537/537 全部通过），并通过故意跳过 `snippets` 字段解析的严格负向验证。
+
+## R258 模板包导入依赖预检与策略弹窗分级警示
+
+- `src/service/import-markdown.ts` 导出 `MarkdownPackManifest` 接口并在 `parseMarkdownPack` 中自动比对包内条目引用的片段集合与包内条目标题，计算出缺失的子片段依赖 `missingSnippets`。
+- `openImportPolicyDialog` 策略确认弹窗展示 `packMissingSnippetsBadge` 黄色警告徽标与 `packMissingSnippetsHint` 行内警示文本，列出具体缺失片段。
+- 扩展 `scripts/render-production.cjs` 冒烟断言（8/8），并通过故意跳过缺失徽标渲染的严格双向负向验证。
+
+## R259 占位符日期算术中文自然语言快捷扩展
+
+- `src/model/placeholders.ts` 接入 `ZH_RELATIVE_DAYS`（今天/明天/后天/大后天/昨天/前天/大前天）与 `ZH_NEXT_WEEKDAY`（下周一~下周日及同义词）自然语言映射。
+- `resolveDateArg` 优先匹配中文自然语言表达并计算绝对日期，无缝回退原有带符号数字与英文星期。
+- 新增 `tests/r160-dynamic-placeholders.test.cjs` 专项断言（单元门禁 538/538 全部通过），并通过故意跳过中文相对日解析的严格负向验证。
+
+## R260 F5 片段嵌套展开详情与可观测性
+
+- `src/service/library.ts` 导出 `SnippetExpansionDetail` 接口并实现 `expandSnippetRefsDetailed`，精细跟踪展开标题、缺失项、最大递归深度、成环状态与超深状态。
+- `expandSnippetRefs` 保持单行封装调用，完全兼容现有调用方。
+- 新增 `tests/r72-snippet.test.cjs` 专项断言（单元门禁 539/539 全部通过），并通过故意跳过 `hasCycles` 标记的严格负向验证。
+
+## R261 Compact Bundle 紧凑分享与直接导入支持
+
+- `src/model/transfer.ts` 导出 `COMPACT_BUNDLE_PREFIX`（`"xlc-bundle:"`）与跨平台安全的 `serializeCompactBundle` / `deserializeCompactBundle`。
+- `validateImport` 支持紧凑分享字符串与 `xlc://import?bundle=` URL 链接自动反序列化直接导入，与标准 JSON 导入享受相同校验与错误边界。
+- 新增 `tests/transfer.test.cjs` 专项断言（单元门禁 540/540 全部通过），并通过故意跳过解码分支的严格负向验证。
+
+## R262 变量下拉与随机选择选项多维分隔符归一化
+
+- `src/model/variables.ts` 的 `parseAskField` 接入 `/[,，、]/` 切分，彻底消除中文全角逗号 `，` 与顿号 `、` 导致的单项误判。
+- `src/model/placeholders.ts` 的 `pickRandomOption` 同步接入 `/[,，、]/` 切分，支持中文全角标点随机选择。
+- 新增 `tests/r67-variables.test.cjs` 与 `tests/r160-dynamic-placeholders.test.cjs` 专项断言（单元门禁 542/542 全部通过），并通过故意改回半角逗号的严格负向验证。
+
+## R263 cleanTagList 标签分隔符修正与多维标点及井号清洗
+
+- 修正 `src/model/item.ts` 中 `cleanTagList` 历史笔误正则 `/[,,、]/`，升级为 `/[,，、;；\s]+/`，全面兼容中英文逗号、顿号、分号与空白分割。
+- 增加对思源原生 `#标签#` 格式的前后缀自动清洗（`.replace(/^#+/, "").replace(/#+$/, "")`）。
+- 新增 `tests/item-model.test.cjs` 专项断言（单元门禁 543/543 全部通过），并通过复现旧笔误正则的严格负向验证。
+
+## R264 搜索多关键词多维标点分词容错与高亮区间对齐
+
+- `src/model/search.ts` 导出 `SEARCH_TOKEN_DELIMITER = /[\s,，/\\+;；|｜]+/` 与 `splitSearchTokens`，支持中英文逗号、斜杠、加号、分号、竖线多维标点切词。
+- `matchEntry` 接入多维分词并执行严格跨字段 AND 组合累积分数；`src/ui/dialog.ts` 的 `appendHighlighted` 同步接入，保证高亮区间与检索切词完全一致。
+- 新增 `tests/r210-multi-keyword-search.test.cjs` 专项断言（单元门禁 553/553 全部通过），并通过故意改回仅空白切分的严格负向验证。
+
+仍开放但已明确记录：B-006 的真实宿主验收、多块正文更新和旧数据边界；Android、真实 AI、B-004 根因与 B-005 隔离/影响审计。发现页标签可访问名称已经修复，不再把历史诊断写成当前缺陷；有限 axe 场景仍不等于全插件无障碍保证。
+
+## R241 资源示例与 Issue #1 续审
+
+- 使用帮助已拆出图片/证件示意图、PPT/PDF/DOCX、简历正文/附件三类真实资源示例；每条都说明先在思源添加真实资源，以及当前仅支持 Markdown/资源链接、打开来源和链接复制。
+- `guide.media.image`、`guide.media.attachment`、`guide.media.resume` 已纳入 Chrome 交互审计；三类示例可见，`test:ix` 仍为 74/74。该证据属于离线 harness，不代表 Android 位图剪贴板、Office 预览或跨应用文件发送已验收。
+- Issue #1 仍开放、无开放 PR。`createNotebook`/`removeNotebook` 契约、`createIndependentLibrary` 离线编排和首次运行设置 UI 已落地；真实宿主权限/生命周期验收仍待完成。依据 [ADR 0059](adr/0059-issue1-independent-notebook-creation-plan.md)，B-005 解除前不启动新的宿主实验。
+
+## R243 设置 UI 接线
+
+- 首次运行设置新增独立笔记本模式，独立笔记本名称与库文档名称分开填写；普通新建专用库文档仍保持推荐默认。
+- 成功 smoke 覆盖模式可见、空字段禁用、填写后启用、`createdNotebookIds` 持久化和对话框关闭；失败 smoke 覆盖表单保留、错误可见、不写配置和错误样式。
+- 该证据属于 Chrome/harness；真实思源权限、生命周期、补偿删除和 Issue #1 关闭条件仍未验收。
+
+## R244 本机使用统计摘要
+
+- 设置页现显示“累计使用次数 / 涉及条目数”摘要，清空侧车统计后立即显示零态；摘要有 `settings.usage.summary` 稳定控件和 `aria-live` 状态语义。
+- `summarizeUsage` 只聚合合法侧车数字，不读取条目正文、来源或网络；单元覆盖非法计数过滤与空态。
+- Chrome 生产 smoke 的设置区为 12 项，交互审计保持 74/74；该能力仍属于本机侧车统计，不代表跨设备或真实宿主数据分析。
+
+## GitHub 状态
+
+- 最新 release：[`v0.4.2`](https://github.com/ai68298100/xiaolv-common/releases/tag/v0.4.2)，非草稿、非 prerelease，附件 `package.zip` SHA256 `9bd5251cc823ffe1ed4b306431fa7477db576e5117865c523b6847e4bfb58b4a`，manifest `xiaolv-common / 0.4.2`，13 个根资源正确。
+- `main` 与 tag CI 均成功；GitHub 最新 main 仍为发布记录同步提交 `dc778017f5dd3557d31a749f534ca2f9c084712e`，本地后续修复尚未推送。
+- 开放 issue：[#1 选择内容库时支持新建独立笔记本](https://github.com/ai68298100/xiaolv-common/issues/1)。当前无开放 PR；本轮已完成设置 UI 与离线接线，但未发送评论，真实宿主验收仍待完成。
+- GitHub Dependabot alerts 已关闭/接口返回 403，code scanning 没有分析结果，secret scanning API 返回空；本地 `pnpm audit` 生产与全依赖均为 0 漏洞。不能把“未启用/无分析结果”写成 GitHub 已完成安全扫描。
+- 集市未推送；本轮修复形成本地里程碑提交，未推送 GitHub 或发布新版本。发布前仍须重新执行发布门禁。
+
+## 建议顺序
+
+1. 继续收口 B-006：在满足 B-005 后从官方返回 DOM/AST 核验完整顶层块集合及所有权，覆盖读回、结构、更新、导出和恢复，再替换当前写前限制；禁止把全部 operation ID 当完整清单或猜测合并旧兄弟块。
+2. 接线 issue #1 设置 UI，展示笔记本/文档两步状态与补偿失败 ID；完成后再安排真实宿主权限和生命周期验收。
+3. 建立操作系统级隔离后再做 B-004、多轮 Electron、真实 AI 和 Android；发布说明继续区分本地、离线、隔离内核、Electron、真实设备/provider。
+4. B-006 解决后再加入简历/公司介绍正文和结构清单等复杂可直接导入示例；邮箱、地址、无效身份占位、URL、JSON 的单行/代码围栏示例已可按当前限制导入。图片、身份证照片、PPT、PDF、DOCX 先提供说明，真实资源安装与预览另立任务。

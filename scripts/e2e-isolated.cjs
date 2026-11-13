@@ -1,0 +1,201 @@
+// 独立后台 E2E（B-001 解除方案，R136）：用本机思源自带内核起一个隔离实例——
+// 独立工作区 + 独立端口（默认 16806），令牌直接从测试工作区 conf 读出，不触碰正在运行的
+// 主思源实例，无需用户授权令牌。默认跑 acceptance，可用 --discovery-only 跑发现验收。
+// 零依赖（Node 18+ 原生 fetch / child_process）。
+//
+// 用法：node scripts/e2e-isolated.cjs [--discovery-only] [--keep] [--port 16806] [--kernel <内核exe路径>]
+//   --discovery-only 运行 scripts/e2e-discovery.cjs
+//   --keep            跑完后保留本次启动的隔离内核供检查
+// 环境变量：SIYUAN_KERNEL（内核路径）、SIYUAN_E2E_PORT（默认 16806）、SIYUAN_E2E_WS（工作区目录，默认系统临时目录）
+//
+// 本脚本只做进程编排与令牌读取；验收断言位于对应的 e2e-*.cjs 脚本。
+"use strict";
+
+const {spawn, spawnSync} = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+const args = process.argv.slice(2);
+const flag = (name) => {
+    const i = args.indexOf(name);
+    return i >= 0 ? (args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : "") : null;
+};
+const KEEP = args.includes("--keep");
+const DISCOVERY_ONLY = args.includes("--discovery-only");
+const rawPort = String(flag("--port") || process.env.SIYUAN_E2E_PORT || 16806);
+if (!/^\d+$/.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65535) {
+    console.error("[isolated] 端口必须是 1 到 65535 之间的数字");
+    process.exit(1);
+}
+const PORT = String(Number(rawPort));
+const ORIGIN = `http://127.0.0.1:${PORT}`;
+
+function resolveKernel() {
+    const fromArg = flag("--kernel") || process.env.SIYUAN_KERNEL || "";
+    const candidates = [
+        fromArg,
+        path.join(os.homedir(), "AppData", "Local", "Programs", "SiYuan", "resources", "kernel", "siyuan.exe"),
+        "C:/Program Files/SiYuan/resources/kernel/siyuan.exe",
+        "D:/RJ/SiYuan/resources/kernel/siyuan.exe",
+    ].filter(Boolean);
+    for (const c of candidates) {
+        try {
+            fs.accessSync(c, fs.constants.X_OK);
+            return c;
+        } catch {}
+    }
+    console.error(`未找到思源内核（siyuan.exe）。请用 --kernel 或环境变量 SIYUAN_KERNEL 指定，候选已尝试：\n  ${candidates.join("\n  ")}`);
+    process.exit(1);
+}
+
+async function probe(origin) {
+    try {
+        const resp = await fetch(`${origin}/api/system/version`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: "{}",
+            signal: AbortSignal.timeout(1500),
+        });
+        return resp.ok ? await resp.json() : null;
+    } catch {
+        return null;
+    }
+}
+
+function api(origin, token, endpoint, payload = {}) {
+    return fetch(`${origin}${endpoint}`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json", ...(token ? {Authorization: `Token ${token}`} : {})},
+        body: JSON.stringify(payload),
+    }).then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status} @ ${endpoint}`);
+        return r.json();
+    });
+}
+
+function readToken(ws) {
+    for (const p of [path.join(ws, "conf", "conf.json"), path.join(ws, "conf.json")]) {
+        try {
+            const conf = JSON.parse(fs.readFileSync(p, "utf8"));
+            const token = conf.api?.token ?? conf.apiToken ?? "";
+            if (token) return token;
+        } catch {}
+    }
+    return "";
+}
+
+async function main() {
+    const kernel = resolveKernel();
+    const resolveE2eWs = () => {
+        if (process.env.SIYUAN_E2E_WS) return path.resolve(process.env.SIYUAN_E2E_WS);
+        const dTemp = "D:\\Temp";
+        if (fs.existsSync(dTemp) || fs.existsSync("D:\\")) return path.join(dTemp, "xiaolv-e2e-ws");
+        return path.join(os.tmpdir(), "xiaolv-e2e-ws");
+    };
+    const ws = resolveE2eWs();
+    fs.mkdirSync(ws, {recursive: true});
+
+    // Never send test writes to an instance whose workspace identity is unknown.
+    if (await probe(ORIGIN)) {
+        console.error(`[isolated] 端口 ${PORT} 已有内核；为避免写入非隔离工作区，请换一个空闲端口`);
+        process.exit(1);
+    }
+    let child = null;
+    const logPath = path.join(ws, ".kernel.log");
+    console.log(`[isolated] 启动隔离内核：${kernel}`);
+    console.log(`[isolated]   工作区 ${ws}`);
+    console.log(`[isolated]   端口   ${PORT}（日志 ${logPath}）`);
+    child = spawn(kernel, ["serve", "-w", ws, "--port", PORT], {
+        stdio: ["ignore", fs.openSync(logPath, "a"), fs.openSync(logPath, "a")],
+    });
+    child.on("error", (err) => {
+        console.error(`[isolated] 内核启动失败：${err.message}`);
+        process.exit(1);
+    });
+    const deadline = Date.now() + 30_000;
+    let ready = null;
+    while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 800));
+        ready = await probe(ORIGIN);
+        if (ready) break;
+    }
+    if (!ready) {
+        console.error("[isolated] 内核 30s 未就绪，查看工作区 .kernel.log");
+        if (child && child.pid) killTree(child.pid);
+        process.exit(1);
+    }
+    console.log(`[isolated] 内核就绪 v${ready?.data ?? ready}`);
+
+    const token = readToken(ws);
+    if (!token) {
+        console.error(`[isolated] 未能从 ${ws} 读到 api token（conf.api.token）`);
+        if (child) killTree(child.pid);
+        process.exit(1);
+    }
+
+    // 验收脚本要求至少一个打开的笔记本；隔离工作区首启为空，就地补建并等待元数据就绪
+    try {
+        let nb = await api(ORIGIN, token, "/api/notebook/lsNotebooks");
+        let list = (nb.data?.notebooks ?? []).filter((n) => !n.closed);
+        if (list.length === 0) {
+            await api(ORIGIN, token, "/api/notebook/createNotebook", {name: "xiaolv-e2e"});
+            console.log('[isolated] 空工作区，已创建笔记本 "xiaolv-e2e"');
+            nb = await api(ORIGIN, token, "/api/notebook/lsNotebooks");
+            list = (nb.data?.notebooks ?? []).filter((n) => !n.closed);
+        }
+        const nbId = list[0]?.id;
+        if (nbId) {
+            for (let i = 0; i < 30; i++) {
+                const probeDoc = await api(ORIGIN, token, "/api/filetree/createDocWithMd", {
+                    notebook: nbId,
+                    path: `/__xlc_warmup_${Date.now()}`,
+                    markdown: "",
+                });
+                if (probeDoc && probeDoc.code === 0 && probeDoc.data) {
+                    await api(ORIGIN, token, "/api/filetree/removeDoc", {notebook: nbId, path: `/${probeDoc.data}.sy`});
+                    break;
+                }
+                await new Promise((r) => setTimeout(r, 800));
+            }
+        }
+    } catch (err) {
+        console.error(`[isolated] 笔记本检查失败：${err.message}`);
+        if (child) killTree(child.pid);
+        process.exit(1);
+    }
+
+    const acceptanceName = DISCOVERY_ONLY ? "e2e-discovery.cjs" : "e2e-acceptance.cjs";
+    const acceptance = path.join(__dirname, acceptanceName);
+    console.log(`[isolated] 运行验收 scripts/${acceptanceName} ——\n`);
+    const exitCode = await new Promise((resolve) => {
+        const proc = spawn(process.execPath, [acceptance], {
+            stdio: "inherit",
+            env: {...process.env, SIYUAN_ORIGIN: ORIGIN, SIYUAN_TOKEN: token},
+        });
+        proc.on("exit", (code) => resolve(code ?? 1));
+    });
+
+    if (child && !KEEP) {
+        console.log("\n[isolated] 关闭隔离内核");
+        killTree(child.pid);
+    } else if (KEEP) {
+        console.log(`\n[isolated] --keep：内核保留在 ${ORIGIN}（工作区 ${ws}），可直接复跑 scripts/${acceptanceName}`);
+    }
+    process.exit(exitCode);
+}
+
+function killTree(pid) {
+    try {
+        if (process.platform === "win32") {
+            spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {stdio: "ignore"});
+        } else {
+            process.kill(pid, "SIGTERM");
+        }
+    } catch {}
+}
+
+main().catch((err) => {
+    console.error(`[isolated] ${err.message}`);
+    process.exit(1);
+});
