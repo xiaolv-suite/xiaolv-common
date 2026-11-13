@@ -888,5 +888,8 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /\.lv-qw-btn-primary:hover:not\(:disabled\)\{background:var\(--lv-lp-accent,#2563eb\)!important;color:#ffffff!important/, 'Primary button hover must enforce high-contrast text and background');
         assert.match(src, /\.lv-qw-btn-secondary:hover:not\(:disabled\)/, 'Secondary button hover must be defined with high contrast');
         assert.match(src, /\.lv-qw-cat-chip\.active:hover/, 'Active category chip hover must preserve white text on accent');
+        // Round-26：移动端全屏弹窗触控滑动流与防截断保护
+        assert.match(src, /touch-action:pan-y/, 'Touch action pan-y must be enabled on scroll bodies');
+        assert.match(src, /-webkit-overflow-scrolling:touch/, 'Webkit touch scrolling must be enabled');
     } finally { c.close(); }
 });

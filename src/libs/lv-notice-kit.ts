@@ -1162,7 +1162,7 @@ const STYLES = `
 .lv-qw-close{background:transparent;border:none;cursor:pointer;font-size:14px;padding:4px 7px;border-radius:7px;color:var(--lv-lp-text-sub,#64748b);transition:background-color .14s ease,color .14s ease,transform .12s ease}
 .lv-qw-close:hover{background:var(--lv-lp-panel-bg,#f1f5f9);color:var(--lv-lp-text,#0f172a)}
 .lv-qw-close:active{transform:scale(.92)}
-.lv-qw-body{padding:13px 16px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;overscroll-behavior:contain}
+.lv-qw-body{padding:13px 16px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y}
 .lv-qw-categories,.lv-qw-tags-row,.lv-qw-time-offsets{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .lv-qw-tags-label{font-size:11px;color:var(--lv-lp-text-sub,#64748b);font-weight:500}
 .lv-qw-cat-pill{display:inline-flex;align-items:center;position:relative}
@@ -1244,8 +1244,12 @@ const STYLES = `
 .lv-conflict-tab:active{transform:scale(.96)}
 .lv-conflict-tab.active{background:var(--lv-lp-accent-soft,rgba(37,99,235,.14));border-color:var(--lv-lp-accent,#2563eb);color:var(--lv-lp-accent,#2563eb)}
 .lv-diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lv-conflict-tab-view{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y}
 @media (max-width:560px){
   .lv-diff-grid{grid-template-columns:1fr!important}
+}
+@media (max-width:600px){
+  .lv-conflict-tab-view{max-height:calc(85dvh - 150px)!important}
 }
 
 /* ===== 设备矩阵适配：平板 / 折叠屏内屏（≥600px）底部抽屉 → 居中悬浮卡片 ===== */
