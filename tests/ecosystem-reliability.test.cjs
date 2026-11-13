@@ -880,5 +880,8 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /lv-block-locate-btn/, 'Block locate and highlight button must be wired');
         assert.match(src, /lv-doc-more-btn/, 'Native document more action button must be wired');
         assert.match(src, /lv-diff-grid/, 'Responsive diff grid must be styled');
+        // Round-24：全局 D 键直达对账中枢与跨插件联邦治理事件广播
+        assert.match(src, /lv-dedup:reconciled/, 'Federation dedup reconciliation event must be dispatched');
+        assert.match(src, /e\.key === "d"/, 'Launchpad shortcut D for dedup must be wired');
     } finally { c.close(); }
 });

@@ -6984,7 +6984,7 @@ export function buildLaunchpadPopoverHtml(
           <button type="button" class="lv-pop-sub-btn lv-pop-diary-btn" title="将今日全生态活动汇总写入日记或复制">📝 今日回顾</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-backup-btn" title="一键导出小驴全家桶联合灾备包">💾 联合备份</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-restore-btn" title="从备份文件恢复小驴全家桶数据（会覆盖当前数据）">♻ 恢复</button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-dedup-btn" title="全生态同步对账与多端重复内容治理">🧹 对账</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-dedup-btn" title="全生态同步对账与多端重复内容治理 (快捷键 D)">🧹 对账 <span style="opacity:.6;font-size:10px;">D</span></button>
           <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--lv-lp-accent,#2563eb);padding:2px 4px;">Esc</button>
         </div>
       </div>
@@ -8223,6 +8223,11 @@ function openDesktopLaunchpadPopoverImpl(
             if (e.key === "r" || e.key === "R") {
                 try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
                 void reloadUI();
+                return;
+            }
+            if (e.key === "d" || e.key === "D") {
+                try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+                openConflictResolverDialog();
                 return;
             }
         }
@@ -10791,6 +10796,13 @@ export function openConflictResolverDialog(): void {
                         }
                     }
                     cleanup();
+                    if (typeof window !== "undefined") {
+                        try {
+                            window.dispatchEvent(new CustomEvent("lv-dedup:reconciled", {
+                                detail: { mode: "doc-titles", count: recycledCount, at: new Date().toISOString() }
+                            }));
+                        } catch { /* ignore */ }
+                    }
                     lvNotify.capsule({
                         source: "文档查重",
                         message: recycledCount > 0 ? `🧹 清理完成：已将 ${recycledCount} 篇冗余同名副本移入废纸篓（可随时撤销还原）` : "全库文档名称唯一，无需清理",
@@ -10806,6 +10818,13 @@ export function openConflictResolverDialog(): void {
                     }
                     const res = await lvDeduplicator.deduplicateDocBlocks(currentDoc.id, currentMinLength);
                     cleanup();
+                    if (typeof window !== "undefined") {
+                        try {
+                            window.dispatchEvent(new CustomEvent("lv-dedup:reconciled", {
+                                detail: { mode: "doc-blocks", count: res.removedCount, at: new Date().toISOString() }
+                            }));
+                        } catch { /* ignore */ }
+                    }
                     lvNotify.capsule({
                         source: "段落排重",
                         message: res.removedCount > 0 ? `🧹 清理完成：已从《${currentDoc.title}》剔除 ${res.removedCount} 处重复块！` : "当前文档内容唯一，无重复块",
@@ -10832,6 +10851,13 @@ export function openConflictResolverDialog(): void {
                     }
                     cleanup();
                     const totalCleaned = cleanedConflict + logRes.removedCount + cleanedClips;
+                    if (typeof window !== "undefined") {
+                        try {
+                            window.dispatchEvent(new CustomEvent("lv-dedup:reconciled", {
+                                detail: { mode: "sync-conflict", count: totalCleaned, at: new Date().toISOString() }
+                            }));
+                        } catch { /* ignore */ }
+                    }
                     lvNotify.capsule({
                         source: "对账治理",
                         message: totalCleaned > 0

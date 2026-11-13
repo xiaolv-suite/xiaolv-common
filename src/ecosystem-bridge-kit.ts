@@ -78,6 +78,8 @@ export const ECOSYSTEM_EVENTS = Object.freeze({
     RAIKIRI_DATA_CHANGED: "lv-raikiri:data-changed",
     // 联盟伙伴：Task Horizon (任务视界)
     TASK_COMPLETED: "tm:task-completed",
+    // 对账治理
+    DEDUP_RECONCILED: "lv-dedup:reconciled",
 } as const);
 
 /* ========================================================================= */
