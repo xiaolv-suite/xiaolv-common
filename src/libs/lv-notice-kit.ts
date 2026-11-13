@@ -3541,6 +3541,109 @@ export function isXiaoLvHubNotebook(name?: string): boolean {
 }
 
 /* ========================================================================= */
+/* 13.5. 全生态对账、去重与同步冲突治理中枢 (Lv Deduplicator Engine)         */
+/* ========================================================================= */
+
+export interface LvConflictDocItem {
+    id: string;
+    box: string;
+    hpath: string;
+    title: string;
+    updated: string;
+}
+
+export const lvDeduplicator = {
+    /** 扫描全库因同步冲突产生的带 (冲突 或 conflict 字样的分叉文档 */
+    async scanConflictDocs(): Promise<LvConflictDocItem[]> {
+        try {
+            const sql = `SELECT id, root_id, box, hpath, content, updated FROM blocks WHERE type='d' AND (content LIKE '%(冲突%' OR content LIKE '%_conflict_%' OR content LIKE '%conflict%') ORDER BY updated DESC LIMIT 50`;
+            const res = await lvKernelPost("/api/query/sql", { stmt: sql });
+            if (res.code === 0 && Array.isArray(res.data)) {
+                return res.data.map((row: any) => ({
+                    id: String(row.id || row.root_id),
+                    box: String(row.box || ""),
+                    hpath: String(row.hpath || ""),
+                    title: String(row.content || ""),
+                    updated: String(row.updated || ""),
+                }));
+            }
+        } catch { /* ignore */ }
+        return [];
+    },
+
+    /** 扫描并清洗指定日期（默认今日）日记中因多设备同步并发追加的重复 LifeLog 块 */
+    async deduplicateDailyLifeLogs(dateStr?: string, dryRun = false): Promise<{ removedCount: number; duplicateGroups: number; details: string[] }> {
+        let removed = 0;
+        let groups = 0;
+        const details: string[] = [];
+        try {
+            const targetDate = dateStr || (() => {
+                const d = new Date();
+                return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+            })();
+            const sql = `
+                SELECT b.id, b.root_id, b.content, b.created 
+                FROM attributes a 
+                JOIN blocks b ON a.block_id = b.id 
+                WHERE a.name = 'custom-lifelog-type' AND (b.created LIKE '${targetDate}%' OR a.value LIKE '%${targetDate}%')
+                ORDER BY b.created ASC
+            `;
+            const res = await lvKernelPost("/api/query/sql", { stmt: sql });
+            if (res.code === 0 && Array.isArray(res.data)) {
+                const map = new Map<string, Array<{ id: string; content: string }>>();
+                for (const row of res.data) {
+                    const contentClean = (row.content || "").replace(/[\r\n\t\s]+/g, " ").trim();
+                    if (!contentClean) continue;
+                    const key = `${row.root_id}:::${contentClean}`;
+                    const arr = map.get(key) || [];
+                    arr.push({ id: String(row.id), content: contentClean });
+                    map.set(key, arr);
+                }
+                for (const [_, items] of map.entries()) {
+                    if (items.length > 1) {
+                        groups++;
+                        const snippet = items[0]?.content.slice(0, 24) || "记事";
+                        details.push(`「${snippet}…」重复 ${items.length} 次`);
+                        if (!dryRun) {
+                            const toRemove = items.slice(1);
+                            for (const item of toRemove) {
+                                const delRes = await lvKernelPost("/api/block/deleteBlock", { id: item.id });
+                                if (delRes.code === 0) removed++;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch { /* ignore */ }
+        return { removedCount: removed, duplicateGroups: groups, details };
+    },
+
+    /** 扫描全库重复剪藏文章（相同目标 URL） */
+    async findDuplicateClips(): Promise<Array<{ url: string; count: number; docIds: string[] }>> {
+        try {
+            const sql = `
+                SELECT a.value as url, count(1) as cnt, group_concat(b.id, ',') as docIds
+                FROM attributes a
+                JOIN blocks b ON a.block_id = b.id
+                WHERE a.name = 'custom-clip-url' AND a.value != ''
+                GROUP BY a.value
+                HAVING count(1) > 1
+                LIMIT 50
+            `;
+            const res = await lvKernelPost("/api/query/sql", { stmt: sql });
+            if (res.code === 0 && Array.isArray(res.data)) {
+                return res.data.map((r: any) => ({
+                    url: String(r.url),
+                    count: Number(r.cnt),
+                    docIds: String(r.docIds || "").split(",").filter(Boolean),
+                }));
+            }
+        } catch { /* ignore */ }
+        return [];
+    }
+};
+
+/* ========================================================================= */
 /* 14. 小驴罗盘 · 家族极速弹射坞引擎 (Lv Launchpad Engine)                   */
 /* ========================================================================= */
 
@@ -6559,6 +6662,7 @@ export function buildLaunchpadPopoverHtml(
           <button type="button" class="lv-pop-sub-btn lv-pop-diary-btn" title="将今日全生态活动汇总写入日记或复制">📝 今日回顾</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-backup-btn" title="一键导出小驴全家桶联合灾备包">💾 联合备份</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-restore-btn" title="从备份文件恢复小驴全家桶数据（会覆盖当前数据）">♻ 恢复</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-dedup-btn" title="全生态同步对账与多端重复内容治理">🧹 对账</button>
           <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--lv-lp-accent,#2563eb);padding:2px 4px;">Esc</button>
         </div>
       </div>
@@ -7437,6 +7541,13 @@ function openDesktopLaunchpadPopoverImpl(
             if (restoreBtn) {
                 e.stopPropagation();
                 openEcosystemRestoreDialog();
+                return;
+            }
+
+            const dedupBtn = target.closest<HTMLElement>(".lv-pop-dedup-btn");
+            if (dedupBtn) {
+                e.stopPropagation();
+                openConflictResolverDialog();
                 return;
             }
 
@@ -9007,6 +9118,12 @@ function openMobileSheetImpl(): void {
                 openEcosystemRestoreDialog();
             }
         },
+        {
+            label: "🧹 冲突排查与对账",
+            action: async () => {
+                openConflictResolverDialog();
+            }
+        },
     ];
     for (const def of ecoDefs) {
         const btn = document.createElement("button");
@@ -10172,6 +10289,144 @@ function openEcosystemRestoreDialog(): void {
             if (saveBtn) saveBtn.disabled = true;
         });
     });
+}
+
+/** 全生态对账与去重治理弹层：扫描全库同步冲突分叉文档、今日日记重复 LifeLog，并提供一键安全清洗 */
+export function openConflictResolverDialog(): void {
+    let conflictDocs: LvConflictDocItem[] = [];
+    let dupLifeLogState: { removedCount: number; duplicateGroups: number; details: string[] } = { removedCount: 0, duplicateGroups: 0, details: [] };
+    let dupClips: Array<{ url: string; count: number; docIds: string[] }> = [];
+
+    mountQuickModal({
+        icon: "🧹",
+        title: "全生态同步对账与排重治理",
+        badgeHtml: `<span class="lv-qw-badge">多端同步自愈中枢</span>`,
+        bodyHtml: `
+            <div class="lv-restore-warn" style="margin-bottom:10px;">
+                💡 <strong>多端同步原理说明</strong>：思源在手机与电脑离线记事后，同步时常因两端 Block ID 独立而将同一条流水重复追加，或在并发修改时生成 <code>(冲突)</code> 分叉文档。小驴引擎支持全库智能对账与一键去重。
+            </div>
+            <div class="lv-conflict-box" style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.1));">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                        <strong>1. 同步冲突分叉文档</strong>
+                        <span class="lv-conflict-doc-status" style="font-weight:600;color:var(--lv-lp-accent,#2563eb);">⏳ 正在扫描…</span>
+                    </div>
+                    <div class="lv-conflict-doc-detail" style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">正在检索全库标题含有 (冲突) 或 _conflict_ 的文档…</div>
+                </div>
+                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.1));">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                        <strong>2. 今日日记重复 LifeLog 流水</strong>
+                        <span class="lv-conflict-log-status" style="font-weight:600;color:var(--lv-lp-accent,#2563eb);">⏳ 正在扫描…</span>
+                    </div>
+                    <div class="lv-conflict-log-detail" style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">正在检查多端并发同步是否造成今日记事重复追加…</div>
+                </div>
+                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.1));">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                        <strong>3. 读库重复网页剪藏</strong>
+                        <span class="lv-conflict-clip-status" style="font-weight:600;color:var(--lv-lp-accent,#2563eb);">⏳ 正在扫描…</span>
+                    </div>
+                    <div class="lv-conflict-clip-detail" style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">正在基于 URL 唯一指纹扫描重复收录的网页文章…</div>
+                </div>
+            </div>
+            <div class="lv-conflict-result" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;font-size:12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);color:var(--lv-lp-text,#0f172a);"></div>
+        `,
+        primaryLabel: "一键执行安全去重",
+        secondaryLabel: "重新检测",
+        onSave: async (saveBtn, cleanup, continueMode) => {
+            if (continueMode) {
+                void runScan();
+                return;
+            }
+            const origLabel = saveBtn?.textContent || "一键执行安全去重";
+            if (saveBtn) saveBtn.textContent = "去重清洗中…";
+            try {
+                const res = await lvDeduplicator.deduplicateDailyLifeLogs(undefined, false);
+                cleanup();
+                lvNotify.capsule({
+                    source: "对账中枢",
+                    message: res.removedCount > 0
+                        ? `🧹 清洗完成：已自动剔除 ${res.removedCount} 条多端并发产生的重复 LifeLog，日记已恢复纯净！`
+                        : "✨ 今日日记无重复流水，数据完全健康！",
+                    duration: 3500,
+                    level: "success",
+                    archive: false,
+                });
+            } catch {
+                if (saveBtn) saveBtn.textContent = origLabel;
+                lvNotify.capsule({ source: "对账中枢", message: "去重执行异常，请稍后重试", duration: 2500, level: "error", archive: false });
+            }
+        }
+    });
+
+    const mask = typeof document !== "undefined" ? document.getElementById("lv-quick-workspace-mask") : null;
+    const saveBtn = mask?.querySelector<HTMLButtonElement>(".lv-qw-btn-primary");
+    const resultBox = mask?.querySelector<HTMLElement>(".lv-conflict-result");
+
+    const runScan = async () => {
+        if (!mask) return;
+        const docStatus = mask.querySelector<HTMLElement>(".lv-conflict-doc-status");
+        const docDetail = mask.querySelector<HTMLElement>(".lv-conflict-doc-detail");
+        const logStatus = mask.querySelector<HTMLElement>(".lv-conflict-log-status");
+        const logDetail = mask.querySelector<HTMLElement>(".lv-conflict-log-detail");
+        const clipStatus = mask.querySelector<HTMLElement>(".lv-conflict-clip-status");
+        const clipDetail = mask.querySelector<HTMLElement>(".lv-conflict-clip-detail");
+
+        if (docStatus) docStatus.textContent = "⏳ 扫描中…";
+        if (logStatus) logStatus.textContent = "⏳ 扫描中…";
+        if (clipStatus) clipStatus.textContent = "⏳ 扫描中…";
+
+        conflictDocs = await lvDeduplicator.scanConflictDocs();
+        dupLifeLogState = await lvDeduplicator.deduplicateDailyLifeLogs(undefined, true);
+        dupClips = await lvDeduplicator.findDuplicateClips();
+
+        if (docStatus) {
+            docStatus.textContent = conflictDocs.length > 0 ? `⚠️ 发现 ${conflictDocs.length} 篇` : "✓ 无冲突";
+            docStatus.style.color = conflictDocs.length > 0 ? "#ef4444" : "#10b981";
+        }
+        if (docDetail) {
+            docDetail.textContent = conflictDocs.length > 0
+                ? `分叉文档：${conflictDocs.slice(0, 3).map(d => d.title).join("、")}${conflictDocs.length > 3 ? "…" : ""}`
+                : "全库未检测到因同步分叉生成的带 (冲突) 后缀文档。";
+        }
+
+        if (logStatus) {
+            logStatus.textContent = dupLifeLogState.duplicateGroups > 0 ? `⚠️ 发现 ${dupLifeLogState.duplicateGroups} 组重复` : "✓ 无重复";
+            logStatus.style.color = dupLifeLogState.duplicateGroups > 0 ? "#f59e0b" : "#10b981";
+        }
+        if (logDetail) {
+            logDetail.textContent = dupLifeLogState.duplicateGroups > 0
+                ? `重复流水：${dupLifeLogState.details.slice(0, 2).join("；")}`
+                : "今日日记各端记事顺序唯一，无时间戳或内容重复块。";
+        }
+
+        if (clipStatus) {
+            clipStatus.textContent = dupClips.length > 0 ? `⚠️ 发现 ${dupClips.length} 篇重复` : "✓ 无重复";
+            clipStatus.style.color = dupClips.length > 0 ? "#f59e0b" : "#10b981";
+        }
+        if (clipDetail) {
+            clipDetail.textContent = dupClips.length > 0
+                ? `共 ${dupClips.length} 篇网址重复收录，可前往拾遗工作台一键合并`
+                : "读库文章 URL 指纹唯一，无多端重复剪藏收录。";
+        }
+
+        const totalIssues = conflictDocs.length + dupLifeLogState.duplicateGroups + dupClips.length;
+        if (resultBox) {
+            resultBox.style.display = "block";
+            if (totalIssues === 0) {
+                resultBox.style.background = "rgba(16,185,129,0.08)";
+                resultBox.style.borderColor = "rgba(16,185,129,0.25)";
+                resultBox.innerHTML = "🎉 <strong>全库体检完毕</strong>：当前思源笔记各端同步良好，未发现任何同步冲突文档或重复流水！";
+                if (saveBtn) saveBtn.textContent = "数据健康 · 无需去重";
+            } else {
+                resultBox.style.background = "rgba(245,158,11,0.08)";
+                resultBox.style.borderColor = "rgba(245,158,11,0.25)";
+                resultBox.innerHTML = `⚠️ 检测到 <strong>${totalIssues}</strong> 项潜在同步重复项，点击下方「一键执行安全去重」可保留真身并剔除冗余块。`;
+                if (saveBtn) saveBtn.textContent = "一键执行安全去重";
+            }
+        }
+    };
+
+    void runScan();
 }
 
 /** 剪贴长内容（>300 字）预览确认弹层：可编辑后再入库；manual 模式用于剪贴权限受阻时手动粘贴。

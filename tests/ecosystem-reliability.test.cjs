@@ -842,5 +842,10 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /isXiaoLvHubNotebook/, 'Hub notebook detector must be exported');
         assert.match(src, /lv-qw-lightbox/, 'LifeLog attach thumbnail must support fullscreen lightbox preview');
         assert.match(src, /e\.key === "s" \|\| e\.key === "S"/, 'QuickModal must support Ctrl+S / Cmd+S quick save');
+        // Round-17：全生态对账去重中枢与同步冲突治理
+        assert.match(src, /const lvDeduplicator =/, 'Deduplicator engine must be defined');
+        assert.match(src, /openConflictResolverDialog/, 'Conflict resolver dialog must be wired');
+        assert.match(src, /lv-pop-dedup-btn/, 'Desktop footer must expose dedup entry');
+        assert.match(src, /🧹 冲突排查与对账/, 'Mobile eco row must expose dedup chip');
     } finally { c.close(); }
 });
