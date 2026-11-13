@@ -883,5 +883,10 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         // Round-24：全局 D 键直达对账中枢与跨插件联邦治理事件广播
         assert.match(src, /lv-dedup:reconciled/, 'Federation dedup reconciliation event must be dispatched');
         assert.match(src, /e\.key === "d"/, 'Launchpad shortcut D for dedup must be wired');
+        // Round-25：按钮悬停高反差护盾（彻底根除白底白字与色彩丢失）
+        assert.match(src, /\.lv-qw-btn:not\(\.lv-qw-btn-primary\):not\(\.lv-qw-btn-secondary\):hover/, 'General button hover must not override primary/secondary buttons');
+        assert.match(src, /\.lv-qw-btn-primary:hover:not\(:disabled\)\{background:var\(--lv-lp-accent,#2563eb\)!important;color:#ffffff!important/, 'Primary button hover must enforce high-contrast text and background');
+        assert.match(src, /\.lv-qw-btn-secondary:hover:not\(:disabled\)/, 'Secondary button hover must be defined with high contrast');
+        assert.match(src, /\.lv-qw-cat-chip\.active:hover/, 'Active category chip hover must preserve white text on accent');
     } finally { c.close(); }
 });
