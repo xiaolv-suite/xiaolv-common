@@ -2140,6 +2140,38 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         } catch { /* ignore */ }
     };
 
+    // 探测并收拢第三方插件在 document.body 上散落插入的离散提醒弹窗（如 Task Horizon 日程提醒等）
+    const recordExternalFloatingReminder = (el: HTMLElement) => {
+        try {
+            if (!el || typeof el.querySelector !== "function") return;
+            const isExternalModal = Boolean(
+                el.querySelector?.("[data-tm-semantic-summary]") ||
+                el.classList?.contains?.("tm-remind-modal") ||
+                el.classList?.contains?.("tm-semantic-date-confirm-modal") ||
+                (el.textContent?.includes("个提醒") && el.textContent?.includes("稍后处理"))
+            );
+            if (isExternalModal) {
+                const raw = (el.textContent || "").replace(/\s+/g, " ").trim();
+                if (raw && !raw.includes("小驴全家桶") && !raw.includes("小驴罗盘")) {
+                    const snippet = raw.length > 70 ? raw.slice(0, 70) + "…" : raw;
+                    const packetId = `sy_ext_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                    hub.post({
+                        id: packetId,
+                        mode: "capsule",
+                        source: "日程与任务",
+                        category: "external-reminder",
+                        title: "日程提醒已收拢",
+                        message: snippet,
+                        level: "info",
+                        createdAt: Date.now(),
+                        repeatCount: 1,
+                        read: false,
+                    });
+                }
+            }
+        } catch { /* ignore */ }
+    };
+
     // 共享总线：思源 #message snackbar 的观察者与 body 引桥在 window 级单例。
     // 原实现每个插件副本各建一份 box 观察者 + body 引桥（8 插件 = 16 个 body/subtree 级 observer）；
     // 现改为单例 observer + 各副本处理器订阅分发——mutation 分发语义与独立观察者完全等价，开销 8→1。
@@ -2161,6 +2193,7 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                             return;
                         }
                     }
+                    recordExternalFloatingReminder(el);
                     updateNativeSnackbar(el);
                 }
             });
@@ -3393,8 +3426,22 @@ export const lvEcosystem = {
         const count = diag.registeredPlugins.length;
         const pluginText = count > 0 ? `${count} 插件已联结` : "单机模式";
         return `🐴 小驴全家桶 · ${pluginText} · 今日活动 ${diag.todayActivitiesCount} 项`;
+    },
+
+    /** 全生态官方统一大本营笔记本标准规范名称 */
+    CANONICAL_HUB_NOTEBOOK_NAME: "🐴 小驴生态",
+
+    /** 判断笔记本名称是否属于小驴生态大本营笔记本（兼容老版本小驴空间/小驴笔记本） */
+    isHubNotebook(name?: string): boolean {
+        if (!name) return false;
+        return /^(🐴\s*)?小驴(生态|空间|笔记本)/.test(name.trim());
     }
 };
+
+export const CANONICAL_HUB_NOTEBOOK_NAME = "🐴 小驴生态";
+export function isXiaoLvHubNotebook(name?: string): boolean {
+    return lvEcosystem.isHubNotebook(name);
+}
 
 /* ========================================================================= */
 /* 14. 小驴罗盘 · 家族极速弹射坞引擎 (Lv Launchpad Engine)                   */

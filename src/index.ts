@@ -2240,12 +2240,12 @@ export default class XiaolvCommonPlugin extends Plugin {
             if (!nbReceipt.ok || nbReceipt.data.length === 0) {
                 return {ok: false, count: 0};
             }
-            const hubNb = nbReceipt.data.find((n) => /小驴空间|小驴生态统一测试空间|小驴笔记本|小驴常用/.test(n.name || ""));
+            const hubNb = nbReceipt.data.find((n) => /^(🐴\s*)?小驴(生态|空间|笔记本|常用)/.test(n.name || ""));
             const targetNotebookId = this.config?.mode === "notebook"
                 ? (this.config.notebookIds?.[0] || hubNb?.id || nbReceipt.data[0]!.id)
                 : (hubNb?.id || nbReceipt.data[0]!.id);
             const targetNbMeta = nbReceipt.data.find((n) => n.id === targetNotebookId);
-            const isHubNb = Boolean(targetNbMeta && /小驴空间|小驴生态统一测试空间|小驴笔记本/.test(targetNbMeta.name || ""));
+            const isHubNb = Boolean(targetNbMeta && /^(🐴\s*)?小驴(生态|空间|笔记本)/.test(targetNbMeta.name || ""));
             const docTitle = `常用资产 · ${pack.name}`;
             const targetHPath = isHubNb ? `/07-小驴常用/${docTitle}` : `/${docTitle}`;
             const docMd = buildDedicatedDocMarkdown(pack);

@@ -125,11 +125,7 @@ export const STANDARD_SUBDIR_MAP: Record<string, PluginSubdirSpec> = Object.free
 
 export function isXiaoLvHubNotebookName(name: string): boolean {
     if (!name) return false;
-    return (
-        name.includes("小驴空间") ||
-        name.includes("小驴笔记本") ||
-        name.includes("小驴生态统一测试空间")
-    );
+    return /^(🐴\s*)?小驴(生态|空间|笔记本)/.test(name.trim());
 }
 
 export function findDedicatedXiaoLvNotebook<T extends { id: string; name: string; closed?: boolean }>(
@@ -264,9 +260,7 @@ export async function scanLegacyAssets(api: SiyuanApiAdapter): Promise<LegacyAss
 
     const openNotebooks = notebooks.filter(nb => !nb.closed);
     const dedicatedXiaoLvNb = openNotebooks.find(nb =>
-        nb.name.includes("小驴空间") ||
-        nb.name.includes("小驴笔记本") ||
-        nb.name.includes("小驴生态统一测试空间")
+        /^(🐴\s*)?小驴(生态|空间|笔记本)/.test(nb.name?.trim() || "")
     );
 
     try {
