@@ -835,5 +835,12 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /请长按屏幕粘贴内容到这里/, 'Manual paste placeholder must use long-press wording on mobile');
         assert.match(src, /touchMode \? `\$\{singleName\} · 点按直达`/, 'Mobile entry titles must use tap semantics, not left/right-click wording');
         assert.match(src, /lv-notice-more/, 'Notice stack must surface an overflow badge when older packets are hidden');
+        // Round-16：零散弹窗收拢、生态统一大本营与照片流大图预览体验升级
+        assert.match(src, /__LV_MODAL_HARMONIZER__/, 'Body harmonizer must maintain singleton refcount on window');
+        assert.match(src, /wireExternalModalHarmonizer/, 'Modal harmonizer must intercept third-party floating reminders');
+        assert.match(src, /CANONICAL_HUB_NOTEBOOK_NAME = "🐴 小驴生态"/, 'Canonical hub notebook must be unified as 🐴 小驴生态');
+        assert.match(src, /isXiaoLvHubNotebook/, 'Hub notebook detector must be exported');
+        assert.match(src, /lv-qw-lightbox/, 'LifeLog attach thumbnail must support fullscreen lightbox preview');
+        assert.match(src, /e\.key === "s" \|\| e\.key === "S"/, 'QuickModal must support Ctrl+S / Cmd+S quick save');
     } finally { c.close(); }
 });

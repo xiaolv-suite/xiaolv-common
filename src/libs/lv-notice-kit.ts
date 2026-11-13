@@ -1221,6 +1221,12 @@ const STYLES = `
   .lv-qw-textarea,.lv-qw-add-cat-input,.lv-qw-nb-select{font-size:16px}
   .lv-qw-btn{min-height:38px;padding:7px 14px}
 }
+@media (max-width:480px){
+  .lv-qw-card{width:96vw!important;max-width:96vw!important;border-radius:14px!important}
+  .lv-qw-foot{flex-direction:column!important;align-items:stretch!important;gap:8px!important;padding:8px 12px 12px!important}
+  .lv-qw-actions{width:100%!important;display:flex!important;gap:6px!important}
+  .lv-qw-btn{flex:1!important;text-align:center!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}
+}
 
 /* ===== 设备矩阵适配：平板 / 折叠屏内屏（≥600px）底部抽屉 → 居中悬浮卡片 ===== */
 @media (min-width: 600px) {
@@ -1852,6 +1858,8 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         }
     }
 
+    let harmonizerDisposer: (() => void) | undefined;
+
     const hub: LvNoticeHub = {
         version: PROTOCOL_VERSION,
         hostPlugin: initialPlugin,
@@ -2056,6 +2064,10 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                     }
                 }
             } catch { /* ignore */ }
+            if (harmonizerDisposer) {
+                try { harmonizerDisposer(); } catch { /* ignore */ }
+                harmonizerDisposer = undefined;
+            }
             timers.forEach((t) => clearTimeout(t));
             timers.clear();
             hostEl?.remove();
@@ -2258,7 +2270,90 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         }
     }
 
+    // 挂载全生态第三方离散裸弹窗哨兵（引用计数单例，彻底杜绝界面突兀裸弹窗）
+    if (typeof document !== "undefined" && typeof MutationObserver === "function" && document.body) {
+        harmonizerDisposer = wireExternalModalHarmonizer(hub);
+    }
+
     return hub;
+}
+
+/** 探测并收拢第三方在 document.body 上散落插入的离散弹窗（如 Task Horizon 日程提醒等） */
+function wireExternalModalHarmonizer(hub: LvNoticeHub): () => void {
+    if (typeof window === "undefined" || typeof document === "undefined" || !document.body || typeof MutationObserver === "undefined") {
+        return () => {};
+    }
+    const win = window as unknown as {
+        __LV_MODAL_HARMONIZER__?: { obs: MutationObserver | null; refCount: number };
+    };
+    const holder = win.__LV_MODAL_HARMONIZER__ || (win.__LV_MODAL_HARMONIZER__ = { obs: null, refCount: 0 });
+    holder.refCount++;
+
+    if (!holder.obs) {
+        holder.obs = new MutationObserver((muts) => {
+            for (const m of muts) {
+                m.addedNodes?.forEach?.((n) => {
+                    const el = n as HTMLElement;
+                    if (!el || typeof el.querySelector !== "function") return;
+                    const isExternalModal = Boolean(
+                        el.querySelector?.(".tm-semantic-date-confirm-box, [data-tm-semantic-summary]") ||
+                        el.classList?.contains?.("tm-remind-modal") ||
+                        el.classList?.contains?.("tm-semantic-date-confirm-modal") ||
+                        (el.textContent?.includes("个提醒") && el.textContent?.includes("稍后处理"))
+                    );
+                    if (isExternalModal) {
+                        try {
+                            const raw = (el.textContent || "").replace(/\s+/g, " ").trim();
+                            if (raw && !raw.includes("小驴全家桶") && !raw.includes("小驴罗盘")) {
+                                const snippet = raw.length > 70 ? raw.slice(0, 70) + "…" : raw;
+                                const packetId = `sy_ext_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                                hub.post({
+                                    id: packetId,
+                                    mode: "card",
+                                    source: "日程与任务",
+                                    category: "external-reminder",
+                                    title: "日程提醒已由罗盘统一收拢",
+                                    message: snippet,
+                                    level: "info",
+                                    createdAt: Date.now(),
+                                    repeatCount: 1,
+                                    read: false,
+                                    actions: [
+                                        {
+                                            label: "查看罗盘",
+                                            primary: true,
+                                            onClick: () => getLaunchpadHub().open(),
+                                            dismissAfterClick: true,
+                                        }
+                                    ]
+                                });
+                            }
+                            // 自动静默该离散弹窗自身：优先点击自带关闭/稍后处理，否则隐藏防遮挡
+                            const closeBtn = el.querySelector<HTMLElement>('[data-tm-semantic-action="close"], [data-tm-penalty-action="close"], .tm-semantic-date-confirm-close');
+                            if (closeBtn && typeof closeBtn.click === "function") {
+                                setTimeout(() => { try { closeBtn.click(); } catch {} }, 60);
+                            } else {
+                                el.style.setProperty("display", "none", "important");
+                                el.style.setProperty("pointer-events", "none", "important");
+                            }
+                        } catch { /* ignore */ }
+                    }
+                });
+            }
+        });
+        try {
+            holder.obs.observe(document.body, { childList: true, subtree: false });
+        } catch { /* ignore */ }
+    }
+
+    return () => {
+        holder.refCount--;
+        if (holder.refCount <= 0 && holder.obs) {
+            try { holder.obs.disconnect(); } catch { /* ignore */ }
+            holder.obs = null;
+            delete win.__LV_MODAL_HARMONIZER__;
+        }
+    };
 }
 
 function escapeHtml(str: string): string {
@@ -10528,7 +10623,7 @@ function mountQuickModal(opts: {
     const secondaryBtnHtml = opts.secondaryLabel
         ? `<button type="button" class="lv-qw-btn lv-qw-btn-secondary" title="Ctrl+Shift+Enter">${escapeHtml(opts.secondaryLabel)}</button>`
         : "";
-    mask.innerHTML = `<div class="lv-qw-card"><div class="lv-qw-head"><div class="lv-qw-title-wrap"><span class="lv-qw-icon">${opts.icon}</span><span class="lv-qw-title">${escapeHtml(opts.title)}</span>${opts.badgeHtml}</div><button type="button" class="lv-qw-close" aria-label="关闭">✕</button></div><div class="lv-qw-body">${opts.bodyHtml}</div><div class="lv-qw-foot"><div class="lv-qw-tip-wrap"><span class="lv-qw-tip">${opts.secondaryLabel ? (isMobileFrontend() ? `点「${escapeHtml(opts.secondaryLabel)}」可连续记录` : "Ctrl+Enter 保存 · Ctrl+Shift+Enter 续记 · Esc") : (isMobileFrontend() ? "点「保存」入库 · 点 ✕ 关闭" : "Ctrl+Enter 保存 · Esc 取消")}</span><span class="lv-qw-char-count">0 字</span></div><div class="lv-qw-actions"><button type="button" class="lv-qw-btn lv-qw-btn-cancel">取消</button>${secondaryBtnHtml}<button type="button" class="lv-qw-btn lv-qw-btn-primary">${escapeHtml(opts.primaryLabel)}</button></div></div></div>`;
+    mask.innerHTML = `<div class="lv-qw-card"><div class="lv-qw-head"><div class="lv-qw-title-wrap"><span class="lv-qw-icon">${opts.icon}</span><span class="lv-qw-title">${escapeHtml(opts.title)}</span>${opts.badgeHtml}</div><button type="button" class="lv-qw-close" aria-label="关闭">✕</button></div><div class="lv-qw-body">${opts.bodyHtml}</div><div class="lv-qw-foot"><div class="lv-qw-tip-wrap"><span class="lv-qw-tip">${opts.secondaryLabel ? (isMobileFrontend() ? `点「${escapeHtml(opts.secondaryLabel)}」可连续记录` : "Ctrl+Enter/S 保存 · Ctrl+Shift+Enter 续记 · Esc") : (isMobileFrontend() ? "点「保存」入库 · 点 ✕ 关闭" : "Ctrl+Enter/S 保存 · Esc 取消")}</span><span class="lv-qw-char-count">0 字</span></div><div class="lv-qw-actions"><button type="button" class="lv-qw-btn lv-qw-btn-cancel">取消</button>${secondaryBtnHtml}<button type="button" class="lv-qw-btn lv-qw-btn-primary">${escapeHtml(opts.primaryLabel)}</button></div></div></div>`;
 
     let isSaving = false;
     let vvCleanup: (() => void) | undefined;
@@ -10568,7 +10663,7 @@ function mountQuickModal(opts: {
             const inlineInput = mask.querySelector<HTMLElement>(".lv-qw-add-cat-row");
             if (inlineInput) return; // 让内联分类输入自己先处理 Esc
             e.preventDefault(); e.stopPropagation(); cleanup();
-        } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === "Enter" || e.key === "s" || e.key === "S")) {
             e.preventDefault(); e.stopPropagation();
             void runSave(Boolean(e.shiftKey && opts.secondaryLabel));
         }
