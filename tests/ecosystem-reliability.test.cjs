@@ -864,5 +864,10 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /lv-group-recycle-btn/, 'Single-group cleanup button must be supported');
         assert.match(src, /lv-block-single-dedup-btn/, 'Single-group block deduplication must be wired');
         assert.match(src, /lv-recycle-all-conflicts-btn/, 'Batch conflict resolution button must be wired');
+        // Round-21：子文档级联保护权重、双栏差异对账与排重敏感度调节
+        assert.match(src, /childCount/, 'Deduplicator must track childCount for hierarchy protection');
+        assert.match(src, /lv-group-diff-btn/, 'Group diff comparison button must be wired');
+        assert.match(src, /lv-min-len-btn/, 'Min length sensitivity selector must be wired');
+        assert.match(src, /安全拦截/, 'Safety confirmations must protect against accidental cascade deletion');
     } finally { c.close(); }
 });

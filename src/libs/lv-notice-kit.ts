@@ -3563,6 +3563,7 @@ export interface LvDuplicateDocEntry {
     hpath: string;
     updated: string;
     length: number;
+    childCount?: number;
 }
 
 export interface LvDuplicateDocGroup {
@@ -3636,7 +3637,7 @@ export const lvDeduplicator = {
         return [];
     },
 
-    /** 扫描全库所有同名重复文档（毫秒级聚类，智能推荐真身与冗余副本） */
+    /** 扫描全库所有同名重复文档（毫秒级聚类，智能推荐真身与冗余副本，保护含子文档的目录树） */
     async scanDuplicateDocTitles(limit = 40): Promise<LvDuplicateDocGroup[]> {
         try {
             const sql = `
@@ -3650,6 +3651,26 @@ export const lvDeduplicator = {
             `;
             const res = await lvKernelPost("/api/query/sql", { stmt: sql });
             if (res.code === 0 && Array.isArray(res.data)) {
+                // 批量检索这些候选文档下的子文档数量，防止误删分类目录父节点
+                const allDocIds: string[] = [];
+                for (const row of res.data) {
+                    const ids = String(row.ids || "").split("|||").filter(Boolean);
+                    allDocIds.push(...ids);
+                }
+                const childCountMap = new Map<string, number>();
+                if (allDocIds.length > 0) {
+                    try {
+                        const inList = allDocIds.slice(0, 300).map((id) => `'${id.replace(/'/g, "''")}'`).join(",");
+                        const childSql = `SELECT parent_id, count(1) as cnt FROM blocks WHERE parent_id IN (${inList}) AND type='d' GROUP BY parent_id`;
+                        const childRes = await lvKernelPost("/api/query/sql", { stmt: childSql });
+                        if (childRes.code === 0 && Array.isArray(childRes.data)) {
+                            for (const cr of childRes.data) {
+                                if (cr && cr.parent_id) childCountMap.set(String(cr.parent_id), Number(cr.cnt) || 0);
+                            }
+                        }
+                    } catch { /* ignore */ }
+                }
+
                 return res.data.map((row: any) => {
                     const ids = String(row.ids || "").split("|||");
                     const boxes = String(row.boxes || "").split("|||");
@@ -3662,9 +3683,10 @@ export const lvDeduplicator = {
                         hpath: paths[i] || "",
                         updated: updateds[i] || "",
                         length: lengths[i] || 0,
+                        childCount: childCountMap.get(id) || 0,
                     }));
-                    // 智能排序：内容较长且最后更新者优先推荐保留为真身
-                    docs.sort((a, b) => (b.length - a.length) || b.updated.localeCompare(a.updated));
+                    // 智能排序：优先保留含有子文档的目录父节点，其次按字数更丰富、更新时间更近排序
+                    docs.sort((a, b) => ((b.childCount || 0) - (a.childCount || 0)) || (b.length - a.length) || b.updated.localeCompare(a.updated));
                     const recommendedKeepId = docs[0]?.id || "";
                     return {
                         title: String(row.title),
@@ -10550,6 +10572,7 @@ export function openConflictResolverDialog(): void {
     let dupClips: LvDuplicateClipGroup[] = [];
     let docDupBlocks: LvDocDuplicateBlockGroup[] = [];
     let searchKeyword = "";
+    let currentMinLength = 6;
 
     const currentDoc = getCurrentOpenDocInfo();
 
@@ -10579,6 +10602,20 @@ export function openConflictResolverDialog(): void {
             if (saveBtn) saveBtn.textContent = "去重清洗中…";
             try {
                 if (activeTab === "doc-titles") {
+                    // 全库同名文档：子文档级联安全拦截防线
+                    let totalChildInAllRecycle = 0;
+                    for (const g of dupDocGroups) {
+                        const toRecycle = g.docs.filter((d) => d.id !== g.recommendedKeepId);
+                        totalChildInAllRecycle += toRecycle.reduce((acc, cur) => acc + (cur.childCount || 0), 0);
+                    }
+                    if (totalChildInAllRecycle > 0 && typeof window !== "undefined") {
+                        const ok = window.confirm(`⚠️ 全库批量清理安全拦截：\n\n全库待清理的同名副本中，共包含 ${totalChildInAllRecycle} 篇受级联影响的子文档！\n\n为确保知识库层级安全，请确认是否一并移入废纸篓（可在思源回收站随时还原）？`);
+                        if (!ok) {
+                            if (saveBtn) saveBtn.textContent = origLabel;
+                            return;
+                        }
+                    }
+
                     // 全库同名文档：将所有非真身副本安全移入思源废纸篓
                     let recycledCount = 0;
                     for (const g of dupDocGroups) {
@@ -10603,7 +10640,7 @@ export function openConflictResolverDialog(): void {
                         lvNotify.capsule({ source: "段落排重", message: "未检测到活跃打开的文档", duration: 2500, level: "warn", archive: false });
                         return;
                     }
-                    const res = await lvDeduplicator.deduplicateDocBlocks(currentDoc.id);
+                    const res = await lvDeduplicator.deduplicateDocBlocks(currentDoc.id, currentMinLength);
                     cleanup();
                     lvNotify.capsule({
                         source: "段落排重",
@@ -10685,41 +10722,49 @@ export function openConflictResolverDialog(): void {
                     <input type="search" class="lv-dup-search-input" placeholder="🔍 快速过滤同名文档（输入标题或路径关键字）…" value="${escapeHtml(searchKeyword)}" style="width:100%;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));background:var(--lv-lp-card-bg,#fff);font-size:11.5px;color:var(--lv-lp-text,#0f172a);outline:none;">
                 </div>
                 <div class="lv-restore-warn" style="font-size:11px;margin-bottom:6px;">
-                    全库共发现 <strong>${dupDocGroups.length}</strong> 组同名文档${kw ? `（当前匹配到 <strong>${filteredGroups.length}</strong> 组）` : ""}。系统推荐绿色【真身】，支持点击「设为真身」、「查看摘要」或「清理本组副本」。
+                    全库共发现 <strong>${dupDocGroups.length}</strong> 组同名文档${kw ? `（当前匹配到 <strong>${filteredGroups.length}</strong> 组）` : ""}。系统自动优先推荐绿色【真身】（含子文档的目录树获最高保护权重），支持点击「设为真身」、「⚖️ 对比」或「清理本组副本」。
                 </div>
                 ${filteredGroups.length === 0 ? `
                     <div style="text-align:center;padding:24px;color:var(--lv-lp-text-sub,#64748b);">无匹配关键词的同名文档</div>
-                ` : filteredGroups.map((g) => `
-                    <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.1));display:flex;flex-direction:column;gap:6px;">
-                        <div style="display:flex;align-items:center;justify-content:space-between;font-weight:600;">
-                            <span>《${escapeHtml(g.title)}》 <span style="font-size:10px;opacity:.75;padding:1px 6px;border-radius:4px;background:var(--lv-lp-accent-soft);color:var(--lv-lp-accent);">${g.count} 篇同名</span></span>
-                            <button type="button" class="lv-qw-tag-chip lv-group-recycle-btn" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">🧹 清理本组副本</button>
-                        </div>
-                        <div style="display:flex;flex-direction:column;gap:4px;">
-                            ${g.docs.map((d) => {
-                                const isKeep = d.id === g.recommendedKeepId;
-                                return `
-                                    <div style="display:flex;flex-direction:column;padding:5px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid ${isKeep ? "#10b981" : "var(--lv-lp-border)"};font-size:11px;">
-                                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                                            <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                                ${isKeep ? `<span style="color:#10b981;font-weight:700;margin-right:4px;">[🌟 推荐真身]</span>` : `<span style="color:#94a3b8;margin-right:4px;">[副本]</span>`}
-                                                <span style="opacity:.85;font-weight:500;" title="${escapeHtml(d.hpath)}">${escapeHtml(d.hpath || "/" + d.id)}</span>
-                                                <span style="opacity:.55;margin-left:6px;font-size:10.5px;">(${d.length} 字 · ${formatSyTimestamp(d.updated)})</span>
+                ` : filteredGroups.map((g) => {
+                    const safeId = escapeHtml(g.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
+                    return `
+                        <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.1));display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;font-weight:600;">
+                                <span>《${escapeHtml(g.title)}》 <span style="font-size:10px;opacity:.75;padding:1px 6px;border-radius:4px;background:var(--lv-lp-accent-soft);color:var(--lv-lp-accent);">${g.count} 篇同名</span></span>
+                                <div style="display:flex;gap:4px;align-items:center;">
+                                    <button type="button" class="lv-qw-tag-chip lv-group-diff-btn" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border:1px solid var(--lv-lp-border);">⚖️ 对比</button>
+                                    <button type="button" class="lv-qw-tag-chip lv-group-recycle-btn" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">🧹 清理本组副本</button>
+                                </div>
+                            </div>
+                            <div class="lv-diff-drawer-${safeId}" style="display:none;padding:8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px dashed var(--lv-lp-accent);font-size:11px;"></div>
+                            <div style="display:flex;flex-direction:column;gap:4px;">
+                                ${g.docs.map((d) => {
+                                    const isKeep = d.id === g.recommendedKeepId;
+                                    return `
+                                        <div style="display:flex;flex-direction:column;padding:5px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid ${isKeep ? "#10b981" : "var(--lv-lp-border)"};font-size:11px;">
+                                            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                                                <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                                    ${isKeep ? `<span style="color:#10b981;font-weight:700;margin-right:4px;">[🌟 推荐真身]</span>` : `<span style="color:#94a3b8;margin-right:4px;">[副本]</span>`}
+                                                    <span style="opacity:.85;font-weight:500;" title="${escapeHtml(d.hpath)}">${escapeHtml(d.hpath || "/" + d.id)}</span>
+                                                    <span style="opacity:.55;margin-left:6px;font-size:10.5px;">(${d.length} 字 · ${formatSyTimestamp(d.updated)})</span>
+                                                    ${(d.childCount || 0) > 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,0.12);color:#d97706;font-weight:600;margin-left:4px;" title="此文档下含有 ${d.childCount} 篇子文档，移入回收站将同时级联移动！">📁 含 ${d.childCount} 篇子文档</span>` : ""}
+                                                </div>
+                                                <div style="display:flex;gap:4px;flex-shrink:0;">
+                                                    ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-title="${escapeHtml(g.title)}" data-doc-id="${d.id}" style="padding:2px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>` : ""}
+                                                    <button type="button" class="lv-qw-tag-chip lv-doc-snippet-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">👁 摘要</button>
+                                                    <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开</button>
+                                                    ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" data-child-count="${d.childCount || 0}" data-doc-title="${escapeHtml(g.title)}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>` : ""}
+                                                </div>
                                             </div>
-                                            <div style="display:flex;gap:4px;flex-shrink:0;">
-                                                ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-title="${escapeHtml(g.title)}" data-doc-id="${d.id}" style="padding:2px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>` : ""}
-                                                <button type="button" class="lv-qw-tag-chip lv-doc-snippet-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">👁 摘要</button>
-                                                <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开</button>
-                                                ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>` : ""}
-                                            </div>
+                                            <div class="lv-snippet-drawer-${d.id}" style="display:none;margin-top:5px;padding:5px 8px;border-radius:4px;background:rgba(15,23,42,0.03);font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);border-left:2px solid var(--lv-lp-accent);word-break:break-all;"></div>
                                         </div>
-                                        <div class="lv-snippet-drawer-${d.id}" style="display:none;margin-top:5px;padding:5px 8px;border-radius:4px;background:rgba(15,23,42,0.03);font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);border-left:2px solid var(--lv-lp-accent);word-break:break-all;"></div>
-                                    </div>
-                                `;
-                            }).join("")}
+                                    `;
+                                }).join("")}
+                            </div>
                         </div>
-                    </div>
-                `).join("")}
+                    `;
+                }).join("")}
             `;
             const sInput = tabView.querySelector<HTMLInputElement>(".lv-dup-search-input");
             if (sInput) {
@@ -10746,11 +10791,19 @@ export function openConflictResolverDialog(): void {
             }
             if (docDupBlocks.length === 0) {
                 tabView.innerHTML = `
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:6px 10px;border-radius:6px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;">
+                        <span style="color:var(--lv-lp-text-sub);">排重敏感度：</span>
+                        <div style="display:flex;gap:4px;">
+                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 6 ? 'active' : ''}" data-len="6" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 6 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥6字 (默认)</button>
+                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 15 ? 'active' : ''}" data-len="15" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 15 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥15字 (长句)</button>
+                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 30 ? 'active' : ''}" data-len="30" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 30 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥30字 (段落)</button>
+                        </div>
+                    </div>
                     <div style="padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);margin-bottom:8px;">
                         当前聚焦文档：<strong>《${escapeHtml(currentDoc.title)}》</strong>
                     </div>
                     <div style="text-align:center;padding:28px 16px;color:#10b981;font-weight:600;">
-                        🎉 文档内容健康度极佳！未检测到任何重复粘贴的段落或列表块。
+                        🎉 文档内容健康度极佳！未检测到任何重复粘贴的段落或列表块（阈值 ≥${currentMinLength}字）。
                     </div>
                 `;
                 if (saveBtn) saveBtn.textContent = "文档内容健康";
@@ -10758,6 +10811,14 @@ export function openConflictResolverDialog(): void {
             }
             if (saveBtn) saveBtn.textContent = `清理当前文档 ${docDupBlocks.length} 组重复内容`;
             tabView.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:6px 10px;border-radius:6px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;">
+                    <span style="color:var(--lv-lp-text-sub);">排重敏感度：</span>
+                    <div style="display:flex;gap:4px;">
+                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 6 ? 'active' : ''}" data-len="6" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 6 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥6字 (默认)</button>
+                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 15 ? 'active' : ''}" data-len="15" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 15 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥15字 (长句)</button>
+                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 30 ? 'active' : ''}" data-len="30" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 30 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥30字 (段落)</button>
+                    </div>
+                </div>
                 <div style="padding:8px 12px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11.5px;">
                     目标文档：<strong>《${escapeHtml(currentDoc.title)}》</strong> · 发现 <strong>${docDupBlocks.length}</strong> 组重复粘贴块：
                 </div>
@@ -10865,7 +10926,7 @@ export function openConflictResolverDialog(): void {
         dupLifeLogState = await lvDeduplicator.deduplicateDailyLifeLogs(undefined, true);
         dupClips = await lvDeduplicator.findDuplicateClips();
         if (currentDoc?.id) {
-            docDupBlocks = await lvDeduplicator.scanDocDuplicateBlocks(currentDoc.id);
+            docDupBlocks = await lvDeduplicator.scanDocDuplicateBlocks(currentDoc.id, currentMinLength);
         }
         renderCurrentTab();
     };
@@ -10877,6 +10938,21 @@ export function openConflictResolverDialog(): void {
             hapticFeedback(6);
             activeTab = (tabBtn.getAttribute("data-tab") as any) || "doc-titles";
             renderCurrentTab();
+            return;
+        }
+
+        const minLenBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-min-len-btn");
+        if (minLenBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            currentMinLength = Number(minLenBtn.getAttribute("data-len")) || 6;
+            if (currentDoc?.id && tabView) {
+                tabView.innerHTML = `<div style="text-align:center;padding:32px;color:var(--lv-lp-accent);">🔍 正在按敏感度 ≥${currentMinLength}字 检索重复块…</div>`;
+                void lvDeduplicator.scanDocDuplicateBlocks(currentDoc.id, currentMinLength).then((blocks) => {
+                    docDupBlocks = blocks;
+                    renderCurrentTab();
+                });
+            }
             return;
         }
 
@@ -10893,6 +10969,12 @@ export function openConflictResolverDialog(): void {
             e.stopPropagation();
             const docId = recycleBtn.getAttribute("data-doc-id");
             const box = recycleBtn.getAttribute("data-doc-box");
+            const childCnt = Number(recycleBtn.getAttribute("data-child-count") || 0);
+            if (childCnt > 0 && typeof window !== "undefined") {
+                const title = recycleBtn.getAttribute("data-doc-title") || "该文档";
+                const ok = window.confirm(`⚠️ 安全拦截告警：\n\n文档《${title}》下含有 ${childCnt} 篇子文档！\n移入废纸篓将同时级联移动这 ${childCnt} 篇子文档。\n\n请确认是否仍要移入回收站？`);
+                if (!ok) return;
+            }
             if (docId) {
                 hapticFeedback(8);
                 void lvDeduplicator.safeRemoveDocToRecycle(docId, box || undefined).then((ok) => {
@@ -10919,15 +11001,82 @@ export function openConflictResolverDialog(): void {
             return;
         }
 
+        const diffBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-group-diff-btn");
+        if (diffBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            const grpTitle = diffBtn.getAttribute("data-group-title");
+            const targetGroup = dupDocGroups.find((g) => g.title === grpTitle);
+            if (targetGroup) {
+                const safeId = escapeHtml(targetGroup.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
+                const diffDrawer = mask?.querySelector<HTMLElement>(`.lv-diff-drawer-${safeId}`);
+                if (diffDrawer) {
+                    if (diffDrawer.style.display === "none") {
+                        diffDrawer.style.display = "block";
+                        diffDrawer.innerHTML = `<div style="text-align:center;padding:12px;color:var(--lv-lp-accent);">🔍 正在对比真身与副本差异…</div>`;
+                        const keepDoc = targetGroup.docs.find(d => d.id === targetGroup.recommendedKeepId) || targetGroup.docs[0];
+                        const candidateDoc = targetGroup.docs.find(d => d.id !== targetGroup.recommendedKeepId) || targetGroup.docs[1] || keepDoc;
+                        if (!keepDoc || !candidateDoc) {
+                            diffDrawer.style.display = "none";
+                            return;
+                        }
+                        void Promise.all([
+                            lvDeduplicator.getDocPreviewSnippet(keepDoc.id, 160),
+                            lvDeduplicator.getDocPreviewSnippet(candidateDoc.id, 160)
+                        ]).then(([keepSnippet, candSnippet]) => {
+                            const wordDiff = candidateDoc.length - keepDoc.length;
+                            const diffLabel = wordDiff === 0 ? "字数完全相同" : (wordDiff > 0 ? `副本多 ${wordDiff} 字` : `真身多 ${-wordDiff} 字`);
+                            diffDrawer.innerHTML = `
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600;color:var(--lv-lp-text);">
+                                    <span>⚖️ 《${escapeHtml(targetGroup.title)}》 差异对账</span>
+                                    <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(15,23,42,0.06);color:var(--lv-lp-text-sub);">${diffLabel}</span>
+                                </div>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                    <div style="padding:6px;border-radius:5px;background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.2);">
+                                        <div style="color:#10b981;font-weight:700;margin-bottom:2px;">🌟 推荐真身</div>
+                                        <div style="font-size:10px;color:var(--lv-lp-text-sub);">${escapeHtml(keepDoc.hpath || "/" + keepDoc.id)}</div>
+                                        <div style="margin:4px 0;font-size:10.5px;">${keepDoc.length} 字 · ${keepDoc.childCount ? `${keepDoc.childCount} 篇子文档 · ` : ""}${formatSyTimestamp(keepDoc.updated)}</div>
+                                        <div style="font-family:monospace;font-size:10px;color:var(--lv-lp-text);background:var(--lv-lp-card-bg);padding:4px 6px;border-radius:4px;border:1px solid var(--lv-lp-border);">${escapeHtml(keepSnippet || "（无段落正文）")}</div>
+                                        <div style="margin-top:6px;display:flex;gap:4px;">
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${keepDoc.id}" style="padding:1px 6px;font-size:10px;">打开真身</button>
+                                        </div>
+                                    </div>
+                                    <div style="padding:6px;border-radius:5px;background:rgba(15,23,42,0.03);border:1px solid var(--lv-lp-border);">
+                                        <div style="color:#64748b;font-weight:700;margin-bottom:2px;">📑 候选副本</div>
+                                        <div style="font-size:10px;color:var(--lv-lp-text-sub);">${escapeHtml(candidateDoc.hpath || "/" + candidateDoc.id)}</div>
+                                        <div style="margin:4px 0;font-size:10.5px;">${candidateDoc.length} 字 · ${candidateDoc.childCount ? `${candidateDoc.childCount} 篇子文档 · ` : ""}${formatSyTimestamp(candidateDoc.updated)}</div>
+                                        <div style="font-family:monospace;font-size:10px;color:var(--lv-lp-text);background:var(--lv-lp-card-bg);padding:4px 6px;border-radius:4px;border:1px solid var(--lv-lp-border);">${escapeHtml(candSnippet || "（无段落正文）")}</div>
+                                        <div style="margin-top:6px;display:flex;gap:4px;">
+                                            <button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-title="${escapeHtml(targetGroup.title)}" data-doc-id="${candidateDoc.id}" style="padding:1px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${candidateDoc.id}" style="padding:1px 6px;font-size:10px;">打开副本</button>
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${candidateDoc.id}" data-doc-box="${candidateDoc.box}" data-child-count="${candidateDoc.childCount || 0}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:1px 6px;font-size:10px;color:#ef4444;">移入回收站</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        diffDrawer.style.display = "none";
+                    }
+                }
+            }
+            return;
+        }
+
         const grpBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-group-recycle-btn");
         if (grpBtn) {
             e.stopPropagation();
             const grpTitle = grpBtn.getAttribute("data-group-title");
             const targetGroup = dupDocGroups.find((g) => g.title === grpTitle);
             if (targetGroup) {
+                const toRecycle = targetGroup.docs.filter((d) => d.id !== targetGroup.recommendedKeepId);
+                const totalChild = toRecycle.reduce((acc, cur) => acc + (cur.childCount || 0), 0);
+                if (totalChild > 0 && typeof window !== "undefined") {
+                    const ok = window.confirm(`⚠️ 安全拦截告警：\n\n待清理的副本中含有目录父文档（共含 ${totalChild} 篇子文档）！\n继续清理将一并级联移入废纸篓。\n\n请确认是否继续清理？`);
+                    if (!ok) return;
+                }
                 hapticFeedback(8);
                 grpBtn.textContent = "清理中…";
-                const toRecycle = targetGroup.docs.filter((d) => d.id !== targetGroup.recommendedKeepId);
                 void Promise.all(toRecycle.map((d) => lvDeduplicator.safeRemoveDocToRecycle(d.id, d.box))).then((res) => {
                     const cnt = res.filter(Boolean).length;
                     lvNotify.capsule({ source: "查重对账", message: `✓ 已将《${targetGroup.title}》的 ${cnt} 篇副本移入废纸篓`, duration: 2500, level: "success", archive: false });
@@ -10965,7 +11114,7 @@ export function openConflictResolverDialog(): void {
             if (currentDoc?.id && blockIds.length > 1) {
                 hapticFeedback(8);
                 blockDedupBtn.textContent = "排重中…";
-                void lvDeduplicator.deduplicateDocBlocks(currentDoc.id, 6, blockIds).then((res) => {
+                void lvDeduplicator.deduplicateDocBlocks(currentDoc.id, currentMinLength, blockIds).then((res) => {
                     lvNotify.capsule({ source: "段落排重", message: `✓ 已从当前文档剔除 ${res.removedCount} 处冗余块（保留首块）`, duration: 2500, level: "success", archive: false });
                     void runScan();
                 });
