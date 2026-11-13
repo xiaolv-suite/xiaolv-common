@@ -856,5 +856,13 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /scanDocDuplicateBlocks/, 'Deduplicator must support within-document duplicate blocks scan');
         assert.match(src, /safeRemoveDocToRecycle/, 'Deduplicator must provide safe removal to recycle bin');
         assert.match(src, /lv-conflict-tab/, 'Conflict resolver dialog must support multi-tab workspace deduplication');
+        // Round-20：深度查重体验加强（摘要速览/真身切换/单组去重/冲突批量治理/实时过滤）
+        assert.match(src, /getDocPreviewSnippet/, 'Deduplicator must support snippet preview');
+        assert.match(src, /formatSyTimestamp/, 'Timestamp formatter must be available');
+        assert.match(src, /lv-dup-search-input/, 'Duplicate search filter input must be present');
+        assert.match(src, /lv-set-keep-btn/, 'Per-document switch keep button must be wired');
+        assert.match(src, /lv-group-recycle-btn/, 'Single-group cleanup button must be supported');
+        assert.match(src, /lv-block-single-dedup-btn/, 'Single-group block deduplication must be wired');
+        assert.match(src, /lv-recycle-all-conflicts-btn/, 'Batch conflict resolution button must be wired');
     } finally { c.close(); }
 });

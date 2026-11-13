@@ -3554,6 +3554,7 @@ export interface LvConflictDocItem {
     hpath: string;
     title: string;
     updated: string;
+    length?: number;
 }
 
 export interface LvDuplicateDocEntry {
@@ -3573,15 +3574,53 @@ export interface LvDuplicateDocGroup {
 
 export interface LvDocDuplicateBlockGroup {
     content: string;
+    type?: string;
     count: number;
     blockIds: string[];
+}
+
+export interface LvDuplicateClipDoc {
+    id: string;
+    title: string;
+    box: string;
+    hpath: string;
+    updated: string;
+}
+
+export interface LvDuplicateClipGroup {
+    url: string;
+    count: number;
+    docIds: string[];
+    docs?: LvDuplicateClipDoc[];
+}
+
+export function formatSyTimestamp(ts?: string): string {
+    if (!ts || ts.length < 8) return "";
+    if (ts.length >= 14) {
+        return `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)} ${ts.slice(8, 10)}:${ts.slice(10, 12)}`;
+    }
+    if (ts.length >= 8) {
+        return `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
+    }
+    return ts;
+}
+
+export function formatBlockType(type?: string): string {
+    switch (type) {
+        case "p": return "📝 段落";
+        case "h": return "📑 标题";
+        case "i": return "☑️ 列表项";
+        case "c": return "💻 代码块";
+        case "b": return "💬 引述块";
+        default: return "🧱 内容块";
+    }
 }
 
 export const lvDeduplicator = {
     /** 扫描全库因同步冲突产生的带 (冲突 或 conflict 字样的分叉文档 */
     async scanConflictDocs(): Promise<LvConflictDocItem[]> {
         try {
-            const sql = `SELECT id, root_id, box, hpath, content, updated FROM blocks WHERE type='d' AND (content LIKE '%(冲突%' OR content LIKE '%_conflict_%' OR content LIKE '%conflict%') ORDER BY updated DESC LIMIT 50`;
+            const sql = `SELECT id, root_id, box, hpath, content, updated, length FROM blocks WHERE type='d' AND (content LIKE '%(冲突%' OR content LIKE '%_conflict_%' OR content LIKE '%conflict%') ORDER BY updated DESC LIMIT 50`;
             const res = await lvKernelPost("/api/query/sql", { stmt: sql });
             if (res.code === 0 && Array.isArray(res.data)) {
                 return res.data.map((row: any) => ({
@@ -3590,6 +3629,7 @@ export const lvDeduplicator = {
                     hpath: String(row.hpath || ""),
                     title: String(row.content || ""),
                     updated: String(row.updated || ""),
+                    length: Number(row.length) || 0,
                 }));
             }
         } catch { /* ignore */ }
@@ -3638,23 +3678,38 @@ export const lvDeduplicator = {
         return [];
     },
 
-    /** 扫描指定文档内部重复粘贴的段落/块 */
+    /** 快速获取文档前两段正文摘要预览（字数 ≤ maxLen） */
+    async getDocPreviewSnippet(docId: string, maxLen = 140): Promise<string> {
+        if (!docId) return "";
+        try {
+            const sql = `SELECT content FROM blocks WHERE root_id = '${docId.replace(/'/g, "''")}' AND (type='p' OR type='h' OR type='i') AND content != '' ORDER BY sort ASC LIMIT 2`;
+            const res = await lvKernelPost("/api/query/sql", { stmt: sql });
+            if (res.code === 0 && Array.isArray(res.data) && res.data.length > 0) {
+                const raw = res.data.map((row: any) => String(row.content || "").replace(/[\r\n\t\s]+/g, " ").trim()).filter(Boolean).join(" ");
+                return raw.length > maxLen ? raw.slice(0, maxLen) + "…" : raw;
+            }
+        } catch { /* ignore */ }
+        return "";
+    },
+
+    /** 扫描指定文档内部重复粘贴的段落/列表/代码块 (type IN p, h, b, i, c) */
     async scanDocDuplicateBlocks(docId: string, minLength = 6): Promise<LvDocDuplicateBlockGroup[]> {
         if (!docId) return [];
         try {
             const sql = `
-                SELECT content, count(1) as cnt, group_concat(id, '|||') as ids
+                SELECT content, type, count(1) as cnt, group_concat(id, '|||') as ids
                 FROM blocks
-                WHERE root_id = '${docId.replace(/'/g, "''")}' AND (type='p' OR type='h' OR type='b') AND length(content) >= ${minLength}
+                WHERE root_id = '${docId.replace(/'/g, "''")}' AND type IN ('p', 'h', 'b', 'i', 'c') AND length(content) >= ${minLength}
                 GROUP BY content
                 HAVING count(1) > 1
                 ORDER BY cnt DESC
-                LIMIT 30
+                LIMIT 40
             `;
             const res = await lvKernelPost("/api/query/sql", { stmt: sql });
             if (res.code === 0 && Array.isArray(res.data)) {
                 return res.data.map((r: any) => ({
                     content: String(r.content),
+                    type: String(r.type || "p"),
                     count: Number(r.cnt),
                     blockIds: String(r.ids || "").split("|||").filter(Boolean),
                 }));
@@ -3663,11 +3718,19 @@ export const lvDeduplicator = {
         return [];
     },
 
-    /** 一键清理指定文档内部因多次粘贴或同步合并导致的重复段落块（保留首块） */
-    async deduplicateDocBlocks(docId: string, minLength = 6): Promise<{ removedCount: number; cleanGroups: number }> {
+    /** 一键清理指定文档内部因多次粘贴或同步合并导致的重复段落块（保留首块，支持指定单组排重） */
+    async deduplicateDocBlocks(docId: string, minLength = 6, specificBlockIds?: string[]): Promise<{ removedCount: number; cleanGroups: number }> {
         let removed = 0;
         let groups = 0;
         try {
+            if (Array.isArray(specificBlockIds) && specificBlockIds.length > 1) {
+                const toRemove = specificBlockIds.slice(1);
+                for (const bid of toRemove) {
+                    const r = await lvKernelPost("/api/block/deleteBlock", { id: bid });
+                    if (r.code === 0) removed++;
+                }
+                return { removedCount: removed, cleanGroups: 1 };
+            }
             const dupGroups = await this.scanDocDuplicateBlocks(docId, minLength);
             for (const g of dupGroups) {
                 if (g.blockIds.length > 1) {
@@ -3745,11 +3808,11 @@ export const lvDeduplicator = {
         return { removedCount: removed, duplicateGroups: groups, details };
     },
 
-    /** 扫描全库重复剪藏文章（相同目标 URL） */
-    async findDuplicateClips(): Promise<Array<{ url: string; count: number; docIds: string[] }>> {
+    /** 扫描全库重复剪藏文章（相同目标 URL）并获取完整文档信息 */
+    async findDuplicateClips(): Promise<LvDuplicateClipGroup[]> {
         try {
             const sql = `
-                SELECT a.value as url, count(1) as cnt, group_concat(b.id, ',') as docIds
+                SELECT a.value as url, count(1) as cnt, group_concat(b.id, '|||') as doc_ids, group_concat(b.content, '|||') as titles, group_concat(b.box, '|||') as boxes, group_concat(b.hpath, '|||') as paths, group_concat(b.updated, '|||') as updateds
                 FROM attributes a
                 JOIN blocks b ON a.block_id = b.id
                 WHERE a.name = 'custom-clip-url' AND a.value != ''
@@ -3759,11 +3822,26 @@ export const lvDeduplicator = {
             `;
             const res = await lvKernelPost("/api/query/sql", { stmt: sql });
             if (res.code === 0 && Array.isArray(res.data)) {
-                return res.data.map((r: any) => ({
-                    url: String(r.url),
-                    count: Number(r.cnt),
-                    docIds: String(r.docIds || "").split(",").filter(Boolean),
-                }));
+                return res.data.map((r: any) => {
+                    const ids = String(r.doc_ids || "").split("|||");
+                    const titles = String(r.titles || "").split("|||");
+                    const boxes = String(r.boxes || "").split("|||");
+                    const paths = String(r.paths || "").split("|||");
+                    const updateds = String(r.updateds || "").split("|||");
+                    const docs: LvDuplicateClipDoc[] = ids.map((id, idx) => ({
+                        id,
+                        title: titles[idx] || "未命名文档",
+                        box: boxes[idx] || "",
+                        hpath: paths[idx] || "",
+                        updated: updateds[idx] || "",
+                    }));
+                    return {
+                        url: String(r.url),
+                        count: Number(r.cnt),
+                        docIds: ids.filter(Boolean),
+                        docs,
+                    };
+                });
             }
         } catch { /* ignore */ }
         return [];
@@ -10469,8 +10547,9 @@ export function openConflictResolverDialog(): void {
     let dupDocGroups: LvDuplicateDocGroup[] = [];
     let conflictDocs: LvConflictDocItem[] = [];
     let dupLifeLogState: { removedCount: number; duplicateGroups: number; details: string[] } = { removedCount: 0, duplicateGroups: 0, details: [] };
-    let dupClips: Array<{ url: string; count: number; docIds: string[] }> = [];
+    let dupClips: LvDuplicateClipGroup[] = [];
     let docDupBlocks: LvDocDuplicateBlockGroup[] = [];
+    let searchKeyword = "";
 
     const currentDoc = getCurrentOpenDocInfo();
 
@@ -10480,12 +10559,12 @@ export function openConflictResolverDialog(): void {
         badgeHtml: `<span class="lv-qw-badge">全库级自愈中枢</span>`,
         bodyHtml: `
             <div class="lv-conflict-tabs" style="display:flex;gap:6px;margin-bottom:10px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));padding-bottom:8px;">
-                <button type="button" class="lv-conflict-tab active" data-tab="doc-titles">📑 全库同名文档</button>
-                <button type="button" class="lv-conflict-tab" data-tab="doc-blocks">📝 当前文档排重</button>
-                <button type="button" class="lv-conflict-tab" data-tab="sync-conflict">⚡ 同步冲突与日记</button>
+                <button type="button" class="lv-conflict-tab active" data-tab="doc-titles">📑 全库同名文档 <span class="lv-dup-tab-badge lv-dup-badge-titles" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
+                <button type="button" class="lv-conflict-tab" data-tab="doc-blocks">📝 当前文档排重 <span class="lv-dup-tab-badge lv-dup-badge-blocks" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
+                <button type="button" class="lv-conflict-tab" data-tab="sync-conflict">⚡ 同步冲突与对账 <span class="lv-dup-tab-badge lv-dup-badge-conflicts" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
             </div>
-            <div class="lv-conflict-tab-view" style="min-height:180px;max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:12px;">
-                <div style="text-align:center;padding:24px;color:var(--lv-lp-text-sub,#64748b);">⏳ 正在深度检索思源全库…</div>
+            <div class="lv-conflict-tab-view" style="min-height:200px;max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:12px;">
+                <div style="text-align:center;padding:28px;color:var(--lv-lp-text-sub,#64748b);">⏳ 正在深度检索思源全库…</div>
             </div>
             <div class="lv-conflict-result" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:11.5px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);color:var(--lv-lp-text,#0f172a);"></div>
         `,
@@ -10513,7 +10592,7 @@ export function openConflictResolverDialog(): void {
                     cleanup();
                     lvNotify.capsule({
                         source: "文档查重",
-                        message: recycledCount > 0 ? `🧹 清理完成：已将 ${recycledCount} 篇冗余同名副本安全移入回收站！` : "全库文档名称唯一，无需清理",
+                        message: recycledCount > 0 ? `🧹 清理完成：已将 ${recycledCount} 篇冗余同名副本移入废纸篓（可随时撤销还原）` : "全库文档名称唯一，无需清理",
                         duration: 3500,
                         level: "success",
                         archive: false,
@@ -10528,19 +10607,36 @@ export function openConflictResolverDialog(): void {
                     cleanup();
                     lvNotify.capsule({
                         source: "段落排重",
-                        message: res.removedCount > 0 ? `🧹 清理完成：已从《${currentDoc.title}》剔除 ${res.removedCount} 处重复段落！` : "当前文档段落唯一，无重复内容",
+                        message: res.removedCount > 0 ? `🧹 清理完成：已从《${currentDoc.title}》剔除 ${res.removedCount} 处重复块！` : "当前文档内容唯一，无重复块",
                         duration: 3500,
                         level: "success",
                         archive: false,
                     });
                 } else {
-                    // 同步冲突与日记
-                    const res = await lvDeduplicator.deduplicateDailyLifeLogs(undefined, false);
+                    // 同步冲突与日记：全方位一键治理
+                    let cleanedConflict = 0;
+                    for (const doc of conflictDocs) {
+                        if (await lvDeduplicator.safeRemoveDocToRecycle(doc.id, doc.box)) cleanedConflict++;
+                    }
+                    const logRes = await lvDeduplicator.deduplicateDailyLifeLogs(undefined, false);
+                    let cleanedClips = 0;
+                    for (const clip of dupClips) {
+                        if (clip.docIds.length > 1) {
+                            const toRecycle = clip.docIds.slice(1);
+                            for (const id of toRecycle) {
+                                const docItem = clip.docs?.find(d => d.id === id);
+                                if (await lvDeduplicator.safeRemoveDocToRecycle(id, docItem?.box)) cleanedClips++;
+                            }
+                        }
+                    }
                     cleanup();
+                    const totalCleaned = cleanedConflict + logRes.removedCount + cleanedClips;
                     lvNotify.capsule({
-                        source: "对账中枢",
-                        message: res.removedCount > 0 ? `🧹 清洗完成：已自动剔除 ${res.removedCount} 条多端并发产生的重复 LifeLog！` : "今日日记无重复流水，数据完全健康！",
-                        duration: 3500,
+                        source: "对账治理",
+                        message: totalCleaned > 0
+                            ? `🧹 治理完成：已清理 ${cleanedConflict} 篇冲突分叉、${logRes.removedCount} 条重复流水、${cleanedClips} 篇冗余剪藏！`
+                            : "全库同步与记事状态极佳，无冗余数据！",
+                        duration: 3800,
                         level: "success",
                         archive: false,
                     });
@@ -10556,42 +10652,68 @@ export function openConflictResolverDialog(): void {
     const tabView = mask?.querySelector<HTMLElement>(".lv-conflict-tab-view");
     const saveBtn = mask?.querySelector<HTMLButtonElement>(".lv-qw-btn-primary");
 
+    const updateTabBadges = () => {
+        const bTitles = mask?.querySelector<HTMLElement>(".lv-dup-badge-titles");
+        const bBlocks = mask?.querySelector<HTMLElement>(".lv-dup-badge-blocks");
+        const bConflicts = mask?.querySelector<HTMLElement>(".lv-dup-badge-conflicts");
+        if (bTitles) bTitles.textContent = String(dupDocGroups.length);
+        if (bBlocks) bBlocks.textContent = String(docDupBlocks.length);
+        if (bConflicts) bConflicts.textContent = String(conflictDocs.length + dupLifeLogState.duplicateGroups + dupClips.length);
+    };
+
     const renderCurrentTab = () => {
         if (!tabView) return;
+        updateTabBadges();
         mask?.querySelectorAll(".lv-conflict-tab").forEach((btn) => {
             btn.classList.toggle("active", btn.getAttribute("data-tab") === activeTab);
         });
 
         if (activeTab === "doc-titles") {
             if (dupDocGroups.length === 0) {
-                tabView.innerHTML = `<div style="text-align:center;padding:32px 16px;color:#10b981;font-weight:600;">🎉 全库检测通过：全库所有文档标题唯一，无任何同名重复分叉！</div>`;
+                tabView.innerHTML = `<div style="text-align:center;padding:36px 16px;color:#10b981;font-weight:600;">🎉 全库检测通过：全库所有文档标题唯一，无任何同名重复分叉！</div>`;
                 if (saveBtn) saveBtn.textContent = "全库无同名文档";
                 return;
             }
             if (saveBtn) saveBtn.textContent = `清理冗余副本 (保留真身)`;
+            const kw = searchKeyword.trim().toLowerCase();
+            const filteredGroups = kw
+                ? dupDocGroups.filter(g => g.title.toLowerCase().includes(kw) || g.docs.some(d => d.hpath.toLowerCase().includes(kw)))
+                : dupDocGroups;
+
             tabView.innerHTML = `
-                <div class="lv-restore-warn" style="font-size:11px;margin-bottom:6px;">
-                    共发现 <strong>${dupDocGroups.length}</strong> 组同名重复文档。系统已按字数与更新时间智能推荐绿色【真身】，点击对应行可打开查看或安全移入废纸篓。
+                <div style="display:flex;gap:6px;margin-bottom:4px;">
+                    <input type="search" class="lv-dup-search-input" placeholder="🔍 快速过滤同名文档（输入标题或路径关键字）…" value="${escapeHtml(searchKeyword)}" style="width:100%;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));background:var(--lv-lp-card-bg,#fff);font-size:11.5px;color:var(--lv-lp-text,#0f172a);outline:none;">
                 </div>
-                ${dupDocGroups.map((g) => `
+                <div class="lv-restore-warn" style="font-size:11px;margin-bottom:6px;">
+                    全库共发现 <strong>${dupDocGroups.length}</strong> 组同名文档${kw ? `（当前匹配到 <strong>${filteredGroups.length}</strong> 组）` : ""}。系统推荐绿色【真身】，支持点击「设为真身」、「查看摘要」或「清理本组副本」。
+                </div>
+                ${filteredGroups.length === 0 ? `
+                    <div style="text-align:center;padding:24px;color:var(--lv-lp-text-sub,#64748b);">无匹配关键词的同名文档</div>
+                ` : filteredGroups.map((g) => `
                     <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.1));display:flex;flex-direction:column;gap:6px;">
                         <div style="display:flex;align-items:center;justify-content:space-between;font-weight:600;">
                             <span>《${escapeHtml(g.title)}》 <span style="font-size:10px;opacity:.75;padding:1px 6px;border-radius:4px;background:var(--lv-lp-accent-soft);color:var(--lv-lp-accent);">${g.count} 篇同名</span></span>
+                            <button type="button" class="lv-qw-tag-chip lv-group-recycle-btn" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">🧹 清理本组副本</button>
                         </div>
                         <div style="display:flex;flex-direction:column;gap:4px;">
                             ${g.docs.map((d) => {
                                 const isKeep = d.id === g.recommendedKeepId;
                                 return `
-                                    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:5px;background:var(--lv-lp-card-bg,#fff);border:1px solid ${isKeep ? "#10b981" : "var(--lv-lp-border)"};font-size:11px;">
-                                        <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                            ${isKeep ? `<span style="color:#10b981;font-weight:700;margin-right:4px;">[🌟 推荐真身]</span>` : `<span style="color:#94a3b8;margin-right:4px;">[副本]</span>`}
-                                            <span style="opacity:.85;" title="${escapeHtml(d.hpath)}">${escapeHtml(d.hpath || "/" + d.id)}</span>
-                                            <span style="opacity:.5;margin-left:6px;">(${d.length} 字)</span>
+                                    <div style="display:flex;flex-direction:column;padding:5px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid ${isKeep ? "#10b981" : "var(--lv-lp-border)"};font-size:11px;">
+                                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                                            <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                                ${isKeep ? `<span style="color:#10b981;font-weight:700;margin-right:4px;">[🌟 推荐真身]</span>` : `<span style="color:#94a3b8;margin-right:4px;">[副本]</span>`}
+                                                <span style="opacity:.85;font-weight:500;" title="${escapeHtml(d.hpath)}">${escapeHtml(d.hpath || "/" + d.id)}</span>
+                                                <span style="opacity:.55;margin-left:6px;font-size:10.5px;">(${d.length} 字 · ${formatSyTimestamp(d.updated)})</span>
+                                            </div>
+                                            <div style="display:flex;gap:4px;flex-shrink:0;">
+                                                ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-title="${escapeHtml(g.title)}" data-doc-id="${d.id}" style="padding:2px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>` : ""}
+                                                <button type="button" class="lv-qw-tag-chip lv-doc-snippet-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">👁 摘要</button>
+                                                <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开</button>
+                                                ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>` : ""}
+                                            </div>
                                         </div>
-                                        <div style="display:flex;gap:4px;flex-shrink:0;">
-                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开</button>
-                                            ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>` : ""}
-                                        </div>
+                                        <div class="lv-snippet-drawer-${d.id}" style="display:none;margin-top:5px;padding:5px 8px;border-radius:4px;background:rgba(15,23,42,0.03);font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);border-left:2px solid var(--lv-lp-accent);word-break:break-all;"></div>
                                     </div>
                                 `;
                             }).join("")}
@@ -10599,12 +10721,24 @@ export function openConflictResolverDialog(): void {
                     </div>
                 `).join("")}
             `;
+            const sInput = tabView.querySelector<HTMLInputElement>(".lv-dup-search-input");
+            if (sInput) {
+                sInput.addEventListener("input", () => {
+                    searchKeyword = sInput.value;
+                    renderCurrentTab();
+                    const newS = tabView.querySelector<HTMLInputElement>(".lv-dup-search-input");
+                    if (newS) {
+                        newS.focus();
+                        newS.setSelectionRange(newS.value.length, newS.value.length);
+                    }
+                });
+            }
         } else if (activeTab === "doc-blocks") {
             if (!currentDoc?.id) {
                 tabView.innerHTML = `
                     <div style="text-align:center;padding:36px 16px;color:var(--lv-lp-text-sub,#64748b);">
                         💡 请先在思源笔记中打开需要排重的长文档，然后再次点击查重对账。<br>
-                        <span style="font-size:11px;opacity:.75;margin-top:6px;display:inline-block;">支持扫描长文内重复粘贴的段落并一键保留首块。</span>
+                        <span style="font-size:11px;opacity:.75;margin-top:6px;display:inline-block;">支持扫描长文内重复粘贴的段落、列表、代码块并一键保留首块。</span>
                     </div>
                 `;
                 if (saveBtn) saveBtn.textContent = "未打开目标文档";
@@ -10616,57 +10750,108 @@ export function openConflictResolverDialog(): void {
                         当前聚焦文档：<strong>《${escapeHtml(currentDoc.title)}》</strong>
                     </div>
                     <div style="text-align:center;padding:28px 16px;color:#10b981;font-weight:600;">
-                        🎉 文档段落健康度极佳！未检测到任何重复粘贴的段落块。
+                        🎉 文档内容健康度极佳！未检测到任何重复粘贴的段落或列表块。
                     </div>
                 `;
-                if (saveBtn) saveBtn.textContent = "文档段落健康";
+                if (saveBtn) saveBtn.textContent = "文档内容健康";
                 return;
             }
-            if (saveBtn) saveBtn.textContent = `清理当前文档 ${docDupBlocks.length} 组重复段落`;
+            if (saveBtn) saveBtn.textContent = `清理当前文档 ${docDupBlocks.length} 组重复内容`;
             tabView.innerHTML = `
                 <div style="padding:8px 12px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11.5px;">
-                    目标文档：<strong>《${escapeHtml(currentDoc.title)}》</strong> · 发现 <strong>${docDupBlocks.length}</strong> 组重复粘贴段落：
+                    目标文档：<strong>《${escapeHtml(currentDoc.title)}》</strong> · 发现 <strong>${docDupBlocks.length}</strong> 组重复粘贴块：
                 </div>
                 ${docDupBlocks.map((b) => `
-                    <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;">
-                        <div style="display:flex;justify-content:space-between;color:var(--lv-lp-accent);font-weight:600;margin-bottom:3px;">
-                            <span>重复出现 ${b.count} 次</span>
-                            <span style="opacity:.65;">共 ${b.blockIds.length} 个块</span>
+                    <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;display:flex;flex-direction:column;gap:5px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span style="color:var(--lv-lp-accent);font-weight:600;">${formatBlockType(b.type)} · 重复出现 ${b.count} 次</span>
+                            <div style="display:flex;gap:4px;">
+                                <button type="button" class="lv-qw-tag-chip lv-block-single-dedup-btn" data-block-ids="${b.blockIds.join(",")}" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);">🧹 单组排重</button>
+                                <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${b.blockIds[0]}" style="padding:2px 7px;font-size:10.5px;">定位首块</button>
+                            </div>
                         </div>
-                        <div style="background:var(--lv-lp-card-bg);padding:5px 8px;border-radius:5px;border:1px solid var(--lv-lp-border);word-break:break-all;color:var(--lv-lp-text);">
-                            ${escapeHtml(b.content.slice(0, 100))}${b.content.length > 100 ? "…" : ""}
+                        <div style="background:var(--lv-lp-card-bg);padding:6px 8px;border-radius:5px;border:1px solid var(--lv-lp-border);word-break:break-all;color:var(--lv-lp-text);font-family:monospace;font-size:10.5px;">
+                            ${escapeHtml(b.content.slice(0, 160))}${b.content.length > 160 ? "…" : ""}
                         </div>
                     </div>
                 `).join("")}
             `;
         } else {
             // 同步冲突与日记
-            const hasConflict = conflictDocs.length > 0 || dupLifeLogState.duplicateGroups > 0;
-            if (saveBtn) saveBtn.textContent = hasConflict ? "一键安全去重清洗" : "同步状态极佳";
+            const hasConflict = conflictDocs.length > 0 || dupLifeLogState.duplicateGroups > 0 || dupClips.length > 0;
+            if (saveBtn) saveBtn.textContent = hasConflict ? "一键安全治理清洗" : "同步状态极佳";
             tabView.innerHTML = `
                 <div class="lv-restore-warn" style="font-size:11px;margin-bottom:6px;">
-                    💡 多端并发记事时，两端生成的 Block ID 独立，思源三向合并会自动保留双方内容，从而偶发同一条流水追加 2 次。小驴对账中枢可在毫秒级保留首条真身。
+                    💡 多端并发记事时，两端生成的 Block ID 独立，思源三向合并会自动保留双方内容，偶发重复追加。小驴对账中枢可在毫秒级定位分叉并保留首条真身。
                 </div>
-                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
                         <strong>1. 同步冲突分叉文档 (Conflict Docs)</strong>
-                        <span style="font-weight:600;color:${conflictDocs.length > 0 ? "#ef4444" : "#10b981"};">${conflictDocs.length > 0 ? `⚠️ 发现 ${conflictDocs.length} 篇` : "✓ 无冲突"}</span>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span style="font-weight:600;color:${conflictDocs.length > 0 ? "#ef4444" : "#10b981"};">${conflictDocs.length > 0 ? `⚠️ 发现 ${conflictDocs.length} 篇` : "✓ 无冲突"}</span>
+                            ${conflictDocs.length > 0 ? `<button type="button" class="lv-qw-tag-chip lv-recycle-all-conflicts-btn" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">🧹 清理所有冲突分叉</button>` : ""}
+                        </div>
                     </div>
-                    <div style="font-size:11px;color:var(--lv-lp-text-sub);">${conflictDocs.length > 0 ? `分叉列表：${conflictDocs.slice(0, 3).map(d => d.title).join("、")}` : "全库未检测到因同步分叉生成的带 (冲突) 后缀文档。"}</div>
+                    ${conflictDocs.length === 0 ? `
+                        <div style="font-size:11px;color:#10b981;">✓ 全库未检测到因同步分叉生成的带 (冲突) 后缀文档。</div>
+                    ` : `
+                        <div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;">
+                            ${conflictDocs.map((d) => `
+                                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:5px;background:var(--lv-lp-card-bg,#fff);border:1px solid rgba(239,68,68,0.2);font-size:11px;">
+                                    <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                        <span style="color:#ef4444;font-weight:600;">[冲突]</span>
+                                        <span style="opacity:.85;" title="${escapeHtml(d.title)}">${escapeHtml(d.title)}</span>
+                                        <span style="opacity:.5;margin-left:6px;font-size:10.5px;">(${d.length || 0} 字 · ${formatSyTimestamp(d.updated)})</span>
+                                    </div>
+                                    <div style="display:flex;gap:4px;flex-shrink:0;">
+                                        <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开对比</button>
+                                        <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>
+                                    </div>
+                                </div>
+                            `).join("")}
+                        </div>
+                    `}
                 </div>
-                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
                         <strong>2. 今日日记重复 LifeLog 流水</strong>
-                        <span style="font-weight:600;color:${dupLifeLogState.duplicateGroups > 0 ? "#f59e0b" : "#10b981"};">${dupLifeLogState.duplicateGroups > 0 ? `⚠️ 发现 ${dupLifeLogState.duplicateGroups} 组重复` : "✓ 无重复"}</span>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span style="font-weight:600;color:${dupLifeLogState.duplicateGroups > 0 ? "#f59e0b" : "#10b981"};">${dupLifeLogState.duplicateGroups > 0 ? `⚠️ 发现 ${dupLifeLogState.duplicateGroups} 组重复` : "✓ 无重复"}</span>
+                            ${dupLifeLogState.duplicateGroups > 0 ? `<button type="button" class="lv-qw-tag-chip lv-clean-lifelog-btn" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border:1px solid var(--lv-lp-border);">🧹 清洗重复流水</button>` : ""}
+                        </div>
                     </div>
-                    <div style="font-size:11px;color:var(--lv-lp-text-sub);">${dupLifeLogState.duplicateGroups > 0 ? `重复流水：${dupLifeLogState.details.slice(0, 2).join("；")}` : "今日日记各端记事顺序唯一，无时间戳或内容重复块。"}</div>
+                    <div style="font-size:11px;color:var(--lv-lp-text-sub);">${dupLifeLogState.duplicateGroups > 0 ? `重复流水：${dupLifeLogState.details.join("；")}` : "今日日记各端记事顺序唯一，无时间戳或内容重复块。"}</div>
                 </div>
-                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-                        <strong>3. 读库重复网页剪藏</strong>
-                        <span style="font-weight:600;color:${dupClips.length > 0 ? "#f59e0b" : "#10b981"};">${dupClips.length > 0 ? `⚠️ 发现 ${dupClips.length} 篇重复` : "✓ 无重复"}</span>
+                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <strong>3. 读库重复网页剪藏 (Duplicate Clips)</strong>
+                        <span style="font-weight:600;color:${dupClips.length > 0 ? "#f59e0b" : "#10b981"};">${dupClips.length > 0 ? `⚠️ 发现 ${dupClips.length} 组重复` : "✓ 无重复"}</span>
                     </div>
-                    <div style="font-size:11px;color:var(--lv-lp-text-sub);">${dupClips.length > 0 ? `共 ${dupClips.length} 篇网址重复收录` : "读库文章 URL 指纹唯一，无多端重复剪藏收录。"}</div>
+                    ${dupClips.length === 0 ? `
+                        <div style="font-size:11px;color:#10b981;">✓ 读库文章 URL 指纹唯一，无多端重复剪藏收录。</div>
+                    ` : `
+                        <div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;">
+                            ${dupClips.map((c) => `
+                                <div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;border-radius:5px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border);font-size:11px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                                        <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;" title="${escapeHtml(c.url)}">🌐 ${escapeHtml(c.url)}</span>
+                                        <button type="button" class="lv-qw-tag-chip lv-recycle-clip-group-btn" data-clip-url="${escapeHtml(c.url)}" style="padding:2px 7px;font-size:10px;color:#ef4444;">清理冗余剪藏</button>
+                                    </div>
+                                    <div style="display:flex;flex-direction:column;gap:2px;">
+                                        ${(c.docs || []).map((cd, idx) => `
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 6px;border-radius:4px;background:rgba(15,23,42,0.02);font-size:10.5px;">
+                                                <span style="opacity:.85;">${idx === 0 ? "[🌟 推荐保留] " : "[副本] "}《${escapeHtml(cd.title)}》</span>
+                                                <div style="display:flex;gap:4px;">
+                                                    <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${cd.id}" style="padding:1px 5px;font-size:10px;">打开</button>
+                                                    ${idx > 0 ? `<button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${cd.id}" data-doc-box="${cd.box}" style="padding:1px 5px;font-size:10px;color:#ef4444;">移入回收站</button>` : ""}
+                                                </div>
+                                            </div>
+                                        `).join("")}
+                                    </div>
+                                </div>
+                            `).join("")}
+                        </div>
+                    `}
                 </div>
             `;
         }
@@ -10712,9 +10897,123 @@ export function openConflictResolverDialog(): void {
                 hapticFeedback(8);
                 void lvDeduplicator.safeRemoveDocToRecycle(docId, box || undefined).then((ok) => {
                     if (ok) {
-                        lvNotify.capsule({ source: "查重对账", message: "✓ 冗余副本已移入废纸篓", duration: 2000, level: "info", archive: false });
+                        lvNotify.capsule({ source: "查重对账", message: "✓ 冗余副本已移入废纸篓（可随时撤销还原）", duration: 2500, level: "info", archive: false });
                         void runScan();
                     }
+                });
+            }
+            return;
+        }
+
+        const setKeepBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-set-keep-btn");
+        if (setKeepBtn) {
+            e.stopPropagation();
+            hapticFeedback(4);
+            const grpTitle = setKeepBtn.getAttribute("data-group-title");
+            const targetDocId = setKeepBtn.getAttribute("data-doc-id");
+            const targetGroup = dupDocGroups.find((g) => g.title === grpTitle);
+            if (targetGroup && targetDocId) {
+                targetGroup.recommendedKeepId = targetDocId;
+                renderCurrentTab();
+            }
+            return;
+        }
+
+        const grpBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-group-recycle-btn");
+        if (grpBtn) {
+            e.stopPropagation();
+            const grpTitle = grpBtn.getAttribute("data-group-title");
+            const targetGroup = dupDocGroups.find((g) => g.title === grpTitle);
+            if (targetGroup) {
+                hapticFeedback(8);
+                grpBtn.textContent = "清理中…";
+                const toRecycle = targetGroup.docs.filter((d) => d.id !== targetGroup.recommendedKeepId);
+                void Promise.all(toRecycle.map((d) => lvDeduplicator.safeRemoveDocToRecycle(d.id, d.box))).then((res) => {
+                    const cnt = res.filter(Boolean).length;
+                    lvNotify.capsule({ source: "查重对账", message: `✓ 已将《${targetGroup.title}》的 ${cnt} 篇副本移入废纸篓`, duration: 2500, level: "success", archive: false });
+                    void runScan();
+                });
+            }
+            return;
+        }
+
+        const snipBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-doc-snippet-btn");
+        if (snipBtn) {
+            e.stopPropagation();
+            const docId = snipBtn.getAttribute("data-doc-id");
+            if (docId) {
+                const drawer = mask?.querySelector<HTMLElement>(`.lv-snippet-drawer-${docId}`);
+                if (drawer) {
+                    if (drawer.style.display === "none") {
+                        drawer.style.display = "block";
+                        drawer.textContent = "摘要检索中…";
+                        void lvDeduplicator.getDocPreviewSnippet(docId).then((snip) => {
+                            drawer.textContent = snip ? `📄 正文速览：${snip}` : "（此文档暂无段落正文或为空文档）";
+                        });
+                    } else {
+                        drawer.style.display = "none";
+                    }
+                }
+            }
+            return;
+        }
+
+        const blockDedupBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-block-single-dedup-btn");
+        if (blockDedupBtn) {
+            e.stopPropagation();
+            const blockIds = (blockDedupBtn.getAttribute("data-block-ids") || "").split(",").filter(Boolean);
+            if (currentDoc?.id && blockIds.length > 1) {
+                hapticFeedback(8);
+                blockDedupBtn.textContent = "排重中…";
+                void lvDeduplicator.deduplicateDocBlocks(currentDoc.id, 6, blockIds).then((res) => {
+                    lvNotify.capsule({ source: "段落排重", message: `✓ 已从当前文档剔除 ${res.removedCount} 处冗余块（保留首块）`, duration: 2500, level: "success", archive: false });
+                    void runScan();
+                });
+            }
+            return;
+        }
+
+        const recycleAllConfBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-recycle-all-conflicts-btn");
+        if (recycleAllConfBtn) {
+            e.stopPropagation();
+            hapticFeedback(8);
+            recycleAllConfBtn.textContent = "清理中…";
+            void Promise.all(conflictDocs.map((doc) => lvDeduplicator.safeRemoveDocToRecycle(doc.id, doc.box))).then((res) => {
+                const cnt = res.filter(Boolean).length;
+                lvNotify.capsule({ source: "冲突治理", message: `✓ 已将 ${cnt} 篇同步分叉文档移入废纸篓`, duration: 2500, level: "success", archive: false });
+                void runScan();
+            });
+            return;
+        }
+
+        const cleanLifeLogBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-clean-lifelog-btn");
+        if (cleanLifeLogBtn) {
+            e.stopPropagation();
+            hapticFeedback(8);
+            cleanLifeLogBtn.textContent = "清洗中…";
+            void lvDeduplicator.deduplicateDailyLifeLogs(undefined, false).then((res) => {
+                lvNotify.capsule({ source: "日记对账", message: `✓ 已剔除 ${res.removedCount} 条多端重复追加的流水`, duration: 2500, level: "success", archive: false });
+                void runScan();
+            });
+            return;
+        }
+
+        const clipRecycleBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-recycle-clip-group-btn");
+        if (clipRecycleBtn) {
+            e.stopPropagation();
+            const url = clipRecycleBtn.getAttribute("data-clip-url");
+            const grp = dupClips.find((c) => c.url === url);
+            if (grp && grp.docIds.length > 1) {
+                hapticFeedback(8);
+                clipRecycleBtn.textContent = "清理中…";
+                const toRecycle = grp.docIds.slice(1);
+                void Promise.all(toRecycle.map((id) => {
+                    const docItem = grp.docs?.find((d) => d.id === id);
+                    return lvDeduplicator.safeRemoveDocToRecycle(id, docItem?.box);
+                })).then((res) => {
+                    const cnt = res.filter(Boolean).length;
+                    lvNotify.capsule({ source: "剪藏去重", message: `✓ 已清理 ${cnt} 篇重复网页剪藏`, duration: 2500, level: "success", archive: false });
+                    void runScan();
                 });
             }
             return;
