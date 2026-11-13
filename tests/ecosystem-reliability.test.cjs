@@ -875,5 +875,10 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /lv-export-audit-btn/, 'Export audit report button must be wired');
         assert.match(src, /lv-toggle-empty-filter-btn/, 'Empty documents toggle filter must be wired');
         assert.match(src, /0字空壳/, 'Empty document badge must be displayed');
+        // Round-23：块级精准高亮聚焦、原生文档右键菜单与响应式双栏排版
+        assert.match(src, /openBlockById/, 'Precision block jump and highlight helper must be exported');
+        assert.match(src, /lv-block-locate-btn/, 'Block locate and highlight button must be wired');
+        assert.match(src, /lv-doc-more-btn/, 'Native document more action button must be wired');
+        assert.match(src, /lv-diff-grid/, 'Responsive diff grid must be styled');
     } finally { c.close(); }
 });

@@ -1227,10 +1227,14 @@ const STYLES = `
   .lv-qw-actions{width:100%!important;display:flex!important;gap:6px!important}
   .lv-qw-btn{flex:1!important;text-align:center!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}
 }
-.lv-conflict-tab{padding:5px 12px;border-radius:7px;border:1px solid var(--lv-lp-border,rgba(15,23,42,.12));background:var(--lv-lp-panel-bg,#f8fafc);color:var(--lv-lp-text-sub,#64748b);font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .12s ease}
+.lv-conflict-tab{padding:5px 12px;border-radius:7px;border:1px solid var(--lv-lp-border,rgba(15,23,42,.12));background:var(--lv-lp-panel-bg,#f8fafc);color:var(--lv-lp-text-sub,#64748b);font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .12s ease}
 .lv-conflict-tab:hover{background:var(--lv-lp-accent-soft,rgba(37,99,235,.08));color:var(--lv-lp-accent,#2563eb)}
 .lv-conflict-tab:active{transform:scale(.96)}
 .lv-conflict-tab.active{background:var(--lv-lp-accent-soft,rgba(37,99,235,.14));border-color:var(--lv-lp-accent,#2563eb);color:var(--lv-lp-accent,#2563eb)}
+.lv-diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:560px){
+  .lv-diff-grid{grid-template-columns:1fr!important}
+}
 
 /* ===== 设备矩阵适配：平板 / 折叠屏内屏（≥600px）底部抽屉 → 居中悬浮卡片 ===== */
 @media (min-width: 600px) {
@@ -10116,6 +10120,29 @@ export async function openDocumentById(docId: string): Promise<boolean> {
     return false;
 }
 
+/** 跨设备/跨端精准打开并高亮聚焦指定块（支持移动端降级与深链跳转） */
+export async function openBlockById(blockId: string, rootId?: string): Promise<boolean> {
+    if (!blockId) return false;
+    const isMobile = isMobileFrontend();
+    try {
+        const sy = (window as any).siyuan;
+        const hostApi = (window as any).__LV_HOST_API__;
+        const app = hostApi?.app || sy?.app || (window as any).siyuanApp;
+        if (!isMobile) {
+            const openTabFn = hostApi?.openTab || (window as any).openTab;
+            if (typeof openTabFn === "function") {
+                await openTabFn({
+                    app,
+                    doc: { id: rootId || blockId, action: ["cb-get-hl", "cb-get-focus"] },
+                    blockId: blockId !== rootId ? blockId : undefined,
+                });
+                return true;
+            }
+        }
+    } catch { /* ignore */ }
+    return openDocumentById(blockId);
+}
+
 let diaryBottomBusy = false;
 
 export async function openDiaryBottom(): Promise<void> {
@@ -10883,7 +10910,7 @@ export function openConflictResolverDialog(): void {
                                 ${g.docs.map((d) => {
                                     const isKeep = d.id === g.recommendedKeepId;
                                     return `
-                                        <div style="display:flex;flex-direction:column;padding:5px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid ${isKeep ? "#10b981" : "var(--lv-lp-border)"};font-size:11px;">
+                                        <div class="lv-doc-entry-row" data-doc-id="${d.id}" data-doc-box="${d.box}" style="display:flex;flex-direction:column;padding:5px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid ${isKeep ? "#10b981" : "var(--lv-lp-border)"};font-size:11px;">
                                             <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
                                                 <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                                     ${isKeep ? `<span style="color:#10b981;font-weight:700;margin-right:4px;">[🌟 推荐真身]</span>` : `<span style="color:#94a3b8;margin-right:4px;">[副本]</span>`}
@@ -10896,6 +10923,7 @@ export function openConflictResolverDialog(): void {
                                                     ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-title="${escapeHtml(g.title)}" data-doc-id="${d.id}" style="padding:2px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>` : ""}
                                                     <button type="button" class="lv-qw-tag-chip lv-doc-snippet-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">👁 摘要</button>
                                                     <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开</button>
+                                                    <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 6px;font-size:11px;" title="思源原生菜单 (右键/重命名/移动/历史/导出)">⋯</button>
                                                     ${!isKeep ? `<button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" data-child-count="${d.childCount || 0}" data-doc-title="${escapeHtml(g.title)}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>` : ""}
                                                 </div>
                                             </div>
@@ -10962,7 +10990,7 @@ export function openConflictResolverDialog(): void {
                     </div>
                 </div>
                 <div style="padding:8px 12px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11.5px;">
-                    目标文档：<strong>《${escapeHtml(currentDoc.title)}》</strong> · 发现 <strong>${docDupBlocks.length}</strong> 组重复粘贴块：
+                    目标文档：<strong>《${escapeHtml(currentDoc.title)}》</strong> · 发现 <strong>${docDupBlocks.length}</strong> 组重复块（预计可精简 <strong>${docDupBlocks.reduce((acc, b) => acc + (b.blockIds.length - 1), 0)}</strong> 处冗余，约 <strong>${docDupBlocks.reduce((acc, b) => acc + (b.blockIds.length - 1) * b.content.length, 0)}</strong> 字）：
                 </div>
                 ${docDupBlocks.map((b) => `
                     <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;display:flex;flex-direction:column;gap:5px;">
@@ -10970,7 +10998,7 @@ export function openConflictResolverDialog(): void {
                             <span style="color:var(--lv-lp-accent);font-weight:600;">${formatBlockType(b.type)} · 重复出现 ${b.count} 次</span>
                             <div style="display:flex;gap:4px;">
                                 <button type="button" class="lv-qw-tag-chip lv-block-single-dedup-btn" data-block-ids="${b.blockIds.join(",")}" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);">🧹 单组排重</button>
-                                <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${b.blockIds[0]}" style="padding:2px 7px;font-size:10.5px;">定位首块</button>
+                                <button type="button" class="lv-qw-tag-chip lv-block-locate-btn" data-block-id="${b.blockIds[0]}" data-root-id="${currentDoc.id}" style="padding:2px 7px;font-size:10.5px;">定位高亮</button>
                             </div>
                         </div>
                         <div style="background:var(--lv-lp-card-bg);padding:6px 8px;border-radius:5px;border:1px solid var(--lv-lp-border);word-break:break-all;color:var(--lv-lp-text);font-family:monospace;font-size:10.5px;">
@@ -11000,7 +11028,7 @@ export function openConflictResolverDialog(): void {
                     ` : `
                         <div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;">
                             ${conflictDocs.map((d) => `
-                                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:5px;background:var(--lv-lp-card-bg,#fff);border:1px solid rgba(239,68,68,0.2);font-size:11px;">
+                                <div class="lv-doc-entry-row" data-doc-id="${d.id}" data-doc-box="${d.box}" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:5px;background:var(--lv-lp-card-bg,#fff);border:1px solid rgba(239,68,68,0.2);font-size:11px;">
                                     <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                         <span style="color:#ef4444;font-weight:600;">[冲突]</span>
                                         <span style="opacity:.85;" title="${escapeHtml(d.title)}">${escapeHtml(d.title)}</span>
@@ -11008,6 +11036,7 @@ export function openConflictResolverDialog(): void {
                                     </div>
                                     <div style="display:flex;gap:4px;flex-shrink:0;">
                                         <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开对比</button>
+                                        <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 6px;font-size:11px;" title="思源原生菜单 (右键/重命名/移动/历史/导出)">⋯</button>
                                         <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>
                                     </div>
                                 </div>
@@ -11173,7 +11202,7 @@ export function openConflictResolverDialog(): void {
                                     <span>⚖️ 《${escapeHtml(targetGroup.title)}》 差异对账</span>
                                     <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(15,23,42,0.06);color:var(--lv-lp-text-sub);">${diffLabel}</span>
                                 </div>
-                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                <div class="lv-diff-grid">
                                     <div style="padding:6px;border-radius:5px;background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.2);">
                                         <div style="color:#10b981;font-weight:700;margin-bottom:2px;">🌟 推荐真身</div>
                                         <div style="font-size:10px;color:var(--lv-lp-text-sub);">${escapeHtml(keepDoc.hpath || "/" + keepDoc.id)}</div>
@@ -11181,6 +11210,7 @@ export function openConflictResolverDialog(): void {
                                         <div style="font-family:monospace;font-size:10px;color:var(--lv-lp-text);background:var(--lv-lp-card-bg);padding:4px 6px;border-radius:4px;border:1px solid var(--lv-lp-border);">${escapeHtml(keepSnippet || "（无段落正文）")}</div>
                                         <div style="margin-top:6px;display:flex;gap:4px;">
                                             <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${keepDoc.id}" style="padding:1px 6px;font-size:10px;">打开真身</button>
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${keepDoc.id}" data-doc-box="${keepDoc.box}" style="padding:1px 6px;font-size:10px;" title="原生菜单">⋯</button>
                                         </div>
                                     </div>
                                     <div style="padding:6px;border-radius:5px;background:rgba(15,23,42,0.03);border:1px solid var(--lv-lp-border);">
@@ -11191,6 +11221,7 @@ export function openConflictResolverDialog(): void {
                                         <div style="margin-top:6px;display:flex;gap:4px;">
                                             <button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-title="${escapeHtml(targetGroup.title)}" data-doc-id="${candidateDoc.id}" style="padding:1px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>
                                             <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${candidateDoc.id}" style="padding:1px 6px;font-size:10px;">打开副本</button>
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${candidateDoc.id}" data-doc-box="${candidateDoc.box}" style="padding:1px 6px;font-size:10px;" title="原生菜单">⋯</button>
                                             <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${candidateDoc.id}" data-doc-box="${candidateDoc.box}" data-child-count="${candidateDoc.childCount || 0}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:1px 6px;font-size:10px;color:#ef4444;">移入回收站</button>
                                         </div>
                                     </div>
@@ -11337,6 +11368,36 @@ export function openConflictResolverDialog(): void {
             return;
         }
 
+        const blockLocateBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-block-locate-btn");
+        if (blockLocateBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            const blockId = blockLocateBtn.getAttribute("data-block-id");
+            const rootId = blockLocateBtn.getAttribute("data-root-id");
+            if (blockId) {
+                void openBlockById(blockId, rootId || undefined);
+                lvNotify.capsule({ source: "定位高亮", message: "已在编辑器高亮聚焦首块位置", duration: 2000, level: "info", archive: false });
+            }
+            return;
+        }
+
+        const moreBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-doc-more-btn");
+        if (moreBtn) {
+            e.stopPropagation();
+            hapticFeedback(4);
+            const docId = moreBtn.getAttribute("data-doc-id");
+            const box = moreBtn.getAttribute("data-doc-box");
+            if (docId && box) {
+                const rect = moreBtn.getBoundingClientRect();
+                void showDocTreeNativeMenu({
+                    notebookId: box,
+                    docId,
+                    position: { x: rect.left, y: rect.bottom + 4 },
+                });
+            }
+            return;
+        }
+
         const clipRecycleBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-recycle-clip-group-btn");
         if (clipRecycleBtn) {
             e.stopPropagation();
@@ -11356,6 +11417,23 @@ export function openConflictResolverDialog(): void {
                 });
             }
             return;
+        }
+    });
+
+    mask?.addEventListener("contextmenu", (e) => {
+        const row = (e.target as HTMLElement | null)?.closest<HTMLElement>(".lv-doc-entry-row");
+        if (row) {
+            const docId = row.getAttribute("data-doc-id");
+            const box = row.getAttribute("data-doc-box");
+            if (docId && box) {
+                e.preventDefault();
+                e.stopPropagation();
+                void showDocTreeNativeMenu({
+                    notebookId: box,
+                    docId,
+                    position: { x: e.clientX, y: e.clientY },
+                });
+            }
         }
     });
 
