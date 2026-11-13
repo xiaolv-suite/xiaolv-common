@@ -869,5 +869,11 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /lv-group-diff-btn/, 'Group diff comparison button must be wired');
         assert.match(src, /lv-min-len-btn/, 'Min length sensitivity selector must be wired');
         assert.match(src, /安全拦截/, 'Safety confirmations must protect against accidental cascade deletion');
+        // Round-22：对账审计单落盘/复制、0字空壳过滤与穿透搜索关键词直达
+        assert.match(src, /generateAuditReportMarkdown/, 'Audit report generator must be defined');
+        assert.match(src, /saveAuditReportToHub/, 'Audit report hub persister must be defined');
+        assert.match(src, /lv-export-audit-btn/, 'Export audit report button must be wired');
+        assert.match(src, /lv-toggle-empty-filter-btn/, 'Empty documents toggle filter must be wired');
+        assert.match(src, /0字空壳/, 'Empty document badge must be displayed');
     } finally { c.close(); }
 });

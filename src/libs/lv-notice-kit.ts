@@ -3867,6 +3867,97 @@ export const lvDeduplicator = {
             }
         } catch { /* ignore */ }
         return [];
+    },
+
+    /** 生成全库对账审计 Markdown 报告文本 */
+    generateAuditReportMarkdown(params: {
+        dupDocGroups: LvDuplicateDocGroup[];
+        conflictDocs: LvConflictDocItem[];
+        dupLifeLogState: { removedCount: number; duplicateGroups: number; details: string[] };
+        dupClips: LvDuplicateClipGroup[];
+        currentDoc?: { id: string; title: string };
+        docDupBlocks?: LvDocDuplicateBlockGroup[];
+    }): string {
+        const d = new Date();
+        const timeStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+        const totalDocsInDup = params.dupDocGroups.reduce((acc, g) => acc + g.docs.length, 0);
+        const lines: string[] = [
+            `# 🐴 小驴生态 · 全思源查重与对账治理审计单`,
+            `> 审计时间：${timeStr} · 治理中枢：小驴对账中枢 (lvDeduplicator v2.0)`,
+            ``,
+            `## 📊 一、 全库对账综述`,
+            `- **全库同名文档组**：${params.dupDocGroups.length} 组（共涉及 ${totalDocsInDup} 篇文档）`,
+            `- **同步冲突分叉文档**：${params.conflictDocs.length} 篇`,
+            `- **今日日记重复流水**：${params.dupLifeLogState.duplicateGroups} 组`,
+            `- **网页剪藏重复收录**：${params.dupClips.length} 组`,
+            ...(params.currentDoc?.id ? [`- **当前聚焦长文档**：《${params.currentDoc.title}》（发现 ${params.docDupBlocks?.length || 0} 组重复内容块）`] : []),
+            ``,
+            `## 📑 二、 全库同名文档明细`,
+        ];
+
+        if (params.dupDocGroups.length === 0) {
+            lines.push(`✓ 全库文档标题唯一，无任何同名分叉。`);
+        } else {
+            lines.push(`| 序号 | 文档标题 | 推荐真身 (Path) | 真身属性 | 候选副本列表 |`);
+            lines.push(`| :---: | :--- | :--- | :--- | :--- |`);
+            params.dupDocGroups.forEach((g, idx) => {
+                const keep = g.docs.find(d => d.id === g.recommendedKeepId) || g.docs[0];
+                const copies = g.docs.filter(d => d.id !== keep?.id);
+                const keepDesc = `${keep ? `${keep.length}字` : "-"}${keep?.childCount ? ` · 含${keep.childCount}子文档` : ""}`;
+                const copiesDesc = copies.map(c => `${c.hpath || "/" + c.id} (${c.length}字${c.childCount ? `·含${c.childCount}子文档` : ""})`).join("<br>");
+                lines.push(`| ${idx + 1} | 《${g.title}》 | \`${keep?.hpath || "/" + keep?.id}\` | ${keepDesc} | ${copiesDesc || "无"} |`);
+            });
+        }
+
+        lines.push(``);
+        lines.push(`## ⚡ 三、 同步冲突与分叉明细`);
+        if (params.conflictDocs.length === 0) {
+            lines.push(`✓ 未检测到带 (冲突) 或 _conflict_ 后缀的同步分叉文档。`);
+        } else {
+            lines.push(`| 序号 | 冲突文档标题 | 所在路径 | 字数 | 更新时间 |`);
+            lines.push(`| :---: | :--- | :--- | :--- | :--- |`);
+            params.conflictDocs.forEach((c, idx) => {
+                lines.push(`| ${idx + 1} | ${c.title} | \`${c.hpath}\` | ${c.length || 0} 字 | ${formatSyTimestamp(c.updated)} |`);
+            });
+        }
+
+        if (params.dupClips.length > 0) {
+            lines.push(``);
+            lines.push(`## 🌐 四、 重复网页剪藏明细`);
+            lines.push(`| 序号 | 目标 URL | 重复收录篇数 | 文档列表 |`);
+            lines.push(`| :---: | :--- | :---: | :--- |`);
+            params.dupClips.forEach((clip, idx) => {
+                const docList = (clip.docs || []).map(d => `《${d.title}》(\`${d.hpath}\`)`).join("<br>");
+                lines.push(`| ${idx + 1} | [${clip.url}](${clip.url}) | ${clip.count} | ${docList} |`);
+            });
+        }
+
+        lines.push(``);
+        lines.push(`---`);
+        lines.push(`*小驴生态 · 100% 本地原生存储与隐私承诺 · 数据主权完整归您所有*`);
+        return lines.join("\n");
+    },
+
+    /** 将审计报告安全落盘至「🐴 小驴生态」大本营 */
+    async saveAuditReportToHub(mdContent: string): Promise<{ ok: boolean; path?: string; docId?: string }> {
+        try {
+            const d = new Date();
+            const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+            const timeStr = `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
+            const title = `对账审计报告-${dateStr}-${timeStr}`;
+            const nbs = await lvKernelPost("/api/notebook/lsNotebooks", {});
+            const hub = (nbs?.data?.notebooks || []).find((n: any) => !n.closed && /^(🐴\s*)?小驴(生态|空间|笔记本)/.test(n.name));
+            if (!hub?.id) return { ok: false };
+            const docRes = await lvKernelPost("/api/filetree/createDocWithMd", {
+                notebook: hub.id,
+                path: `/99-生态杂项/${title}`,
+                markdown: mdContent,
+            });
+            if (docRes.code === 0 && docRes.data) {
+                return { ok: true, path: `/99-生态杂项/${title}`, docId: String(docRes.data) };
+            }
+        } catch { /* ignore */ }
+        return { ok: false };
     }
 };
 
@@ -7214,6 +7305,30 @@ function openDesktopLaunchpadPopoverImpl(
                 omniHitsList = [];
                 let html = "";
 
+                // 0. 关键词包含 查重 / 对账 / 冲突 / 排重 / dup / dedup 时，置顶快捷治理动作
+                const isDedupKw = /^(查重|对账|冲突|排重|dup|dedup)/i.test(kw.trim());
+                if (isDedupKw) {
+                    const idx = omniHitsList.length;
+                    omniHitsList.push({
+                        label: "全思源文档查重与对账治理",
+                        onSelect: () => {
+                            pushSearchHistory(kw);
+                            closeDesktopLaunchpadPopover();
+                            openConflictResolverDialog();
+                        },
+                    });
+                    html += `
+                      <button type="button" class="lv-pop-hit-item ${idx === omniFocusIndex ? "focused" : ""}" data-omni-idx="${idx}">
+                        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                          <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:rgba(239,68,68,0.12);color:#ef4444;flex-shrink:0;">🧹 治理</span>
+                          <span style="font-size:12.5px;font-weight:700;color:var(--lv-lp-accent,#2563eb);white-space:nowrap;">全思源文档查重与对账治理工作室</span>
+                          <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">同名文档 · 段落去重 · 同步冲突与日记排重</span>
+                        </div>
+                        <span style="font-size:10.5px;font-weight:600;color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">打开 ➔</span>
+                      </button>
+                    `;
+                }
+
                 matchedPlugins.forEach((p) => {
                     const idx = omniHitsList.length;
                     const pColor = resolveSafeBrandColor(p.id, p.color);
@@ -9421,6 +9536,26 @@ function openMobileSheetImpl(): void {
             void lvOmnisearch.searchStream(kw, (hits, status) => {
                 if (seq !== searchSeq || !document.getElementById(MOBILE_SHEET_ID)) return; // 过期响应或坞已关
                 results.textContent = "";
+                const isDedupKw = /^(查重|对账|冲突|排重|dup|dedup)/i.test(kw.trim());
+                if (isDedupKw) {
+                    const dedupCard = document.createElement("button");
+                    dedupCard.type = "button";
+                    dedupCard.className = "lv-sheet-result";
+                    dedupCard.style.border = "1px solid var(--lv-lp-accent, #2563eb)";
+                    dedupCard.style.background = "var(--lv-lp-accent-soft, rgba(37,99,235,0.08))";
+                    dedupCard.innerHTML = `
+                        <span class="lv-sheet-result-badge" style="background:rgba(239,68,68,0.12);color:#ef4444;">🧹 治理</span>
+                        <span class="lv-sheet-result-body">
+                            <span class="lv-sheet-result-title" style="color:var(--lv-lp-accent,#2563eb);font-weight:700;">全思源文档查重与对账治理</span>
+                            <span class="lv-sheet-result-snippet">同名文档 · 段落去重 · 同步冲突与日记排重</span>
+                        </span>
+                    `;
+                    dedupCard.onclick = () => {
+                        closeMobileSheet();
+                        openConflictResolverDialog();
+                    };
+                    results.appendChild(dedupCard);
+                }
                 if (hits.length > 0) {
                     const count = document.createElement("div");
                     count.className = "lv-sheet-result-count";
@@ -10573,6 +10708,7 @@ export function openConflictResolverDialog(): void {
     let docDupBlocks: LvDocDuplicateBlockGroup[] = [];
     let searchKeyword = "";
     let currentMinLength = 6;
+    let filterOnlyEmpty = false;
 
     const currentDoc = getCurrentOpenDocInfo();
 
@@ -10581,10 +10717,11 @@ export function openConflictResolverDialog(): void {
         title: "全思源文档查重与对账治理",
         badgeHtml: `<span class="lv-qw-badge">全库级自愈中枢</span>`,
         bodyHtml: `
-            <div class="lv-conflict-tabs" style="display:flex;gap:6px;margin-bottom:10px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));padding-bottom:8px;">
+            <div class="lv-conflict-tabs" style="display:flex;gap:6px;margin-bottom:10px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));padding-bottom:8px;align-items:center;">
                 <button type="button" class="lv-conflict-tab active" data-tab="doc-titles">📑 全库同名文档 <span class="lv-dup-tab-badge lv-dup-badge-titles" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
                 <button type="button" class="lv-conflict-tab" data-tab="doc-blocks">📝 当前文档排重 <span class="lv-dup-tab-badge lv-dup-badge-blocks" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
                 <button type="button" class="lv-conflict-tab" data-tab="sync-conflict">⚡ 同步冲突与对账 <span class="lv-dup-tab-badge lv-dup-badge-conflicts" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
+                <button type="button" class="lv-qw-tag-chip lv-export-audit-btn" style="margin-left:auto;padding:3px 9px;font-size:11px;color:var(--lv-lp-accent,#2563eb);background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));">📄 导出对账单</button>
             </div>
             <div class="lv-conflict-tab-view" style="min-height:200px;max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:12px;">
                 <div style="text-align:center;padding:28px;color:var(--lv-lp-text-sub,#64748b);">⏳ 正在深度检索思源全库…</div>
@@ -10713,19 +10850,23 @@ export function openConflictResolverDialog(): void {
             }
             if (saveBtn) saveBtn.textContent = `清理冗余副本 (保留真身)`;
             const kw = searchKeyword.trim().toLowerCase();
-            const filteredGroups = kw
+            let filteredGroups = kw
                 ? dupDocGroups.filter(g => g.title.toLowerCase().includes(kw) || g.docs.some(d => d.hpath.toLowerCase().includes(kw)))
                 : dupDocGroups;
+            if (filterOnlyEmpty) {
+                filteredGroups = filteredGroups.filter(g => g.docs.some(d => d.length === 0));
+            }
 
             tabView.innerHTML = `
-                <div style="display:flex;gap:6px;margin-bottom:4px;">
-                    <input type="search" class="lv-dup-search-input" placeholder="🔍 快速过滤同名文档（输入标题或路径关键字）…" value="${escapeHtml(searchKeyword)}" style="width:100%;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));background:var(--lv-lp-card-bg,#fff);font-size:11.5px;color:var(--lv-lp-text,#0f172a);outline:none;">
+                <div style="display:flex;gap:6px;margin-bottom:4px;align-items:center;">
+                    <input type="search" class="lv-dup-search-input" placeholder="🔍 快速过滤同名文档（输入标题或路径关键字）…" value="${escapeHtml(searchKeyword)}" style="flex:1;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));background:var(--lv-lp-card-bg,#fff);font-size:11.5px;color:var(--lv-lp-text,#0f172a);outline:none;">
+                    <button type="button" class="lv-qw-tag-chip lv-toggle-empty-filter-btn" style="padding:5px 9px;font-size:11px;white-space:nowrap;${filterOnlyEmpty ? 'background:rgba(239,68,68,0.12);color:#ef4444;border-color:rgba(239,68,68,0.3);font-weight:700;' : ''}">⚪ 仅看含空壳组</button>
                 </div>
                 <div class="lv-restore-warn" style="font-size:11px;margin-bottom:6px;">
-                    全库共发现 <strong>${dupDocGroups.length}</strong> 组同名文档${kw ? `（当前匹配到 <strong>${filteredGroups.length}</strong> 组）` : ""}。系统自动优先推荐绿色【真身】（含子文档的目录树获最高保护权重），支持点击「设为真身」、「⚖️ 对比」或「清理本组副本」。
+                    全库共发现 <strong>${dupDocGroups.length}</strong> 组同名文档${kw || filterOnlyEmpty ? `（当前匹配到 <strong>${filteredGroups.length}</strong> 组）` : ""}。系统自动优先推荐绿色【真身】（含子文档的目录树获最高保护权重），支持点击「设为真身」、「⚖️ 对比」或「清理本组副本」。
                 </div>
                 ${filteredGroups.length === 0 ? `
-                    <div style="text-align:center;padding:24px;color:var(--lv-lp-text-sub,#64748b);">无匹配关键词的同名文档</div>
+                    <div style="text-align:center;padding:24px;color:var(--lv-lp-text-sub,#64748b);">无匹配关键词或空壳条件的同名文档</div>
                 ` : filteredGroups.map((g) => {
                     const safeId = escapeHtml(g.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
                     return `
@@ -10748,6 +10889,7 @@ export function openConflictResolverDialog(): void {
                                                     ${isKeep ? `<span style="color:#10b981;font-weight:700;margin-right:4px;">[🌟 推荐真身]</span>` : `<span style="color:#94a3b8;margin-right:4px;">[副本]</span>`}
                                                     <span style="opacity:.85;font-weight:500;" title="${escapeHtml(d.hpath)}">${escapeHtml(d.hpath || "/" + d.id)}</span>
                                                     <span style="opacity:.55;margin-left:6px;font-size:10.5px;">(${d.length} 字 · ${formatSyTimestamp(d.updated)})</span>
+                                                    ${d.length === 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(100,116,139,0.12);color:#64748b;font-weight:600;margin-left:4px;" title="此文档内容为空（0字），通常为误点新建产生的空壳">⚪ 0字空壳</span>` : ""}
                                                     ${(d.childCount || 0) > 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,0.12);color:#d97706;font-weight:600;margin-left:4px;" title="此文档下含有 ${d.childCount} 篇子文档，移入回收站将同时级联移动！">📁 含 ${d.childCount} 篇子文档</span>` : ""}
                                                 </div>
                                                 <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -11143,6 +11285,54 @@ export function openConflictResolverDialog(): void {
             void lvDeduplicator.deduplicateDailyLifeLogs(undefined, false).then((res) => {
                 lvNotify.capsule({ source: "日记对账", message: `✓ 已剔除 ${res.removedCount} 条多端重复追加的流水`, duration: 2500, level: "success", archive: false });
                 void runScan();
+            });
+            return;
+        }
+
+        const emptyFilterBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-toggle-empty-filter-btn");
+        if (emptyFilterBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            filterOnlyEmpty = !filterOnlyEmpty;
+            renderCurrentTab();
+            return;
+        }
+
+        const exportBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-export-audit-btn");
+        if (exportBtn) {
+            e.stopPropagation();
+            hapticFeedback(8);
+            exportBtn.textContent = "生成中…";
+            const md = lvDeduplicator.generateAuditReportMarkdown({
+                dupDocGroups,
+                conflictDocs,
+                dupLifeLogState,
+                dupClips,
+                currentDoc: currentDoc ? { id: currentDoc.id, title: currentDoc.title } : undefined,
+                docDupBlocks,
+            });
+            try {
+                if (typeof navigator !== "undefined" && navigator.clipboard) {
+                    void navigator.clipboard.writeText(md);
+                }
+            } catch { /* ignore */ }
+            void lvDeduplicator.saveAuditReportToHub(md).then((res) => {
+                exportBtn.textContent = "📄 导出对账单";
+                if (res.ok) {
+                    lvNotify.card({
+                        title: "📄 对账审计单已生成并安全归档",
+                        message: `全库对账报告已复制至剪贴板，并安全归档至「🐴 小驴生态${res.path}」！`,
+                        actions: [{
+                            label: "打开对账文档",
+                            primary: true,
+                            onClick: () => { if (res.docId) void openDocumentById(res.docId); },
+                        }],
+                        level: "success",
+                        duration: 6500,
+                    });
+                } else {
+                    lvNotify.capsule({ source: "对账审计", message: "✓ 全库对账报告已复制至剪贴板（Markdown）", duration: 3200, level: "success" });
+                }
             });
             return;
         }
