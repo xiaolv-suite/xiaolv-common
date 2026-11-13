@@ -847,5 +847,9 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         assert.match(src, /openConflictResolverDialog/, 'Conflict resolver dialog must be wired');
         assert.match(src, /lv-pop-dedup-btn/, 'Desktop footer must expose dedup entry');
         assert.match(src, /🧹 冲突排查与对账/, 'Mobile eco row must expose dedup chip');
+        // Round-18：Cascade Escape 防误关与穿透搜索无结果态一键建档
+        assert.match(src, /document\.querySelector<HTMLElement>\("\.lv-qw-lightbox"\)/, 'Escape keyHandler must dismiss lightbox first without closing quick modal');
+        assert.match(src, /lv-omni-empty-note-btn/, 'Desktop omni empty state must offer quick note creation');
+        assert.match(src, /lv-mobile-empty-note/, 'Mobile omni empty state must offer quick note creation');
     } finally { c.close(); }
 });

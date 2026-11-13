@@ -7060,7 +7060,16 @@ function openDesktopLaunchpadPopoverImpl(
                 if (!status.done) {
                     html += `<div style="text-align:center;padding:6px 12px;font-size:11px;color:var(--lv-lp-text-sub,#64748b);">🔍 正在流式检索全生态知识库 (${status.pending} 项进行中)…</div>`;
                 } else if (omniHitsList.length === 0) {
-                    html = `<div style="text-align:center;padding:28px 12px;font-size:12px;color:var(--lv-lp-text-sub,#64748b);">未在小驴全家桶中穿透检索到与 “<strong style="color:var(--lv-lp-text,#0f172a);">${escapeHtml(searchInput.value.trim())}</strong>” 相关的条目</div>`;
+                    const searchVal = searchInput.value.trim();
+                    html = `
+                      <div style="text-align:center;padding:22px 16px 12px;font-size:12px;color:var(--lv-lp-text-sub,#64748b);">
+                        未在小驴全家桶中穿透检索到与 “<strong style="color:var(--lv-lp-text,#0f172a);">${escapeHtml(searchVal)}</strong>” 相关的条目
+                      </div>
+                      <div class="lv-pop-empty-actions" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:0 14px 18px;">
+                        <button type="button" class="lv-pop-sub-btn lv-omni-empty-note-btn" data-search-kw="${escapeHtml(searchVal)}" style="padding:5px 12px;font-size:11.5px;font-weight:600;">⚡ 以此内容一键记事</button>
+                        <button type="button" class="lv-pop-sub-btn lv-omni-empty-task-btn" data-search-kw="${escapeHtml(searchVal)}" style="padding:5px 12px;font-size:11.5px;font-weight:600;">✅ 以此标题新建待办</button>
+                      </div>
+                    `;
                 }
 
                 omniBox.innerHTML = html;
@@ -7467,6 +7476,24 @@ function openDesktopLaunchpadPopoverImpl(
                     closeDesktopLaunchpadPopover();
                     try { getLaunchpadHub().executeAction(pid, actName); } catch (err) { console.warn("[LvLaunchpad] 二级行动失败:", err); }
                 }
+                return;
+            }
+
+            const emptyNoteBtn = target.closest<HTMLElement>(".lv-omni-empty-note-btn");
+            if (emptyNoteBtn) {
+                e.stopPropagation();
+                const kw = emptyNoteBtn.getAttribute("data-search-kw") || "";
+                closeDesktopLaunchpadPopover();
+                openQuickNoteDialog(kw);
+                return;
+            }
+
+            const emptyTaskBtn = target.closest<HTMLElement>(".lv-omni-empty-task-btn");
+            if (emptyTaskBtn) {
+                e.stopPropagation();
+                const kw = emptyTaskBtn.getAttribute("data-search-kw") || "";
+                closeDesktopLaunchpadPopover();
+                openQuickNoteDialog("- [ ] " + kw);
                 return;
             }
 
@@ -9225,7 +9252,25 @@ function openMobileSheetImpl(): void {
                 if (!hits.length) {
                     const empty = document.createElement("div");
                     empty.className = status.done ? "lv-sheet-empty" : "lv-sheet-result-count";
-                    empty.textContent = status.done ? "未找到匹配结果" : `🔍 正在流式检索全生态 (${status.pending} 项进行中)…`;
+                    if (status.done) {
+                        empty.innerHTML = `
+                            <div style="margin-bottom:8px;">未找到与 “<strong>${escapeHtml(kw)}</strong>” 相关的条目</div>
+                            <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
+                                <button type="button" class="lv-sheet-action-chip lv-mobile-empty-note" style="padding:4px 10px;font-size:11px;">⚡ 一键记事</button>
+                                <button type="button" class="lv-sheet-action-chip lv-mobile-empty-task" style="padding:4px 10px;font-size:11px;">✅ 新建待办</button>
+                            </div>
+                        `;
+                        empty.querySelector(".lv-mobile-empty-note")?.addEventListener("click", () => {
+                            closeMobileSheet();
+                            openQuickNoteDialog(kw);
+                        });
+                        empty.querySelector(".lv-mobile-empty-task")?.addEventListener("click", () => {
+                            closeMobileSheet();
+                            openQuickNoteDialog("- [ ] " + kw);
+                        });
+                    } else {
+                        empty.textContent = `🔍 正在流式检索全生态 (${status.pending} 项进行中)…`;
+                    }
                     results.appendChild(empty);
                 }
             }).catch(() => { /* 检索异常静默 */ });
@@ -10915,6 +10960,12 @@ function mountQuickModal(opts: {
     const keyHandler = (e: KeyboardEvent) => {
         if (e.isComposing || e.keyCode === 229) return;
         if (e.key === "Escape") {
+            const lb = document.querySelector<HTMLElement>(".lv-qw-lightbox");
+            if (lb) {
+                e.preventDefault(); e.stopPropagation();
+                try { lb.remove(); } catch { /* ignore */ }
+                return;
+            }
             const inlineInput = mask.querySelector<HTMLElement>(".lv-qw-add-cat-row");
             if (inlineInput) return; // 让内联分类输入自己先处理 Esc
             e.preventDefault(); e.stopPropagation(); cleanup();
