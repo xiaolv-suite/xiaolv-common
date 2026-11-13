@@ -544,7 +544,7 @@ export default class XiaolvCommonPlugin extends Plugin {
 
         // 小驴罗盘 · 全端统一收敛入口挂载 (Protocol v1.7 Unified Entry)
         try {
-            this.mobileEntryCleaner = lvLaunchpad.ensureUnifiedEntry();
+            this.mobileEntryCleaner = lvLaunchpad.ensureUnifiedEntry(this);
         } catch {
             // 环境防御
         }
@@ -1747,6 +1747,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                 digit: 8,
                 badge,
                 badgeType: "primary",
+                /* 罗盘每次打开实时拉取片段条目数 */
+                badgeProvider: () => {
+                    const c = this.library?.getIndex()?.items?.size;
+                    return c !== undefined ? `常用 ${c} 项` : "常用";
+                },
                 actions: ["打开片段搜索", "复制置顶片段", "从剪贴板保存片段", "查看剪贴板历史"],
                 topBarElement: this.topBarElement,
                 onClick: () => this.openCommonPanel(),

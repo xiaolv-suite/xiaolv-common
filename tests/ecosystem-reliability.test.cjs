@@ -438,3 +438,402 @@ test('ECO-015: 罗盘弹窗键盘导航在 IME 合成期整体让路 (isComposin
     const escapeIdx = handlerBody.indexOf('e.key === "Escape"');
     assert.ok(guardIdx >= 0 && escapeIdx > guardIdx, 'IME 守卫必须先于 Escape 分支');
 });
+
+test('ECO-016: 极速工作台全端核心动作、桌面端重新加载及配置均有效且可调', async () => {
+    const c = load('lv-notice-kit.ts');
+    try {
+        const lp = c.api.lvLaunchpad;
+        assert.ok(lp, 'lvLaunchpad must be exported');
+        assert.equal(typeof lp.openQuickNote, 'function');
+        assert.equal(typeof lp.openLifeLog, 'function');
+        assert.equal(typeof lp.openDiaryBottom, 'function');
+        assert.equal(typeof lp.openTaskManager, 'function');
+        assert.equal(typeof lp.openNewTask, 'function');
+        assert.equal(typeof lp.reloadUI, 'function');
+        assert.equal(typeof lp.randomWalk, 'function');
+        assert.equal(typeof lp.pasteToDailyNote, 'function');
+        assert.equal(typeof lp.getQuickWorkspaceConfig, 'function');
+        assert.equal(typeof lp.saveQuickWorkspaceConfig, 'function');
+
+        // Config defaults
+        const conf = lp.getQuickWorkspaceConfig();
+        assert.ok(Array.isArray(conf.lifeLogCategories), 'lifeLogCategories must be an array');
+        assert.ok(conf.lifeLogCategories.includes('日记'), 'default categories must include 日记');
+
+        // Save patch including notebookId
+        lp.saveQuickWorkspaceConfig({ lifeLogCategories: ['测试1', '测试2'], lifeLogNotebookId: 'nb-123' });
+        const updated = lp.getQuickWorkspaceConfig();
+        assert.deepEqual(updated.lifeLogCategories, ['测试1', '测试2']);
+        assert.equal(updated.lifeLogNotebookId, 'nb-123');
+
+        // Check HTML builder includes quick actions
+        const html = c.api.buildLaunchpadPopoverHtml([], false);
+        assert.match(html, /lv-pop-quick-strip/, 'Popover HTML must contain quick strip');
+        assert.match(html, /lv-quick-note-btn/, 'Must have QuickNote button');
+        assert.match(html, /lv-quick-lifelog-btn/, 'Must have LifeLog button');
+        assert.match(html, /lv-quick-diary-bottom-btn/, 'Must have DiaryBottom button');
+        assert.match(html, /lv-quick-clip-btn/, 'Must have ClipBtn button');
+        assert.match(html, /lv-quick-random-walk-btn/, 'Must have RandomWalk button');
+        assert.match(html, /lv-quick-task-mgr-btn/, 'Must have TaskManager button');
+        assert.match(html, /lv-quick-new-task-btn/, 'Must have NewTask button');
+        assert.match(html, /lv-quick-reload-btn/, 'Desktop Popover HTML must have Reload button');
+        assert.match(html, /lv-pop-today-ticker/, 'Desktop Popover must use compact single-line today ticker');
+        assert.ok(html.indexOf('lv-pop-quick-wrap') < html.indexOf('lv-pop-search-bar'), 'Quick workbench must appear before compact search bar');
+
+        // Check mobile settings & double click ball & smart tags & new task action in source
+        const src = fs.readFileSync(find('lv-notice-kit.ts'), 'utf8');
+        assert.match(src, /lv-sheet-pref-btn/, 'Mobile sheet must have settings button');
+        assert.match(src, /lv-sheet-today-ticker/, 'Mobile sheet must use compact single-line today ticker');
+        assert.match(src, /双击悬浮球：极速直达 LifeLog/, 'Mobile floating ball must support double-click LifeLog');
+        assert.match(src, /lv-qw-tags-row/, 'Quick Note must include quick tag insertion chips');
+        assert.match(src, /lv-qw-time-offsets/, 'LifeLog must include time offset selectors');
+        assert.match(src, /lv-qw-add-cat-btn/, 'LifeLog must support inline category addition');
+        assert.match(src, /data-action="new-task"/, 'Mobile sheet must contain new-task action card');
+        assert.match(src, /data-action="paste-clip"/, 'Mobile sheet must contain paste-clip action card');
+        assert.match(src, /data-action="random-walk"/, 'Mobile sheet must contain random-walk action card');
+        assert.match(src, /tmQuickAddOpen/, 'openNewTask must cascade to tmQuickAddOpen');
+        assert.match(src, /\/api\/ui\/reloadUI/, 'reloadUI must call SiYuan /api/ui/reloadUI');
+        assert.match(src, /ORDER BY random\(\)/, 'randomWalk must query with random ordering');
+        assert.equal(typeof c.api.resolveDailyNotebookId, 'function');
+        assert.match(src, /resolveDailyNotebookId/, 'appendMarkdownToDailyNote must use resolveDailyNotebookId');
+        assert.match(src, /local-dailynoteid/, 'resolveDailyNotebookId must check local-dailynoteid');
+
+        // Ensure mobile quick grid does NOT contain reloadUI
+        const mobileQuickMatch = src.match(/quickGrid\.innerHTML\s*=\s*`([\s\S]*?)`;/);
+        assert.ok(mobileQuickMatch, 'Mobile quickGrid HTML block must exist');
+        assert.ok(!/reload/i.test(mobileQuickMatch[1]) && !/重新加载/.test(mobileQuickMatch[1]), 'Mobile sheet must not contain reload button');
+    } finally { c.close(); }
+});
+
+test('ECO-017: 通知系统长效免打扰（未来3天/未来一周）及统一 showMessage 适配器均可靠有效', () => {
+    const store = new Map();
+    const fakeStorage = {
+        get length() { return store.size; },
+        key(i) { return Array.from(store.keys())[i] ?? null; },
+        getItem(k) { return store.has(k) ? store.get(k) : null; },
+        setItem(k, v) { store.set(k, String(v)); },
+        removeItem(k) { store.delete(k); },
+    };
+    const c = load('lv-notice-kit.ts', {}, { localStorage: fakeStorage });
+    try {
+        c.api.lvNotify.clearHistory();
+        assert.equal(c.api.lvNotify.isCategoryMuted('exam-review'), false);
+        assert.equal(c.api.lvNotify.isMutedToday('exam-review'), false);
+
+        // 未来 3 天不通知
+        c.api.lvNotify.muteDays('exam-review', 3);
+        assert.equal(c.api.lvNotify.isCategoryMuted('exam-review'), true);
+        assert.equal(c.api.lvNotify.isMutedToday('exam-review'), true);
+
+        // 未来 1 周不通知
+        c.api.lvNotify.muteDays('daily-reminder', 7);
+        assert.equal(c.api.lvNotify.isCategoryMuted('daily-reminder'), true);
+
+        // 验证处于免打扰期的分类被静默拦截
+        c.api.lvNotify.card({ source: '小驴考试', category: 'exam-review', title: '每日提醒', message: '不应弹出' });
+        assert.equal(c.api.lvNotify.getHistory().length, 0);
+
+        // 获取静音分类清单
+        const mutedList = c.api.lvNotify.getMutedCategories();
+        assert.equal(mutedList.length, 2);
+        assert.ok(mutedList.some((x) => x.category === 'exam-review'));
+        assert.ok(mutedList.some((x) => x.category === 'daily-reminder'));
+
+        // 重载实例仍持久化生效，解除静音后恢复
+        const reloaded = load('lv-notice-kit.ts', {}, { localStorage: fakeStorage });
+        try {
+            assert.equal(reloaded.api.lvNotify.isCategoryMuted('exam-review'), true);
+            reloaded.api.lvNotify.clearCategoryMute('exam-review');
+            assert.equal(reloaded.api.lvNotify.isCategoryMuted('exam-review'), false);
+            assert.equal(reloaded.api.lvNotify.isCategoryMuted('daily-reminder'), true);
+        } finally { reloaded.close(); }
+
+        // Scoped showMessage 适配器校验
+        const scopedShow = c.api.createScopedShowMessage('小驴打卡');
+        scopedShow('[小驴打卡] 打卡成功', 2000, 'info');
+        const hist = c.api.lvNotify.getHistory();
+        assert.equal(hist.length, 1);
+        assert.equal(hist[0].source, '小驴打卡');
+        assert.equal(hist[0].message, '打卡成功');
+
+        // 源码自动补全未来3天/未来一周验证
+        const src = fs.readFileSync(find('lv-notice-kit.ts'), 'utf8');
+        assert.match(src, /未来3天不通知/, 'Card renderer must support 3-day mute option');
+        assert.match(src, /未来一周不通知/, 'Card renderer must support 7-day mute option');
+        assert.match(src, /lv-pop-unmute-btn/, 'Settings drawer must provide unmute trigger');
+    } finally { c.close(); }
+});
+
+test('ECO-018: notification history folds duplicates (including non-consecutive & scan heartbeats) and captures SiYuan #message snackbars', () => {
+    const store = new Map();
+    const fakeStorage = {
+        get length() { return store.size; },
+        key(i) { return Array.from(store.keys())[i] ?? null; },
+        getItem(k) { return store.has(k) ? store.get(k) : null; },
+        setItem(k, v) { store.set(k, String(v)); },
+        removeItem(k) { store.delete(k); },
+    };
+
+    const c = load('lv-notice-kit.ts', {}, { localStorage: fakeStorage });
+    try {
+        c.api.lvNotify.clearHistory();
+        c.api.lvNotify.silent({ source: '小驴管家', category: 'hub-scan', message: '管家扫描完成：1 项逾期，0 项临期（共 1 项）' });
+        c.api.lvNotify.silent({ source: '小驴管家', category: 'journal-sync', message: '后台流水与日记文档增量同步完成' });
+        c.api.lvNotify.silent({ source: '小驴管家', category: 'hub-scan', message: '管家扫描完成：1 项逾期，0 项临期（共 1 项）' });
+        c.api.lvNotify.silent({ source: '小驴管家', category: 'hub-scan', message: '管家扫描完成：0 项逾期，0 项临期（共 0 项）' });
+
+        const hist = c.api.lvNotify.getHistory();
+        assert.equal(hist.length, 2, 'non-consecutive hub-scan notices should fold into 1 row');
+        assert.equal(hist[0].category, 'hub-scan');
+        assert.equal(hist[0].repeatCount, 3);
+        assert.match(hist[0].message, /0 项逾期/);
+
+        const items = [{ id: 'siyuan-home', name: '小驴管家', desc: '管家', state: 'docked', onClick() {} }];
+        const inboxHtml = c.api.buildLaunchpadPopoverHtml(items, false, { showInboxDrawer: true, inboxFilter: 'all' });
+        assert.ok(inboxHtml.includes('×3'), 'inbox drawer should render ×3 repeat badge');
+        assert.ok(inboxHtml.includes('lv-inbox-copy-btn'), 'inbox drawer should render copy button');
+        assert.ok(inboxHtml.includes('data-inbox-filter="siyuan"'), 'inbox drawer should include SiYuan native filter tab');
+    } finally { c.close(); }
+
+    // 模拟 SiYuan 原生 #message 容器与 MutationObserver 采集
+    const observers = [];
+    class MockMutationObserver {
+        constructor(cb) { this.cb = cb; this.disconnected = false; observers.push(this); }
+        observe() {}
+        disconnect() { this.disconnected = true; }
+    }
+    const makeEl = (tag, cls = '', text = '') => {
+        const classes = new Set(cls ? cls.split(/\s+/).filter(Boolean) : []);
+        const children = [];
+        return {
+            tagName: tag.toUpperCase(),
+            style: {},
+            dataset: {},
+            textContent: text,
+            innerText: text,
+            classList: {
+                add: (...c) => c.forEach((x) => classes.add(x)),
+                remove: (...c) => c.forEach((x) => classes.delete(x)),
+                contains: (c) => classes.has(c),
+            },
+            setAttribute() {},
+            getAttribute() { return null; },
+            addEventListener() {},
+            appendChild(ch) { children.push(ch); return ch; },
+            querySelector(sel) {
+                if (sel === '.b3-snackbar__content') return children.find((x) => x.classList?.contains('b3-snackbar__content')) || null;
+                return null;
+            },
+            querySelectorAll() { return []; },
+            closest(sel) { return sel === '.b3-snackbar' && classes.has('b3-snackbar') ? this : null; },
+            remove() {},
+        };
+    };
+    const msgBox = makeEl('div');
+    const hostDiv = makeEl('div');
+    const mockDoc = {
+        body: makeEl('body'),
+        head: makeEl('head'),
+        getElementById(id) {
+            if (id === 'message') return msgBox;
+            if (id === 'lv-notice-host') return hostDiv;
+            return null;
+        },
+        createElement(tag) { return makeEl(tag); },
+    };
+    const c2 = load('lv-notice-kit.ts', {}, { localStorage: fakeStorage, document: mockDoc, MutationObserver: MockMutationObserver });
+    try {
+        c2.api.lvNotify.clearHistory();
+        c2.api.lvNotify.registerPlugin('测试插件');
+        const msgObs = observers.find((o) => !o.disconnected);
+        assert.ok(msgObs, 'should attach MutationObserver to #message');
+
+        const infoSnack = makeEl('div', 'b3-snackbar', '工作空间同步完成');
+        const errSnack = makeEl('div', 'b3-snackbar b3-snackbar--error', 'SQL 查询语法错误');
+        msgObs.cb([{ type: 'childList', addedNodes: [infoSnack, errSnack] }]);
+
+        const nativeHist = c2.api.lvNotify.getHistory();
+        assert.equal(nativeHist.length, 2);
+        assert.equal(nativeHist[0].source, '思源原生');
+        assert.equal(nativeHist[0].level, 'error');
+        assert.equal(nativeHist[0].read, false);
+        assert.equal(nativeHist[1].source, '思源原生');
+        assert.equal(nativeHist[1].level, 'info');
+        assert.equal(nativeHist[1].read, true, 'non-error SiYuan native notice should be archived as read');
+
+        // 同元素原地文本更新（如思源进度消息），不新增重复条目
+        errSnack.textContent = 'SQL 查询语法错误（已重试）';
+        errSnack.innerText = 'SQL 查询语法错误（已重试）';
+        msgObs.cb([{ type: 'characterData', target: errSnack, addedNodes: [] }]);
+        const updatedHist = c2.api.lvNotify.getHistory();
+        assert.equal(updatedHist.length, 2);
+        assert.equal(updatedHist[0].message, 'SQL 查询语法错误（已重试）');
+
+        const items = [{ id: 'siyuan-home', name: '小驴管家', desc: '管家', state: 'docked', onClick() {} }];
+        const syHtml = c2.api.buildLaunchpadPopoverHtml(items, false, { showInboxDrawer: true, inboxFilter: 'siyuan' });
+        assert.ok(syHtml.includes('SQL 查询语法错误（已重试）'));
+        assert.ok(syHtml.includes('思源 2'));
+    } finally { c2.close(); }
+});
+
+test('ECO-019: ephemeral archive=false suppression, randomWalk contacts fallback, shared desktop owners, and global Quicker hotkey', async () => {
+    const openedDocs = [];
+    const registeredCommands = [];
+    const fakeWindow = {
+        setTimeout,
+        clearTimeout,
+        addEventListener() {},
+        removeEventListener() {},
+        siyuanContacts: {
+            searchPeople: async () => [{ docId: 'person-doc-123', name: '张三' }],
+        },
+    };
+    const fakeDoc = {
+        getElementById() { return null; },
+    };
+    const c = load('lv-notice-kit.ts', fakeWindow, {
+        document: fakeDoc,
+        fetch: async () => ({ json: async () => ({ code: 0, data: [] }) }),
+    });
+    try {
+        c.api.lvNotify.clearHistory();
+        // 1. archive=false 瞬时回执与 undo 不污染通知中心历史
+        c.api.lvNotify.capsule({ source: '罗盘', message: '瞬时回执', archive: false });
+        c.api.lvNotify.undo({ source: '闪卡', message: '已撤销操作', onUndo() {} });
+        assert.equal(c.api.lvNotify.getHistory().length, 0);
+        assert.equal(c.api.lvNotify.getUnreadCount(), 0);
+        // warn/error 级别即便传了 archive:false 仍保留告警留档
+        c.api.lvNotify.capsule({ source: '罗盘', message: '重要警告', level: 'warn', archive: false });
+        assert.equal(c.api.lvNotify.getHistory().length, 1);
+
+        // 2. registerHostApi + randomWalk 在常规 SQL 为空时自动结合小驴人脉抽取并打开
+        c.api.lvLaunchpad.registerHostApi({
+            app: { id: 'test-app' },
+            openTab: async (opts) => { openedDocs.push(opts?.doc?.id); },
+        });
+        await c.api.randomWalk();
+        assert.deepEqual(openedDocs, ['person-doc-123']);
+
+        // 3. ensureUnifiedEntry 仅全局注册一次冷僻全局快捷键 ⌥⇧⌘K（含 globalCallback）
+        const clean1 = c.api.lvLaunchpad.ensureUnifiedEntry({
+            app: { id: 'p1' },
+            addCommand: (cmd) => registeredCommands.push(cmd),
+        });
+        const clean2 = c.api.lvLaunchpad.ensureUnifiedEntry({
+            app: { id: 'p2' },
+            addCommand: (cmd) => registeredCommands.push(cmd),
+        });
+        assert.equal(registeredCommands.length, 1);
+        assert.equal(registeredCommands[0].hotkey, '⌥⇧⌘K');
+        assert.equal(typeof registeredCommands[0].globalCallback, 'function');
+        clean1();
+        clean2();
+
+        // 4. 验证顶栏共享 owners 跨插件去闪与双击进 LifeLog 源码契约
+        const src = fs.readFileSync(find('lv-notice-kit.ts'), 'utf8');
+        assert.match(src, /__LV_DESKTOP_ENTRY_OWNERS__/);
+        assert.match(src, /__LV_TOPBAR_CONVERGENCE_TIMER__/);
+        assert.match(src, /lastMobileTopbarTap/);
+    } finally { c.close(); }
+});
+
+test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal tokens, inline LifeLog category add, and URL clip formatting', async () => {
+    const c = load('lv-notice-kit.ts');
+    try {
+        const items = [
+            { id: 'siyuan-checkin', name: '打卡', fullName: '小驴打卡', desc: '习惯', state: 'docked', onClick() {} },
+        ];
+        const mainHtml = c.api.buildLaunchpadPopoverHtml(items, false);
+        assert.ok(mainHtml.includes('lv-pop-search-clear'), 'Desktop search bar must include clear button');
+        assert.ok(mainHtml.includes('lv-pop-search-history'), 'Desktop search bar must include history chips container');
+
+        const prefHtml = c.api.buildLaunchpadPopoverHtml(items, false, { showPrefDrawer: true });
+        assert.ok(prefHtml.includes('lv-pop-notebook-select'), 'Settings drawer must use real notebook select dropdown');
+        assert.ok(prefHtml.includes('lv-pop-save-toast'), 'Settings drawer must include inline save feedback toast');
+        assert.ok(!prefHtml.includes('lv-pop-grid'), 'Settings sub-view should not cram grid underneath');
+
+        const inboxHtml = c.api.buildLaunchpadPopoverHtml(items, false, { showInboxDrawer: true });
+        assert.ok(!inboxHtml.includes('lv-pop-grid'), 'Inbox sub-view should not cram grid underneath');
+
+        const src = fs.readFileSync(find('lv-notice-kit.ts'), 'utf8');
+        assert.doesNotMatch(src, /window\.prompt\(/, 'LifeLog must not use unsupported Electron window.prompt');
+        assert.match(src, /lv-qw-add-cat-input/, 'LifeLog must provide inline category composer');
+        assert.match(src, /lv-qw-ll-nb-select/, 'LifeLog must provide target notebook selector');
+        assert.match(src, /data-action="daily-review"/, 'Mobile quickGrid should balance 4x2 with daily-review');
+        assert.match(src, /rerenderPopover/, 'Desktop popover should rerender in-place without flickering destroy/recreate');
+        assert.match(src, /lv-popover-settled/, 'In-place rerender must suppress re-entrance animation');
+        assert.match(src, /querySelector\("\.lv-pop-today-ticker"\)/, 'syncTodayDashboardDom must target .lv-pop-today-ticker');
+        assert.match(src, /isInFormControl/, 'Desktop popover must guard single-letter shortcuts inside form inputs');
+        assert.match(src, /\[contenteditable="true"\]/, 'openDiaryBottom must focus editable child block');
+        assert.match(src, /body\.body--dark[\s\S]{0,160}\.lv-qw-mask/, 'QuickModal must define dark mode theme tokens');
+        assert.match(src, /resolveIconHref\(item\.svgIcon\)/, 'Desktop tiles must prefer real sprite plugin icons');
+        assert.match(src, /lv-inbox-day-sep/, 'Inbox drawer should group notices by day');
+        assert.match(src, /lv-sheet-dragging/, 'Mobile sheet should provide drag-down visual feedback');
+        assert.match(src, /aria-haspopup/, 'Compass entries must declare dialog popup semantics');
+        // Round-3：8 快捷功能逐项强化
+        assert.match(src, /data-insert="date"/, 'QuickNote must provide date insertion chip');
+        assert.match(src, /lv-qw-draft-hint-text/, 'Draft restore hint must show saved-at timestamp');
+        assert.match(src, /quickNoteSavedCount \+= 1/, 'QuickNote continue mode must count saved entries');
+        assert.match(src, /interface TodayWriteEntry/, 'Shared write history must carry line text + block id');
+        assert.match(src, /readTodayWriteEntries/, 'LifeLog & QuickNote must share the write-history reader');
+        assert.match(src, /buildTodayWriteStripHtml/, 'LifeLog & QuickNote must share the history strip builder');
+        assert.match(src, /undoLastTodayWriteEntry/, 'LifeLog & QuickNote must share the block-level undo runner');
+        assert.match(src, /lv_quicknote_today_/, 'QuickNote must keep its own today write history for undo');
+        assert.match(src, /lv-qw-undo-btn/, 'LifeLog strip must offer one-click undo of latest entry');
+        assert.match(src, /\/api\/block\/deleteBlock/, 'LifeLog undo must delete the written block');
+        assert.match(src, /buildClipMarkdown/, 'Clip paste must centralize markdown formatting');
+        assert.match(src, /lines\.every\(\(l\) => \/\^https\?:\\\/\\\/\\S\+\$\/i\.test\(l\)\)/, 'Clip paste must expand multi-URL lines into separate link entries');
+        assert.match(src, /saveClipboardImageToAssets/, 'Clip paste must auto-save clipboard images into workspace assets');
+        assert.match(src, /\/api\/file\/putFile/, 'Clipboard image save must use putFile API');
+        assert.match(src, /openClipPreviewModal/, 'Long clipboard text must open editable preview before append');
+        assert.match(src, /手动粘贴/, 'Clipboard permission denial must fall back to a manual paste modal');
+        assert.match(src, /lv-qw-clip-target-btn/, 'Clip preview modal must offer cycling target badge like QuickNote');
+        assert.match(src, /openPluginBazaarSettings/, 'Task-manager failure guidance must open plugin bazaar');
+        assert.match(src, /taskMgrLastTier/, 'Task-manager should remember last successful invocation tier');
+        assert.match(src, /newTaskLastTier/, 'New-task should remember last successful invocation tier');
+        assert.match(src, /updated > strftime\('%Y%m%d%H%M%S','now','-90 days'\)/, 'Random walk must prefer docs updated within 90 days');
+        assert.match(src, /内核重载接口异常，已降级为浏览器刷新/, 'Reload must surface degraded fallback feedback');
+        assert.match(src, /aria-keyshortcuts/, 'Desktop quick pills must declare their hotkeys for assistive tech');
+        // Round-5：LifeLog 配图
+        assert.match(src, /lv-qw-photo-btn/, 'LifeLog must expose a photo picker chip');
+        assert.match(src, /compressAndPutImageFile/, 'Photos must be canvas-compressed (1600px/JPEG0.85) before putFile');
+        assert.match(src, /lv-lifelog-/, 'LifeLog photos must use the lv-lifelog asset name prefix');
+        assert.match(src, /lv-qw-attach-strip/, 'LifeLog modal must render pending photo thumbnails strip');
+        assert.match(src, /extractAppendIdsList/, 'Multi-block append must collect all created block ids');
+        assert.match(src, /📷×/, 'History strip & preview must mark photo count');
+        assert.match(src, /bs: extraIds && extraIds\.length > 0 \? extraIds : undefined/, 'Write history entries must carry sibling block ids for group undo');
+        // Round-6：双端徽章动态化与语义修正
+        assert.match(src, /item\.badge = undefined;/, 'badgeProvider null/undefined must clear stale badge snapshot (desktop sync probe)');
+        assert.match(src, /else if \(!dynamicBadge && item\.badge\) \{\s*item\.badge = undefined;/, 'Async zeroed probe must clear stale badge too (desktop & mobile)');
+        assert.match(src, /tileEl\?\.querySelector\("\.lv-pop-badge"\)\?\.remove\(\)/, 'Async zeroed probe must remove tile badge element');
+        assert.match(src, /项待完成/, 'Checkin ticker label must reflect pending semantics ("N 待办" = N items left, not done)');
+        assert.match(src, /\/temp\/xiaolv-backup-/, 'Mobile joint backup must write to workspace temp via putFile (no blob download in WebView)');
+        assert.match(src, /打开雷切切片库/, 'Mobile eco chip label must match the actual action name (切片库, not 画板)');
+        assert.match(src, /function openOmniHitWithFallback/, 'Omni hit click must fall back to linkBlockId jump when provider omits onClick');
+        assert.match(src, /该结果暂不支持直达/, 'Omni hit with neither onClick nor linkBlockId must surface explicit feedback, not dead click');
+        assert.match(src, /已选: 当前日记本/, 'Pref notebook select must not leak raw notebook hash id as first-frame label');
+        assert.match(src, /selectedOptions\?\.\[0\];[\s\S]{0,80}nb\.name/, 'Notebook change must re-label selected option with real notebook name');
+        // Round-8：焦点圈闭 / 资产卫生 / 搜索相关性 / 双端空态一致
+        assert.match(src, /Tab 焦点圈闭/, 'Desktop popover must trap Tab focus cycling inside the surface');
+        assert.match(src, /\/api\/file\/removeFile/, 'Removed pending photo must clean up its uploaded asset file');
+        assert.match(src, /snippet\.includes\(kw\)\) score \+= 1/, 'Search relevance must also score snippet matches');
+        assert.match(src, /m\.status === "empty" \? "–" : "0"/, 'Mobile dashboard ticker must match desktop empty "–" rendering');
+        // Round-9：启动闪烁治理（锚点与思源 le() 重排终点对齐 + 拉锯限频）
+        assert.match(src, /const DESKTOP_RIGHT_ANCHOR_SELECTOR = "#barMore,/, 'Compass anchor must match SiYuan le() reflow destination (#barMore) to stop tug-of-war flicker');
+        assert.match(src, /now - lastCompassMoveAt < 600/, 'Compass repositioning must be rate-limited against SiYuan reflow');
+        assert.match(src, /nowGuard - lastCompassRebuildAt < 250/, 'Observer rebuild path must be throttled during startup churn');
+        assert.match(src, /buildDesktopEntryButton\(true\)/, 'Active re-mount path (plugin enable) must bypass the rebuild throttle');
+        // Round-10：灾备闭环补齐（恢复半环）
+        assert.match(src, /function openEcosystemRestoreDialog/, 'Ecosystem backup must have a restore dialog wired to restoreFull');
+        assert.match(src, /lv-pop-restore-btn/, 'Desktop footer must expose the restore entry next to backup');
+        assert.match(src, /从备份恢复/, 'Mobile eco row must expose restore chip');
+        assert.match(src, /lv-restore-summary/, 'Restore dialog must show parsed backup summary before confirming');
+        // Round-11：移动端文案去桌面化（触屏无键盘，Ctrl/Tab/Esc 提示按端适配）
+        assert.match(src, /isMobileFrontend\(\) \? `点「\$\{escapeHtml\(opts\.secondaryLabel\)\}」可连续记录`/, 'QuickModal foot tips must switch to touch semantics on mobile');
+        assert.match(src, /isMobileFrontend\(\) \? "记录想法或待办\.\.\." : "记录想法或待办\.\.\. \(Ctrl\+Enter/, 'QuickNote placeholder must drop keyboard hints on mobile');
+        assert.match(src, /点下方 📷 可添加照片/, 'LifeLog placeholder must point to the photo chip on mobile instead of Ctrl+V');
+        assert.match(src, /请长按屏幕粘贴内容到这里/, 'Manual paste placeholder must use long-press wording on mobile');
+        assert.match(src, /touchMode \? `\$\{singleName\} · 点按直达`/, 'Mobile entry titles must use tap semantics, not left/right-click wording');
+        assert.match(src, /lv-notice-more/, 'Notice stack must surface an overflow badge when older packets are hidden');
+    } finally { c.close(); }
+});

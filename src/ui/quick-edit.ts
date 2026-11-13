@@ -122,7 +122,7 @@ export function openQuickEditDialog(
     const hint = document.createElement("span");
     hint.id = "xlc-quick-edit-hint";
     hint.className = "xlc-quick-edit-hint";
-    hint.textContent = "Ctrl+Enter 保存 · Esc 取消";
+    hint.textContent = isMobileModal ? "点「保存」应用修改 · 点 ✕ 关闭" : "Ctrl+Enter 保存 · Esc 取消";
 
     const counter = document.createElement("span");
     counter.id = "xlc-quick-edit-counter";

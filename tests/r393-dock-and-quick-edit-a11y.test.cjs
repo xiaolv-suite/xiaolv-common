@@ -47,7 +47,8 @@ test("UI/UX Pro Max · 侧边栏行动作 24px 最小触控靶点与键盘聚焦
 test("UI/UX Pro Max · 就地快编辅助信息行与动态字数统计", () => {
     // TS 结构生成与动态字数统计
     assert.match(quickEditTs, /footer\.className = "xlc-quick-edit-footer";/);
-    assert.match(quickEditTs, /hint\.textContent = "Ctrl\+Enter 保存 · Esc 取消";/);
+    // 桌面保留键盘提示；移动视口按端适配为触屏语义（R11 移动语境专项）
+    assert.match(quickEditTs, /hint\.textContent = isMobileModal \? "点「保存」应用修改 · 点 ✕ 关闭" : "Ctrl\+Enter 保存 · Esc 取消";/);
     assert.match(quickEditTs, /counter\.textContent = `\$\{textarea\.value\.length\} 字符`;/);
     assert.match(quickEditTs, /textarea\.addEventListener\("input",\s*updateCount\);/);
 
