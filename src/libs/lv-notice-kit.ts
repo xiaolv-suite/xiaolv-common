@@ -1194,12 +1194,14 @@ const STYLES = `
 .lv-restore-pick{display:flex;align-items:center;gap:6px}
 .lv-restore-summary{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--lv-lp-text,#0f172a);background:var(--lv-lp-panel-bg,#f8fafc);border:1px dashed var(--lv-lp-border,rgba(15,23,42,.1));padding:7px 10px;border-radius:8px}
 .lv-qw-attach-strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 8px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px dashed var(--lv-lp-border,rgba(15,23,42,.1))}
-.lv-qw-attach-thumb{position:relative;width:48px;height:48px;border-radius:8px;overflow:hidden;border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,.14));background:var(--lv-lp-panel-bg,#f1f5f9);flex-shrink:0}
+.lv-qw-attach-thumb{position:relative;width:56px;height:56px;border-radius:9px;overflow:hidden;border:1.5px solid var(--lv-lp-border-strong,rgba(15,23,42,.14));background:var(--lv-lp-panel-bg,#f1f5f9);flex-shrink:0;cursor:pointer;transition:transform .14s ease,box-shadow .14s ease}
+.lv-qw-attach-thumb:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(0,0,0,.12)}
 .lv-qw-attach-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.lv-qw-attach-del{position:absolute;top:0;right:0;width:16px;height:16px;border:none;border-radius:0 0 0 6px;background:rgba(15,23,42,.62);color:#fff;font-size:11px;line-height:16px;padding:0;cursor:pointer;font-family:inherit}
-.lv-qw-attach-del:active{transform:scale(.92)}
+.lv-qw-attach-del{position:absolute;top:0;right:0;width:22px;height:22px;border:none;border-radius:0 0 0 8px;background:rgba(15,23,42,.72);color:#fff;font-size:13px;font-weight:700;line-height:20px;padding:0;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;transition:background .15s ease}
+.lv-qw-attach-del:hover{background:#ef4444}
+.lv-qw-attach-del:active{transform:scale(.88)}
 .lv-qw-attach-thumb.lv-qw-attach-busy{display:flex;align-items:center;justify-content:center}
-.lv-qw-attach-thumb.lv-qw-attach-busy::after{content:"";width:16px;height:16px;border-radius:50%;border:2px solid var(--lv-lp-accent,#2563eb);border-top-color:transparent;animation:lvSpin .8s linear infinite}
+.lv-qw-attach-thumb.lv-qw-attach-busy::after{content:"";width:18px;height:18px;border-radius:50%;border:2px solid var(--lv-lp-accent,#2563eb);border-top-color:transparent;animation:lvSpin .8s linear infinite}
 .lv-qw-attach-actions{display:flex;align-items:center;gap:6px;margin-top:4px}
 .lv-qw-draft-clear{border:none;background:transparent;color:var(--lv-lp-accent,#2563eb);cursor:pointer;font-size:10.5px;padding:0 2px;font-weight:600}
 .lv-qw-preview-text{font-weight:600;color:var(--lv-lp-text,#0f172a)}
@@ -11050,9 +11052,24 @@ export function openLifeLogDialog(): void {
                 void lvKernelPost("/api/file/removeFile", { path: `/${target.path}` }).catch(() => { /* 清理失败静默 */ });
             }
             pendingPhotos.splice(idx, 1);
-            hapticFeedback(6);
+            hapticFeedback(8);
             renderAttachStrip();
             updatePreview();
+            return;
+        }
+
+        // 点击照片缩略图直接原图浮层预览（Lightbox）
+        const thumbImg = (e.target as HTMLElement | null)?.closest<HTMLImageElement>(".lv-qw-attach-thumb img");
+        if (thumbImg?.src) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            const lb = document.createElement("div");
+            lb.className = "lv-qw-lightbox";
+            lb.style.cssText = "position:fixed;inset:0;z-index:1150;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:lvNoticeFadeIn .15s ease-out;";
+            lb.innerHTML = `<img src="${escapeHtml(thumbImg.src)}" style="max-width:92vw;max-height:88vh;object-fit:contain;border-radius:8px;box-shadow:0 12px 36px rgba(0,0,0,0.5);" /><button type="button" style="position:absolute;top:16px;right:20px;font-size:24px;color:#fff;background:transparent;border:none;cursor:pointer;padding:8px;">✕</button>`;
+            const closeLb = () => { lb.remove(); };
+            lb.addEventListener("click", closeLb);
+            document.body.appendChild(lb);
         }
     });
 
@@ -11061,6 +11078,9 @@ export function openLifeLogDialog(): void {
         const doneCount = pendingPhotos.filter((p) => p.path).length;
         const photoTag = doneCount > 0 ? ` 📷×${doneCount}` : "";
         previewEl.textContent = `${computeTimeStr()} ${selectedCat}：${textarea?.value?.trim() || "..."}${photoTag}`;
+        if (photoBtn) {
+            photoBtn.textContent = doneCount > 0 ? `📷 照片 (${doneCount})` : "📷 照片";
+        }
     };
     updatePreview();
 
