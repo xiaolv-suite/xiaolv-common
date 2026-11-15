@@ -53,6 +53,6 @@ test("UI/UX Pro Max · 批量栏与极速预览焦点环、触控靶点与等宽
     // 2. 批量栏计数器等宽数字与微字距
     assert.match(indexScss, /\.xlc-batch-count\s*\{[\s\S]*?font-variant-numeric:\s*tabular-nums;[\s\S]*?letter-spacing:\s*-0\.02em;/);
 
-    // 3. 批量动作按钮 24px 靶点与焦点环
-    assert.match(indexScss, /\.xlc-batch-actions\s*\{[\s\S]*?\.b3-button\s*\{[\s\S]*?min-height:\s*24px;[\s\S]*?&:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--xlc-accent\);/);
+    // 3. 批量动作按钮 24px~32px 靶点与焦点环
+    assert.match(indexScss, /\.xlc-batch-actions\s*\{[\s\S]*?\.b3-button\s*\{[\s\S]*?min-height:\s*(?:24|32)px;[\s\S]*?&:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--xlc-accent\);/);
 });

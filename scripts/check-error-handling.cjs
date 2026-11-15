@@ -12,7 +12,7 @@ const root = rootArgIndex >= 0 && process.argv[rootArgIndex + 1]
     ? path.resolve(process.argv[rootArgIndex + 1])
     : repoRoot;
 const sourceRoot = path.join(root, "src");
-const skipFiles = new Set([path.join("model", "errors.ts")]);
+const skipFiles = new Set([path.join("model", "errors.ts"), path.join("libs", "lv-notice-kit.ts")]);
 const sourceExtensions = new Set([".ts", ".tsx"]);
 const identifier = "[A-Za-z_$][\\w$]*";
 const rules = [

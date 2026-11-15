@@ -170,10 +170,11 @@ export function openPromoteClipDialog(options: PromoteClipDialogOptions): Dialog
     cancelBtn.dataset.xlcControl = "promote.cancel";
     cancelBtn.addEventListener("click", () => dialog.destroy());
 
+    const submitLabel = (t("save") || "转正保存") + (isMobileModal ? "" : " (Ctrl+Enter)");
     const submitBtn = document.createElement("button");
     submitBtn.type = "button";
     submitBtn.className = "b3-button xlc-btn-primary";
-    submitBtn.textContent = (t("save") || "转正保存") + " (Ctrl+Enter)";
+    submitBtn.textContent = submitLabel;
     submitBtn.dataset.xlcControl = "promote.submit";
 
     // 实时唯一性校验
@@ -236,11 +237,11 @@ export function openPromoteClipDialog(options: PromoteClipDialogOptions): Dialog
                 dialog.destroy();
             } else {
                 submitBtn.disabled = false;
-                submitBtn.textContent = (t("save") || "转正保存") + " (Ctrl+Enter)";
+                submitBtn.textContent = submitLabel;
             }
         } catch (err) {
             submitBtn.disabled = false;
-            submitBtn.textContent = (t("save") || "转正保存") + " (Ctrl+Enter)";
+            submitBtn.textContent = submitLabel;
         } finally {
             isSubmitting = false;
         }

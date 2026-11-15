@@ -260,24 +260,25 @@
     .xlc-history-label {
       opacity: 0.7;
       margin-right: 2px;
-      font-size: 11px;
+      font-size: var(--xlc-font-2xs);
       flex-shrink: 0;
     }
 
     .xlc-history-pill {
       display: inline-flex;
       align-items: center;
-      min-height: 24px;
+      min-height: 28px;
       background-color: var(--b3-theme-surface);
       border: 1px solid var(--b3-border-color);
       color: var(--b3-theme-on-surface);
-      font-size: 11px;
-      padding: 0 4px 0 7px;
+      font-size: var(--xlc-font-2xs);
+      padding: 0 8px;
       border-radius: var(--b3-border-radius);
       cursor: pointer;
       line-height: var(--xlc-line-control);
       flex-shrink: 0;
       white-space: nowrap;
+      touch-action: manipulation;
       transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
                   border-color var(--xlc-dur-fast) var(--xlc-ease);
 
@@ -315,7 +316,7 @@
         padding: 0 2px;
         margin-left: 4px;
         font: inherit;
-        font-size: 12px;
+        font-size: var(--xlc-font-xs);
         line-height: 1;
         color: inherit;
         opacity: 0.6;
@@ -324,8 +325,9 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 16px;
-        min-height: 16px;
+        min-width: 20px;
+        min-height: 20px;
+        touch-action: manipulation;
         transition: opacity var(--xlc-dur-fast), color var(--xlc-dur-fast);
 
         &:hover {
@@ -347,12 +349,20 @@
       border: none;
       color: var(--b3-theme-on-surface);
       opacity: 0.6;
-      font-size: 10px;
-      padding: 1px 5px;
+      font-size: 11.5px;
+      min-height: 28px;
+      padding: 3px 8px;
       border-radius: var(--b3-border-radius);
       cursor: pointer;
+      touch-action: manipulation;
       line-height: var(--xlc-line-control);
       transition: transform var(--xlc-dur-fast) var(--xlc-ease), background var(--xlc-dur-fast) var(--xlc-ease), border-color var(--xlc-dur-fast) var(--xlc-ease), box-shadow var(--xlc-dur-fast) var(--xlc-ease), color var(--xlc-dur-fast) var(--xlc-ease), opacity var(--xlc-dur-fast) var(--xlc-ease);
+
+      @media (max-width: 640px) {
+        min-height: 38px;
+        padding: 6px 12px;
+        font-size: 13px;
+      }
 
       &:hover {
         opacity: 1;
@@ -567,8 +577,10 @@
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      width: 22px;
-      height: 22px;
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      min-height: 28px;
       margin-left: 2px;
       border: 1px solid transparent;
       border-radius: var(--xlc-radius-pill, 9999px);
@@ -577,7 +589,15 @@
       font-size: 13px;
       line-height: 1;
       opacity: 0.6;
+      touch-action: manipulation;
       transition: transform var(--xlc-dur-fast) var(--xlc-ease), background var(--xlc-dur-fast) var(--xlc-ease), border-color var(--xlc-dur-fast) var(--xlc-ease), box-shadow var(--xlc-dur-fast) var(--xlc-ease), color var(--xlc-dur-fast) var(--xlc-ease), opacity var(--xlc-dur-fast) var(--xlc-ease);
+
+      @media (max-width: 640px) {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+      }
 
       &:hover {
         opacity: 0.9;
@@ -606,8 +626,10 @@
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      width: 22px;
-      height: 22px;
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      min-height: 28px;
       margin-left: 2px;
       border: 1px solid transparent;
       border-radius: var(--xlc-radius-pill, 9999px);
@@ -616,7 +638,15 @@
       font-size: 13px;
       line-height: 1;
       opacity: 0.6;
+      touch-action: manipulation;
       transition: transform var(--xlc-dur-fast) var(--xlc-ease), background var(--xlc-dur-fast) var(--xlc-ease), border-color var(--xlc-dur-fast) var(--xlc-ease), box-shadow var(--xlc-dur-fast) var(--xlc-ease), color var(--xlc-dur-fast) var(--xlc-ease), opacity var(--xlc-dur-fast) var(--xlc-ease);
+
+      @media (max-width: 640px) {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+      }
 
       &:hover {
         opacity: 0.9;
@@ -730,10 +760,11 @@
     .xlc-scope-chip {
       border: none;
       background: transparent;
-      height: 24px;
-      min-height: 24px;
+      height: 28px;
+      min-height: 28px;
       padding: 0 10px;
-      font-size: var(--xlc-font-2xs);
+      font-size: var(--xlc-font-xs);
+      touch-action: manipulation;
       border-radius: var(--xlc-radius-pill, 9999px);
       transition: transform var(--xlc-dur-fast) var(--xlc-ease), background var(--xlc-dur-fast) var(--xlc-ease), border-color var(--xlc-dur-fast) var(--xlc-ease), box-shadow var(--xlc-dur-fast) var(--xlc-ease), color var(--xlc-dur-fast) var(--xlc-ease), opacity var(--xlc-dur-fast) var(--xlc-ease);
 
@@ -765,10 +796,11 @@
     .xlc-clip-format-chip {
       border: none;
       background: transparent;
-      height: 24px;
-      min-height: 24px;
-      padding: 0 8px;
-      font-size: var(--xlc-font-2xs);
+      height: 28px;
+      min-height: 28px;
+      padding: 0 10px;
+      font-size: var(--xlc-font-xs);
+      touch-action: manipulation;
       border-radius: var(--xlc-radius-pill, 9999px);
       cursor: pointer;
       color: var(--xlc-ink);
@@ -806,9 +838,9 @@
     .xlc-quick-pill {
       display: inline-flex;
       align-items: center;
-      min-height: 24px;
+      min-height: 28px;
       font-size: var(--xlc-font-2xs);
-      padding: 1px 7px;
+      padding: 2px 9px;
       border-radius: var(--b3-border-radius);
       background-color: var(--b3-theme-surface);
       border: 1px solid var(--b3-border-color);
@@ -1147,7 +1179,8 @@
         background: var(--xlc-soft);
         color: var(--xlc-muted);
         font-size: var(--xlc-font-2xs);
-        padding: 1px 7px;
+        padding: 3px 9px;
+        min-height: 28px;
         border-radius: var(--xlc-radius-pill, 9999px);
         line-height: var(--xlc-line-control);
         font-family: inherit;
@@ -1159,6 +1192,12 @@
         transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
                     color var(--xlc-dur-fast) var(--xlc-ease),
                     transform var(--xlc-dur-fast) var(--xlc-ease);
+
+        @media (pointer: coarse), (max-width: 620px) {
+          min-height: 30px;
+          padding: 4px 10px;
+          font-size: var(--xlc-font-xs);
+        }
 
         &:hover {
           background: var(--xlc-lavender);
@@ -1199,12 +1238,12 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      // 24px 紧凑命中（原型星标 13px 字形的最小按钮化）：给标题行让出截断余量；
+      // 28px 标准命中：给标题行让出截断余量同时保证触控可达性；
       // 移动端由 --mobile 覆盖为 44px 触控尺寸
-      width: 24px;
-      height: 24px;
-      min-width: 24px;
-      min-height: 24px;
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      min-height: 28px;
       flex-shrink: 0;
       border: none;
       border-radius: var(--xlc-radius-sm);
@@ -1245,10 +1284,10 @@
       transition: opacity 0.15s ease;
 
       .xlc-row-action {
-        width: 24px;
-        height: 24px;
-        min-width: 24px;
-        min-height: 24px;
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        min-height: 28px;
         font-size: var(--xlc-font-sm);
         border-radius: var(--xlc-radius-sm);
         color: var(--b3-theme-primary);
@@ -1263,13 +1302,14 @@
         &--pill {
           width: auto !important;
           min-width: auto !important;
-          height: 22px !important;
-          min-height: 22px !important;
-          padding: 0 7px !important;
-          font-size: 11px !important;
+          height: 28px !important;
+          min-height: 28px !important;
+          padding: 0 10px !important;
+          font-size: 12px !important;
           font-weight: 600;
           white-space: nowrap;
           border-radius: 6px;
+          touch-action: manipulation;
           border: 1px solid color-mix(in srgb, var(--b3-theme-primary) 24%, var(--b3-border-color));
           background: var(--b3-theme-surface);
           color: var(--b3-theme-on-surface);
@@ -1793,6 +1833,41 @@
       line-height: var(--xlc-leading-relaxed);
       color: var(--xlc-ink);
       background: var(--xlc-surface);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+
+      table {
+        width: max-content;
+        min-width: 100%;
+        max-width: none;
+        border-collapse: collapse;
+        table-layout: auto;
+        margin: var(--xlc-space-2) 0;
+        border: 1px solid var(--b3-border-color);
+        font-size: var(--xlc-font-xs);
+
+        th, td {
+          padding: 6px 10px;
+          border: 1px solid var(--b3-border-color);
+          min-width: 72px;
+          overflow-wrap: break-word !important;
+          word-break: break-word;
+          vertical-align: top;
+        }
+
+        th {
+          background: var(--b3-theme-surface-lighter);
+          font-weight: var(--xlc-weight-semibold);
+          white-space: nowrap;
+          color: var(--b3-theme-on-surface);
+        }
+
+        td:first-child,
+        th:first-child {
+          min-width: 80px;
+          white-space: nowrap;
+        }
+      }
     }
   }
 
@@ -1803,7 +1878,7 @@
     flex-wrap: wrap;
 
     .b3-button {
-      min-height: 24px;
+      min-height: 28px;
 
       &:focus-visible {
         outline: 2px solid var(--xlc-accent);
@@ -1910,8 +1985,8 @@
       color: var(--b3-theme-on-surface);
       font-size: var(--xlc-font-xs);
       padding: 2px 6px;
-      min-height: 24px;
-      min-width: 24px;
+      min-height: 28px;
+      min-width: 28px;
       white-space: nowrap;
       border-radius: 4px;
       cursor: pointer;
@@ -1933,8 +2008,8 @@
       color: var(--b3-theme-on-surface);
       font-size: var(--xlc-font-xs);
       padding: 2px 6px;
-      min-height: 24px;
-      min-width: 24px;
+      min-height: 28px;
+      min-width: 28px;
       white-space: nowrap;
       border-radius: 4px;
       cursor: pointer;
@@ -2278,12 +2353,12 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 24px;
+      min-height: 28px;
       border: 1px solid var(--b3-border-color);
       background-color: var(--b3-theme-surface);
       color: var(--b3-theme-on-surface);
       font-size: var(--xlc-font-2xs);
-      padding: 1px 7px;
+      padding: 2px 9px;
       border-radius: var(--xlc-radius-pill, 9999px);
       cursor: pointer;
       line-height: var(--xlc-line-control);
@@ -2319,8 +2394,8 @@
     margin-bottom: 8px;
 
     .b3-button {
-      min-height: 24px;
-      padding: var(--xlc-space-0-5) var(--xlc-space-2);
+      min-height: 28px;
+      padding: var(--xlc-space-1) var(--xlc-space-2);
 
       &:focus-visible {
         outline: 2px solid var(--xlc-accent);
@@ -2351,7 +2426,7 @@
     .xlc-operation-retry {
       flex: 0 0 auto;
       margin-left: auto;
-      min-height: 24px;
+      min-height: 28px;
 
       &:focus-visible {
         outline: 2px solid var(--xlc-accent);
@@ -2362,7 +2437,7 @@
 
   .xlc-settings-data-actions {
     .b3-button {
-      min-height: 24px;
+      min-height: 28px;
 
       &:focus-visible {
         outline: 2px solid var(--xlc-accent);
@@ -2543,7 +2618,7 @@
       font-size: var(--xlc-font-sm);
       font-family: inherit;
       line-height: var(--xlc-line-control);
-      min-height: 24px;
+      min-height: 28px;
       cursor: pointer;
       transition: background-color var(--xlc-dur-fast) var(--xlc-ease),
                   transform var(--xlc-dur-fast) var(--xlc-ease);
@@ -2881,7 +2956,7 @@
 
     .xlc-ct-del {
       flex-shrink: 0;
-      min-height: 24px;
+      min-height: 28px;
       padding: var(--xlc-space-0-5) var(--xlc-space-2);
       font-size: var(--xlc-font-xs);
 
@@ -3433,8 +3508,8 @@
         background-color: var(--b3-theme-surface);
         color: var(--b3-theme-on-surface);
         font-size: var(--xlc-font-2xs);
-        padding: 1px 8px;
-        min-height: 24px;
+        padding: 2px 9px;
+        min-height: 28px;
         border-radius: var(--xlc-radius-pill, 9999px);
         cursor: pointer;
         transition: transform var(--xlc-dur-fast) var(--xlc-ease), background var(--xlc-dur-fast) var(--xlc-ease), border-color var(--xlc-dur-fast) var(--xlc-ease), box-shadow var(--xlc-dur-fast) var(--xlc-ease), color var(--xlc-dur-fast) var(--xlc-ease), opacity var(--xlc-dur-fast) var(--xlc-ease);
@@ -3608,8 +3683,8 @@
     font-family: var(--mono, ui-monospace, monospace);
     font-size: var(--xlc-font-xs);
     line-height: var(--xlc-line-control);
-    min-height: 24px;
-    padding: var(--xlc-space-0-5) var(--xlc-space-2);
+    min-height: 28px;
+    padding: var(--xlc-space-1) var(--xlc-space-2);
     border: 1px solid var(--xlc-line-strong);
     border-radius: var(--xlc-radius-pill);
     color: var(--xlc-var);
@@ -3772,12 +3847,18 @@
   padding-top: 0;
 }
 
-// ══ 移动端软键盘弹起（守卫：settings-dialog.ts 标记 lv-keyboard-open）：
-//    设置弹窗随 visualViewport 收缩，焦点输入框不再被键盘遮挡 ══
+// ══ 移动端软键盘弹起（守卫：settings-dialog.ts / openItemEditDialog 标记 lv-keyboard-open）：
+//    设置与长表单弹窗随 visualViewport 收缩，焦点输入框不再被键盘遮挡 ══
 .b3-dialog.lv-keyboard-open .b3-dialog__container.xlc-settings-root-host,
+.b3-dialog.lv-keyboard-open .b3-dialog__container.xlc-form-host,
 .b3-dialog.lv-keyboard-open:has(> .b3-dialog__body > .xlc-settings) .b3-dialog__container {
   height: var(--lv-vv-h, 100dvh) !important;
   max-height: var(--lv-vv-h, 100dvh) !important;
+
+  :is(.xlc-discovery-footer, .xlc-form-actions) {
+    position: static !important;
+    box-shadow: none !important;
+  }
 }
 
 // ══ 输入框专项精修：光标 / 占位符 / 自旋钮 / 搜索清除钮 / 禁用态 ══
@@ -4439,6 +4520,8 @@
       min-height: 0;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+      touch-action: pan-y;
     }
   }
 
@@ -4446,8 +4529,9 @@
     padding-top: var(--xlc-space-2) !important;
   }
 
-  .xlc-menu-text-tools-panel {
-    display: none !important;
+  .xlc-menu-text-tools-list {
+    max-height: 32dvh;
+    overflow-y: auto;
   }
 
   .b3-dialog__container.xlc-form-host:not(.xlc-discovery-host) > .b3-dialog__header,
@@ -4885,6 +4969,9 @@
         opacity: 0.9;
       }
       .xlc-top-chip-text {
+        display: block;
+        min-width: 0;
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -6949,10 +7036,11 @@
     }
 
     .xlc-dock-btn-icon {
-      width: 26px;
-      height: 26px;
-      min-width: 26px;
-      min-height: 26px;
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      min-height: 28px;
+      touch-action: manipulation;
       padding: 0;
       display: inline-flex;
       align-items: center;
@@ -7182,18 +7270,20 @@
         pointer-events: auto;
       }
       .xlc-dock-act-btn {
-        width: 36px !important;
-        height: 36px !important;
-        min-width: 36px !important;
-        min-height: 36px !important;
+        width: 40px !important;
+        height: 40px !important;
+        min-width: 40px !important;
+        min-height: 40px !important;
+        touch-action: manipulation;
       }
     }
 
     .xlc-dock-act-btn {
-      width: 24px;
-      height: 24px;
-      min-width: 24px;
-      min-height: 24px;
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      min-height: 28px;
+      touch-action: manipulation;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -7868,7 +7958,15 @@
       cursor: pointer;
       font-size: 14px;
       color: var(--xlc-muted);
-      padding: 0 4px;
+      padding: 0;
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
       line-height: 1;
 
       &:hover { color: var(--xlc-ink); }
@@ -8283,10 +8381,11 @@
       margin-top: 2px;
 
       .b3-button {
-        font-size: 11px;
-        min-height: 24px;
-        padding: 0 10px;
+        font-size: 12px;
+        min-height: 28px;
+        padding: 2px 12px;
         white-space: nowrap;
+        touch-action: manipulation;
       }
     }
 

@@ -1,7 +1,7 @@
 import {Dialog} from "siyuan";
 import {LIMITS} from "../constants";
 import {lvSurfaceStack} from "../libs/lv-notice-kit";
-import {adaptSecondaryDialogForMobile, getDialogBody, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {isBlockId, ITEM_TYPES, ItemType} from "../model/item";
 import {toErrorMessage} from "../model/errors";
 import {buildDiscoveryTagFacets, matchesDiscoveryTag} from "../model/discovery-facets";
@@ -340,11 +340,12 @@ export class DiscoveryDialog implements DiscoveryDialogController {
                 return true;
             }
         });
+        const isMobileModal = isMobileDialogViewport();
         const dialog = new Dialog({
             title: this.options.title ?? this.tx(this.titleKey()),
             content: "",
-            width: "min(1040px, 94vw)",
-            height: "min(840px, 92vh)",
+            width: isMobileModal ? "100vw" : "min(1040px, 94vw)",
+            height: isMobileModal ? "100dvh" : "min(840px, 92vh)",
             disableClose: true,
             destroyCallback: () => {
                 this.surfaceUnregister?.();
@@ -370,6 +371,7 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.dialog = dialog;
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-discovery-host");
         mountPlatformDialogTitleWrap(dialog.element, this.options.title ?? this.tx(this.titleKey()));
+        adaptSecondaryDialogForMobile(dialog, this.tx("close") || "关闭", () => this.close());
         const body = getDialogBody(dialog.element);
         if (!body) return;
         body.innerHTML = "";

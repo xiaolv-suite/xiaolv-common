@@ -2,7 +2,7 @@
   "name": "xiaolv-common",
   "author": "xiaolv-suite",
   "url": "https://github.com/xiaolv-suite/xiaolv-common",
-  "version": "0.10.86",
+  "version": "0.10.87",
   "minAppVersion": "3.8.4",
   "settingsWindow": true,
   "disabledInPublish": false,

@@ -35,9 +35,9 @@ test("UI/UX Pro Max · 侧边栏行动作 24px 最小触控靶点与键盘聚焦
     assert.match(dockTs, /favBtn\.setAttribute\("aria-label",\s*favTitle\);/);
     assert.match(dockTs, /favBtn\.setAttribute\("aria-label",\s*updatedTitle\);/);
 
-    // 样式规范：24px 靶点与 focus-visible
-    assert.match(indexScss, /\.xlc-dock-act-btn\s*\{[\s\S]*?min-width:\s*24px;/);
-    assert.match(indexScss, /\.xlc-dock-act-btn\s*\{[\s\S]*?min-height:\s*24px;/);
+    // 样式规范：24px~28px 靶点与 focus-visible
+    assert.match(indexScss, /\.xlc-dock-act-btn\s*\{[\s\S]*?min-width:\s*(?:24|28)px;/);
+    assert.match(indexScss, /\.xlc-dock-act-btn\s*\{[\s\S]*?min-height:\s*(?:24|28)px;/);
     assert.match(indexScss, /\.xlc-dock-act-btn\s*\{[\s\S]*?&:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--xlc-accent\);/);
 
     // 键盘聚焦行透出动作

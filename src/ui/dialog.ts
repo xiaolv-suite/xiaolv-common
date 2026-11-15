@@ -2979,8 +2979,8 @@ export class CommonSearchDialog {
         if (entry.isOmni) {
             const omniBadge = document.createElement("span");
             omniBadge.className = "xlc-badge xlc-badge--omni";
-            omniBadge.textContent = entry.tags?.includes("全库块") ? "思源块" : (entry.tags?.includes("当前文档") ? "本文档" : "思源");
-            omniBadge.title = "思源全库检索条目，可直接复用或一键收录为常用语 (Alt+S)";
+            omniBadge.textContent = entry.tags?.includes("全库块") ? "思源块" : (entry.tags?.includes("当前文档") ? "本文档" : (entry.category === "剪贴板" ? "剪贴板" : "思源"));
+            omniBadge.title = entry.category === "剪贴板" ? "剪贴板历史暂存条目，可一键复制或沉淀为常用语 (Alt+S)" : "思源全库检索条目，可直接复用或一键收录为常用语 (Alt+S)";
             title.appendChild(omniBadge);
         }
         if (entry.category && entry.category.trim() && !entry.isOmni) {
@@ -5144,12 +5144,14 @@ export class CommonSearchDialog {
                 this.menuDismiss?.();
             }
         };
-        setTimeout(() => {
+        const bindTimer = setTimeout(() => {
+            if (!menu.isConnected) return;
             document.addEventListener("click", onDocClick);
             document.addEventListener("keydown", onDocKey);
         }, 10);
 
         this.menuDismiss = () => {
+            clearTimeout(bindTimer);
             document.removeEventListener("click", onDocClick);
             document.removeEventListener("keydown", onDocKey);
             menu.remove();
@@ -8192,6 +8194,15 @@ export class CommonSearchDialog {
             this.deps.notify?.("info", `已合并插入 ${this.pasteTrayItems.length} 项常用语`);
             this.clearPasteTray();
             if (!this.pinWindow) this.destroy();
+        } else if (this.deps.isMobile?.()) {
+            const copied = await this.deps.copyText(merged);
+            if (copied) {
+                this.deps.notify?.("info", `已合并复制 ${this.pasteTrayItems.length} 项常用语`);
+                this.clearPasteTray();
+                if (!this.pinWindow) this.destroy();
+            } else {
+                this.deps.notify?.("error", "合并插入失败");
+            }
         } else {
             this.deps.notify?.("error", "合并插入失败");
         }

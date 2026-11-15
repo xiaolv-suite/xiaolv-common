@@ -6,7 +6,7 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock, lvTicker, showDocTreeNativeMenu, safeDocTitleFromHPath} from "./libs/lv-notice-kit";
+import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock, lvTicker, showDocTreeNativeMenu, safeDocTitleFromHPath, pushDiagError} from "./libs/lv-notice-kit";
 import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {EXPORT_SCHEMA_VERSION, LIMITS, PLUGIN_VERSION, PROTOCOL_NAME, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -169,7 +169,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                     const dialogEl = target.closest(".b3-dialog");
                     if (dialogEl && dialogEl.querySelector('[class*="xlc-"], [id*="xlc-"]')) {
                         const closeBtn = dialogEl.querySelector<HTMLElement>(".b3-dialog__close, [data-action='close'], .xlc-dialog-close");
-                        if (closeBtn) closeBtn.click();
+                        if (closeBtn) {
+                            if (typeof closeBtn.click === "function") closeBtn.click();
+                            else closeBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+                        }
                     }
                 }
             };
@@ -1732,11 +1735,12 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.syncLaunchpadRegistry();
     }
 
-    /** 同步向小驴罗盘注册的插件状态与动态条目数徽标 (Epoch 7 Phase 5) */
+    /** 同步向小驴罗盘注册的插件状态与动态条目数徽标 (Epoch 7 Phase 5)
+     *  badge 不再携带「常用」前缀：罗盘磁贴已展示插件名，重复词在窄瓦片上呈现「常用常用 0 项」 */
     public syncLaunchpadRegistry(): void {
         try {
             const count = this.library?.getIndex()?.items?.size;
-            const badge = count !== undefined ? `常用 ${count} 项` : "常用";
+            const badge = count !== undefined ? `${count} 项` : "已就绪";
             this.launchpadCleaner = lvLaunchpad.register({
                 id: "xiaolv-common",
                 name: "常用",
@@ -1750,7 +1754,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 /* 罗盘每次打开实时拉取片段条目数 */
                 badgeProvider: () => {
                     const c = this.library?.getIndex()?.items?.size;
-                    return c !== undefined ? `常用 ${c} 项` : "常用";
+                    return c !== undefined ? `${c} 项` : "已就绪";
                 },
                 actions: ["打开片段搜索", "复制置顶片段", "从剪贴板保存片段", "查看剪贴板历史"],
                 topBarElement: this.topBarElement,
@@ -1949,27 +1953,41 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     public recordClipboard(text: string): void {
-        if (!this.state.clipboardHistoryEnabled) return;
-        this.state.clipboardHistory = pushClipboardHistory(this.state.clipboardHistory, text, this.state.clipboardHistoryLimit ?? 30);
+        if (!this.state.clipboardHistoryEnabled || !text || typeof text !== "string") return;
+        const clean = text.trim();
+        if (clean.length < 2) return;
+        const bounded = clean.length > 8000 ? clean.slice(0, 8000) : clean;
+        this.state.clipboardHistory = pushClipboardHistory(this.state.clipboardHistory, bounded, this.state.clipboardHistoryLimit ?? 30);
         this.persistSoon();
     }
 
     private setupClipboardTracking(): void {
+        let lastFocusReadAt = 0;
+        let lastReadText = "";
         const onCopyCut = (e: ClipboardEvent) => {
             if (!this.state.clipboardHistoryEnabled) return;
             try {
                 const text = e.clipboardData?.getData("text/plain") || window.getSelection()?.toString();
-                if (text) this.recordClipboard(text);
+                if (text) {
+                    lastReadText = text;
+                    this.recordClipboard(text);
+                }
             } catch {
                 // ignore
             }
         };
         const onWindowFocus = async () => {
             if (!this.state.clipboardHistoryEnabled) return;
+            const now = Date.now();
+            if (now - lastFocusReadAt < 1500) return;
+            lastFocusReadAt = now;
             try {
                 if (navigator.clipboard?.readText && window.isSecureContext) {
                     const txt = await navigator.clipboard.readText();
-                    if (txt) this.recordClipboard(txt);
+                    if (txt && txt !== lastReadText) {
+                        lastReadText = txt;
+                        this.recordClipboard(txt);
+                    }
                 }
             } catch {
                 // ignore
@@ -2169,7 +2187,12 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         });
 
+        let bindTimer: ReturnType<typeof setTimeout> | null = null;
         const cleanup = () => {
+            if (bindTimer !== null) {
+                clearTimeout(bindTimer);
+                bindTimer = null;
+            }
             surfaceUnreg();
             document.removeEventListener("mousedown", onDismiss);
             document.removeEventListener("keydown", onDismiss);
@@ -2183,7 +2206,9 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         };
 
-        setTimeout(() => {
+        bindTimer = setTimeout(() => {
+            bindTimer = null;
+            if (!popover.isConnected) return;
             document.addEventListener("mousedown", onDismiss);
             document.addEventListener("keydown", onDismiss);
         }, 50);
@@ -2241,9 +2266,9 @@ export default class XiaolvCommonPlugin extends Plugin {
                 return {ok: false, count: 0};
             }
             const hubNb = nbReceipt.data.find((n) => /^(🐴\s*)?小驴(生态|空间|笔记本|常用)/.test(n.name || ""));
-            const targetNotebookId = this.config?.mode === "notebook"
-                ? (this.config.notebookIds?.[0] || hubNb?.id || nbReceipt.data[0]!.id)
-                : (hubNb?.id || nbReceipt.data[0]!.id);
+            const configuredNbId = this.config?.mode === "notebook" ? this.config.notebookIds?.[0] : undefined;
+            const validConfiguredNb = configuredNbId && nbReceipt.data.some((n) => n.id === configuredNbId) ? configuredNbId : undefined;
+            const targetNotebookId = validConfiguredNb || hubNb?.id || nbReceipt.data[0]!.id;
             const targetNbMeta = nbReceipt.data.find((n) => n.id === targetNotebookId);
             const isHubNb = Boolean(targetNbMeta && /^(🐴\s*)?小驴(生态|空间|笔记本)/.test(targetNbMeta.name || ""));
             const docTitle = `常用资产 · ${pack.name}`;
@@ -2860,10 +2885,17 @@ export default class XiaolvCommonPlugin extends Plugin {
                         return {ok, message: msg};
                     } else {
                         const targetDocId = editorTarget?.docId || this.host.currentDocId() || "";
-                        const ok = await withDocLock(targetDocId, async () => {
+                        let ok = await withDocLock(targetDocId, async () => {
                             return this.host.insertMarkdown(content, editorTarget ?? undefined);
                         });
-                        const msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
+                        let msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
+                        if (!ok && this.host.isMobile()) {
+                            const copied = await this.host.writeClipboard(kramdownToPlainText(content));
+                            if (copied) {
+                                ok = true;
+                                msg = this.i18nFn()("copied", shortTitle(active?.title || "条目"));
+                            }
+                        }
                         this.notify(ok ? "info" : "error", msg);
                         if (ok) {
                             try {
@@ -2915,10 +2947,17 @@ export default class XiaolvCommonPlugin extends Plugin {
                         return {ok, message: msg};
                     } else {
                         const targetDocId = editorTarget?.docId || this.host.currentDocId() || "";
-                        const ok = await withDocLock(targetDocId, async () => {
+                        let ok = await withDocLock(targetDocId, async () => {
                             return this.host.insertMarkdown(content, editorTarget ?? undefined);
                         });
-                        const msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
+                        let msg = ok ? this.i18nFn()("inserted", shortTitle(active?.title || "条目")) : this.i18nFn()("insertFailed");
+                        if (!ok && this.host.isMobile()) {
+                            const copied = await this.host.writeClipboard(kramdownToPlainText(content));
+                            if (copied) {
+                                ok = true;
+                                msg = this.i18nFn()("copied", shortTitle(active?.title || "条目"));
+                            }
+                        }
                         this.notify(ok ? "info" : "error", msg);
                         if (ok) {
                             try {
@@ -3192,14 +3231,41 @@ export default class XiaolvCommonPlugin extends Plugin {
         const initialKramdown = kd.ok ? kd.data : "";
         const isMobileModal = isMobileDialogViewport();
         const dialogTitle = `${t("edit")} · ${(item.title || t("unknownType")).slice(0, 24)}${item.title.length > 24 ? "…" : ""}`;
+        let vvCleanup: (() => void) | undefined;
         const dialog = new Dialog({
             // 标题带条目名（截断 24 字）：确认正在编辑哪一条
             title: dialogTitle,
             content: "",
             width: isMobileModal ? "100vw" : "min(620px, 92vw)",
             height: isMobileModal ? "100dvh" : "min(860px, 92vh)",
+            destroyCallback: () => {
+                vvCleanup?.();
+                vvCleanup = undefined;
+            },
         });
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+        if (isMobileModal && typeof window !== "undefined" && window.visualViewport) {
+            const vv = window.visualViewport;
+            let baseHeight = Math.max(window.innerHeight || 0, Math.round(vv.height || 0));
+            const syncKeyboardViewport = () => {
+                if (!dialog.element?.isConnected) return;
+                const currentInner = window.innerHeight || 0;
+                const currentH = Math.round(vv.height || currentInner);
+                if (currentH > baseHeight) baseHeight = currentH;
+                dialog.element.style.setProperty("--lv-vv-h", `${currentH}px`);
+                const keyboardOpen = Math.max(baseHeight, currentInner) - currentH > 110;
+                dialog.element.classList.toggle("lv-keyboard-open", keyboardOpen);
+            };
+            syncKeyboardViewport();
+            vv.addEventListener("resize", syncKeyboardViewport);
+            vv.addEventListener("scroll", syncKeyboardViewport, {passive: true});
+            window.addEventListener("resize", syncKeyboardViewport, {passive: true});
+            vvCleanup = () => {
+                vv.removeEventListener("resize", syncKeyboardViewport);
+                vv.removeEventListener("scroll", syncKeyboardViewport);
+                window.removeEventListener("resize", syncKeyboardViewport);
+            };
+        }
         dialog.element.addEventListener("click", (e) => {
             if (e.target === dialog.element || (e.target as HTMLElement).classList?.contains("b3-dialog__scrim")) {
                 dialog.destroy();
@@ -3644,11 +3710,15 @@ export default class XiaolvCommonPlugin extends Plugin {
                     this.persistSidecar(STORAGE_KEYS.state, this.state);
                 }
             }
+            let restoreFailed = false;
             if (data.itemsBundle && typeof data.itemsBundle === "object") {
                 try {
                     await this.importBundleText(JSON.stringify(data.itemsBundle), "overwrite");
                 } catch (err) {
                     console.warn("[xiaolv-common] restoreData importBundle error:", err);
+                    /* A1 审计修复：核心条目包恢复失败不得再向灾备总线谎报成功 */
+                    restoreFailed = true;
+                    pushDiagError({ source: "小驴常用", message: `灾备恢复条目包失败：${toErrorMessage(err)}` });
                 }
             } else if (Array.isArray(data.items)) {
                 try {
@@ -3661,9 +3731,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                     await this.importBundleText(JSON.stringify(fallbackBundle), "overwrite");
                 } catch (err) {
                     console.warn("[xiaolv-common] restoreData items array error:", err);
+                    restoreFailed = true;
+                    pushDiagError({ source: "小驴常用", message: `灾备恢复条目数组失败：${toErrorMessage(err)}` });
                 }
             }
-            return true;
+            return !restoreFailed;
         } catch (err) {
             console.error("[xiaolv-common] restoreData failed:", err);
             return false;

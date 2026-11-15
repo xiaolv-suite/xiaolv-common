@@ -6,10 +6,14 @@ const assert = require("node:assert/strict");
 const {
     lvLaunchpad,
     syncTopBarConvergence,
+    resetTopBarConvergenceHysteresis,
+    resetLaunchpadRegistryForTesting,
 } = require("../src/libs/lv-notice-kit.ts");
 
 test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence Engine) 专项测试", async (t) => {
+    resetLaunchpadRegistryForTesting();
     await t.test("1. 单插件场景保留原生按钮，>=2 个插件时自动激活小驴罗盘并收敛独立图标", () => {
+        resetLaunchpadRegistryForTesting();
         // 模拟 DOM 环境
         const toolbar = {
             id: "toolbar",
@@ -40,7 +44,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             createElement: () => ({ setAttribute: () => {}, querySelector: () => null, style: {}, addEventListener: () => {} }),
         };
 
-        globalThis.window = {
+        globalThis.window = { __LV_LAUNCHPAD_REGISTRY__: new Map(),
             __LV_LAUNCHPAD__: undefined,
             dispatchEvent: () => true,
             setTimeout: () => 1,
@@ -48,7 +52,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
         };
 
         try {
-            // 阶段 1：仅注册 1 个插件（常用）
+            // 阶段 1：仅注册 1 个插件（常用），罗盘中枢即常驻显示，保障单插件用户直接唤起 LifeLog 等生态能力
             const unregister1 = lvLaunchpad.register({
                 id: "xiaolv-common",
                 name: "常用",
@@ -59,9 +63,9 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             });
 
             syncTopBarConvergence();
-            // 只有 1 个插件时，不收敛，原生按钮保持正常可见，罗盘按钮隐藏
-            assert.equal(mockTopBarEl1.style.display, "");
-            assert.equal(compassBtn.style.display, "none");
+            // 单插件时，罗盘按钮自动激活显示，默认收敛插件独立按钮，顶栏保持清爽
+            assert.equal(compassBtn.style.display, "inline-flex");
+            assert.equal(mockTopBarEl1.style.display, "none");
 
             // 阶段 2：注册第 2 个插件（打卡）
             const unregister2 = lvLaunchpad.register({
@@ -74,10 +78,8 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             });
 
             syncTopBarConvergence();
-            // 已有 2 个插件，启动顶栏统一收敛！
-            // 罗盘按钮自动激活显示！
+            // 2 个插件，罗盘按钮继续显示，未置顶项收敛
             assert.equal(compassBtn.style.display, "inline-flex");
-            // 未置顶的 2 个插件独立按钮自动被收敛隐藏！
             assert.equal(mockTopBarEl1.style.display, "none", "常用独立按钮应被收敛隐藏");
             assert.equal(mockTopBarEl2.style.display, "none", "打卡独立按钮应被收敛隐藏");
 
@@ -88,13 +90,17 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             assert.equal(mockTopBarEl2.style.display, "", "置顶的打卡按钮应恢复显示");
             assert.equal(mockTopBarEl1.style.display, "none", "未置顶的常用按钮继续隐藏");
 
-            // 阶段 4：注销打卡插件，回到单插件状态
+            // 阶段 4：注销打卡插件，回到单插件状态，罗盘依然常驻
             unregister2();
+            resetTopBarConvergenceHysteresis();
             syncTopBarConvergence();
-            // 回到 1 个插件，常用按钮自动恢复显示
-            assert.equal(mockTopBarEl1.style.display, "");
+            assert.equal(compassBtn.style.display, "inline-flex", "回到单插件状态罗盘依然常驻");
 
+            // 阶段 5：全部插件注销（0 个插件），罗盘中枢隐藏
             unregister1();
+            resetTopBarConvergenceHysteresis();
+            syncTopBarConvergence();
+            assert.equal(compassBtn.style.display, "none", "所有插件注销后罗盘中枢隐藏");
         } finally {
             globalThis.document = prevDoc;
             globalThis.window = prevWin;
@@ -138,7 +144,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             },
         };
 
-        globalThis.window = {
+        globalThis.window = { __LV_LAUNCHPAD_REGISTRY__: new Map(),
             innerWidth: 1920,
             addEventListener() {},
             removeEventListener() {},
@@ -218,7 +224,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             },
             createElement: () => ({ setAttribute: () => {}, querySelector: () => null, style: {}, addEventListener: () => {} }),
         };
-        globalThis.window = {
+        globalThis.window = { __LV_LAUNCHPAD_REGISTRY__: new Map(),
             __LV_LAUNCHPAD__: undefined,
             dispatchEvent: () => true,
             setTimeout: () => 1,
@@ -261,6 +267,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
     });
 
     await t.test("4. Bento 弹射坞全键盘流交互：方向键导航、Enter 启动、P 键置顶切换、数字键直达", () => {
+        resetLaunchpadRegistryForTesting();
         const {
             openDesktopLaunchpadPopover,
             closeDesktopLaunchpadPopover,
@@ -318,7 +325,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
             },
         };
 
-        globalThis.window = {
+        globalThis.window = { __LV_LAUNCHPAD_REGISTRY__: new Map(),
             innerWidth: 1920,
             innerHeight: 1080,
             addEventListener(ev, fn) {
@@ -398,7 +405,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
                 return null;
             },
         };
-        globalThis.window = {
+        globalThis.window = { __LV_LAUNCHPAD_REGISTRY__: new Map(),
             __LV_LAUNCHPAD__: undefined,
             dispatchEvent: () => true,
             setTimeout: () => 1,
@@ -473,7 +480,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
                 return null;
             },
         };
-        globalThis.window = {
+        globalThis.window = { __LV_LAUNCHPAD_REGISTRY__: new Map(),
             __LV_LAUNCHPAD__: undefined,
             dispatchEvent: () => true,
             setTimeout: () => 1,
@@ -569,7 +576,7 @@ test("Protocol v1.7.5: 桌面端与全端顶栏统一收敛 (TopBar Convergence 
                 const cleanup = lvLaunchpad.ensureDesktopEntry();
                 assert.equal(insertedBefore, barMore, "罗盘图标必须锚定在思源 3.8.x 的 #barMore 之前（条目重排锚点）");
                 assert.equal(appendChildCalled, false, "严禁将罗盘 appendChild 至窗口控制区后面");
-                assert.equal(capturedAttrs["data-topbar-entry"], "lv-launchpad", "罗盘必须持有 data-topbar-entry 才能参与思源条目排序持久化");
+                assert.equal(capturedAttrs["data-topbar-entry"], undefined, "消除横跳：罗盘严禁声明 data-topbar-entry 避免被思源重排抛在左侧");
                 assert.equal(capturedAttrs["data-location"], "right", "罗盘 data-location 必须与官方 addTopBar position:\"right\" 对齐");
                 cleanup();
             } finally {

@@ -133,6 +133,15 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     const root = document.createElement("div");
     root.className = "xlc-varform";
 
+    let settled = false;
+    const doCancel = (): void => {
+        if (liveDebounceTimer) clearTimeout(liveDebounceTimer);
+        if (settled) return;
+        settled = true;
+        dialog.destroy();
+        options.onCancel?.();
+    };
+
     // 头部：类型徽标 + 条目标题 + Esc 提示
     const head = document.createElement("div");
     head.className = "xlc-varform-head";
@@ -157,7 +166,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     headCloseBtn.textContent = "✕";
     headCloseBtn.title = t("cancel") || "关闭";
     headCloseBtn.setAttribute("aria-label", t("cancel") || "关闭");
-    headCloseBtn.addEventListener("click", () => cancelBtn.click());
+    headCloseBtn.addEventListener("click", doCancel);
     head.appendChild(headCloseBtn);
     root.appendChild(head);
 
@@ -699,7 +708,6 @@ export function openVariableFillCard(options: VariableFillOptions): void {
 
     // 结算语义（R138）：按钮确认/取消即「已结算」；未结算时的销毁（Esc/点遮罩）才视为取消。
     // 修复：此前确认路径也会先触发 onCancel、点取消会触发两次（destroyCallback + 显式调用）。
-    let settled = false;
     const confirm = (): void => {
         if (liveDebounceTimer) clearTimeout(liveDebounceTimer);
         if (settled) return;
@@ -708,13 +716,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         options.onConfirm(collect());
     };
     insertBtn.addEventListener("click", confirm);
-    cancelBtn.addEventListener("click", () => {
-        if (liveDebounceTimer) clearTimeout(liveDebounceTimer);
-        if (settled) return;
-        settled = true;
-        dialog.destroy();
-        options.onCancel?.();
-    });
+    cancelBtn.addEventListener("click", doCancel);
     // Enter=插入（焦点在输入框时）；焦点在按钮上时由原生激活该按钮（取消=取消）
     root.addEventListener("keydown", (ev) => {
         // IME 组合态（中文组词候选未上屏）：Enter 属选词，不得触发插入（对齐 dialog.ts 惯例，R138）

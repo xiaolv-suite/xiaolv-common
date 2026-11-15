@@ -529,15 +529,34 @@ test('ECO-017: 通知系统长效免打扰（未来3天/未来一周）及统一
         c.api.lvNotify.muteDays('daily-reminder', 7);
         assert.equal(c.api.lvNotify.isCategoryMuted('daily-reminder'), true);
 
+        // 关键断言：今日免打扰清理旧日 key 时绝不能误删多日长效免打扰表
+        c.api.lvNotify.muteToday('some-other-category');
+        assert.equal(c.api.lvNotify.isCategoryMuted('exam-review'), true, 'muteToday must not clear multi-day mute table');
+        assert.equal(c.api.lvNotify.isCategoryMuted('daily-reminder'), true, 'muteToday must not clear multi-day mute table');
+
         // 验证处于免打扰期的分类被静默拦截
         c.api.lvNotify.card({ source: '小驴考试', category: 'exam-review', title: '每日提醒', message: '不应弹出' });
         assert.equal(c.api.lvNotify.getHistory().length, 0);
 
-        // 获取静音分类清单
+        // 分类级稍后提醒（ECO-021 契约并入）：窗口内必须拦住来源插件周期心跳投递的新实例，
+        // 否则表现为"点了稍后提醒仍然不断弹出"（考试错题每分钟巡检即此场景）
+        c.api.lvNotify.clearHistory();
+        c.api.lvNotify.card({ source: '小驴考试', category: 'exam-daily-review', title: '每日错题复习到期提醒', message: '实例A' });
+        assert.equal(c.api.lvNotify.getHistory().length, 1);
+        c.api.lvNotify.snoozeCategory('exam-daily-review', 30 * 60 * 1000);
+        assert.equal(c.api.lvNotify.isCategorySnoozed('exam-daily-review'), true);
+        c.api.lvNotify.card({ source: '小驴考试', category: 'exam-daily-review', title: '每日错题复习到期提醒', message: '窗口内实例B不应入史' });
+        assert.equal(c.api.lvNotify.getHistory().length, 1, 'snoozed category must suppress new posts');
+        c.api.lvNotify.clearCategorySnooze('exam-daily-review');
+        assert.equal(c.api.lvNotify.isCategorySnoozed('exam-daily-review'), false);
+        c.api.lvNotify.clearHistory();
+
+        // 获取静音分类清单（包含2个多日长效+1个今日免打扰）
         const mutedList = c.api.lvNotify.getMutedCategories();
-        assert.equal(mutedList.length, 2);
+        assert.equal(mutedList.length, 3);
         assert.ok(mutedList.some((x) => x.category === 'exam-review'));
         assert.ok(mutedList.some((x) => x.category === 'daily-reminder'));
+        assert.ok(mutedList.some((x) => x.category === 'some-other-category'));
 
         // 重载实例仍持久化生效，解除静音后恢复
         const reloaded = load('lv-notice-kit.ts', {}, { localStorage: fakeStorage });
@@ -669,11 +688,97 @@ test('ECO-018: notification history folds duplicates (including non-consecutive 
         assert.equal(updatedHist.length, 2);
         assert.equal(updatedHist[0].message, 'SQL 查询语法错误（已重试）');
 
+        // 加载/进度类瞬态噪音（正在打开/请稍等/正在索引等）不入史：真机曾折叠成 ×130 刷屏
+        const loadingSnack = makeEl('div', 'b3-snackbar', '正在打开，请稍等…');
+        msgObs.cb([{ type: 'childList', addedNodes: [loadingSnack] }]);
+        assert.equal(c2.api.lvNotify.getHistory().length, 2, 'loading noise must not be archived into history');
+
         const items = [{ id: 'siyuan-home', name: '小驴管家', desc: '管家', state: 'docked', onClick() {} }];
         const syHtml = c2.api.buildLaunchpadPopoverHtml(items, false, { showInboxDrawer: true, inboxFilter: 'siyuan' });
         assert.ok(syHtml.includes('SQL 查询语法错误（已重试）'));
         assert.ok(syHtml.includes('思源 2'));
     } finally { c2.close(); }
+});
+
+test('ECO-021: 首启弹层队列 firstRun 卡片串行呈现、当天指纹去重与补投续链', async () => {
+    const observers2 = [];
+    class MockMutationObserver2 {
+        constructor(cb) { this.cb = cb; this.disconnected = false; observers2.push(this); }
+        observe() {}
+        disconnect() { this.disconnected = true; }
+    }
+    const makeEl2 = (tag, cls = '', text = '') => {
+        const classes = new Set(cls ? cls.split(/\s+/).filter(Boolean) : []);
+        const children = [];
+        return {
+            tagName: tag.toUpperCase(),
+            style: {},
+            dataset: {},
+            textContent: text,
+            innerText: text,
+            classList: {
+                add: (...c) => c.forEach((x) => classes.add(x)),
+                remove: (...c) => c.forEach((x) => classes.delete(x)),
+                contains: (c) => classes.has(c),
+            },
+            setAttribute() {},
+            getAttribute() { return null; },
+            addEventListener() {},
+            appendChild(ch) { children.push(ch); return ch; },
+            querySelector() { return null; },
+            querySelectorAll() { return []; },
+            closest() { return null; },
+            remove() {},
+        };
+    };
+    const hostDiv2 = makeEl2('div');
+    const mockDoc2 = {
+        body: makeEl2('body'),
+        head: makeEl2('head'),
+        getElementById(id) {
+            if (id === 'lv-notice-host') return hostDiv2;
+            return null;
+        },
+        createElement(tag) { return makeEl2(tag); },
+    };
+    const store2 = new Map();
+    const fakeStorage2 = {
+        get length() { return store2.size; },
+        key(i) { return Array.from(store2.keys())[i] ?? null; },
+        getItem(k) { return store2.has(k) ? store2.get(k) : null; },
+        setItem(k, v) { store2.set(k, String(v)); },
+        removeItem(k) { store2.delete(k); },
+    };
+    const c3 = load('lv-notice-kit.ts', {
+        setTimeout, clearTimeout, setInterval, clearInterval,
+        addEventListener() {}, removeEventListener() {},
+    }, { localStorage: fakeStorage2, document: mockDoc2, MutationObserver: MockMutationObserver2 });
+    try {
+        c3.api.lvNotify.clearHistory();
+        // 1) 两张 firstRun 卡同时投递：第一张立即渲染入史，第二张进入队列
+        const id1 = c3.api.lvNotify.card({ source: '罗盘', title: '欢迎卡', message: '第一张首启卡', duration: 0, firstRun: true });
+        c3.api.lvNotify.card({ source: '小驴打卡', title: '每日提醒', message: '第二张首启卡', duration: 0, firstRun: true, category: 'daily-reminder' });
+        let hist = c3.api.lvNotify.getHistory();
+        assert.equal(hist.length, 1, 'second firstRun card must be queued, not rendered');
+        assert.equal(hist[0].title, '欢迎卡');
+
+        // 2) 关闭第一张 → 400ms 队列补投第二张
+        c3.api.lvNotify.dismiss(id1);
+        await new Promise((resolve) => setTimeout(resolve, 550));
+        hist = c3.api.lvNotify.getHistory();
+        assert.equal(hist.length, 2, 'queued card should be reposted after dismiss + 400ms');
+        assert.equal(hist[0].title, '每日提醒');
+
+        // 3) 同指纹（source|title|category）当天重复投递 → 去重丢弃
+        c3.api.lvNotify.card({ source: '罗盘', title: '欢迎卡', message: '第一张首启卡', duration: 0, firstRun: true });
+        hist = c3.api.lvNotify.getHistory();
+        assert.equal(hist.length, 2, 'same-fingerprint firstRun card must be deduped within the day');
+
+        // 4) 非 firstRun 卡不受队列影响，立即入史
+        c3.api.lvNotify.card({ source: '小驴拾遗', title: '普通卡', message: '不排队', duration: 0 });
+        hist = c3.api.lvNotify.getHistory();
+        assert.equal(hist.length, 3, 'non-firstRun card renders immediately');
+    } finally { c3.close(); }
 });
 
 test('ECO-019: ephemeral archive=false suppression, randomWalk contacts fallback, shared desktop owners, and global Quicker hotkey', async () => {
@@ -891,5 +996,77 @@ test('ECO-020: Launchpad v2.6 in-place rerender, search UX, dark QuickModal toke
         // Round-26：移动端全屏弹窗触控滑动流与防截断保护
         assert.match(src, /touch-action:pan-y/, 'Touch action pan-y must be enabled on scroll bodies');
         assert.match(src, /-webkit-overflow-scrolling:touch/, 'Webkit touch scrolling must be enabled');
+    } finally { c.close(); }
+});
+
+test('ECO-022: diagnostic error ring buffer (merge/cap/persist) and one-click diagnostic report', async () => {
+    const store = new Map();
+    const fakeStorage = {
+        get length() { return store.size; },
+        key(i) { return Array.from(store.keys())[i] ?? null; },
+        getItem(k) { return store.has(k) ? store.get(k) : null; },
+        setItem(k, v) { store.set(k, String(v)); },
+        removeItem(k) { store.delete(k); },
+    };
+
+    const c = load('lv-notice-kit.ts', {}, { localStorage: fakeStorage });
+    try {
+        // ① error 级卡片入环；连续同源同消息合并计数（防刷屏）
+        c.api.lvNotify.card({ source: '小驴考试', title: '任务执行失败', message: 'timeout after 12000ms', level: 'error' });
+        c.api.lvNotify.card({ source: '小驴考试', title: '任务执行失败', message: 'timeout after 12000ms', level: 'error' });
+        c.api.lvNotify.card({ source: '小驴闪卡', message: '制卡失败：addRiffCards blocked', level: 'error' });
+        let ring = c.api.lvEcosystem.getRecentErrors();
+        assert.equal(ring.length, 2, 'consecutive identical errors must merge into one entry');
+        assert.equal(ring[0].count, 2, 'merged entry must carry repeat count');
+        assert.match(ring[0].message, /任务执行失败：timeout/);
+        assert.equal(ring[1].source, '小驴闪卡');
+
+        // ② 非 error 级不得入环
+        c.api.lvNotify.card({ source: '小驴打卡', message: '打卡成功', level: 'success' });
+        assert.equal(c.api.lvEcosystem.getRecentErrors().length, 2, 'non-error cards must not enter ring');
+
+        // ③ 环形上限 50：最旧被淘汰、最新保留
+        for (let i = 1; i <= 60; i++) {
+            c.api.lvNotify.card({ source: '小驴雷切', message: `err-${i}`, level: 'error' });
+        }
+        ring = c.api.lvEcosystem.getRecentErrors();
+        assert.equal(ring.length, 50, 'ring must cap at 50');
+        assert.match(ring[ring.length - 1].message, /err-60/, 'latest error must survive');
+        assert.equal(ring[0].message, 'err-11', 'oldest entries must be evicted (err-1..err-10 out)');
+
+        // ④ 诊断计数透出 + 跨副本持久化
+        assert.equal(c.api.lvEcosystem.getDiagnostics().recentErrorCount, 50);
+        const reloaded = load('lv-notice-kit.ts', {}, { localStorage: fakeStorage });
+        try {
+            assert.equal(reloaded.api.lvEcosystem.getRecentErrors().length, 50, 'ring must persist across reloads');
+        } finally { reloaded.close(); }
+
+        // ⑤ 一键诊断报告：内核不可达降级 + 分区完整 + 错误样本携带
+        const report = await c.api.lvEcosystem.buildDiagnosticReport();
+        assert.match(report, /小驴生态诊断报告/);
+        assert.match(report, /内核连通：❌ 思源内核不可达/, 'no fetch in vm context must degrade to unreachable line');
+        assert.match(report, /最近错误（50 条 \/ 环形上限 50）/);
+        assert.match(report, /err-60/, 'report must carry latest error sample');
+        assert.match(report, /请将本报告整段一起发送给开发者/);
+        assert.match(report, /QQ 群 871707735/, 'report must carry QQ feedback group');
+        assert.match(report, /68298100@qq\.com/, 'report must carry feedback email');
+
+        // ⑥ 清空后报告降级为无错误记录
+        c.api.lvEcosystem.clearRecentErrors();
+        assert.equal(c.api.lvEcosystem.getRecentErrors().length, 0);
+        const emptyReport = await c.api.lvEcosystem.buildDiagnosticReport();
+        assert.match(emptyReport, /✅ 无错误记录/);
+
+        // ⑦ 源码契约：窗口级幂等捕获 + 双端诊断按钮 + 独立存储键
+        const src = fs.readFileSync(find('lv-notice-kit.ts'), 'utf8');
+        assert.match(src, /__LV_DIAG_CAPTURE__/, 'window-level idempotent capture guard required');
+        assert.match(src, /addEventListener\("error"|addEventListener\('error'/, 'window.error capture required');
+        assert.match(src, /addEventListener\("unhandledrejection"|addEventListener\('unhandledrejection'/, 'unhandledrejection capture required');
+        assert.match(src, /lv-inbox-diag-btn/, 'desktop compass inbox diag button required');
+        assert.match(src, /lv-mobile-inbox-diag/, 'mobile compass sheet diag chip required');
+        assert.match(src, /lv_diag_error_ring_v1/, 'ring storage key required');
+        assert.match(src, /installDiagErrorCapture\(\)/, 'capture must be installed from hub acquisition path');
+        assert.match(src, /LV_FEEDBACK_QQ_GROUP = "871707735"/, 'feedback QQ group constant required');
+        assert.match(src, /LV_FEEDBACK_EMAIL = "68298100@qq\.com"/, 'feedback email constant required');
     } finally { c.close(); }
 });

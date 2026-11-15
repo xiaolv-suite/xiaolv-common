@@ -183,8 +183,8 @@ export function cleanShortcode(v: unknown): string {
 export function parseSnippetAnnotations(text: string): { cleanText: string; tags: string[]; title: string } {
     if (!text || typeof text !== "string") return { cleanText: text || "", tags: [], title: "" };
     const trimmed = text.trim();
-    // 多行复杂结构（如代码围栏、表格、超级块）不自动剥离内部文本
-    if (trimmed.startsWith("```") || trimmed.startsWith("{{{") || trimmed.includes("\n\n")) {
+    // 多行长文本、代码围栏、表格、超级块或超过400字符的内容不自动提取注解（高频长文本 O(1) 早退保护，杜绝正则回溯）
+    if (trimmed.length > 400 || trimmed.includes("\n") || trimmed.includes("\r") || trimmed.startsWith("```") || trimmed.startsWith("{{{")) {
         return { cleanText: text, tags: [], title: "" };
     }
 

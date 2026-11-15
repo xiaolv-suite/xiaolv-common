@@ -56,6 +56,9 @@ export interface CardNoticeOptions {
     };
     /** 手动或自动关闭时的回调 */
     onDismiss?: () => void;
+    /** 首启弹层队列：标记 true 的卡片同一时刻只展示一张，关闭后 400ms 再弹下一张，
+     *  当天内按指纹（source|title|category）去重不再复现（真机走查：首启多家引导/提醒卡同屏堆叠） */
+    firstRun?: boolean;
 }
 
 export interface CapsuleNoticeOptions {
@@ -113,8 +116,8 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 184; // 1.8.4 (Mobile double-tap LifeLog & ephemeral vs archived notice separation)
-const STORAGE_PREFIX = "lv_notice_mute_";
+const PROTOCOL_VERSION = 186; // 1.8.6 (diagnostic error ring buffer + one-click diagnostic report in compass inbox)
+const STORAGE_PREFIX = "lv_notice_mute_today_";
 const HISTORY_STORAGE_PREFIX = "lv_notice_history_";
 const MAX_PERSISTED_HISTORY = 50;
 const AI_STORAGE_KEY = "lv_ai_shared_config";
@@ -192,9 +195,13 @@ export interface LvLaunchpadItem {
 export interface LvQuickWorkspaceConfig {
     lifeLogCategories: string[];
     lifeLogNotebookId?: string;
+    lifeLogDocumentId?: string;
+    lifeLogDocumentTitle?: string;
     diaryNotebookId?: string;
     quickNoteNotebookId?: string;
     quickNoteDocumentId?: string;
+    quickNoteDocumentTitle?: string;
+    quickNoteAttachMode?: "assets" | "local-link";
 }
 
 export interface LvPluginBackupPayload {
@@ -221,6 +228,8 @@ export interface LvEcosystemDiagnostics {
     todayActivitiesCount: number;
     hasSharedAiConfig: boolean;
     sharedAiModel?: string;
+    /** 诊断环形缓冲内当前错误条数（含跨会话持久化） */
+    recentErrorCount?: number;
 }
 
 export interface LvAiConfig {
@@ -268,6 +277,9 @@ interface LvNoticeHub {
     snooze: (id: string, durationMs: number) => void;
     muteToday: (category: string) => void;
     isMutedToday: (category: string) => boolean;
+    snoozeCategory?: (category: string, durationMs: number) => void;
+    isCategorySnoozed?: (category: string) => boolean;
+    clearCategorySnooze?: (category: string) => void;
     muteDays?: (category: string, days: number) => void;
     muteUntil?: (category: string, untilTimestamp: number) => void;
     isCategoryMuted?: (category: string) => boolean;
@@ -545,6 +557,7 @@ const STYLES = `
 .lv-notice-repeat {
     font-size: 10px;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
     padding: 1px 5px;
     border-radius: 10px;
     background: var(--lv-nt-accent);
@@ -555,12 +568,18 @@ const STYLES = `
     background: transparent;
     border: none;
     cursor: pointer;
-    padding: 2px 4px;
-    margin: -2px -2px 0 0;
+    min-width: 28px;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: -4px -4px 0 0;
     color: var(--lv-nt-text-sub);
     font-size: 14px;
     line-height: 1;
-    border-radius: 4px;
+    border-radius: 6px;
+    touch-action: manipulation;
     transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .lv-notice-close-btn:hover {
@@ -641,7 +660,7 @@ const STYLES = `
     padding: 3px 8px;
     border-radius: 6px;
     background: transparent;
-    color: var(--lv-nt-muted);
+    color: var(--lv-nt-text-sub);
     border: 1px solid var(--lv-nt-border);
 }
 .lv-notice-btn--mute:hover {
@@ -711,7 +730,17 @@ const STYLES = `
     color: #ef4444 !important;
 }
 
-:is(body.body--mobile, [data-is-mobile="true"]) #lv-notice-host,
+:is(body.body--mobile, [data-is-mobile="true"]) #lv-notice-host {
+    right: 0;
+    left: 0;
+    top: calc(var(--mobile-topbar-height, 48px) + env(safe-area-inset-top, 0px) + 8px);
+    bottom: auto;
+    align-items: center;
+    padding: 0 max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
 @media (max-width: 640px) {
     #lv-notice-host {
         right: 0;
@@ -779,6 +808,7 @@ const STYLES = `
     --lv-lp-accent: #2563eb;
     --lv-lp-accent-soft: rgba(37, 99, 235, 0.09);
     --lv-lp-card-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    --lv-lp-icon-inset: inset 0 1px 0 rgba(255, 255, 255, 0.65);
     position: fixed;
     inset: 0;
     z-index: 1080;
@@ -801,6 +831,7 @@ const STYLES = `
     --lv-lp-accent: #60a5fa;
     --lv-lp-accent-soft: rgba(59, 130, 246, 0.18);
     --lv-lp-card-shadow: 0 4px 14px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --lv-lp-icon-inset: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 #lv-launchpad-sheet-mask .lv-sheet {
     width: 100%;
@@ -821,6 +852,7 @@ const STYLES = `
 .lv-sheet-tile-badge {
     font-size: 10px;
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
     padding: 1px 7px;
     border-radius: 999px;
     background: var(--lv-lp-accent-soft);
@@ -834,6 +866,8 @@ const STYLES = `
 }
 .lv-sheet-tile-badge--success { background: rgba(16, 185, 129, 0.12); color: #059669; border-color: rgba(16, 185, 129, 0.22); }
 .lv-sheet-tile-badge--warn { background: rgba(245, 158, 11, 0.14); color: #d97706; border-color: rgba(245, 158, 11, 0.24); }
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) .lv-sheet-tile-badge--success { background: rgba(16, 185, 129, 0.18); color: #34d399; border-color: rgba(52, 211, 153, 0.28); }
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) .lv-sheet-tile-badge--warn { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border-color: rgba(251, 191, 36, 0.28); }
 .lv-sheet-result-count { font-size: 11px; color: var(--lv-lp-text-sub); padding: 0 2px 2px; }
 /* 穿透结果分组头（按来源） */
 .lv-sheet-result-group { font-size: 11px; font-weight: 700; color: var(--lv-lp-accent); padding: 6px 2px 2px; }
@@ -854,18 +888,24 @@ const STYLES = `
     -webkit-tap-highlight-color: transparent;
 }
 .lv-sheet-histrow-chip:active { background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); }
-/* 生态直达行（收敛为底部轻量辅助操作） */
-.lv-sheet-eco-row { display: flex; gap: 6px; margin: 4px 0 6px; }
+/* 生态直达行（收敛为底部轻量辅助操作，2×2 等宽网格杜绝 390px 挤压截断） */
+.lv-sheet-eco-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 4px 0 6px; }
 .lv-sheet-eco-chip {
-    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
     border: 1px dashed var(--lv-lp-border);
     background: transparent;
     border-radius: 8px;
-    padding: 4px 8px;
-    font-size: 11px;
+    padding: 6px 8px;
+    font-size: 11.5px;
     font-weight: 500;
     color: var(--lv-lp-text-sub);
     cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     transition: transform 0.14s ease, border-color 0.14s ease, color 0.14s ease;
@@ -947,15 +987,15 @@ const STYLES = `
 .lv-sheet-search.b3-text-field,
 .lv-sheet-search {
     width: 100%;
-    height: 28px;
+    height: 36px;
     box-sizing: border-box;
     margin-bottom: 5px;
-    padding: 3px 9px;
-    border-radius: 7px;
+    padding: 4px 11px;
+    border-radius: 10px;
     border: 1px solid var(--lv-lp-border);
     background: var(--lv-lp-panel-bg);
     color: var(--lv-lp-text);
-    font-size: 11.5px;
+    font-size: 13px;
     box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
 }
 .lv-sheet-search:focus {
@@ -1042,7 +1082,7 @@ const STYLES = `
     border-radius: 9px;
     background: linear-gradient(135deg, color-mix(in srgb, currentColor 16%, var(--lv-lp-card-bg)) 0%, color-mix(in srgb, currentColor 7%, var(--lv-lp-card-bg)) 100%);
     border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
-    box-shadow: 0 4px 10px -2px color-mix(in srgb, currentColor 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    box-shadow: 0 4px 10px -2px color-mix(in srgb, currentColor 20%, transparent), var(--lv-lp-icon-inset);
     color: var(--lv-lp-accent);
     margin-bottom: 1px;
 }
@@ -1062,7 +1102,7 @@ const STYLES = `
 }
 .lv-sheet-action-chip:active { background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); border-color: var(--lv-lp-accent); }
 .lv-sheet-quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 2px 0 8px; }
-.lv-sheet-quick-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 54px; padding: 8px 3px 7px; border-radius: 12px; background: var(--lv-lp-card-bg); border: 1px solid var(--lv-lp-border-strong); box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.6); cursor: pointer; text-align: center; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease; }
+.lv-sheet-quick-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 54px; padding: 8px 3px 7px; border-radius: 12px; background: var(--lv-lp-card-bg); border: 1px solid var(--lv-lp-border-strong); box-shadow: var(--lv-lp-card-shadow); cursor: pointer; text-align: center; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease; }
 .lv-sheet-quick-card:active { transform: scale(0.95); background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); border-color: var(--lv-lp-accent); box-shadow: none; }
 .lv-sheet-quick-card[data-busy="true"] { opacity: 0.68; pointer-events: none; }
 .lv-sheet-quick-card[data-busy="true"] .lv-sheet-quick-icon { animation: lvSpin 0.8s linear infinite; }
@@ -1150,7 +1190,7 @@ const STYLES = `
   --lv-lp-panel-bg:rgba(30,36,49,.82);--lv-lp-card-bg:#1e2433;--lv-lp-card-hover-bg:#283044;--lv-lp-border:rgba(255,255,255,.1);--lv-lp-border-strong:rgba(255,255,255,.16);--lv-lp-text:#f8fafc;--lv-lp-text-sub:#94a3b8;--lv-lp-accent:#60a5fa;--lv-lp-accent-soft:rgba(59,130,246,.2);
   background:rgba(0,0,0,.58);
 }
-.lv-qw-card{width:min(520px,94vw);max-height:90dvh;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,.14));border-radius:18px;box-shadow:0 20px 44px -8px rgba(15,23,42,.26),0 0 0 1px rgba(255,255,255,.08) inset;display:flex;flex-direction:column;overflow:hidden;color:var(--lv-lp-text,#0f172a);font-family:var(--b3-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif);animation:lvSheetCenter 200ms cubic-bezier(.22,1,.36,1) both}
+.lv-qw-card{width:min(640px,94vw);max-height:92dvh;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,.14));border-radius:18px;box-shadow:0 20px 48px -8px rgba(15,23,42,.28),0 0 0 1px rgba(255,255,255,.08) inset;display:flex;flex-direction:column;overflow:hidden;color:var(--lv-lp-text,#0f172a);font-family:var(--b3-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif);animation:lvSheetCenter 200ms cubic-bezier(.22,1,.36,1) both}
 .lv-qw-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:13px 16px 11px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,.08));flex-shrink:0}
 .lv-qw-title-wrap{display:flex;align-items:center;gap:7px;min-width:0;flex-wrap:wrap}
 .lv-qw-icon{font-size:16px;line-height:1}
@@ -1180,6 +1220,29 @@ const STYLES = `
 .lv-qw-add-cat-input:focus{outline:none;border-color:var(--lv-lp-accent)}
 .lv-qw-nb-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11.5px}
 .lv-qw-nb-select{flex:1;min-width:0;padding:4px 8px;border-radius:6px;border:1px solid var(--lv-lp-border-strong);background:var(--lv-lp-card-bg);color:var(--lv-lp-text);font-size:11.5px;font-family:inherit;cursor:pointer}
+.lv-qw-custom-doc-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11.5px}
+.lv-qw-custom-doc-name{flex:1;min-width:0;font-weight:600;color:var(--lv-lp-accent,#2563eb);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lv-qw-custom-doc-btns{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.lv-qw-attach-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding:6px 0 2px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,.1))}
+.lv-qw-attach-triggers{display:flex;align-items:center;gap:5px}
+.lv-qw-link-mode-group{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:999px;background:var(--lv-lp-panel-bg,#f1f5f9);border:1px solid var(--lv-lp-border,rgba(15,23,42,.1))}
+.lv-qw-mode-pill{padding:2px 7px;border:none;border-radius:999px;font-size:10px;font-weight:600;color:var(--lv-lp-text-sub,#64748b);background:transparent;cursor:pointer;transition:all .12s ease}
+.lv-qw-mode-pill:hover:not(.is-active){color:var(--lv-lp-accent,#2563eb)}
+.lv-qw-mode-pill.is-active{background:var(--lv-lp-card-bg,#fff);color:var(--lv-lp-accent,#2563eb);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.lv-qw-attach-list{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;max-height:110px;overflow-y:auto}
+.lv-qw-attach-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,.12));font-size:11px}
+.lv-qw-attach-thumb{width:22px;height:22px;object-fit:cover;border-radius:4px;flex-shrink:0}
+.lv-qw-attach-name{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.lv-qw-attach-size{color:var(--lv-lp-text-sub);font-size:9.5px}
+.lv-qw-item-mode-btn{padding:1px 5px;font-size:9.5px;font-weight:600;border-radius:4px;background:var(--lv-lp-accent-soft);color:var(--lv-lp-accent);border:none;cursor:pointer}
+.lv-qw-attach-remove{border:none;background:transparent;color:var(--lv-lp-text-sub);cursor:pointer;font-size:11px;padding:0 2px}
+.lv-qw-attach-remove:hover{color:#ef4444}
+.lv-qw-doc-picker-modal{position:absolute;top:50px;left:14px;right:14px;z-index:25;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.22);padding:10px;display:flex;flex-direction:column;gap:8px;animation:lvFadeIn .15s ease}
+.lv-qw-doc-search-input{width:100%;box-sizing:border-box;padding:6px 10px;font-size:12.5px;border:1px solid var(--lv-lp-border-strong);border-radius:8px;background:var(--lv-lp-panel-bg);color:var(--lv-lp-text)}
+.lv-qw-doc-results{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.lv-qw-doc-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;border:none;background:transparent;text-align:left;color:var(--lv-lp-text);width:100%}
+.lv-qw-doc-item:hover{background:var(--lv-lp-accent-soft);color:var(--lv-lp-accent)}
+.lv-qw-textarea.is-dragover{border-color:var(--lv-lp-accent,#2563eb);box-shadow:0 0 0 3px var(--lv-lp-accent-soft,rgba(37,99,235,.2))}
 .lv-qw-tag-chip{padding:3px 8px;border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,.1));background:var(--lv-lp-panel-bg,#f8fafc);color:var(--lv-lp-text,#0f172a);font-size:11px;cursor:pointer;font-family:inherit;transition:background-color .12s ease,border-color .12s ease,color .12s ease,transform .1s ease}
 .lv-qw-tag-chip:active,.lv-qw-time-chip:active{transform:scale(.95)}
 .lv-qw-tag-chip:not([style*="color"]):hover{background:var(--lv-lp-accent-soft,rgba(37,99,235,.1));border-color:var(--lv-lp-accent,#2563eb);color:var(--lv-lp-accent,#2563eb)}
@@ -1187,7 +1250,7 @@ const STYLES = `
 .lv-qw-time-chip:not(.active):hover{background:var(--lv-lp-accent-soft,rgba(37,99,235,.1));border-color:var(--lv-lp-accent,#2563eb);color:var(--lv-lp-accent,#2563eb)}
 .lv-qw-time-chip.active{background:var(--lv-lp-accent,#2563eb)!important;border-color:var(--lv-lp-accent,#2563eb)!important;color:#ffffff!important;font-weight:600}
 .lv-qw-time-chip.active:hover{background:var(--lv-lp-accent,#2563eb)!important;color:#ffffff!important;filter:brightness(1.08)}
-.lv-qw-textarea{width:100%;box-sizing:border-box;min-height:112px;max-height:240px;resize:vertical;border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.6;font-family:inherit;border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,.14));background:var(--lv-lp-card-bg,#fff);color:var(--lv-lp-text,#0f172a);transition:border-color .15s ease,box-shadow .15s ease}
+.lv-qw-textarea{width:100%;box-sizing:border-box;min-height:120px;max-height:260px;resize:vertical;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.65;font-family:inherit;border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,.14));background:var(--lv-lp-card-bg,#fff);color:var(--lv-lp-text,#0f172a);transition:border-color .15s ease,box-shadow .15s ease}
 .lv-qw-textarea:focus{outline:none;border-color:var(--lv-lp-accent,#2563eb);box-shadow:0 0 0 3px var(--lv-lp-accent-soft,rgba(37,99,235,.15))}
 .lv-qw-preview-tag,.lv-qw-draft-hint,.lv-qw-recent-strip{font-size:11px;color:var(--lv-lp-text-sub,#64748b);padding:4.5px 9px;border-radius:7px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px dashed var(--lv-lp-border,rgba(15,23,42,.1))}
 .lv-qw-draft-hint{display:flex;align-items:center;justify-content:space-between;font-size:10.5px}
@@ -1306,6 +1369,10 @@ const STYLES = `
     font-size: 11.5px;
     line-height: 1;
     height: 32px;
+    min-width: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0 9px;
     border-radius: 999px;
     color: var(--lv-lp-text);
@@ -1373,36 +1440,120 @@ function getSafeLocalStorage(): Storage | null {
 }
 
 const MUTE_UNTIL_STORAGE_KEY = "lv_notice_mute_until_v1";
+// 分类级「稍后提醒」抑制窗口表：周期心跳提醒（如考试每分钟错题巡检）在用户点了
+// 「稍后提醒 30 分钟/2小时」后，必须在窗口内拦住来源插件投递的**新实例**——
+// 否则下一分钟心跳又会弹出一张全新卡片，表现为"点了稍后提醒还是不断弹"。
+const SNOOZE_UNTIL_STORAGE_KEY = "lv_notice_snooze_until_v1";
+
+let memorySnoozeUntilCache: Record<string, number> = {};
+let memoryMuteUntilCache: Record<string, number> = {};
+
+function cleanCategoryKey(category: string): string {
+    return (category || "").trim().toLowerCase().replace(/^(?:exam-|siyuan-)/, "").replace(/-reminder[s]?$/, "");
+}
+
+function loadSnoozeUntilMap(): Record<string, number> {
+    const ls = getSafeLocalStorage();
+    const now = Date.now();
+    const active: Record<string, number> = {};
+    const winCache = typeof window !== "undefined" ? (window as any).__LV_SNOOZE_UNTIL_CACHE__ || memorySnoozeUntilCache : memorySnoozeUntilCache;
+    for (const [k, v] of Object.entries(winCache)) {
+        if (typeof v === "number" && Number.isFinite(v) && v > now) active[k] = v;
+    }
+    if (ls) {
+        try {
+            const raw = ls.getItem(SNOOZE_UNTIL_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    for (const [k, v] of Object.entries(parsed)) {
+                        if (typeof v === "number" && Number.isFinite(v) && v > now) {
+                            active[k] = Math.max(active[k] ?? 0, v);
+                        }
+                    }
+                }
+            }
+        } catch { /* ignore */ }
+    }
+    memorySnoozeUntilCache = { ...active };
+    if (typeof window !== "undefined") (window as any).__LV_SNOOZE_UNTIL_CACHE__ = memorySnoozeUntilCache;
+    return active;
+}
+
+function saveSnoozeUntilMap(map: Record<string, number>): void {
+    memorySnoozeUntilCache = { ...map };
+    if (typeof window !== "undefined") (window as any).__LV_SNOOZE_UNTIL_CACHE__ = memorySnoozeUntilCache;
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
+    try {
+        ls.setItem(SNOOZE_UNTIL_STORAGE_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+}
+
+function snoozeCategoryImpl(category: string, durationMs: number): void {
+    if (!category || !Number.isFinite(durationMs) || durationMs <= 0) return;
+    const map = loadSnoozeUntilMap();
+    map[category] = Date.now() + durationMs;
+    saveSnoozeUntilMap(map);
+}
+
+function isCategorySnoozedImpl(category: string): boolean {
+    if (!category) return false;
+    const now = Date.now();
+    const map = loadSnoozeUntilMap();
+    if (map[category] && map[category] > now) return true;
+    const cleanCat = cleanCategoryKey(category);
+    for (const [k, until] of Object.entries(map)) {
+        if (until > now && cleanCategoryKey(k) === cleanCat) return true;
+    }
+    return false;
+}
+
+function clearCategorySnoozeImpl(category: string): void {
+    if (!category) return;
+    const map = loadSnoozeUntilMap();
+    const cleanCat = cleanCategoryKey(category);
+    let changed = false;
+    for (const k of Object.keys(map)) {
+        if (k === category || cleanCategoryKey(k) === cleanCat) {
+            delete map[k];
+            changed = true;
+        }
+    }
+    if (changed) saveSnoozeUntilMap(map);
+}
 
 function loadMuteUntilMap(): Record<string, number> {
     const ls = getSafeLocalStorage();
-    if (!ls) return {};
-    try {
-        const raw = ls.getItem(MUTE_UNTIL_STORAGE_KEY);
-        if (raw) {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-                const now = Date.now();
-                const active: Record<string, number> = {};
-                let cleaned = false;
-                for (const [k, v] of Object.entries(parsed)) {
-                    if (typeof v === "number" && Number.isFinite(v) && v > now) {
-                        active[k] = v;
-                    } else {
-                        cleaned = true;
+    const now = Date.now();
+    const active: Record<string, number> = {};
+    const winCache = typeof window !== "undefined" ? (window as any).__LV_MUTE_UNTIL_CACHE__ || memoryMuteUntilCache : memoryMuteUntilCache;
+    for (const [k, v] of Object.entries(winCache)) {
+        if (typeof v === "number" && Number.isFinite(v) && v > now) active[k] = v;
+    }
+    if (ls) {
+        try {
+            const raw = ls.getItem(MUTE_UNTIL_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    for (const [k, v] of Object.entries(parsed)) {
+                        if (typeof v === "number" && Number.isFinite(v) && v > now) {
+                            active[k] = Math.max(active[k] ?? 0, v);
+                        }
                     }
                 }
-                if (cleaned) {
-                    try { ls.setItem(MUTE_UNTIL_STORAGE_KEY, JSON.stringify(active)); } catch { /* ignore */ }
-                }
-                return active;
             }
-        }
-    } catch { /* ignore */ }
-    return {};
+        } catch { /* ignore */ }
+    }
+    memoryMuteUntilCache = { ...active };
+    if (typeof window !== "undefined") (window as any).__LV_MUTE_UNTIL_CACHE__ = memoryMuteUntilCache;
+    return active;
 }
 
 function saveMuteUntilMap(map: Record<string, number>): void {
+    memoryMuteUntilCache = { ...map };
+    if (typeof window !== "undefined") (window as any).__LV_MUTE_UNTIL_CACHE__ = memoryMuteUntilCache;
     const ls = getSafeLocalStorage();
     if (!ls) return;
     try {
@@ -1430,8 +1581,14 @@ function muteCategoryDaysImpl(category: string, days: number): void {
 function muteCategoryTodayImpl(category: string): void {
     if (!category) return;
     const d = new Date();
+    const now = d.getTime();
     d.setHours(23, 59, 59, 999);
-    muteCategoryUntilImpl(category, d.getTime());
+    const endOfDay = d.getTime();
+    // 跨午夜安全保护：若用户在晚间（>=20:00）选择「今日免打扰」，保障至少静音到次日上午 08:00（或最低 8 小时），
+    // 避免 23 点选了免打扰，5 分钟后一过零点又被同一通知吵醒。
+    const minSafeDuration = 8 * 3600 * 1000;
+    const until = Math.max(endOfDay, now + minSafeDuration);
+    muteCategoryUntilImpl(category, until);
     const ls = getSafeLocalStorage();
     if (!ls) return;
     try {
@@ -1440,7 +1597,8 @@ function muteCategoryTodayImpl(category: string): void {
             if (typeof ls.length === "number" && typeof ls.key === "function" && typeof ls.removeItem === "function") {
                 for (let i = ls.length - 1; i >= 0; i--) {
                     const k = ls.key(i);
-                    if (k && k.startsWith(STORAGE_PREFIX) && k !== key) {
+                    // 仅清理今日免打扰历史键，严格排除长效免打扰表 MUTE_UNTIL_STORAGE_KEY 与 SNOOZE_UNTIL_STORAGE_KEY
+                    if (k && k !== MUTE_UNTIL_STORAGE_KEY && k !== SNOOZE_UNTIL_STORAGE_KEY && (k.startsWith(STORAGE_PREFIX) || k.startsWith("lv_notice_mute_20")) && k !== key) {
                         ls.removeItem(k);
                     }
                 }
@@ -1457,18 +1615,29 @@ function muteCategoryTodayImpl(category: string): void {
 
 function isCategoryMutedImpl(category: string): boolean {
     if (!category) return false;
+    const now = Date.now();
     const map = loadMuteUntilMap();
-    if (map[category] && map[category] > Date.now()) {
+    if (map[category] && map[category] > now) {
         return true;
+    }
+    const cleanCat = cleanCategoryKey(category);
+    for (const [k, until] of Object.entries(map)) {
+        if (until > now && cleanCategoryKey(k) === cleanCat) return true;
     }
     const ls = getSafeLocalStorage();
     if (!ls) return false;
     try {
         const key = `${STORAGE_PREFIX}${getTodayKey()}`;
-        const raw = ls.getItem(key);
+        const raw = ls.getItem(key) || ls.getItem(`lv_notice_mute_${getTodayKey()}`);
         if (!raw) return false;
         const list = JSON.parse(raw);
-        return Array.isArray(list) && list.includes(category);
+        if (Array.isArray(list)) {
+            if (list.includes(category)) return true;
+            for (const c of list) {
+                if (cleanCategoryKey(String(c)) === cleanCat) return true;
+            }
+        }
+        return false;
     } catch {
         return false;
     }
@@ -1477,10 +1646,15 @@ function isCategoryMutedImpl(category: string): boolean {
 function clearCategoryMuteImpl(category: string): void {
     if (!category) return;
     const map = loadMuteUntilMap();
-    if (Object.prototype.hasOwnProperty.call(map, category)) {
-        delete map[category];
-        saveMuteUntilMap(map);
+    const cleanCat = cleanCategoryKey(category);
+    let changed = false;
+    for (const k of Object.keys(map)) {
+        if (k === category || cleanCategoryKey(k) === cleanCat) {
+            delete map[k];
+            changed = true;
+        }
     }
+    if (changed) saveMuteUntilMap(map);
     const ls = getSafeLocalStorage();
     if (!ls) return;
     try {
@@ -1489,7 +1663,7 @@ function clearCategoryMuteImpl(category: string): void {
         if (raw) {
             const list = JSON.parse(raw);
             if (Array.isArray(list)) {
-                ls.setItem(key, JSON.stringify(list.filter((c: string) => c !== category)));
+                ls.setItem(key, JSON.stringify(list.filter((c: string) => c !== category && cleanCategoryKey(c) !== cleanCat)));
             }
         }
     } catch { /* ignore */ }
@@ -1648,8 +1822,93 @@ function saveTodayNoticeHistory(list: ReadonlyArray<LvNoticePacket>): void {
     } catch { /* ignore quota / private mode */ }
 }
 
-function createCoordinator(initialPlugin: string): LvNoticeHub {
-    let hostEl = typeof document.getElementById === "function" ? document.getElementById("lv-notice-host") : null;
+/* ===== 首启弹层队列（First-Run Notice Queue · Protocol v1.8.6） =====
+ * 新工作区首启时多家插件的引导卡/提醒卡同时投递，底部卡片互相堆叠（真机走查实证五层同屏）。
+ * - firstRun 卡片按指纹（source|title|category）当天去重，重载不复现；
+ * - 同一时刻只渲染一张：active>0 时新卡进入 pending，卡片离场（手动/自动/Esc/滑走统一走 dismiss→onDismiss）
+ *   400ms 后串行补投下一张；
+ * - 状态挂 window 单例，8 仓模块实例共享同一队列。 */
+const FIRST_RUN_DONE_STORAGE_KEY = "lv_notice_first_run_done_v1";
+
+interface FirstRunSharedState {
+    active: number;
+    pending: LvNoticePacket[];
+}
+
+function getFirstRunShared(): FirstRunSharedState {
+    if (typeof window !== "undefined") {
+        const w = window as unknown as { __LV_FIRST_RUN_STATE__?: FirstRunSharedState };
+        if (!w.__LV_FIRST_RUN_STATE__) w.__LV_FIRST_RUN_STATE__ = { active: 0, pending: [] };
+        return w.__LV_FIRST_RUN_STATE__;
+    }
+    const g = globalThis as unknown as { __LV_FIRST_RUN_STATE_NODE__?: FirstRunSharedState };
+    if (!g.__LV_FIRST_RUN_STATE_NODE__) g.__LV_FIRST_RUN_STATE_NODE__ = { active: 0, pending: [] };
+    return g.__LV_FIRST_RUN_STATE_NODE__;
+}
+
+function firstRunFingerprint(packet: LvNoticePacket): string {
+    return `${packet.source || ""}|${packet.title || ""}|${packet.category || ""}`;
+}
+
+function loadFirstRunDoneSet(): Set<string> {
+    const ls = getSafeLocalStorage();
+    if (!ls) return new Set();
+    try {
+        const raw = ls.getItem(FIRST_RUN_DONE_STORAGE_KEY);
+        const today = getTodayKey();
+        if (raw) {
+            const parsed = JSON.parse(raw) as { day?: string; keys?: string[] };
+            if (parsed?.day === today && Array.isArray(parsed.keys)) return new Set(parsed.keys);
+        }
+    } catch { /* ignore */ }
+    return new Set();
+}
+
+function saveFirstRunDoneSet(done: Set<string>): void {
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
+    try {
+        ls.setItem(FIRST_RUN_DONE_STORAGE_KEY, JSON.stringify({ day: getTodayKey(), keys: Array.from(done).slice(0, 60) }));
+    } catch { /* ignore */ }
+}
+
+/** 当天指纹已展示过 → false（丢弃）；否则登记并放行 */
+function gateFirstRunNotice(packet: LvNoticePacket): boolean {
+    const done = loadFirstRunDoneSet();
+    const fp = firstRunFingerprint(packet);
+    if (done.has(fp)) return false;
+    done.add(fp);
+    saveFirstRunDoneSet(done);
+    return true;
+}
+
+/** 包装 onDismiss：卡片离场（含 duration 到期/Esc/滑走/手动关闭统一走 dismiss）后 400ms 补投下一张 */
+function wrapFirstRunDismiss(packet: LvNoticePacket, flush: () => void): LvNoticePacket {
+    const inner = packet.onDismiss;
+    return {
+        ...packet,
+        onDismiss: () => {
+            try { inner?.(); } catch { /* ignore */ }
+            const shared = getFirstRunShared();
+            shared.active = Math.max(0, shared.active - 1);
+            const schedule = typeof window !== "undefined" && typeof window.setTimeout === "function" ? window.setTimeout : setTimeout;
+            schedule(() => flush(), 400);
+        },
+    };
+}
+
+function flushFirstRunPending(repost: () => ((p: LvNoticePacket) => void)): void {
+    const shared = getFirstRunShared();
+    if (shared.active > 0) return;
+    const next = shared.pending.shift();
+    if (!next) return;
+    const replay = { ...next, id: `${next.id}_frq_${Date.now().toString(36)}` } as LvNoticePacket & { __frqReplay?: boolean };
+    replay.__frqReplay = true;
+    const post = repost();
+    post(replay);
+}
+
+function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl = typeof document.getElementById === "function" ? document.getElementById("lv-notice-host") : null;
     if (!hostEl && document.body && typeof document.createElement === "function") {
         hostEl = document.createElement("div");
         hostEl.id = "lv-notice-host";
@@ -1718,9 +1977,13 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                         ${escapeHtml(packet.action.label)}
                     </button>
                 ` : "";
+                const repeatHtml = (packet.repeatCount || 1) > 1
+                    ? `<span class="lv-notice-repeat">×${packet.repeatCount}</span>`
+                    : "";
                 card.innerHTML = `
                     <span class="lv-notice-source-badge">${escapeHtml(packet.source || "提示")}</span>
                     <span>${escapeHtml(packet.message)}</span>
+                    ${repeatHtml}
                     ${actionHtml}
                 `;
                 if (packet.action) {
@@ -1731,6 +1994,9 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                             await packet.action?.onClick?.();
                         } catch (err) {
                             console.error("[LvNotice] capsule action error", err);
+                            /* 模式二留痕（2026-11-14 审计）：动作失败不再只 console——用户可见反馈 + 诊断入环 */
+                            pushDiagError({ source: packet.source || "通知中心", message: `动作执行失败：${err instanceof Error ? err.message : String(err)}` });
+                            hub.post({ id: `cap_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, mode: "capsule", source: "通知中心", message: "⚠️ 动作执行失败，已记录诊断", level: "error", duration: 2600, archive: false, createdAt: Date.now(), repeatCount: 1 });
                         }
                         hub.dismiss(packet.id);
                     });
@@ -1798,7 +2064,12 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                         const idx = parseInt(btn.getAttribute("data-action-idx") || "0", 10);
                         const act = packet.actions?.[idx];
                         if (act?.onClick) {
-                            try { await act.onClick(); } catch (err) { console.error("[LvNotice] action error", err); }
+                            try { await act.onClick(); } catch (err) {
+                                console.error("[LvNotice] action error", err);
+                                /* 模式二留痕（2026-11-14 审计）：卡片动作失败补可见反馈 + 诊断入环 */
+                                pushDiagError({ source: packet.source || "通知中心", message: `动作执行失败：${err instanceof Error ? err.message : String(err)}` });
+                                hub.post({ id: `cap_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, mode: "capsule", source: "通知中心", message: "⚠️ 动作执行失败，已记录诊断", level: "error", duration: 2600, archive: false, createdAt: Date.now(), repeatCount: 1 });
+                            }
                         }
                         if (act?.dismissAfterClick !== false) {
                             hub.dismiss(packet.id);
@@ -1811,8 +2082,8 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                         const sIdx = parseInt(btn.getAttribute("data-snooze-idx") || "0", 10);
                         const opt = resolvedSnoozeOpts[sIdx];
                         if (opt?.muteDays && opt.muteDays > 0 && packet.category) {
+                            muteCategoryDaysImpl(packet.category, opt.muteDays);
                             if (typeof hub.muteDays === "function") hub.muteDays(packet.category, opt.muteDays);
-                            else muteCategoryDaysImpl(packet.category, opt.muteDays);
                             hub.dismiss(packet.id);
                             const desc = opt.muteDays === 7 ? "未来一周" : `未来 ${opt.muteDays} 天`;
                             lvNotify.capsule({
@@ -1822,7 +2093,8 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                                 archive: false,
                             });
                         } else if (opt?.muteToday && packet.category) {
-                            hub.muteToday(packet.category);
+                            muteCategoryTodayImpl(packet.category);
+                            if (typeof hub.muteToday === "function") hub.muteToday(packet.category);
                             hub.dismiss(packet.id);
                             lvNotify.capsule({
                                 source: packet.source || "免打扰",
@@ -1831,6 +2103,18 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                                 archive: false,
                             });
                         } else if (opt?.durationMs) {
+                            // 分类级稍后提醒：登记抑制窗口（拦住周期心跳的新实例）+ 延迟重发本实例
+                            if (packet.category) {
+                                snoozeCategoryImpl(packet.category, opt.durationMs);
+                                const minutes = Math.round(opt.durationMs / 60000);
+                                const desc = minutes >= 60 ? `${Math.round(minutes / 60)} 小时` : `${minutes} 分钟`;
+                                lvNotify.capsule({
+                                    source: packet.source || "稍后提醒",
+                                    message: `⏰ 「${packet.title || packet.category}」将在 ${desc} 后再次提醒`,
+                                    duration: 2400,
+                                    archive: false,
+                                });
+                            }
                             hub.snooze(packet.id, opt.durationMs);
                         } else {
                             hub.dismiss(packet.id);
@@ -1890,8 +2174,36 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
 
         post(packet: LvNoticePacket) {
             packet.read = packet.read ?? false;
-            if (packet.category && this.isMutedToday(packet.category)) {
+            packet.repeatCount = typeof packet.repeatCount === "number" && packet.repeatCount > 0 ? packet.repeatCount : 1;
+            // 铁律拦截：当前分类若在免打扰（今日/3天/一周）或稍后提醒窗口内，无条件直接拦截丢弃
+            if (packet.category && (isCategoryMutedImpl(packet.category) || isCategorySnoozedImpl(packet.category))) {
                 return;
+            }
+
+            // 诊断环形缓冲：error 级通知卡片是用户反馈 bug 的直接信号源，随投递入环供一键诊断导出
+            if (packet.level === "error") {
+                pushDiagError({
+                    source: packet.source || "unknown",
+                    message: `${packet.title ? `${packet.title}：` : ""}${packet.message || ""}`.trim(),
+                });
+            }
+
+            // 首启弹层队列：firstRun 卡片同一时刻只渲染一张，关闭后 400ms 串行补投，
+            // 当天内按指纹去重（新工作区首启多家引导/提醒卡同屏堆叠的根治）。
+            // 补投实例（__frqReplay）跳过指纹门但保留 active 计数与 dismiss 包装，令队列链持续。
+            if (packet.firstRun && packet.mode === "card") {
+                const replayPacket = packet as unknown as { __frqReplay?: boolean };
+                const isReplay = replayPacket.__frqReplay === true;
+                if (isReplay) delete replayPacket.__frqReplay;
+                if (!isReplay) {
+                    if (!gateFirstRunNotice(packet)) return;
+                    if (getFirstRunShared().active > 0) {
+                        getFirstRunShared().pending.push(packet);
+                        return;
+                    }
+                }
+                getFirstRunShared().active++;
+                packet = wrapFirstRunDismiss(packet, () => flushFirstRunPending(() => hub.post.bind(hub)));
             }
 
             // 专注模式：card/capsule 全生态降级为 silent（仅应归档通知入历史，瞬时回执直接忽略）
@@ -1917,6 +2229,18 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
                 existing.message = packet.message;
                 existing.createdAt = Date.now();
                 existing.read = false;
+                // 重置倒计时定时器，保证持续看到最新计数且不提前消散
+                if (timers.has(existing.id)) {
+                    clearTimeout(timers.get(existing.id));
+                    timers.delete(existing.id);
+                }
+                const nextDuration = packet.duration ?? (packet.level === "error" ? 0 : 4000);
+                if (nextDuration > 0) {
+                    const t = window.setTimeout(() => {
+                        this.dismiss(existing.id);
+                    }, nextDuration);
+                    timers.set(existing.id, t);
+                }
                 if (shouldArchive) {
                     if (!historyList.includes(existing)) {
                         recordIntoHistory(historyList, { ...packet, createdAt: existing.createdAt });
@@ -1971,8 +2295,14 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         snooze(id: string, durationMs: number) {
             const item = activePackets.find((p) => p.id === id);
             if (!item) return;
+            // 分类级稍后提醒：登记抑制窗口，拦住来源插件周期心跳投递的新实例；
+            // 无分类的历史包保持旧行为（仅延迟重发单实例）
+            if (item.category && Number.isFinite(durationMs) && durationMs > 0) {
+                snoozeCategoryImpl(item.category, durationMs);
+            }
             this.dismiss(id);
             setTimeout(() => {
+                if (item.category) clearCategorySnoozeImpl(item.category);
                 this.post({
                     ...item,
                     id: `snoozed_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1984,6 +2314,18 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
 
         muteToday(category: string) {
             muteCategoryTodayImpl(category);
+        },
+
+        snoozeCategory(category: string, durationMs: number) {
+            snoozeCategoryImpl(category, durationMs);
+        },
+
+        isCategorySnoozed(category: string): boolean {
+            return isCategorySnoozedImpl(category);
+        },
+
+        clearCategorySnooze(category: string) {
+            clearCategorySnoozeImpl(category);
         },
 
         muteDays(category: string, days: number) {
@@ -2123,6 +2465,12 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
         }
     };
 
+    /* 原生加载/进度类提示白名单：思源会在每次打开文档、索引、处理任务时弹出瞬时进度条，
+     * 高频时同一句被折叠成 ×130 一类的历史记录（真机截图实证）。这类提示在思源界面本身
+     * 已即时反馈，属于纯瞬态噪音——不再归档进通知历史（异常类即使命中也照常留档追踪）。 */
+    const NATIVE_SNACKBAR_NOISE_RE = /正在打开|请稍等|正在加载|加载中|正在处理|正在索引|正在重建索引|正在构建索引|正在缓存|构建缓存|正在写入|正在导出|正在导入/i;
+    const isNativeSnackbarNoise = (text: string): boolean => NATIVE_SNACKBAR_NOISE_RE.test(text || "");
+
     const updateNativeSnackbar = (node: Node): void => {
         try {
             const baseEl = ((typeof Element !== "undefined" && node instanceof Element) || typeof (node as any)?.closest === "function" ? node : (node as any)?.parentElement) as HTMLElement | null;
@@ -2159,19 +2507,33 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {
             const text = extractSnackbarText(el);
             if (!text) return;
             const err = isSnackbarError(el);
+            const isNoise = isNativeSnackbarNoise(text);
+            const isUpgradeNotice = /新版本|可升级|升级到|新版|version|update/i.test(text);
             const packetId = `sy_native_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+            // UX-2 根治：思源原生 error snackbar 默认常驻右上角不消散，会遮挡罗盘弹层头部（🔔/🩺）；
+            // 升级与异常由 lv-kit 统一接管为高可见胶囊并隐藏原生红条/黄条，避免重叠冲突。
+            if ((err || isUpgradeNotice) && el.style) {
+                try { el.style.display = "none"; } catch { /* ignore */ }
+            }
+
+            // 升级/重要公告必须高可见显示；纯加载噪音静默；常规原生提示以 3.5s 微胶囊友好滑出，绝不静默丢失
+            const noticeMode: "card" | "capsule" | "silent" = err ? "capsule" : (isUpgradeNotice ? "capsule" : (isNoise ? "silent" : "capsule"));
+            const noticeDuration = isUpgradeNotice ? 8000 : (err ? 4200 : 3500);
+
             hub.post({
                 id: packetId,
-                mode: "silent",
-                source: "思源原生",
-                category: "siyuan-native",
-                title: err ? "思源异常" : undefined,
+                mode: noticeMode,
+                duration: noticeDuration,
+                source: isUpgradeNotice ? "思源官方" : "思源原生",
+                category: isUpgradeNotice ? "siyuan-upgrade" : (err ? "siyuan-error" : "siyuan-native"),
+                title: isUpgradeNotice ? "🎉 发现思源新版本" : (err ? "思源异常" : undefined),
                 message: text,
                 level: err ? "error" : "info",
                 createdAt: Date.now(),
                 repeatCount: 1,
-                // 普通思源原生提示已在思源中弹出过，留档默认标已读避免红点虚高；异常提示标未读以便追踪
-                read: !err,
+                read: !err && !isUpgradeNotice,
+                archive: isNoise ? false : undefined,
             });
             const top = historyList[0];
             nativeSnackbarToPacketId.set(el, top && top.message === text ? top.id : packetId);
@@ -2405,14 +2767,33 @@ function getNodeHub(callerPlugin: string): LvNoticeHub {
                 if (packet.category && this.isMutedToday(packet.category)) {
                     return;
                 }
+                if (packet.category && isCategorySnoozedImpl(packet.category)) {
+                    return;
+                }
+                // 诊断环形缓冲：node hub 与浏览器 coordinator 行为对齐（error 级入环）
+                if (packet.level === "error") {
+                    pushDiagError({
+                        source: packet.source || "unknown",
+                        message: `${packet.title ? `${packet.title}：` : ""}${packet.message || ""}`.trim(),
+                    });
+                }
                 const shouldArchive = packet.archive !== false || packet.level === "warn" || packet.level === "error";
                 if (!shouldArchive) return;
                 recordIntoHistory(nodeHistoryList, packet);
                 saveTodayNoticeHistory(nodeHistoryList);
             },
             dismiss() {},
-            snooze() {},
+            snooze(id: string, durationMs: number) {
+                // Node 侧无渲染层：仅登记分类级稍后提醒窗口
+                const item = nodeHistoryList.find((p) => p.id === id);
+                if (item?.category && Number.isFinite(durationMs) && durationMs > 0) {
+                    snoozeCategoryImpl(item.category, durationMs);
+                }
+            },
             muteToday(category: string) { muteCategoryTodayImpl(category); },
+            snoozeCategory(category: string, durationMs: number) { snoozeCategoryImpl(category, durationMs); },
+            isCategorySnoozed(category: string) { return isCategorySnoozedImpl(category); },
+            clearCategorySnooze(category: string) { clearCategorySnoozeImpl(category); },
             muteDays(category: string, days: number) { muteCategoryDaysImpl(category, days); },
             muteUntil(category: string, untilTimestamp: number) { muteCategoryUntilImpl(category, untilTimestamp); },
             isCategoryMuted(category: string) { return isCategoryMutedImpl(category); },
@@ -2453,6 +2834,9 @@ function getHub(callerPlugin = "小驴"): LvNoticeHub {
     if (typeof window === "undefined" || typeof document === "undefined") {
         return getNodeHub(callerPlugin);
     }
+
+    // 诊断环形缓冲全局捕获：任一插件副本加载即安装（窗口级幂等），与 hub 版本解耦
+    installDiagErrorCapture();
 
     if (window.__LV_NOTICE_HUB__) {
         if (window.__LV_NOTICE_HUB__.version < PROTOCOL_VERSION) {
@@ -2915,6 +3299,25 @@ export const lvNotify = {
 
     snooze(id: string, durationMs: number): void {
         window.__LV_NOTICE_HUB__?.snooze(id, durationMs);
+    },
+
+    /** 分类级稍后提醒：窗口内拦住该分类所有新通知实例（含来源插件周期心跳投递） */
+    snoozeCategory(category: string, durationMs: number): void {
+        snoozeCategoryImpl(category, durationMs);
+        const hub = getHub();
+        if (typeof (hub as any).snoozeCategory === "function") {
+            (hub as any).snoozeCategory(category, durationMs);
+        }
+    },
+
+    /** 该分类是否处于稍后提醒抑制窗口内 */
+    isCategorySnoozed(category: string): boolean {
+        return isCategorySnoozedImpl(category);
+    },
+
+    /** 提前解除某分类的稍后提醒抑制 */
+    clearCategorySnooze(category: string): void {
+        clearCategorySnoozeImpl(category);
     },
 
     muteToday(category: string): void {
@@ -3519,6 +3922,128 @@ export const lvBackup = {
 };
 
 /* ========================================================================= */
+/* ========================================================================= */
+/* 12b. 诊断环形缓冲与一键诊断报告（用户 bug 分诊数据源，Protocol v1.8.6）      */
+/* ========================================================================= */
+
+export interface LvDiagErrorEntry {
+    /** 毫秒时间戳 */
+    ts: number;
+    /** 捕获来源："window.error" | "unhandledrejection" | error 级通知卡片的 source 插件名 */
+    source: string;
+    /** 错误消息（截断至 DIAG_ERROR_MSG_MAX） */
+    message: string;
+    /** 堆栈摘要（前 3 行，截断至 DIAG_ERROR_STACK_MAX） */
+    stack?: string;
+    /** 连续重复合并计数（同源同消息不再新增条目，防刷屏） */
+    count: number;
+}
+
+const DIAG_ERROR_RING_KEY = "lv_diag_error_ring_v1";
+const DIAG_ERROR_RING_MAX = 50;
+const DIAG_ERROR_MSG_MAX = 300;
+const DIAG_ERROR_STACK_MAX = 600;
+
+/** 用户 bug 反馈渠道（诊断报告末尾与导出反馈胶囊统一引用，勿在插件仓内硬编码） */
+export const LV_FEEDBACK_QQ_GROUP = "871707735";
+export const LV_FEEDBACK_EMAIL = "68298100@qq.com";
+
+function loadDiagRing(): LvDiagErrorEntry[] {
+    if (typeof localStorage === "undefined") return [];
+    try {
+        const raw = localStorage.getItem(DIAG_ERROR_RING_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr.filter((e) => e && typeof e.message === "string").slice(-DIAG_ERROR_RING_MAX) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveDiagRing(entries: LvDiagErrorEntry[]): void {
+    if (typeof localStorage === "undefined") return;
+    try {
+        localStorage.setItem(DIAG_ERROR_RING_KEY, JSON.stringify(entries.slice(-DIAG_ERROR_RING_MAX)));
+    } catch { /* 容量满或隐私模式：诊断永不影响主流程 */ }
+}
+
+function summarizeDiagStack(stack?: string): string | undefined {
+    if (!stack) return undefined;
+    try {
+        const lines = String(stack).split("\n").slice(0, 3).join("\n");
+        return lines.length > DIAG_ERROR_STACK_MAX ? `${lines.slice(0, DIAG_ERROR_STACK_MAX)}…` : lines;
+    } catch {
+        return undefined;
+    }
+}
+
+/** 记录一条错误进环形缓冲；每次实时读写 localStorage，保证多插件副本共享同一份诊断真相 */
+export function pushDiagError(entry: { source: string; message: string; stack?: string }): void {
+    try {
+        const msg = String(entry.message || "").trim().slice(0, DIAG_ERROR_MSG_MAX);
+        if (!msg) return;
+        const ring = loadDiagRing();
+        const last = ring[ring.length - 1];
+        if (last && last.source === entry.source && last.message === msg) {
+            last.count += 1;
+            last.ts = Date.now();
+        } else {
+            ring.push({ ts: Date.now(), source: String(entry.source || "unknown").slice(0, 60), message: msg, stack: summarizeDiagStack(entry.stack), count: 1 });
+        }
+        saveDiagRing(ring);
+    } catch { /* 诊断路径永不抛错，避免二次错误风暴 */ }
+}
+
+/** 读取最近错误环形缓冲（旧→新，上限 DIAG_ERROR_RING_MAX 条） */
+export function getRecentDiagErrors(): LvDiagErrorEntry[] {
+    return loadDiagRing();
+}
+
+/** 清空诊断环形缓冲 */
+export function clearRecentDiagErrors(): void {
+    if (typeof localStorage === "undefined") return;
+    try {
+        localStorage.removeItem(DIAG_ERROR_RING_KEY);
+    } catch { /* ignore */ }
+}
+
+let diagCaptureInstalled = false;
+
+/** 安装全局错误捕获（window.error + unhandledrejection）。窗口级幂等：多插件副本共享时仅首个安装。 */
+function installDiagErrorCapture(): void {
+    if (diagCaptureInstalled || typeof window === "undefined") return;
+    try {
+        const w = window as unknown as { __LV_DIAG_CAPTURE__?: boolean };
+        if (w.__LV_DIAG_CAPTURE__) {
+            diagCaptureInstalled = true;
+            return;
+        }
+        w.__LV_DIAG_CAPTURE__ = true;
+        window.addEventListener("error", (ev) => {
+            try {
+                const err = ev.error as Error | undefined;
+                pushDiagError({
+                    source: "window.error",
+                    message: err?.message || ev.message || "未知脚本错误",
+                    stack: err?.stack,
+                });
+            } catch { /* ignore */ }
+        });
+        window.addEventListener("unhandledrejection", (ev) => {
+            try {
+                const reason = (ev as PromiseRejectionEvent).reason;
+                pushDiagError({
+                    source: "unhandledrejection",
+                    message: typeof reason === "string" ? reason : (reason as Error)?.message || String(reason ?? "未知 Promise 拒绝"),
+                    stack: (reason as Error)?.stack,
+                });
+            } catch { /* ignore */ }
+        });
+        diagCaptureInstalled = true;
+    } catch {
+        diagCaptureInstalled = false;
+    }
+}
+
 /* 13. 全生态健康自省与指示器 (Lv Ecosystem Diagnostics)                       */
 /* ========================================================================= */
 
@@ -3538,7 +4063,99 @@ export const lvEcosystem = {
             todayActivitiesCount: activities.length,
             hasSharedAiConfig: Boolean(aiCfg?.apiKey),
             sharedAiModel: aiCfg?.model,
+            recentErrorCount: getRecentDiagErrors().length,
         };
+    },
+
+    /** 读取诊断环形缓冲（最近错误，旧→新，上限 50 条） */
+    getRecentErrors(): LvDiagErrorEntry[] {
+        return getRecentDiagErrors();
+    },
+
+    /** 清空诊断环形缓冲 */
+    clearRecentErrors(): void {
+        clearRecentDiagErrors();
+    },
+
+    /**
+     * 生成结构化一键诊断报告（异步：含 3s 超时的内核探活）。
+     * 罗盘通知中心「🩺 诊断」按钮调用；用户复制粘贴给开发者即可完成 bug 分诊第一手取证。
+     * 任何子步骤失败均降级为对应「不可达/未知」行，绝不抛错。
+     */
+    async buildDiagnosticReport(): Promise<string> {
+        const diag = this.getDiagnostics();
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const now = new Date();
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+        const lines: string[] = [];
+        lines.push("🐴 小驴生态诊断报告");
+        lines.push("──────────────────────────────");
+        lines.push(`⏱ 生成时间：${stamp}`);
+        lines.push(`🧭 运行环境：${isMobileFrontend() ? "移动端" : "桌面端"}`);
+
+        try {
+            const ua = typeof navigator !== "undefined" ? String(navigator.userAgent) : "unknown";
+            lines.push(`🌐 UA：${ua.length > 140 ? `${ua.slice(0, 140)}…` : ua}`);
+        } catch { /* ignore */ }
+
+        // 内核探活（3s 超时）
+        let kernelLine = "❌ 思源内核不可达（/api/system/version 探测失败，请确认思源已启动）";
+        try {
+            if (typeof fetch === "function") {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => { try { ctrl.abort(); } catch { /* ignore */ } }, 3000);
+                const res = await fetch("/api/system/version", { method: "POST", body: "{}", signal: ctrl.signal });
+                clearTimeout(timer);
+                const json = await res.json().catch((): null => null) as { code?: number; data?: string | { version?: string } } | null;
+                // 兼容两种返回形态：data 为版本字符串（实测 "3.8.10"）或 { version } 对象
+                const rawVer = json?.data;
+                const v = typeof rawVer === "string" ? rawVer : String(rawVer?.version ?? "");
+                if (json && json.code === 0) kernelLine = `✅ 正常（内核 ${v || "未知版本"}）`;
+                else kernelLine = `⚠ 内核响应异常（code=${String(json?.code ?? "?")}）`;
+            }
+        } catch { /* 保留不可达文案 */ }
+        lines.push(`🔗 内核连通：${kernelLine}`);
+
+        lines.push(`🧩 协同宿主：${diag.coordinatorHost}`);
+        lines.push(`🧩 已联结插件（${diag.registeredPlugins.length}）：${diag.registeredPlugins.join("、") || "无"}`);
+        lines.push(`📡 今日活动：${diag.todayActivitiesCount} 项`);
+        lines.push(`🤖 AI 网关：${diag.hasSharedAiConfig ? `已配置（${diag.sharedAiModel ?? "未知模型"}）` : "未配置"}`);
+        lines.push(`🩺 协议版本：lv-kit v${diag.version}`);
+
+        try {
+            if (typeof localStorage !== "undefined") {
+                let bytes = 0;
+                let keys = 0;
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith("lv_")) {
+                        bytes += (localStorage.getItem(k) || "").length;
+                        keys += 1;
+                    }
+                }
+                lines.push(`💾 本地状态：${keys} 个 lv_* 键，约 ${(bytes / 1024).toFixed(1)} KB`);
+            }
+        } catch { /* ignore */ }
+
+        const errors = getRecentDiagErrors();
+        lines.push("");
+        lines.push(`🩺 最近错误（${errors.length} 条 / 环形上限 ${DIAG_ERROR_RING_MAX}）：`);
+        if (errors.length === 0) {
+            lines.push("  ✅ 无错误记录");
+        } else {
+            for (const e of errors.slice(-10).reverse()) {
+                const d = new Date(e.ts);
+                lines.push(`  - [${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}] [${e.source}]${e.count > 1 ? ` ×${e.count}` : ""} ${e.message}`);
+                if (e.stack) {
+                    lines.push(`      ${e.stack.split("\n").slice(0, 2).join("\n      ")}`);
+                }
+            }
+        }
+        lines.push("──────────────────────────────");
+        lines.push(`📮 反馈渠道：QQ 群 ${LV_FEEDBACK_QQ_GROUP} ｜ 邮箱 ${LV_FEEDBACK_EMAIL}`);
+        lines.push("请将本报告整段一起发送给开发者，即可快速定位问题。");
+        return lines.join("\n");
     },
 
     /** 生成一行极简且精致的胶囊状态文字，如：“🐴 小驴全家桶协同正常 · 7 个插件已联结 · 今日活动 8 项” */
@@ -4375,6 +4992,7 @@ export const lvLaunchpad = {
 
     /** 统一全端顶栏收敛入口（自动适配桌面与移动端环境，注册全局冷僻快捷键 Ctrl+Alt+Shift+K 供 Quicker 唤醒） */
     ensureUnifiedEntry(pluginHost?: unknown): () => void {
+        ensureStyles();
         const cleanM = ensureMobileEntry();
         const cleanD = ensureDesktopEntry();
         const host = pluginHost as any;
@@ -4532,6 +5150,12 @@ const MOBILE_SHEET_ID = "lv-launchpad-sheet-mask";
 /** 思源移动端检测：手机宿主渲染 #mobileTopBar 或挂载 window.siyuan.mobile 对象；UA 兜底覆盖 browser-mobile 场景 */
 export function isMobileFrontend(): boolean {
     if (typeof document === "undefined" || typeof document.getElementById !== "function") return false;
+    try {
+        // MOBS-1 深层修复（2026-11-14 走查）：思源移动端沉浸态（body--toolbar-hide）整条
+        // #mobileTopBar 都不渲染，结构检测会漏判为桌面 → 罗盘移动入口子系统整体缺席。
+        // 真移动前端的 URL 路径是石锤信号（真机 App 同样走 /stage/build/mobile/）。
+        if (typeof location !== "undefined" && location.pathname.includes("/stage/build/mobile/")) return true;
+    } catch { /* ignore */ }
     try {
         if (document.getElementById("mobileTopBar")) return true;
     } catch { /* ignore */ }
@@ -4742,6 +5366,7 @@ let lastMobileTopbarTap = { ts: 0, x: 0, y: 0 };
 
 function buildMobileEntryButton(): boolean {
     if (typeof document === "undefined") return false;
+    ensureStyles();
     const topBar = document.getElementById("mobileTopBar");
     if (!topBar) return false;
     if (document.getElementById(MOBILE_ENTRY_ID)) { refreshEntryBadgeDot(); return true; } // 已存在即幂等成功
@@ -4793,12 +5418,18 @@ function buildMobileEntryButton(): boolean {
 let ballIdleTimer: number | undefined;
 
 function applyBallPosition(ball: HTMLElement, pos: LvBallPosition, idle: boolean): void {
+    ensureStyles();
     ballCurrentPos = pos; // 供旋转/折叠屏开合后重钳制使用
     try {
         const vw = typeof window !== "undefined" && Number.isFinite(window.innerWidth) ? window.innerWidth : 390;
         const vh = typeof window !== "undefined" && Number.isFinite(window.innerHeight) ? window.innerHeight : 800;
         // 避让思源移动端底部文档切换栏与顶栏：可停留区间 [56, vh-88]
         const top = Math.min(vh - 88, Math.max(56, Math.round(pos.yRatio * vh)));
+        ball.style.position = "fixed";
+        ball.style.width = "46px";
+        ball.style.height = "46px";
+        ball.style.borderRadius = "999px";
+        ball.style.zIndex = "970";
         ball.style.top = `${top}px`;
         ball.style.left = pos.edge === "right" ? `${Math.max(8, vw - 56)}px` : "10px";
         ball.classList.remove("lv-ball-edge-left", "lv-ball-edge-right");
@@ -4824,6 +5455,7 @@ function scheduleBallIdle(ball: HTMLElement, pos: LvBallPosition): void {
 
 function buildMobileBallButton(): boolean {
     if (typeof document === "undefined" || !document.body) return false;
+    ensureStyles();
     const existing = document.getElementById(MOBILE_BALL_ID);
     if (existing) { refreshEntryBadgeDot(); return true; } // 幂等
 
@@ -5024,6 +5656,7 @@ function unwireViewportWatch(): void {
 /** 按当前入口模式同步顶栏按钮与悬浮球 DOM（幂等；setMobileEntryMode 实时生效） */
 function syncMobileEntryDom(): void {
     if (typeof document === "undefined" || !isMobileFrontend()) return;
+    ensureStyles();
     const mode = getMobileEntryMode();
     if (mode === "topbar" || mode === "both") {
         buildMobileEntryButton();
@@ -5042,7 +5675,42 @@ function syncMobileEntryDom(): void {
     } else {
         try { document.getElementById(MOBILE_BALL_ID)?.remove(); } catch { /* ignore */ }
     }
+    selfHealMobileEntryPlacement();
     refreshEntryBadgeDot();
+}
+
+/* 顶栏塌陷自愈：思源移动端在无文档视图等状态下 mobileTopBar 可能塌陷为 0 高，
+ * static 子项会被居中悬到视口上缘外（48px 按钮只露下半，触控目标减半——真机走查实证）。
+ * 检测到宿主塌陷时把入口提升为固定定位钉在视口左上，宿主恢复后还原内联。 */
+function selfHealMobileEntryPlacement(): void {
+    if (typeof document === "undefined") return;
+    const entry = document.getElementById(MOBILE_ENTRY_ID);
+    if (!entry) return;
+    const topBar = document.getElementById("mobileTopBar");
+    // 始终以实际的 mobileTopBar 高度为判定基准，而不是 entry.parentElement（因为 entry 迁到 body 后 parentElement 变成 body，会误判为健康从而引发反复回滚死循环！）
+    const topBarH = topBar ? Math.round(topBar.getBoundingClientRect().height) : 0;
+    if (topBarH < 24) {
+        // MOBS-1 终修（2026-11-14 走查）：塌陷 topbar（高 0 + overflow 裁剪）里的入口
+        // 「rect 谎报、实际不可见不可点」——必须迁出到 body 才能真正可见可点。
+        // 固定钉在视口左上角安全区，赋予高层级避免被正文遮盖。
+        try {
+            if (entry.parentElement !== document.body) document.body.appendChild(entry);
+        } catch { /* ignore */ }
+        entry.style.position = "fixed";
+        entry.style.left = "max(6px, env(safe-area-inset-left, 6px))";
+        entry.style.top = "max(6px, env(safe-area-inset-top, 6px))";
+        entry.style.zIndex = "960";
+        entry.style.visibility = "visible";
+    } else if (topBar) {
+        // 顶栏真正恢复健康（topBarH >= 24）：迁回 topbar 并清掉内联样式
+        try {
+            if (entry.parentElement !== topBar) topBar.appendChild(entry);
+        } catch { /* ignore */ }
+        entry.style.position = "";
+        entry.style.top = "";
+        entry.style.left = "";
+        entry.style.zIndex = "";
+    }
 }
 
 function mobileEntryFullyApplied(): boolean {
@@ -5054,25 +5722,69 @@ function mobileEntryFullyApplied(): boolean {
     return topbarOk && ballOk;
 }
 
-/* ===== 新用户引导卡（Protocol v1.7）：≥3 个插件首次入坞时一次性欢迎卡 ===== */
+/* ===== 罗盘开启与生态引导持久化（Launchpad Onboarding Persistence · Protocol v1.8.7） ===== */
 const ONBOARDING_KEY = "lv_launchpad_onboarding_done";
+const DESKTOP_CONVERGENCE_ONBOARDING_KEY = "lv_desktop_convergence_onboarding_done";
+
+export function markLaunchpadOnboardingDonePermanently(): void {
+    const ls = getSafeLocalStorage();
+    try { ls?.setItem(ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    try { ls?.setItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    if (typeof window !== "undefined") {
+        (window as unknown as { __LV_LAUNCHPAD_ONBOARDING_DONE__?: boolean }).__LV_LAUNCHPAD_ONBOARDING_DONE__ = true;
+    }
+    try {
+        lvNotify.muteDays("launchpad-convergence", 3650);
+        lvNotify.muteDays("launchpad-onboarding", 3650);
+        lvNotify.muteDays("launchpad", 3650);
+    } catch { /* ignore */ }
+}
+
+export function isLaunchpadOnboardingDone(): boolean {
+    if (typeof window !== "undefined" && (window as unknown as { __LV_LAUNCHPAD_ONBOARDING_DONE__?: boolean }).__LV_LAUNCHPAD_ONBOARDING_DONE__) {
+        return true;
+    }
+    const ls = getSafeLocalStorage();
+    if (ls) {
+        try {
+            if (ls.getItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY) === "1" || ls.getItem(ONBOARDING_KEY) === "1") {
+                return true;
+            }
+        } catch { /* ignore */ }
+    }
+    try {
+        if (lvNotify.isCategoryMuted("launchpad-convergence") || lvNotify.isCategoryMuted("launchpad-onboarding") || lvNotify.isCategoryMuted("launchpad")) {
+            return true;
+        }
+    } catch { /* ignore */ }
+    return false;
+}
 
 function maybeShowOnboardingCard(): void {
-    const ls = getSafeLocalStorage();
-    if (!ls || typeof document === "undefined") return;
-    try { if (ls.getItem(ONBOARDING_KEY) === "1") return; } catch { /* ignore */ }
+    if (typeof document === "undefined" || isLaunchpadOnboardingDone()) return;
     const items = getLaunchpadHub().getItems();
-    if (items.length < 3) return; // 单双插件用户不需要生态引导
-    try { ls.setItem(ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    if (items.length < 3) return; // 单双插件用户不弹欢迎卡
+    markLaunchpadOnboardingDonePermanently();
     lvNotify.card({
         source: "罗盘",
+        category: "launchpad-onboarding",
         title: "👋 欢迎使用小驴罗盘",
         message: `已为你收敛 ${items.length} 个插件的入口：点磁贴直达主界面、长按磁贴展开快捷行动、顶部搜索穿透全家桶、🌙 一键专注静音。可在各插件设置中自定义。`,
         level: "info",
         duration: 0,
+        firstRun: true,
         actions: [
-            { label: "知道了", primary: true },
+            {
+                label: "我知道了",
+                primary: true,
+                onClick: () => {
+                    markLaunchpadOnboardingDonePermanently();
+                },
+            },
         ],
+        onDismiss: () => {
+            markLaunchpadOnboardingDonePermanently();
+        },
     });
 }
 
@@ -5183,18 +5895,44 @@ function wireMobileTopBarObserver(): void {
             debounceTimer = null;
             if (!document.getElementById(MOBILE_ENTRY_ID)) {
                 syncMobileEntryDom();
+            } else {
+                // 入口在位时也做塌陷自愈：视图切换可能让顶栏塌陷/恢复（纯布局变化，无 DOM 增删）
+                selfHealMobileEntryPlacement();
             }
         }, 120);
     });
 
     try {
-        mobileTopBarObserver.observe(topBar, { childList: true });
+        mobileTopBarObserver.observe(topBar, { childList: true, attributes: true, attributeFilter: ["class", "style"] });
         if (typeof window !== "undefined") (window as unknown as { __LV_MOBILE_TOPBAR_OBS__?: MutationObserver }).__LV_MOBILE_TOPBAR_OBS__ = mobileTopBarObserver;
     } catch { /* ignore */ }
 }
 
+/* 移动入口塌陷自愈哨兵：共享 window 单例定时器，8 仓模块实例共用一个 */
+let mobileEntryHealTimer: number | null = null;
+function startMobileEntryHealSentinel(): void {
+    if (typeof window === "undefined") return;
+    const w = window as unknown as { __LV_MOBILE_ENTRY_HEAL__?: number };
+    if (w.__LV_MOBILE_ENTRY_HEAL__ || mobileEntryHealTimer) return;
+    if (typeof window.setInterval !== "function" || typeof window.clearInterval !== "function") return;
+    mobileEntryHealTimer = Number(window.setInterval(() => {
+        try {
+            if (getSharedMobileEntryOwners().size === 0) { stopMobileEntryHealSentinel(); return; }
+            selfHealMobileEntryPlacement();
+        } catch { /* ignore */ }
+    }, 5000));
+    w.__LV_MOBILE_ENTRY_HEAL__ = mobileEntryHealTimer;
+}
+function stopMobileEntryHealSentinel(): void {
+    if (typeof window === "undefined") return;
+    const w = window as unknown as { __LV_MOBILE_ENTRY_HEAL__?: number };
+    if (mobileEntryHealTimer) { try { clearInterval(mobileEntryHealTimer); } catch { /* ignore */ } mobileEntryHealTimer = null; }
+    if (w.__LV_MOBILE_ENTRY_HEAL__) { try { window.clearInterval(w.__LV_MOBILE_ENTRY_HEAL__); } catch { /* ignore */ } delete w.__LV_MOBILE_ENTRY_HEAL__; }
+}
+
 function ensureMobileEntry(): MobileEntryCleanup {
     if (typeof document === "undefined") return () => {};
+    ensureStyles();
     if (!isMobileFrontend()) return () => {}; // 桌面端完全 no-op，不挂任何计时器
     const owners = getSharedMobileEntryOwners();
     const owner = `owner_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -5206,6 +5944,7 @@ function ensureMobileEntry(): MobileEntryCleanup {
     if (firstOwner) {
         wireMobileSuppression();
         wireMobileTopBarObserver(); // 挂载移动端顶栏 MutationObserver 持久自愈守护
+        startMobileEntryHealSentinel(); // 5s 低频哨兵：视图切换引发顶栏塌陷/恢复时自愈入口定位
         maybeStartBedlineReminder(); // 睡前日报定时提醒随首个宿主启动（lvTicker 单例，全局一次）
     }
     if (!mobileEntryFullyApplied()) {
@@ -5222,6 +5961,7 @@ function ensureMobileEntry(): MobileEntryCleanup {
         mobileEntryRetryTimers.forEach((t) => { try { window.clearTimeout(t); } catch { /* ignore */ } });
         mobileEntryRetryTimers = [];
         if (owners.size > 0) return; // 仍有插件在世：公共入口与其他宿主的清理权保留
+        stopMobileEntryHealSentinel();
         try {
             mobileTopBarObserver?.disconnect();
             if (typeof window !== "undefined") {
@@ -5251,6 +5991,7 @@ function getSharedDesktopEntryOwners(): Set<string> {
     return localDesktopEntryOwners;
 }
 let desktopEntryRetryTimers: number[] = [];
+let compassTrailingRetryTimer: number | null = null;
 
 const SIYUAN_NATIVE_BUTTON_IDS = new Set([
     "barSearch", "barSync", "barBack", "barForward",
@@ -5322,30 +6063,36 @@ function findPluginTopBarElementInToolbar(item: LvLaunchpadItem): HTMLElement | 
     return null;
 }
 
-const DESKTOP_CONVERGENCE_ONBOARDING_KEY = "lv_desktop_convergence_onboarding_done";
-
 function maybeShowDesktopConvergenceOnboarding(itemCount: number): void {
-    const ls = getSafeLocalStorage();
-    if (!ls || typeof document === "undefined") return;
-    try { if (ls.getItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY) === "1") return; } catch { /* ignore */ }
-    try { ls.setItem(DESKTOP_CONVERGENCE_ONBOARDING_KEY, "1"); } catch { /* ignore */ }
+    if (typeof document === "undefined" || isLaunchpadOnboardingDone()) return;
+    markLaunchpadOnboardingDonePermanently();
     lvNotify.card({
         source: "小驴罗盘",
+        category: "launchpad-convergence",
         title: "🧭 顶栏已升级为小驴罗盘中枢",
-        message: `已为您将 ${itemCount} 个插件自动收敛至顶栏罗盘图标，告别顶栏拥挤。点击罗盘可直达所有插件；若习惯老版独立图标，可一键恢复平铺顶栏！`,
+        message: `已为您将 ${itemCount} 个插件自动收敛至顶栏罗盘图标，告别顶栏拥挤。点击罗盘可直达所有插件与 LifeLog 随手记；若习惯老版独立图标，可一键恢复平铺顶栏！`,
         level: "info",
         duration: 12000,
+        firstRun: true,
         actions: [
             {
-                label: "打开罗盘看看",
+                label: "我知道了",
                 primary: true,
                 onClick: () => {
+                    markLaunchpadOnboardingDonePermanently();
+                },
+            },
+            {
+                label: "打开罗盘看看",
+                onClick: () => {
+                    markLaunchpadOnboardingDonePermanently();
                     openDesktopLaunchpadPopover();
                 },
             },
             {
                 label: "一键恢复平铺顶栏",
                 onClick: () => {
+                    markLaunchpadOnboardingDonePermanently();
                     const hub = getLaunchpadHub();
                     const allItems = hub.getItems();
                     for (const it of allItems) {
@@ -5355,6 +6102,9 @@ function maybeShowDesktopConvergenceOnboarding(itemCount: number): void {
                 },
             },
         ],
+        onDismiss: () => {
+            markLaunchpadOnboardingDonePermanently();
+        },
     });
 }
 
@@ -5387,41 +6137,56 @@ export function scheduleMobileEntryDom(delayMs = 35): void {
 }
 
 /**
- * 桌面端顶栏收敛调度引擎（Convergence Engine · Protocol v1.7.5）：
- * 1. 当已注册的小驴插件 >= 2 个时：
- *    - 自动挂载桌面端统一罗盘图标 #lvLaunchpadDesktopEntry；
- *    - 将未明确置顶（state !== 'pinned'）的插件原生 topBarElement 自动设为 display: none；
- *    - 若用户在罗盘内将某插件设为 'pinned'（置顶），则显示其原生按钮；
- * 2. 当小驴插件仅有 1 个时：
- *    - 保留该插件原生图标正常显示（零干扰）；
- * 3. 插件全部卸载或注销时，自动恢复原生显示。
+ * 桌面端顶栏收敛调度引擎（Convergence Engine · Protocol v1.8.7）：
+ * 1. 无论已入驻 1 个还是 8 个小驴插件：
+ *    - 小驴罗盘统一入口 #lvLaunchpadDesktopEntry 始终常驻显示；
+ *    - 点击罗盘图标一律直接唤起小驴罗盘 Popover（全功能工作台，含 LifeLog 随手记/活动流/备份诊断/OmniSearch）；
+ *    - 默认将插件原生 topBarElement 收敛（display: none），顶栏极致清爽；
+ *    - 若用户在罗盘内将某插件设为 'pinned'（置顶），则在顶栏保留其原生独立按钮；
+ * 2. 插件全部卸载或注销（0 个小驴插件）时，罗盘中枢隐藏。
  */
 // 锚点必须与思源 3.8.x 顶栏重排终点一致：le() 会把 orders.topBar 内所有条目逐一移到 #barMore 之前，
 // 罗盘若锚定更左侧条目（如 #barSearch）就会与思源重排互相搬动 → 启动期出现又消失的拉锯闪烁。
 const DESKTOP_RIGHT_ANCHOR_SELECTOR = "#barMore, #barSetting, #barSettings, #barHelp, #barMode, #barExit, #windowControls";
 
-export function syncTopBarConvergence(): void {
+function findDesktopRightAnchor(toolbar: HTMLElement): HTMLElement | null {
+    if (!toolbar || typeof toolbar.querySelector !== "function") return null;
+    try {
+        const candidates = DESKTOP_RIGHT_ANCHOR_SELECTOR.split(",").map((s) => s.trim());
+        for (const sel of candidates) {
+            const el = toolbar.querySelector<HTMLElement>(sel);
+            if (el && el.parentElement === toolbar) return el;
+        }
+    } catch { /* ignore */ }
+    return null;
+}
+
+export function syncTopBarConvergence(opts?: { ignoreHysteresis?: boolean }): void {
     if (typeof document === "undefined" || isMobileFrontend()) return;
     try {
         const hub = getLaunchpadHub();
         const items = hub.getItems();
         const activeItems = items.filter(it => it.state !== "hidden");
-        const needConverge = activeItems.length >= 2;
+        // 只要存在任意存活小驴插件（>= 1），罗盘中枢即常驻显示，保障单插件用户也能随时唤起 LifeLog / 罗盘
+        const hasAnyActive = activeItems.length >= 1;
+        const nowTs = Date.now();
+        if (hasAnyActive) lastCompassActiveAtLeastTwoAt = nowTs;
+        const needShowCompass = hasAnyActive || (!opts?.ignoreHysteresis && (nowTs - lastCompassActiveAtLeastTwoAt < 6000));
+        const needConverge = hasAnyActive;
 
         const compassBtn = document.getElementById(DESKTOP_ENTRY_ID);
         if (compassBtn && typeof compassBtn === "object" && "style" in compassBtn && compassBtn.style) {
-            // 思源 3.8.x ye() 重排防护：ye() 会将 orders.topBar 中的所有原生/插件项重插到 #barMore 之前，
-            // 若罗盘按钮被挤到 #drag 左侧，立即自愈归位到右侧插件区锚点之前
+            // 思源 3.8.x 顶栏重排自愈防护：确保罗盘处于右侧功能区，且已在右侧时锁定不动，绝不反复横跳
             const toolbar = document.getElementById("toolbar");
             if (toolbar && compassBtn.parentElement === toolbar && typeof toolbar.querySelector === "function") {
                 ensureCompassOnRightSide(toolbar, compassBtn);
             }
-            const nextDisplay = needConverge ? "inline-flex" : "none";
+            const nextDisplay = needShowCompass ? "inline-flex" : "none";
             if (compassBtn.style.display !== nextDisplay) {
                 compassBtn.style.display = nextDisplay;
             }
             refreshEntryBadgeDot();
-            if (needConverge) {
+            if (activeItems.length >= 2) {
                 maybeShowDesktopConvergenceOnboarding(activeItems.length);
             }
         }
@@ -5452,31 +6217,70 @@ export function syncTopBarConvergence(): void {
 // 罗盘搬动/重建限频：吸收启动期思源 ye()/le() 批量重排的抖动，杜绝「移除→重建→再移除」拉锯闪烁
 let lastCompassMoveAt = 0;
 let lastCompassRebuildAt = 0;
+let lastCompassActiveAtLeastTwoAt = 0;
+
+export function resetTopBarConvergenceHysteresis(): void {
+    lastCompassActiveAtLeastTwoAt = 0;
+    lastCompassMoveAt = 0;
+    lastCompassRebuildAt = 0;
+}
+
+export function resetLaunchpadRegistryForTesting(): void {
+    launchpadRegistry.clear();
+    if (typeof window !== "undefined" && (window as any).__LV_LAUNCHPAD_REGISTRY__) {
+        try { (window as any).__LV_LAUNCHPAD_REGISTRY__.clear(); } catch { /* ignore */ }
+    }
+    resetTopBarConvergenceHysteresis();
+}
 
 function ensureCompassOnRightSide(toolbar: HTMLElement, btn: HTMLElement): void {
     try {
-        const anchor = toolbar.querySelector(DESKTOP_RIGHT_ANCHOR_SELECTOR);
-        if (!anchor || anchor.parentElement !== toolbar || btn.nextElementSibling === anchor) return;
+        if (!btn || btn.parentElement !== toolbar) return;
         const children = Array.from(toolbar.children || []);
         const dragIdx = children.findIndex((c) => c.id === "drag");
         const btnIdx = children.indexOf(btn);
-        // 仅当罗盘真正漂移到了 #drag 左侧时才重排位置；600ms 限频防止与思源重排互相搬动
+
+        // 核心消除横跳（Zero-Jitter Lock）：
+        // 只要罗盘按钮已经在 #drag 的右侧（即右侧插件/功能区），位置即为完全合法，
+        // 绝对不要再去调用 insertBefore 重新搬动它！彻底消除多插件加载和思源排序拉锯导致的来回横跳
+        if (dragIdx !== -1 && btnIdx > dragIdx) {
+            return;
+        }
+
+        // 仅当罗盘真正漂移到了 #drag 左侧时才重排位置；限频防止与思源重排互相搬动
         if (btnIdx === -1 || (dragIdx !== -1 && btnIdx < dragIdx)) {
             const now = Date.now();
             if (now - lastCompassMoveAt < 600) return;
-            lastCompassMoveAt = now;
-            toolbar.insertBefore(btn, anchor);
+            const anchor = findDesktopRightAnchor(toolbar);
+            if (anchor && anchor.parentElement === toolbar && btn !== anchor) {
+                lastCompassMoveAt = now;
+                toolbar.insertBefore(btn, anchor);
+            }
         }
     } catch { /* ignore */ }
 }
 
 const DESKTOP_POPOVER_ID = "lv-desktop-launchpad-popover";
+
+/* ROBS-1 按压中保护：弹层 DOM 交换在用户按压（pointerdown→pointerup）期间延迟执行，
+   防止 badge 探针/omni 流式渲染把被按压节点中途摘除导致 click 改派公共祖先而被吞。 */
+let lvPopoverPressDepth = 0;
+let lvPopoverDeferredSwap: (() => void) | null = null;
+function lvPopoverSafeSwap(mutate: () => void): void {
+    if (lvPopoverPressDepth > 0) {
+        lvPopoverDeferredSwap = mutate;
+        return;
+    }
+    mutate();
+}
 const LAUNCHPAD_VIEW_KEY = "lv_launchpad_view_mode";
 const LAUNCHPAD_ACTION_LIMIT_KEY = "lv_launchpad_action_limit";
 let desktopPopoverKeyDownHandler: ((e: KeyboardEvent) => void) | null = null;
 let desktopPopoverOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+let desktopPopoverOutsideBindTimer: number | null = null;
 let desktopPopoverResizeHandler: (() => void) | null = null;
 let desktopGlobalHotkeyWired = false;
+let desktopGlobalHotkeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
 function getLaunchpadViewMode(): "grid" | "list" {
     const ls = getSafeLocalStorage();
@@ -5521,6 +6325,8 @@ function ensureDesktopStyles(): void {
   --lv-lp-accent: #2563eb;
   --lv-lp-accent-soft: rgba(37, 99, 235, 0.09);
   --lv-lp-card-shadow: 0 2px 6px -1px rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --lv-lp-icon-inset: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --lv-lp-icon-inset-hover: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   color: var(--lv-lp-text);
   background: var(--lv-lp-bg) !important;
@@ -5546,14 +6352,16 @@ function ensureDesktopStyles(): void {
   --lv-lp-accent: #60a5fa;
   --lv-lp-accent-soft: rgba(59, 130, 246, 0.18);
   --lv-lp-card-shadow: 0 4px 12px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --lv-lp-icon-inset: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --lv-lp-icon-inset-hover: inset 0 1px 0 rgba(255, 255, 255, 0.18);
   box-shadow: 0 28px 60px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }`;
     const existing = document.getElementById("lv-launchpad-desktop-styles");
     try {
         const style = existing ?? document.createElement("style");
-        if (existing && existing.getAttribute?.("data-lv-ver") === "2.9") return;
+        if (existing && existing.getAttribute?.("data-lv-ver") === "3.0") return;
         style.id = "lv-launchpad-desktop-styles";
-        style.setAttribute?.("data-lv-ver", "2.9");
+        style.setAttribute?.("data-lv-ver", "3.0");
         style.textContent = cssText + `
 #lvLaunchpadDesktopEntry,
 #lvLaunchpadMobileEntry {
@@ -5849,7 +6657,7 @@ function ensureDesktopStyles(): void {
   margin-bottom: 4px;
   background: linear-gradient(135deg, color-mix(in srgb, currentColor 16%, var(--lv-lp-card-bg)) 0%, color-mix(in srgb, currentColor 7%, var(--lv-lp-card-bg)) 100%);
   border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
-  box-shadow: 0 4px 10px -2px color-mix(in srgb, currentColor 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  box-shadow: 0 4px 10px -2px color-mix(in srgb, currentColor 20%, transparent), var(--lv-lp-icon-inset);
   position: relative;
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
   flex-shrink: 0;
@@ -5857,7 +6665,7 @@ function ensureDesktopStyles(): void {
 .lv-pop-tile:hover .lv-pop-icon-wrap,
 .lv-pop-tile.lv-pop-tile-focused .lv-pop-icon-wrap {
   transform: scale(1.08) translateY(-1px);
-  box-shadow: 0 6px 14px -2px color-mix(in srgb, currentColor 30%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: 0 6px 14px -2px color-mix(in srgb, currentColor 30%, transparent), var(--lv-lp-icon-inset-hover);
 }
 .lv-pop-status-dot {
   position: absolute;
@@ -5898,6 +6706,7 @@ function ensureDesktopStyles(): void {
 .lv-pop-badge {
   font-size: 10px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   padding: 1px 7px;
   border-radius: 999px;
   display: inline-block;
@@ -5928,6 +6737,21 @@ function ensureDesktopStyles(): void {
   background: rgba(16, 185, 129, 0.12);
   color: #059669;
   border: 1px solid rgba(16, 185, 129, 0.22);
+}
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) .lv-pop-badge.lv-badge-warn {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.28);
+}
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) .lv-pop-badge.lv-badge-error {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.28);
+}
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) .lv-pop-badge.lv-badge-success {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.28);
 }
 .lv-pop-actions-drawer {
   border-top: 1px solid var(--lv-lp-border);
@@ -6007,6 +6831,7 @@ function ensureDesktopStyles(): void {
   color: #ffffff;
   font-size: 9px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
   margin-left: 3px;
 }
@@ -6144,9 +6969,9 @@ function ensureDesktopStyles(): void {
   transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 .lv-pop-ticker-pill:hover {
-  border-color: var(--lv-lp-accent);
-  color: var(--lv-lp-accent);
-  background: var(--lv-lp-accent-soft);
+  border-color: var(--lv-lp-accent, #2563eb);
+  color: var(--lv-lp-accent, #2563eb) !important;
+  background: var(--lv-lp-accent-soft, rgba(37,99,235,0.1));
 }
 .lv-pop-ticker-pill:active {
   transform: scale(0.95);
@@ -6235,6 +7060,10 @@ export function closeDesktopLaunchpadPopover(immediate = false): void {
     const el = document.getElementById(DESKTOP_POPOVER_ID);
     if (!el) return;
 
+    if (desktopPopoverOutsideBindTimer !== null) {
+        try { if (typeof window !== "undefined") window.clearTimeout(desktopPopoverOutsideBindTimer); else clearTimeout(desktopPopoverOutsideBindTimer); } catch { /* ignore */ }
+        desktopPopoverOutsideBindTimer = null;
+    }
     if (desktopPopoverKeyDownHandler && typeof window !== "undefined") {
         window.removeEventListener("keydown", desktopPopoverKeyDownHandler, true);
         desktopPopoverKeyDownHandler = null;
@@ -6429,6 +7258,7 @@ function buildInboxDrawerHtml(
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:5px;">
+            <button type="button" class="lv-pop-sub-btn lv-inbox-diag-btn" title="复制生态诊断报告（运行环境/插件矩阵/最近错误），粘贴给开发者即可定位问题" style="padding:2.5px 8px;font-size:10.5px;">🩺 诊断</button>
             <button type="button" class="lv-pop-sub-btn lv-inbox-mark-all-btn" title="标记全部为已读" style="padding:2.5px 8px;font-size:10.5px;">✓ 全部已读</button>
             <button type="button" class="lv-pop-sub-btn lv-inbox-clear-btn" title="清空全部通知历史" style="padding:2.5px 8px;font-size:10.5px;">清空</button>
           </div>
@@ -7068,6 +7898,19 @@ function openDesktopLaunchpadPopoverImpl(
     popover.setAttribute("aria-label", "小驴罗盘全家桶弹射坞");
     if ("tabIndex" in popover) popover.tabIndex = -1;
 
+    /* ROBS-1：按压深度追踪挂弹层根容器（rerender 只替换 innerHTML，容器监听存活） */
+    popover.addEventListener("pointerdown", () => { lvPopoverPressDepth++; }, true);
+    const releasePopoverPress = () => {
+        lvPopoverPressDepth = Math.max(0, lvPopoverPressDepth - 1);
+        if (lvPopoverPressDepth === 0 && lvPopoverDeferredSwap) {
+            const deferred = lvPopoverDeferredSwap;
+            lvPopoverDeferredSwap = null;
+            try { deferred(); } catch { /* ignore */ }
+        }
+    };
+    popover.addEventListener("pointerup", releasePopoverPress, true);
+    popover.addEventListener("pointercancel", releasePopoverPress, true);
+
     const targetWidth = items.length >= 3 ? 520 : 440;
 
     const reposition = () => {
@@ -7188,7 +8031,14 @@ function openDesktopLaunchpadPopoverImpl(
                 wrapper.innerHTML = buildToday4in1DashboardHtml(getTodaySummary(items));
                 const nextDash = wrapper.firstElementChild;
                 if (nextDash) {
-                    dash.parentNode.replaceChild(nextDash, dash);
+                    /* ROBS-1：today-ticker 徽标替换同样走按压中保护，节点失连则跳过 */
+                    lvPopoverSafeSwap(() => {
+                        try {
+                            if (dash.isConnected && nextDash.isConnected === false && dash.parentNode) {
+                                dash.parentNode.replaceChild(nextDash, dash);
+                            }
+                        } catch { /* ignore */ }
+                    });
                 }
             }
         } catch { /* ignore */ }
@@ -7478,14 +8328,19 @@ function openDesktopLaunchpadPopoverImpl(
         omniHitsList = [];
         isDrawerHovered = false;
         popover.classList?.add?.("lv-popover-settled");
-        popover.innerHTML = buildLaunchpadPopoverHtml(items, allPinned, {
-            view: currentView,
-            focusedIndex: currentFocusIndex,
-            showPrefDrawer,
-            showInboxDrawer,
-            inboxFilter,
-            actionLimit: currentActionLimit,
-            allItems,
+        /* ROBS-1 按压中保护（2026-11-14 审计 A1）：badge 探针/omni 流式检索会在按压中途替换子树，
+           被按压节点被摘除后 click 改派公共祖先、closest 匹配失败 → 点击被吞。
+           按压期间延迟整体重建，pointerup 后补执行。 */
+        lvPopoverSafeSwap(() => {
+            popover.innerHTML = buildLaunchpadPopoverHtml(items, allPinned, {
+                view: currentView,
+                focusedIndex: currentFocusIndex,
+                showPrefDrawer,
+                showInboxDrawer,
+                inboxFilter,
+                actionLimit: currentActionLimit,
+                allItems,
+            });
         });
         updateFocusHighlight();
         wireSearchInput();
@@ -7748,6 +8603,35 @@ function openDesktopLaunchpadPopoverImpl(
                 refreshEntryBadgeDot();
                 rerenderPopover();
                 lvNotify.capsule({ source: "通知中心", message: "✓ 已清空通知历史", duration: 1600, archive: false });
+                return;
+            }
+
+            // 一键诊断报告：生成 + 复制到剪贴板，用户粘贴给开发者即可完成分诊取证
+            const diagBtn = target.closest<HTMLElement>(".lv-inbox-diag-btn");
+            if (diagBtn) {
+                e.stopPropagation();
+                const originalText = diagBtn.textContent || "🩺 诊断";
+                diagBtn.textContent = "…收集";
+                void (async () => {
+                    try {
+                        const report = await lvEcosystem.buildDiagnosticReport();
+                        const ok = await copyTextToClipboard(report);
+                        diagBtn.textContent = ok ? "✓ 已复制" : "✗ 复制失败";
+                        lvNotify.capsule({
+                            source: "通知中心",
+                            message: ok
+                                ? `🩺 诊断报告已复制，请发 QQ 群 ${LV_FEEDBACK_QQ_GROUP} 或邮箱 ${LV_FEEDBACK_EMAIL}`
+                                : `🩺 报告复制失败，请截图发 QQ 群 ${LV_FEEDBACK_QQ_GROUP}`,
+                            duration: 3000,
+                            archive: false,
+                        });
+                    } catch (err) {
+                        diagBtn.textContent = "✗ 复制失败";
+                        lvNotify.capsule({ source: "通知中心", message: `🩺 诊断报告生成失败：${err instanceof Error ? err.message : "未知错误"}（可截图反馈至 QQ 群 ${LV_FEEDBACK_QQ_GROUP}）`, duration: 3000, archive: false });
+                    } finally {
+                        setTimeout(() => { try { diagBtn.textContent = originalText; } catch { /* popover 可能已重渲染 */ } }, 1800);
+                    }
+                })();
                 return;
             }
 
@@ -8272,11 +9156,18 @@ function openDesktopLaunchpadPopoverImpl(
             }
         }
     };
-    setTimeout(() => {
+    if (desktopPopoverOutsideBindTimer !== null) {
+        try { if (typeof window !== "undefined") window.clearTimeout(desktopPopoverOutsideBindTimer); else clearTimeout(desktopPopoverOutsideBindTimer); } catch { /* ignore */ }
+        desktopPopoverOutsideBindTimer = null;
+    }
+    const scheduleOutsideBind = typeof window !== "undefined" ? window.setTimeout : setTimeout;
+    desktopPopoverOutsideBindTimer = Number(scheduleOutsideBind(() => {
+        desktopPopoverOutsideBindTimer = null;
+        if (!desktopPopoverOutsideClickHandler || !isDesktopPopoverOpen()) return;
         if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-            window.addEventListener("mousedown", desktopPopoverOutsideClickHandler!, true);
+            window.addEventListener("mousedown", desktopPopoverOutsideClickHandler, true);
         }
-    }, 50);
+    }, 50));
 
     desktopPopoverResizeHandler = reposition;
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
@@ -8299,26 +9190,60 @@ export function toggleDesktopLaunchpadPopover(anchorEl?: HTMLElement | null): vo
 function wireDesktopGlobalHotkey(): void {
     if (desktopGlobalHotkeyWired || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
     desktopGlobalHotkeyWired = true;
-    window.addEventListener("keydown", (e: KeyboardEvent) => {
+    desktopGlobalHotkeyHandler = (e: KeyboardEvent) => {
         if (e && e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "l" || e.key === "L")) {
             if (isMobileFrontend()) return;
             try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
             toggleDesktopLaunchpadPopover();
         }
-    });
+    };
+    window.addEventListener("keydown", desktopGlobalHotkeyHandler);
 }
 
 function insertDesktopEntryButton(toolbar: HTMLElement, btn: HTMLElement): void {
-    if (typeof toolbar.querySelector === "function" && typeof toolbar.insertBefore === "function") {
-        try {
-            // 思源 3.8.x 顶栏条目重排规则：锚定在右侧工具锚点之前（始终处于 #drag 右侧插件区），
-            // 配合 syncTopBarConvergence 中的 ensureCompassOnRightSide 自愈，既不漂移到左侧也绝不落入 #windowControls 窗口控制区。
-            const anchor = toolbar.querySelector(DESKTOP_RIGHT_ANCHOR_SELECTOR);
-            if (anchor && anchor.parentElement === toolbar) {
-                toolbar.insertBefore(btn, anchor);
-                return;
+    if (!toolbar || !btn) return;
+    // 关键防抖（Zero-Jitter Lock）：若罗盘按钮已经在顶栏 #drag 右侧系统功能区，直接锁定，严禁拔起重插
+    if (btn.parentElement === toolbar && btn.isConnected) {
+        const children = Array.from(toolbar.children || []);
+        const dragIdx = children.findIndex((c) => c.id === "drag");
+        const btnIdx = children.indexOf(btn);
+        if (dragIdx !== -1 && btnIdx > dragIdx) {
+            return;
+        }
+    }
+
+    // 关键排重：清理多插件并发装配时可能遗留的多余罗盘节点，严格保证顶栏只存活 1 个罗盘按钮
+    const duplicates = toolbar.querySelectorAll<HTMLElement>("#" + DESKTOP_ENTRY_ID);
+    if (duplicates.length > 0) {
+        let kept = false;
+        duplicates.forEach((el) => {
+            if (!kept && (el === btn || !btn.isConnected)) {
+                kept = true;
+            } else {
+                try { el.remove(); } catch { /* ignore */ }
             }
-        } catch { /* ignore */ }
+        });
+        if (btn.isConnected && btn.parentElement === toolbar) {
+            const children = Array.from(toolbar.children || []);
+            const dragIdx = children.findIndex((c) => c.id === "drag");
+            const btnIdx = children.indexOf(btn);
+            if (dragIdx !== -1 && btnIdx > dragIdx) return;
+        }
+    }
+
+    try {
+        const anchor = findDesktopRightAnchor(toolbar);
+        if (anchor && anchor.parentElement === toolbar && anchor !== btn) {
+            toolbar.insertBefore(btn, anchor);
+            return;
+        }
+    } catch { /* ignore */ }
+
+    // 回退锚点：若未找到 #barMore 等，插入在 #windowControls 之前或直接追加
+    const winCtrl = toolbar.querySelector<HTMLElement>("#windowControls");
+    if (winCtrl && winCtrl.parentElement === toolbar && winCtrl !== btn) {
+        toolbar.insertBefore(btn, winCtrl);
+        return;
     }
     toolbar.appendChild(btn);
 }
@@ -8328,63 +9253,111 @@ function buildDesktopEntryButton(forceRebuild = false): boolean {
     const toolbar = document.getElementById("toolbar");
     if (!toolbar) return false;
     if (document.getElementById(DESKTOP_ENTRY_ID)) { refreshEntryBadgeDot(); scheduleTopBarConvergence(80); return true; }
-    // 被动重建节流：思源 ye() 启动期可能连续多轮移除顶栏条目，250ms 内不反复重建，吸收拉锯闪烁；
-    // 主动创建路径（插件启用/首挂载）传 forceRebuild 直接放行，避免出现空窗
-    if (!forceRebuild) {
-        const nowGuard = Date.now();
-        if (lastCompassRebuildAt && nowGuard - lastCompassRebuildAt < 250) return false;
-        lastCompassRebuildAt = nowGuard;
+
+    // 全局防并发创建锁：8 仓并发启动时严禁重复 new 多个 button 实例
+    const w = typeof window !== "undefined" ? (window as unknown as { __LV_DESKTOP_ENTRY_CREATING__?: boolean }) : null;
+    if (w) {
+        if (w.__LV_DESKTOP_ENTRY_CREATING__) return true;
+        w.__LV_DESKTOP_ENTRY_CREATING__ = true;
     }
 
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.id = DESKTOP_ENTRY_ID;
-    btn.className = "toolbar__item ariaLabel";
-    // 思源 3.8.x 原生条目公民身份：data-topbar-entry 让罗盘参与顶栏条目排序持久化与 ye() 重排恢复，
-    // data-location 与官方 addTopBar position:"right" 对齐，避免被思源条目体系视为异物
-    btn.setAttribute("data-topbar-entry", "lv-launchpad");
-    btn.setAttribute("data-location", "right");
-    btn.setAttribute("aria-label", "小驴罗盘");
-    btn.setAttribute("aria-haspopup", "dialog");
-    btn.setAttribute("title", "小驴罗盘 · 全家桶极速直达 (左键展开 · 快捷键 1~8)");
-    btn.style.position = "relative";
-    // 创建初期先根据当前已入驻插件数决定初始显隐，避免单插件时先闪现再隐藏
-    const initialActiveCount = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden").length;
-    btn.style.display = initialActiveCount >= 2 ? "inline-flex" : "none";
-    btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;margin-left:2px;font-size:11px;line-height:1;">🌙</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
-
-    btn.addEventListener("click", () => {
-        const items = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden");
-        if (items.length === 1) {
-            const first = items[0];
-            if (first) {
-                // 热键路径可能已先打开罗盘：单插件直达前先收场，避免主界面与罗盘同屏叠放
-                closeDesktopLaunchpadPopover();
-                try { first.onClick(); } catch (err) { console.warn("[LvLaunchpad] 桌面单插件直达失败:", err); }
+    try {
+        // 被动重建节流：思源 ye() 启动期可能连续多轮移除顶栏条目，250ms 内不反复重建，吸收拉锯闪烁；
+        // 主动创建路径（插件启用/首挂载）传 forceRebuild 直接放行，避免出现空窗。
+        // 关键兜底：被限流丢弃的重建必须安排一次尾部重试——否则顶栏被思源整表重刷后，
+        // 罗盘可能长时间无人补位（表现为"突然消失且不再回来"）。
+        if (!forceRebuild) {
+            const nowGuard = Date.now();
+            if (lastCompassRebuildAt && nowGuard - lastCompassRebuildAt < 250) {
+                if (!compassTrailingRetryTimer) {
+                    const scheduleFn = typeof window !== "undefined" ? window.setTimeout : setTimeout;
+                    compassTrailingRetryTimer = Number(scheduleFn(() => {
+                        compassTrailingRetryTimer = null;
+                        if (!document.getElementById(DESKTOP_ENTRY_ID)) buildDesktopEntryButton();
+                    }, 280));
+                }
+                return false;
             }
-            return;
+            lastCompassRebuildAt = nowGuard;
         }
-        toggleDesktopLaunchpadPopover(btn);
-    });
 
-    btn.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        toggleDesktopLaunchpadPopover(btn);
-    });
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.id = DESKTOP_ENTRY_ID;
+        btn.className = "toolbar__item ariaLabel";
+        // 消除横跳根因（Zero-Jitter Citizen）：严禁标记 data-topbar-entry！
+        // 思源 3.8.x 会对所有 [data-topbar-entry] 按思源内置 orders.topBar 配置表重排，
+        // 若持有该属性但不在内核配置表中，思源重排时会将其他按钮搬走而把罗盘遗弃在左侧 #barWorkspace 后面（index 1），
+        // 进而触发小驴自愈搬移形成拉锯横跳。移除该属性即可对思源配置重排完全免疫，永久稳定常驻右侧！
+        btn.setAttribute("data-location", "right");
+        btn.setAttribute("aria-label", "小驴罗盘");
+        btn.setAttribute("aria-haspopup", "dialog");
+        btn.setAttribute("title", "小驴罗盘 · 全家桶极速直达 (左键展开 · 快捷键 1~8)");
+        btn.style.position = "relative";
+        // 创建初期只要当前入驻插件数 >= 1 即为显示，无论单插件还是多插件罗盘均稳定常驻，消除显隐抖动
+        const initialActiveCount = getLaunchpadHub().getItems().filter((it) => it.state !== "hidden").length;
+        btn.style.display = initialActiveCount >= 1 ? "inline-flex" : "none";
+        btn.innerHTML = `${COMPASS_SVG}<span class="lv-entry-moon" aria-hidden="true" style="display:none;margin-left:2px;font-size:11px;line-height:1;">🌙</span><span class="lv-entry-dot" aria-hidden="true" style="display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:999px;background:var(--b3-theme-primary,#3576c7);"></span>`;
 
-    insertDesktopEntryButton(toolbar, btn);
-    lastCompassRebuildAt = Date.now();
-    refreshEntryBadgeDot();
-    scheduleTopBarConvergence(80);
-    wireDesktopToolbarObserver();
-    return true;
+        btn.addEventListener("click", () => {
+            // 单插件与多插件一律直接打开罗盘 Popover，保障单插件用户随时唤起 LifeLog / OmniSearch 等全生态能力
+            toggleDesktopLaunchpadPopover(btn);
+        });
+
+        btn.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            toggleDesktopLaunchpadPopover(btn);
+        });
+
+        insertDesktopEntryButton(toolbar, btn);
+        lastCompassRebuildAt = Date.now();
+        refreshEntryBadgeDot();
+        scheduleTopBarConvergence(80);
+        wireDesktopToolbarObserver();
+        return true;
+    } finally {
+        if (w) w.__LV_DESKTOP_ENTRY_CREATING__ = false;
+    }
 }
 
 let desktopToolbarObserver: MutationObserver | null = null;
 let desktopThemeObserver: MutationObserver | null = null;
 
-function wireDesktopToolbarObserver(): void {
-    if (typeof document === "undefined" || isMobileFrontend()) return;
+/* ===== 罗盘保活哨兵（Compass Keep-Alive Sentry） =====
+ * 思源在工作区切换/设置保存/布局加载等时机会整表重刷 #toolbar；虽然 MutationObserver
+ * 会补位重建，但 observer 本身也可能被竞态断开（如旧实例清理误伤了共享观察器）。
+ * 只要有任一存活小驴插件持有罗盘，就以 5s 低频哨兵兜底重校「存在 + 右侧锚位」，
+ * 彻底杜绝"突然消失且不再回来"。共享单例挂 window，8 仓模块实例共用一个定时器。 */
+let compassKeepAliveTimer: number | null = null;
+function startCompassKeepAlive(): void {
+    if (typeof window === "undefined") return;
+    const w = window as unknown as { __LV_COMPASS_KEEPALIVE__?: number };
+    if (w.__LV_COMPASS_KEEPALIVE__ || compassKeepAliveTimer) return;
+    // 测试环境/受限宿主可能未注入定时器：守卫降级为 no-op，保活是兜底而非主链路
+    if (typeof window.setInterval !== "function" || typeof window.clearInterval !== "function") return;
+    const tick = () => {
+        try {
+            if (getSharedDesktopEntryOwners().size === 0) { stopCompassKeepAlive(); return; }
+            const btn = document.getElementById(DESKTOP_ENTRY_ID);
+            if (!btn) {
+                buildDesktopEntryButton(true);
+                return;
+            }
+            const toolbar = document.getElementById("toolbar");
+            if (toolbar && btn.parentElement === toolbar) ensureCompassOnRightSide(toolbar, btn);
+        } catch { /* ignore */ }
+    };
+    compassKeepAliveTimer = Number(window.setInterval(tick, 5000));
+    w.__LV_COMPASS_KEEPALIVE__ = compassKeepAliveTimer;
+}
+function stopCompassKeepAlive(): void {
+    if (typeof window === "undefined") return;
+    const w = window as unknown as { __LV_COMPASS_KEEPALIVE__?: number };
+    if (compassKeepAliveTimer) { try { clearInterval(compassKeepAliveTimer); } catch { /* ignore */ } compassKeepAliveTimer = null; }
+    if (w.__LV_COMPASS_KEEPALIVE__) { try { window.clearInterval(w.__LV_COMPASS_KEEPALIVE__); } catch { /* ignore */ } delete w.__LV_COMPASS_KEEPALIVE__; }
+}
+
+function wireDesktopToolbarObserver(): void {    if (typeof document === "undefined" || isMobileFrontend()) return;
     const toolbar = document.getElementById("toolbar");
     if (!toolbar || typeof MutationObserver === "undefined") return;
     const w = typeof window !== "undefined" ? (window as unknown as { __LV_DESKTOP_TOOLBAR_OBS__?: MutationObserver; __LV_DESKTOP_THEME_OBS__?: MutationObserver }) : {};
@@ -8428,6 +9401,7 @@ function wireDesktopToolbarObserver(): void {
 
 function ensureDesktopEntry(): MobileEntryCleanup {
     if (typeof document === "undefined") return () => {};
+    ensureStyles();
     if (isMobileFrontend()) return () => {};
     const owners = getSharedDesktopEntryOwners();
     const owner = `owner_desktop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -8445,6 +9419,7 @@ function ensureDesktopEntry(): MobileEntryCleanup {
             }, delay));
             desktopEntryRetryTimers.push(tid);
         }
+        startCompassKeepAlive();
     } else {
         if (!document.getElementById(DESKTOP_ENTRY_ID)) {
             // 主动恢复路径（插件启用/重载）：绕过被动重建节流，避免出现按钮空窗
@@ -8459,6 +9434,7 @@ function ensureDesktopEntry(): MobileEntryCleanup {
         desktopEntryRetryTimers = [];
         // 仍有其他小驴插件在世时，保留共享顶栏罗盘按钮与全局观察器，防止单插件重载/重置引发顶栏反复闪烁
         if (owners.size > 0) return;
+        stopCompassKeepAlive();
         try {
             desktopToolbarObserver?.disconnect();
             if (typeof window !== "undefined") {
@@ -8477,6 +9453,11 @@ function ensureDesktopEntry(): MobileEntryCleanup {
             }
         } catch { /* ignore */ }
         desktopThemeObserver = null;
+        if (desktopGlobalHotkeyHandler && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+            window.removeEventListener("keydown", desktopGlobalHotkeyHandler);
+        }
+        desktopGlobalHotkeyHandler = null;
+        desktopGlobalHotkeyWired = false;
         closeDesktopLaunchpadPopover();
         try { document.getElementById(DESKTOP_ENTRY_ID)?.remove(); } catch { /* ignore */ }
     };
@@ -8504,12 +9485,19 @@ const MOBILE_OVERLAY_SELECTOR = [
 ].join(", ");
 
 function isOverlayElementVisible(el: Element): boolean {
-    const htmlEl = el as HTMLElement;
-    if (htmlEl.hidden === true) return false;
-    if (htmlEl.classList && typeof htmlEl.classList.contains === "function" && htmlEl.classList.contains("fn__none")) {
-        return false;
+    // 自身 + 全部祖先任一不可见即视为不可见：思源部分对话框关闭后容器 DOM 会残留在
+    // document 中（仅祖先 .b3-dialog 挂 display:none），只查自身会把"已关闭的残骸"
+    // 误判为打开态，导致悬浮球/移动罗盘被永久抑制（表现为突然消失不再回来）。
+    let cur: Element | null = el;
+    for (let depth = 0; cur && depth < 12; depth++, cur = cur.parentElement) {
+        if (cur === document.body) break;
+        const htmlEl = cur as HTMLElement;
+        if (htmlEl.hidden === true) return false;
+        if (htmlEl.classList && typeof htmlEl.classList.contains === "function" && htmlEl.classList.contains("fn__none")) {
+            return false;
+        }
+        if (htmlEl.style && htmlEl.style.display === "none") return false;
     }
-    if (htmlEl.style && htmlEl.style.display === "none") return false;
     return true;
 }
 
@@ -8762,6 +9750,35 @@ function resolveIconHref(svgIcon?: string): string | null {
     return null;
 }
 
+/**
+ * MOBS-2 根治：移动端从罗盘切换启动另一插件时，自动收起已打开的前序插件全屏主弹窗，
+ * 避免多层全屏 Dialog 无限叠加导致用户需要连点多次关闭才能退回笔记正文。
+ */
+function dismissActiveMobilePluginDialogs(): void {
+    if (typeof document === "undefined" || !isMobileFrontend()) return;
+    try {
+        const selectors = [
+            ".b3-dialog__container.lc-checkin-dialog",
+            ".b3-dialog__container.lvct-mobile-dialog",
+            ".b3-dialog__container.glean-dialog--fullscreen",
+            ".lv-hub-mobile-dialog",
+            ".lv-review-mobile-dialog",
+            ".b3-dialog__container.lv-exam-dialog",
+            ".b3-dialog__container.sw-mobile-switcher-dialog",
+            ".b3-dialog__container.xlc-sheet",
+            ".b3-dialog__container:has(.lv-mobile-host)",
+        ];
+        const openContainers = document.querySelectorAll<HTMLElement>(selectors.join(", "));
+        openContainers.forEach((container) => {
+            const closeEl = container.querySelector<HTMLElement>(".b3-dialog__close")
+                || container.closest(".b3-dialog--open")?.querySelector<HTMLElement>(".b3-dialog__close");
+            if (closeEl) {
+                closeEl.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+            }
+        });
+    } catch { /* ignore */ }
+}
+
 /** 长按展开二级行动的磁贴渲染（返回磁贴根元素） */
 function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }): HTMLElement | null {
     if (typeof document === "undefined") return null;
@@ -8825,6 +9842,7 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
         hapticFeedback(8);
         pushRecentTileId(item.id);
         closeMobileSheet();
+        dismissActiveMobilePluginDialogs();
         try { item.onClick(); } catch (e) { console.warn("[LvLaunchpad] 磁贴唤起失败:", e); }
     });
 
@@ -8870,6 +9888,7 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
                 hapticFeedback(8);
                 pushRecentTileId(item.id);
                 closeMobileSheet();
+                dismissActiveMobilePluginDialogs();
                 try { getLaunchpadHub().executeAction(item.id, actName); } catch (e) { console.warn("[LvLaunchpad] 行动直达失败:", e); }
             });
             actWrap.appendChild(chip);
@@ -9037,10 +10056,35 @@ function openMobileSheetImpl(): void {
         topBar.innerHTML = `
           <span style="font-size:12px;font-weight:700;color:var(--lv-lp-accent,#2563eb);">🔔 通知中心 (${unread} 未读)</span>
           <div style="display:flex;gap:6px;">
+            <button type="button" class="lv-sheet-action-chip lv-mobile-inbox-diag" title="复制生态诊断报告" style="padding:4px 10px;font-size:11px;">🩺诊断</button>
             <button type="button" class="lv-sheet-action-chip lv-mobile-inbox-mark" style="padding:4px 10px;font-size:11px;">全读</button>
             <button type="button" class="lv-sheet-action-chip lv-mobile-inbox-clear" style="padding:4px 10px;font-size:11px;">清空</button>
           </div>
         `;
+        topBar.querySelector(".lv-mobile-inbox-diag")?.addEventListener("click", () => {
+            const chip = topBar.querySelector<HTMLButtonElement>(".lv-mobile-inbox-diag");
+            if (chip) chip.textContent = "…收集";
+            void (async () => {
+                let ok = false;
+                let failText = "生成失败";
+                try {
+                    const report = await lvEcosystem.buildDiagnosticReport();
+                    ok = await copyTextToClipboard(report);
+                } catch (err) {
+                    failText = err instanceof Error ? err.message.slice(0, 40) : "生成失败";
+                }
+                if (chip && chip.isConnected) chip.textContent = ok ? "✓已复制" : `✗${failText}`;
+                lvNotify.capsule({
+                    source: "通知中心",
+                    message: ok
+                        ? `🩺 诊断报告已复制，请发 QQ 群 ${LV_FEEDBACK_QQ_GROUP} 或邮箱 ${LV_FEEDBACK_EMAIL}`
+                        : `🩺 报告导出失败，可截图发 QQ 群 ${LV_FEEDBACK_QQ_GROUP}`,
+                    duration: 3000,
+                    archive: false,
+                });
+                setTimeout(() => { try { if (chip && chip.isConnected) chip.textContent = "🩺诊断"; } catch { /* ignore */ } }, 2200);
+            })();
+        });
         topBar.querySelector(".lv-mobile-inbox-mark")?.addEventListener("click", () => {
             lvNotify.markAllRead();
             inboxBtn.textContent = "🔔";
@@ -9063,7 +10107,7 @@ function openMobileSheetImpl(): void {
                 const itemEl = document.createElement("div");
                 itemEl.style.cssText = `display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:8px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));font-size:11px;${!packet.read ? "border-left:3px solid var(--lv-lp-accent,#2563eb);cursor:pointer;" : ""}`;
                 const repeatHtml = (packet.repeatCount || 1) > 1
-                    ? `<span style="font-size:10px;font-weight:700;padding:0 5px;border-radius:999px;background:rgba(245,158,11,0.14);color:#b45309;">×${packet.repeatCount}</span>`
+                    ? `<span style="font-size:10px;font-weight:700;padding:0 5px;border-radius:999px;background:rgba(245,158,11,0.16);color:#f59e0b;font-variant-numeric:tabular-nums;">×${packet.repeatCount}</span>`
                     : "";
                 const titleHtml = packet.title ? `<strong style="color:var(--lv-lp-text,#0f172a);">${escapeHtml(packet.title)}</strong>` : "";
                 itemEl.innerHTML = `
@@ -9074,8 +10118,8 @@ function openMobileSheetImpl(): void {
                       ${repeatHtml}
                     </div>
                     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                      <button type="button" class="lv-sheet-action-chip lv-mobile-inbox-copy" style="min-height:22px;padding:1px 7px;font-size:10px;">复制</button>
-                      <span style="font-size:10px;color:var(--lv-lp-text-sub,#64748b);">${formatNoticeTime(packet.createdAt || Date.now())}</span>
+                      <button type="button" class="lv-sheet-action-chip lv-mobile-inbox-copy" style="min-height:28px;padding:3px 10px;font-size:11px;">复制</button>
+                      <span style="font-size:10px;color:var(--lv-lp-text-sub,#64748b);font-variant-numeric:tabular-nums;">${formatNoticeTime(packet.createdAt || Date.now())}</span>
                     </div>
                   </div>
                   <div style="color:var(--lv-lp-text,#0f172a);word-break:break-word;">${escapeHtml(packet.message)}</div>
@@ -9144,22 +10188,22 @@ function openMobileSheetImpl(): void {
             <span class="lv-mobile-pref-saved" style="font-size:10px;color:var(--lv-lp-text-sub,#64748b);">双击悬浮球极速闪记</span>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;padding:6px 0;font-size:12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-              <span>罗盘入口形态</span>
-              <select class="lv-mobile-pref-mode" style="padding:4px 8px;border-radius:6px;border:1px solid var(--lv-lp-border-strong);background:var(--lv-lp-card-bg);color:var(--lv-lp-text);font-size:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;">
+              <span style="flex-shrink:0;">罗盘入口形态</span>
+              <select class="lv-mobile-pref-mode" style="min-height:34px;max-width:58%;min-width:0;padding:4px 8px;border-radius:8px;border:1px solid var(--lv-lp-border-strong);background:var(--lv-lp-card-bg);color:var(--lv-lp-text);font-size:12px;box-sizing:border-box;">
                 <option value="both" ${curMode === "both" ? "selected" : ""}>悬浮球 + 顶栏按钮</option>
                 <option value="ball" ${curMode === "ball" ? "selected" : ""}>仅悬浮球</option>
                 <option value="topbar" ${curMode === "topbar" ? "selected" : ""}>仅顶栏按钮</option>
                 <option value="none" ${curMode === "none" ? "selected" : ""}>隐藏入口</option>
               </select>
             </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-              <span>LifeLog 分类</span>
-              <input type="text" class="lv-mobile-pref-cats b3-text-field" value="${escapeHtml(qwConf.lifeLogCategories.join(', '))}" style="width:170px;font-size:12px;padding:4px 7px;" />
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;">
+              <span style="flex-shrink:0;">LifeLog 分类</span>
+              <input type="text" class="lv-mobile-pref-cats b3-text-field" value="${escapeHtml(qwConf.lifeLogCategories.join(', '))}" style="width:min(185px,58%);min-width:0;min-height:34px;font-size:12px;padding:4px 8px;border-radius:8px;box-sizing:border-box;text-overflow:ellipsis;" />
             </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-              <span>日记笔记本</span>
-              <select class="lv-mobile-pref-nb-select" style="width:170px;padding:4px 8px;border-radius:6px;border:1px solid var(--lv-lp-border-strong);background:var(--lv-lp-card-bg);color:var(--lv-lp-text);font-size:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;">
+              <span style="flex-shrink:0;">日记笔记本</span>
+              <select class="lv-mobile-pref-nb-select" style="width:min(185px,58%);min-width:0;min-height:34px;padding:4px 8px;border-radius:8px;border:1px solid var(--lv-lp-border-strong);background:var(--lv-lp-card-bg);color:var(--lv-lp-text);font-size:12px;box-sizing:border-box;text-overflow:ellipsis;">
                 <option value="">✨ 自动识别默认日记本</option>
                 ${qwConf.lifeLogNotebookId ? `<option value="${escapeHtml(qwConf.lifeLogNotebookId)}" selected>已选: ${escapeHtml(qwConf.lifeLogNotebookId)}</option>` : ""}
               </select>
@@ -9376,7 +10420,25 @@ function openMobileSheetImpl(): void {
     // 今日状态微报（单行微胶囊横条：减弱数据状态聚合占位，合并主线与其它有待办插件）
     const dashboardEl = document.createElement("div");
     dashboardEl.className = "lv-sheet-today-ticker";
+    let dashPressDepth = 0;
+    let dashDeferred = false;
+    dashboardEl.addEventListener("pointerdown", () => { dashPressDepth += 1; });
+    const releaseDashPress = () => {
+        if (dashPressDepth > 0) dashPressDepth -= 1;
+        if (dashPressDepth === 0 && dashDeferred && document.getElementById(MOBILE_SHEET_ID)) {
+            dashDeferred = false;
+            renderMobileDashboard();
+        }
+    };
+    dashboardEl.addEventListener("pointerup", releaseDashPress);
+    dashboardEl.addEventListener("pointercancel", releaseDashPress);
+
     const renderMobileDashboard = () => {
+        if (dashPressDepth > 0) {
+            dashDeferred = true;
+            return;
+        }
+        dashDeferred = false;
         dashboardEl.textContent = "";
         const todaySummary = getTodaySummary(items);
         todaySummary.metrics.forEach((m) => {
@@ -9524,6 +10586,7 @@ function openMobileSheetImpl(): void {
         btn.type = "button";
         btn.className = "lv-sheet-eco-chip";
         btn.textContent = def.label;
+        btn.title = def.label;
         btn.addEventListener("click", () => {
             hapticFeedback(8);
             try {
@@ -9631,6 +10694,7 @@ function openMobileSheetImpl(): void {
                         row.addEventListener("click", () => {
                             pushSearchHistory(kw); // 点选结果=确认意图，记入搜索历史
                             closeMobileSheet();
+                            dismissActiveMobilePluginDialogs();
                             openOmniHitWithFallback(hit);
                         });
                         results.appendChild(row);
@@ -9863,9 +10927,13 @@ export function getQuickWorkspaceConfig(): LvQuickWorkspaceConfig {
             return {
                 lifeLogCategories: Array.isArray(data.lifeLogCategories) && data.lifeLogCategories.length > 0 ? data.lifeLogCategories : DEFAULT_LIFELOG_CATEGORIES,
                 lifeLogNotebookId: typeof data.lifeLogNotebookId === "string" ? data.lifeLogNotebookId : undefined,
+                lifeLogDocumentId: typeof data.lifeLogDocumentId === "string" ? data.lifeLogDocumentId : undefined,
+                lifeLogDocumentTitle: typeof data.lifeLogDocumentTitle === "string" ? data.lifeLogDocumentTitle : undefined,
                 diaryNotebookId: typeof data.diaryNotebookId === "string" ? data.diaryNotebookId : undefined,
                 quickNoteNotebookId: typeof data.quickNoteNotebookId === "string" ? data.quickNoteNotebookId : undefined,
                 quickNoteDocumentId: typeof data.quickNoteDocumentId === "string" ? data.quickNoteDocumentId : undefined,
+                quickNoteDocumentTitle: typeof data.quickNoteDocumentTitle === "string" ? data.quickNoteDocumentTitle : undefined,
+                quickNoteAttachMode: data.quickNoteAttachMode === "local-link" ? "local-link" : "assets",
             };
         }
     } catch { /* ignore */ }
@@ -10178,15 +11246,18 @@ export async function openDiaryBottom(): Promise<void> {
         try {
             let nb = conf.diaryNotebookId?.trim() || "";
             if (!nb) nb = await resolveDailyNotebookId();
-            const createPayload: Record<string, unknown> = { app: (window as any)?.siyuan?.app?.id || "siyuan" };
-            if (nb) createPayload.notebook = nb;
-            const res = await lvKernelPost("/api/filetree/createDailyNote", createPayload);
-            if (res.code === 0 && res.data?.id) {
-                docId = String(res.data.id);
-            } else {
-                const fallbackRes = await lvKernelPost("/api/filetree/createDailyNote", {});
-                if (fallbackRes.code === 0 && fallbackRes.data?.id) {
-                    docId = String(fallbackRes.data.id);
+            docId = (await findTodayDailyNoteDocId(nb)) || "";
+            if (!docId) {
+                const createPayload: Record<string, unknown> = { app: (window as any)?.siyuan?.app?.id || "siyuan" };
+                if (nb) createPayload.notebook = nb;
+                const res = await lvKernelPost("/api/filetree/createDailyNote", createPayload);
+                if (res.code === 0 && res.data?.id) {
+                    docId = String(res.data.id);
+                } else {
+                    const fallbackRes = await lvKernelPost("/api/filetree/createDailyNote", {});
+                    if (fallbackRes.code === 0 && fallbackRes.data?.id) {
+                        docId = String(fallbackRes.data.id);
+                    }
                 }
             }
         } catch (err) {
@@ -10640,7 +11711,7 @@ async function saveClipboardImageToAssets(): Promise<string | null> {
 }
 
 /** 压缩后写入 assets：最长边 1600px / JPEG 0.85（白底合成），返回 { path, thumb } 供缩略图条直接展示 */
-async function compressAndPutImageFile(file: File | Blob, stampBase: string, idx: number): Promise<{ path: string; thumb: string } | null> {
+export async function compressAndPutImageFile(file: File | Blob, stampBase: string, idx: number): Promise<{ path: string; thumb: string } | null> {
     try {
         if (typeof document === "undefined") return null;
         const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -11867,7 +12938,26 @@ function extractAppendIdsList(resData: any): { ids: string[]; docId?: string; bl
     return { ids: [] };
 }
 
-async function appendMarkdownToDailyNote(markdown: string, notebook?: string): Promise<{ ok: boolean; msg?: string; docId?: string; blockId?: string; ids?: string[] }> {
+/**
+ * 探测今日日记文档 ID（只读探针模式，避让冲突副本，绝不主动创建文档）
+ */
+export async function findTodayDailyNoteDocId(notebook?: string): Promise<string | null> {
+    try {
+        let nb = notebook?.trim() || "";
+        if (!nb) nb = await resolveDailyNotebookId();
+        const d = new Date();
+        const yyyymmdd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+        const boxClause = nb ? `AND box='${nb.replace(/'/g, "''")}'` : "";
+        const sql = `SELECT id FROM blocks WHERE type='d' ${boxClause} AND ial LIKE '%custom-dailynote-${yyyymmdd}%' AND content NOT LIKE '%(冲突%' AND content NOT LIKE '%conflict%' ORDER BY created ASC LIMIT 1`;
+        const res = await lvKernelPost("/api/query/sql", { stmt: sql });
+        if (res.code === 0 && Array.isArray(res.data) && res.data[0]?.id) {
+            return String(res.data[0].id);
+        }
+    } catch { /* soft */ }
+    return null;
+}
+
+export async function appendMarkdownToDailyNote(markdown: string, notebook?: string): Promise<{ ok: boolean; msg?: string; docId?: string; blockId?: string; ids?: string[] }> {
     let nb = notebook?.trim() || "";
     if (!nb) {
         nb = await resolveDailyNotebookId();
@@ -11875,20 +12965,23 @@ async function appendMarkdownToDailyNote(markdown: string, notebook?: string): P
     const payload: Record<string, unknown> = { data: markdown, dataType: "markdown" };
     if (nb) payload.notebook = nb;
 
-    // 1. 先尝试直接追加到今日日记块
-    const res = await lvKernelPost("/api/block/appendDailyNoteBlock", payload);
-    if (res.code === 0) {
-        const listed = extractAppendIdsList(res.data);
-        return { ok: true, docId: listed.docId, blockId: listed.blockId, ids: listed.ids };
+    // 1. 先尝试以只读探针查找今日已有日记正身（避开 (冲突 副本）
+    const existingDocId = await findTodayDailyNoteDocId(nb);
+    if (existingDocId) {
+        const aRes = await lvKernelPost("/api/block/appendBlock", { data: markdown, dataType: "markdown", parentID: existingDocId });
+        if (aRes.code === 0) {
+            const listed = extractAppendIdsList(aRes.data);
+            return { ok: true, docId: listed.docId || existingDocId, blockId: listed.blockId, ids: listed.ids };
+        }
     }
 
-    // 2. 若日记尚未创建，调用 createDailyNote 创建今日日记文档
+    // 2. 若日记尚未创建，通过官方标准 createDailyNote 在目标笔记本明确创建今日日记文档（杜绝未公开接口遍历全库报错）
     const createPayload: Record<string, unknown> = { app: (window as any)?.siyuan?.app?.id || "siyuan" };
     if (nb) createPayload.notebook = nb;
     const cRes = await lvKernelPost("/api/filetree/createDailyNote", createPayload);
     let docId = (cRes.code === 0 && cRes.data?.id) ? String(cRes.data.id) : "";
 
-    // 3. 容错回退：若带 notebook 创建失败，尝试无参创建
+    // 3. 容错回退：若带 notebook 创建失败，尝试由思源原生配置默认笔记本创建
     if (!docId) {
         const cResFallback = await lvKernelPost("/api/filetree/createDailyNote", {});
         if (cResFallback.code === 0 && cResFallback.data?.id) {
@@ -11896,7 +12989,7 @@ async function appendMarkdownToDailyNote(markdown: string, notebook?: string): P
         }
     }
 
-    // 4. 若文档已获取成功，调用 appendBlock 追加 Markdown
+    // 4. 若文档获取成功，统一调用公开稳定接口 appendBlock 追加 Markdown
     if (docId) {
         const aRes = await lvKernelPost("/api/block/appendBlock", { data: markdown, dataType: "markdown", parentID: docId });
         if (aRes.code === 0) {
@@ -11906,7 +12999,25 @@ async function appendMarkdownToDailyNote(markdown: string, notebook?: string): P
         return { ok: false, msg: aRes.msg || "追加块失败" };
     }
 
-    return { ok: false, msg: cRes.msg || res.msg || "无法创建今日日记文档" };
+    return { ok: false, msg: cRes.msg || "无法创建今日日记文档" };
+}
+
+/**
+ * 结构化追加单条符合全生态 LifeLog 规范的时间线段落至今日日记
+ */
+export async function appendLifeLogEntryToDailyNote(
+    entry: { time?: string; type: string; body: string; tags?: string[]; refDocId?: string; refDocTitle?: string },
+    notebook?: string
+): Promise<{ ok: boolean; blockId?: string; docId?: string; msg?: string }> {
+    const pad = (v: number) => String(v).padStart(2, "0");
+    const now = new Date();
+    const timeStr = entry.time || `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const cleanType = (entry.type || "日常记录").replace(/[\r\n\s]+/g, " ").replace(/[：:]/g, "-").trim();
+    const cleanBody = (entry.body || "已记录").replace(/[\r\n\s]+/g, " ").trim();
+    const tagsPart = entry.tags?.length ? ` ${entry.tags.map(t => t.startsWith("#") ? t : `#${t}`).join(" ")}` : "";
+    const refPart = entry.refDocId ? ` ((${entry.refDocId} "${(entry.refDocTitle || "查看台账").replace(/"/g, "'")}"))` : "";
+    const line = `${timeStr} ${cleanType}：${cleanBody}${tagsPart}${refPart}\n{: custom-lifelog-type="${cleanType}" }`;
+    return appendMarkdownToDailyNote(line, notebook);
 }
 
 function mountQuickModal(opts: {
@@ -12020,6 +13131,17 @@ function mountQuickModal(opts: {
     return mask;
 }
 
+interface QnAttachment {
+    id: string;
+    file: File;
+    name: string;
+    sizeStr: string;
+    type: "image" | "video" | "file";
+    mode: "assets" | "local-link";
+    localPath: string;
+    previewUrl?: string;
+}
+
 export function openQuickNoteDialog(initialPrefix = ""): void {
     const conf = getQuickWorkspaceConfig();
     const currentDoc = getCurrentOpenDocInfo();
@@ -12030,9 +13152,12 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
             : (savedMode === "custom" && conf.quickNoteDocumentId?.trim() ? "custom"
                 : (conf.quickNoteDocumentId?.trim() && savedMode !== "daily" ? "custom" : "daily"));
     let chosenNotebookId = conf.quickNoteNotebookId || conf.lifeLogNotebookId || "";
+    let customDocId = conf.quickNoteDocumentId?.trim() || "";
+    let customDocTitle = conf.quickNoteDocumentTitle?.trim() || "";
+
     const getBadgeLabel = () => targetMode === "current" && currentDoc
-        ? `目标: ${currentDoc.title.slice(0, 14)} ↻`
-        : targetMode === "custom" ? "目标: 指定文档 ↻" : "目标: 今日日记 ↻";
+        ? `目标: ${currentDoc.title.slice(0, 12)} ↻`
+        : targetMode === "custom" ? `目标: ${(customDocTitle || "指定文档").slice(0, 12)} ↻` : "目标: 今日日记 ↻";
 
     let textarea: HTMLTextAreaElement | null = null;
     let quickNoteSavedCount = 0;
@@ -12043,41 +13168,165 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
         ? `<button type="button" class="lv-qw-tag-chip" data-insert="doclink" title="插入当前文档双链">📎 当前文档</button>`
         : "";
 
+    // 附件管理队列与当前插入模式
+    const attachments: QnAttachment[] = [];
+    let currentLinkMode: "assets" | "local-link" = conf.quickNoteAttachMode === "local-link" ? "local-link" : "assets";
+
     const mask = mountQuickModal({
         icon: "⚡",
         title: "一键记事",
-        badgeHtml: `<button type="button" class="lv-qw-badge lv-qw-badge-btn" title="点击切换存储目标（今日日记 / 当前文档）">${escapeHtml(getBadgeLabel())}</button>`,
-        bodyHtml: `<div class="lv-qw-nb-row" style="${targetMode === "daily" ? "" : "display:none;"}"><span class="lv-qw-tags-label">📔 日记本</span><select class="lv-qw-nb-select"><option value="">✨ 自动识别默认日记本</option></select></div><div class="lv-qw-tags-row"><span class="lv-qw-tags-label">标记:</span><button type="button" class="lv-qw-tag-chip" data-insert="#灵感 ">#灵感</button><button type="button" class="lv-qw-tag-chip" data-insert="#待办 ">#待办</button><button type="button" class="lv-qw-tag-chip" data-insert="- [ ] ">- [ ] 待办</button><button type="button" class="lv-qw-tag-chip" data-insert="> ">&gt; 引用</button><button type="button" class="lv-qw-tag-chip" data-insert="time">⏱ 时间</button><button type="button" class="lv-qw-tag-chip" data-insert="date">📅 日期</button>${docLinkChip}</div><textarea class="lv-qw-textarea b3-text-field" placeholder="${isMobileFrontend() ? "记录想法或待办..." : "记录想法或待办... (Ctrl+Enter 保存，Tab 缩进，支持列表续行)"}" rows="5"></textarea><div class="lv-qw-draft-hint" style="display:none;"><span class="lv-qw-draft-hint-text">🌱 已恢复未保存草稿</span><button type="button" class="lv-qw-draft-clear">清空</button></div>${quickHistoryStripHtml}`,
+        badgeHtml: `<button type="button" class="lv-qw-badge lv-qw-badge-btn" title="点击切换存储目标（今日日记 / 当前文档 / 指定文档）">${escapeHtml(getBadgeLabel())}</button>`,
+        bodyHtml: `
+            <div class="lv-qw-nb-row" style="${targetMode === "daily" ? "" : "display:none;"}">
+                <span class="lv-qw-tags-label">📔 日记本</span>
+                <select class="lv-qw-nb-select"><option value="">✨ 自动识别默认日记本</option></select>
+            </div>
+            <div class="lv-qw-custom-doc-row" style="${targetMode === "custom" ? "" : "display:none;"}">
+                <span class="lv-qw-tags-label">📄 指定文档</span>
+                <span class="lv-qw-custom-doc-name" title="${customDocTitle || ''}">${escapeHtml(customDocTitle || (customDocId ? '已选文档' : '尚未设定指定文档'))}</span>
+                <div class="lv-qw-custom-doc-btns">
+                    ${currentDoc ? `<button type="button" class="lv-qw-tag-chip lv-qw-bind-cur-btn" title="将当前打开的《${escapeHtml(currentDoc.title)}》设为指定文档">📎 设为当前</button>` : ""}
+                    <button type="button" class="lv-qw-tag-chip lv-qw-pick-doc-btn" title="搜索并绑定思源笔记本中的任意文档">🔍 选取文档</button>
+                </div>
+            </div>
+            <div class="lv-qw-tags-row">
+                <span class="lv-qw-tags-label">标记:</span>
+                <button type="button" class="lv-qw-tag-chip" data-insert="#灵感 ">#灵感</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="#待办 ">#待办</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="- [ ] ">- [ ] 待办</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="> ">&gt; 引用</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="time">⏱ 时间</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="date">📅 日期</button>
+                ${docLinkChip}
+            </div>
+            <textarea class="lv-qw-textarea b3-text-field" placeholder="${isMobileFrontend() ? "记录想法或待办..." : "记录想法或待办... (Ctrl+Enter 保存，Tab 缩进，支持列表续行/拖拽/粘贴)"}" rows="5"></textarea>
+            <div class="lv-qw-attach-bar">
+                <div class="lv-qw-attach-triggers">
+                    <button type="button" class="lv-qw-tag-chip lv-qw-btn-img" title="添加本地图片 (PNG/JPG/GIF/WebP/SVG)">🖼️ 图片</button>
+                    <button type="button" class="lv-qw-tag-chip lv-qw-btn-video" title="添加本地视频 (MP4/WebM/MOV/MKV)">📹 视频</button>
+                    <button type="button" class="lv-qw-tag-chip lv-qw-btn-file" title="添加任意本地文件">📎 文件</button>
+                    <input type="file" class="lv-qw-hidden-file-input" multiple style="display:none;" />
+                </div>
+                <div class="lv-qw-link-mode-group" title="电脑端插入方式：存入知识库 assets 跨端漫游，或仅插入本地路径 file:// 直链节省存储">
+                    <button type="button" class="lv-qw-mode-pill ${currentLinkMode === "assets" ? "is-active" : ""}" data-attach-mode="assets" title="【存入知识库】：将文件复制上传至思源 assets 目录，支持多端同步漫游">💾 存入知识库</button>
+                    <button type="button" class="lv-qw-mode-pill ${currentLinkMode === "local-link" ? "is-active" : ""}" data-attach-mode="local-link" title="【对应链接】：仅插入本地文件路径直链 (file:///)，不拷贝大文件，节省磁盘与流量">🔗 对应链接</button>
+                </div>
+            </div>
+            <div class="lv-qw-attach-list" style="display:none;"></div>
+            <div class="lv-qw-draft-hint" style="display:none;"><span class="lv-qw-draft-hint-text">🌱 已恢复未保存草稿</span><button type="button" class="lv-qw-draft-clear">清空</button></div>
+            ${quickHistoryStripHtml}
+        `,
         primaryLabel: "保存入库",
         secondaryLabel: "保存并继续",
         onSave: async (saveBtn, cleanup, continueMode) => {
-            const val = textarea?.value?.trim();
-            if (!val) { lvNotify.capsule({ source: "一键记事", message: "请输入记事内容", duration: 1800, archive: false }); textarea?.focus(); return; }
+            const val = textarea?.value?.trim() || "";
+            if (!val && attachments.length === 0) {
+                lvNotify.capsule({ source: "一键记事", message: "请输入记事内容或添加附件", duration: 1800, archive: false });
+                textarea?.focus();
+                return;
+            }
+            if (targetMode === "custom" && !customDocId) {
+                lvNotify.capsule({ source: "一键记事", message: "请先指定目标文档", duration: 2400, level: "warn", archive: false });
+                openDocPicker((doc) => {
+                    customDocId = doc.id;
+                    customDocTitle = doc.content;
+                    saveQuickWorkspaceConfig({ quickNoteDocumentId: customDocId, quickNoteDocumentTitle: customDocTitle });
+                    updateCustomDocUi();
+                });
+                return;
+            }
             const origLabel = saveBtn?.textContent || "保存入库";
-            if (saveBtn) saveBtn.textContent = "保存中…";
+            if (saveBtn) saveBtn.textContent = attachments.length > 0 ? "处理附件中…" : "保存中…";
+
             try {
-                const parentID = targetMode === "current" && currentDoc ? currentDoc.id : (targetMode === "custom" && conf.quickNoteDocumentId ? conf.quickNoteDocumentId.trim() : "");
+                const attachMarkdownLines: string[] = [];
+                if (attachments.length > 0) {
+                    const d = new Date();
+                    const pad = (v: number) => String(v).padStart(2, "0");
+                    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+
+                    for (let i = 0; i < attachments.length; i++) {
+                        const att = attachments[i];
+                        if (!att) continue;
+                        if (att.mode === "assets") {
+                            const ext = att.name.includes(".") ? att.name.split(".").pop() : (att.type === "image" ? "png" : att.type === "video" ? "mp4" : "bin");
+                            const safeName = `lv-qn-${stamp}-${i}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+                            try {
+                                const fd = new FormData();
+                                fd.append("path", `/data/assets/${safeName}`);
+                                fd.append("file", att.file, safeName);
+                                fd.append("isDir", "false");
+                                await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                if (att.type === "image") {
+                                    attachMarkdownLines.push(`![${att.name}](assets/${safeName})`);
+                                } else if (att.type === "video") {
+                                    attachMarkdownLines.push(`<video controls src="assets/${safeName}" style="max-width:100%; border-radius:8px;"></video>`);
+                                } else {
+                                    attachMarkdownLines.push(`[📎 ${att.name}](assets/${safeName})`);
+                                }
+                            } catch (err) {
+                                console.warn("[LvQuickNote] 附件写入 assets 失败:", err);
+                            }
+                        } else {
+                            // local-link 模式
+                            const abs = att.localPath || (att.file as any).path || "";
+                            if (abs) {
+                                const normalized = abs.replace(/\\/g, "/");
+                                const uri = normalized.startsWith("/") ? `file://${normalized}` : `file:///${normalized}`;
+                                if (att.type === "image") {
+                                    attachMarkdownLines.push(`![${att.name}](${uri})`);
+                                } else if (att.type === "video") {
+                                    attachMarkdownLines.push(`<video controls src="${uri}" style="max-width:100%; border-radius:8px;"></video>\n[📹 本地视频: ${att.name}](${uri})`);
+                                } else {
+                                    attachMarkdownLines.push(`[📎 本地文件: ${att.name}](${uri})`);
+                                }
+                            } else {
+                                // 无法获取本地绝对路径时（如沙箱），安全自动降级为写入 assets
+                                const ext = att.name.includes(".") ? att.name.split(".").pop() : "bin";
+                                const safeName = `lv-qn-${stamp}-${i}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+                                try {
+                                    const fd = new FormData();
+                                    fd.append("path", `/data/assets/${safeName}`);
+                                    fd.append("file", att.file, safeName);
+                                    fd.append("isDir", "false");
+                                    await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                    attachMarkdownLines.push(att.type === "image" ? `![${att.name}](assets/${safeName})` : `[📎 ${att.name}](assets/${safeName})`);
+                                } catch { /* soft */ }
+                            }
+                        }
+                    }
+                }
+
+                const fullPayload = [val, ...attachMarkdownLines].filter(Boolean).join("\n\n");
+                const parentID = targetMode === "current" && currentDoc ? currentDoc.id : (targetMode === "custom" && customDocId ? customDocId : "");
                 let res: { ok: boolean; msg?: string; docId?: string; blockId?: string };
                 if (parentID) {
-                    const aRes = await lvKernelPost("/api/block/appendBlock", { data: `${val}\n`, dataType: "markdown", parentID });
+                    const aRes = await lvKernelPost("/api/block/appendBlock", { data: `${fullPayload}\n`, dataType: "markdown", parentID });
                     const ids = extractAppendIds(aRes.data);
                     res = { ok: aRes.code === 0, msg: aRes.msg, docId: ids.docId || parentID, blockId: ids.blockId };
                 } else {
-                    res = await appendMarkdownToDailyNote(`${val}\n`, chosenNotebookId || conf.quickNoteNotebookId);
+                    res = await appendMarkdownToDailyNote(`${fullPayload}\n`, chosenNotebookId || conf.quickNoteNotebookId);
                 }
+
                 if (res.ok) {
-                    try { ls?.removeItem(QUICK_NOTE_DRAFT_KEY); ls?.removeItem(QUICK_NOTE_DRAFT_AT_KEY); } catch { /* ignore */ }
-                    const qLine = (val.split(/\r?\n/)[0] || val).replace(/[\r\n\t]+/g, " ").trim().slice(0, 30);
+                    try { ls?.removeItem(QUICK_NOTE_DRAFT_KEY); ls?.removeItem(QUICK_NOTE_DRAFT_AT_KEY); } catch {}
+                    const qLine = (val.split(/\r?\n/)[0] || (attachments[0]?.name ? `[附件] ${attachments[0].name}` : "记事")).replace(/[\r\n\t]+/g, " ").trim().slice(0, 30);
                     pushTodayWriteEntry(quickNoteTodayKey(), qLine, res.blockId);
                     const jumpId = res.blockId || res.docId;
                     try {
                         getActivityHub().record({
                             category: "note",
                             source: "一键记事",
-                            title: val.replace(/[\r\n]+/g, " ").slice(0, 28),
+                            title: qLine,
                             linkBlockId: jumpId,
                         });
-                    } catch { /* ignore */ }
+                    } catch {}
+
+                    // 清理预览 ObjectURL
+                    attachments.forEach((a) => { if (a.previewUrl) try { URL.revokeObjectURL(a.previewUrl); } catch {} });
+                    attachments.length = 0;
+                    renderAttachments();
+
                     if (continueMode) {
                         quickNoteSavedCount += 1;
                         if (textarea) { textarea.value = ""; textarea.dispatchEvent(new Event("input")); textarea.focus(); }
@@ -12090,9 +13339,10 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
                         lvNotify.capsule({ source: "一键记事", message: "⚡ 已入库，可继续记录下一条", duration: 1800, archive: false });
                     } else {
                         cleanup();
+                        const targetDocTitle = targetMode === "current" && currentDoc ? currentDoc.title : (targetMode === "custom" ? customDocTitle || "指定文档" : "今日日记");
                         lvNotify.capsule({
                             source: "一键记事",
-                            message: targetMode === "current" && currentDoc ? `⚡ 已存入《${currentDoc.title}》` : "⚡ 已成功记入日记",
+                            message: targetMode === "daily" ? "⚡ 已成功记入今日日记" : `⚡ 已成功存入《${targetDocTitle}》`,
                             duration: 2600,
                             level: "success",
                             archive: false,
@@ -12110,11 +13360,242 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
         }
     });
     if (!mask) return;
+
     textarea = mask.querySelector<HTMLTextAreaElement>(".lv-qw-textarea");
     const badgeBtn = mask.querySelector<HTMLButtonElement>(".lv-qw-badge-btn");
     const nbRow = mask.querySelector<HTMLElement>(".lv-qw-nb-row");
     const nbSelect = mask.querySelector<HTMLSelectElement>(".lv-qw-nb-select");
+    const customDocRow = mask.querySelector<HTMLElement>(".lv-qw-custom-doc-row");
+    const customDocNameEl = mask.querySelector<HTMLElement>(".lv-qw-custom-doc-name");
     const draftHint = mask.querySelector<HTMLElement>(".lv-qw-draft-hint");
+
+    const updateCustomDocUi = () => {
+        if (customDocNameEl) {
+            customDocNameEl.textContent = customDocTitle || (customDocId ? "已选文档" : "尚未设定指定文档");
+            customDocNameEl.title = customDocTitle || "";
+        }
+        if (badgeBtn) badgeBtn.textContent = getBadgeLabel();
+    };
+
+    if (customDocId && !customDocTitle) {
+        void lvKernelPost("/api/query/sql", { stmt: `SELECT content FROM blocks WHERE id = '${customDocId.replace(/'/g, "''")}' AND type='d' LIMIT 1` }).then((res) => {
+            if (res.code === 0 && Array.isArray(res.data) && res.data[0]?.content) {
+                customDocTitle = String(res.data[0].content).trim();
+                updateCustomDocUi();
+            }
+        });
+    }
+
+    // 绑定当前文档为指定目标
+    mask.querySelector(".lv-qw-bind-cur-btn")?.addEventListener("click", () => {
+        if (currentDoc) {
+            customDocId = currentDoc.id;
+            customDocTitle = currentDoc.title;
+            saveQuickWorkspaceConfig({ quickNoteDocumentId: customDocId, quickNoteDocumentTitle: customDocTitle });
+            updateCustomDocUi();
+            hapticFeedback(8);
+            lvNotify.capsule({ source: "一键记事", message: `已设定指定文档为《${currentDoc.title}》`, duration: 2200, archive: false });
+        }
+    });
+
+    // 文档快速搜索选取模态层
+    const openDocPicker = (onSelect: (doc: { id: string; content: string }) => void) => {
+        const card = mask.querySelector(".lv-qw-card");
+        if (!card) return;
+        const existing = card.querySelector(".lv-qw-doc-picker-modal");
+        if (existing) { existing.remove(); return; }
+        const modal = document.createElement("div");
+        modal.className = "lv-qw-doc-picker-modal";
+        modal.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <strong style="font-size:12px;color:var(--lv-lp-text);">🔍 选取指定目标文档</strong>
+                <button type="button" class="lv-qw-doc-picker-close" style="border:none;background:transparent;cursor:pointer;color:var(--lv-lp-text-sub);font-size:13px;">✕</button>
+            </div>
+            <input type="text" class="lv-qw-doc-search-input" placeholder="输入关键词搜索文档..." autofocus />
+            <div class="lv-qw-doc-results"></div>
+        `;
+        const input = modal.querySelector<HTMLInputElement>(".lv-qw-doc-search-input");
+        const resultsEl = modal.querySelector<HTMLElement>(".lv-qw-doc-results");
+        const close = () => { modal.remove(); };
+        modal.querySelector(".lv-qw-doc-picker-close")?.addEventListener("click", close);
+
+        const doSearch = async (kw: string) => {
+            if (!resultsEl) return;
+            const escaped = kw.replace(/'/g, "''").trim();
+            const whereClause = escaped ? `AND content LIKE '%${escaped}%'` : "";
+            const sql = `SELECT id, content, hpath FROM blocks WHERE type='d' ${whereClause} AND content NOT LIKE '%(冲突%' AND content NOT LIKE '%conflict%' ORDER BY updated DESC LIMIT 8`;
+            try {
+                const res = await lvKernelPost("/api/query/sql", { stmt: sql });
+                if (!modal.isConnected) return;
+                if (res.code === 0 && Array.isArray(res.data) && res.data.length > 0) {
+                    resultsEl.innerHTML = res.data.map((d: any) => `
+                        <button type="button" class="lv-qw-doc-item" data-id="${escapeHtml(d.id)}" data-title="${escapeHtml(d.content || '未命名')}">
+                            <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 ${escapeHtml(d.content || '未命名')}</span>
+                            <small style="color:var(--lv-lp-text-sub);margin-left:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">${escapeHtml(d.hpath || '')}</small>
+                        </button>
+                    `).join("");
+                    resultsEl.querySelectorAll<HTMLButtonElement>(".lv-qw-doc-item").forEach((b) => {
+                        b.addEventListener("click", () => {
+                            const id = b.getAttribute("data-id") || "";
+                            const title = b.getAttribute("data-title") || "";
+                            onSelect({ id, content: title });
+                            close();
+                        });
+                    });
+                } else {
+                    resultsEl.innerHTML = `<div style="text-align:center;padding:12px;font-size:11.5px;color:var(--lv-lp-text-sub);">未找到相关文档</div>`;
+                }
+            } catch {
+                if (resultsEl) resultsEl.innerHTML = `<div style="text-align:center;padding:12px;font-size:11.5px;color:var(--lv-lp-text-sub);">搜索失败</div>`;
+            }
+        };
+
+        let timer: number | null = null;
+        input?.addEventListener("input", () => {
+            if (timer) clearTimeout(timer);
+            timer = window.setTimeout(() => { doSearch(input.value); }, 120);
+        });
+        card.appendChild(modal);
+        void doSearch("");
+        window.setTimeout(() => input?.focus(), 40);
+    };
+
+    mask.querySelector(".lv-qw-pick-doc-btn")?.addEventListener("click", () => {
+        hapticFeedback(6);
+        openDocPicker((doc) => {
+            customDocId = doc.id;
+            customDocTitle = doc.content;
+            saveQuickWorkspaceConfig({ quickNoteDocumentId: customDocId, quickNoteDocumentTitle: customDocTitle });
+            updateCustomDocUi();
+            lvNotify.capsule({ source: "一键记事", message: `已设定指定文档为《${doc.content}》`, duration: 2200, archive: false });
+        });
+    });
+
+    // 附件管理交互逻辑
+    const fileInput = mask.querySelector<HTMLInputElement>(".lv-qw-hidden-file-input");
+    const attachListEl = mask.querySelector<HTMLElement>(".lv-qw-attach-list");
+    const modePills = mask.querySelectorAll<HTMLButtonElement>(".lv-qw-mode-pill");
+
+    modePills.forEach((p) => {
+        p.addEventListener("click", () => {
+            const m = p.getAttribute("data-attach-mode") as "assets" | "local-link";
+            if (m && m !== currentLinkMode) {
+                currentLinkMode = m;
+                modePills.forEach((pill) => pill.classList.toggle("is-active", pill.getAttribute("data-attach-mode") === m));
+                saveQuickWorkspaceConfig({ quickNoteAttachMode: m });
+                attachments.forEach((a) => { a.mode = m; });
+                renderAttachments();
+                hapticFeedback(6);
+                lvNotify.capsule({ source: "一键记事", message: m === "assets" ? "已切换：存入知识库 (assets 跨端漫游)" : "已切换：插入对应链接 (file:// 本地直链)", duration: 1800, archive: false });
+            }
+        });
+    });
+
+    const renderAttachments = () => {
+        if (!attachListEl) return;
+        if (attachments.length === 0) {
+            attachListEl.style.display = "none";
+            attachListEl.innerHTML = "";
+            return;
+        }
+        attachListEl.style.display = "flex";
+        attachListEl.innerHTML = attachments.map((a) => `
+            <div class="lv-qw-attach-chip" data-att-id="${a.id}">
+                ${a.previewUrl ? `<img class="lv-qw-attach-thumb" src="${a.previewUrl}" alt="${escapeHtml(a.name)}" />` : `<span style="font-size:14px;">${a.type === "video" ? "📹" : "📎"}</span>`}
+                <span class="lv-qw-attach-name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</span>
+                <small class="lv-qw-attach-size">${a.sizeStr}</small>
+                <button type="button" class="lv-qw-item-mode-btn" data-toggle="${a.id}" title="点击切换此文件的插入模式">${a.mode === "assets" ? "💾 知识库" : "🔗 本地链"}</button>
+                <button type="button" class="lv-qw-attach-remove" data-del="${a.id}" title="移除附件">✕</button>
+            </div>
+        `).join("");
+
+        attachListEl.querySelectorAll<HTMLButtonElement>("[data-toggle]").forEach((b) => {
+            b.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const id = b.getAttribute("data-toggle");
+                const it = attachments.find((a) => a.id === id);
+                if (it) {
+                    it.mode = it.mode === "assets" ? "local-link" : "assets";
+                    renderAttachments();
+                }
+            });
+        });
+        attachListEl.querySelectorAll<HTMLButtonElement>("[data-del]").forEach((b) => {
+            b.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const id = b.getAttribute("data-del");
+                const idx = attachments.findIndex((a) => a.id === id);
+                if (idx >= 0) {
+                    const targetAtt = attachments[idx];
+                    if (targetAtt && targetAtt.previewUrl) {
+                        try { URL.revokeObjectURL(targetAtt.previewUrl); } catch {}
+                    }
+                    attachments.splice(idx, 1);
+                    renderAttachments();
+                }
+            });
+        });
+    };
+
+    const addFiles = (files: File[]) => {
+        for (const f of files) {
+            const type = f.type.startsWith("image/") ? "image" : (f.type.startsWith("video/") ? "video" : "file");
+            const localPath = String((f as any).path || "");
+            const sizeStr = f.size > 1024 * 1024 ? `${(f.size / (1024 * 1024)).toFixed(1)}MB` : `${Math.round(f.size / 1024)}KB`;
+            const previewUrl = type === "image" ? URL.createObjectURL(f) : undefined;
+            attachments.push({
+                id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                file: f,
+                name: f.name,
+                sizeStr,
+                type,
+                mode: currentLinkMode,
+                localPath,
+                previewUrl,
+            });
+        }
+        renderAttachments();
+        hapticFeedback(8);
+    };
+
+    mask.querySelector(".lv-qw-btn-img")?.addEventListener("click", () => {
+        if (fileInput) { fileInput.accept = "image/*"; fileInput.click(); }
+    });
+    mask.querySelector(".lv-qw-btn-video")?.addEventListener("click", () => {
+        if (fileInput) { fileInput.accept = "video/*"; fileInput.click(); }
+    });
+    mask.querySelector(".lv-qw-btn-file")?.addEventListener("click", () => {
+        if (fileInput) { fileInput.accept = "*/*"; fileInput.click(); }
+    });
+    fileInput?.addEventListener("change", () => {
+        if (fileInput.files?.length) {
+            addFiles(Array.from(fileInput.files));
+            fileInput.value = "";
+        }
+    });
+
+    textarea?.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        textarea.classList.add("is-dragover");
+    });
+    textarea?.addEventListener("dragleave", () => {
+        textarea.classList.remove("is-dragover");
+    });
+    textarea?.addEventListener("drop", (e) => {
+        e.preventDefault();
+        textarea.classList.remove("is-dragover");
+        if (e.dataTransfer?.files?.length) {
+            addFiles(Array.from(e.dataTransfer.files));
+            lvNotify.capsule({ source: "一键记事", message: `📎 已拖入 ${e.dataTransfer.files.length} 个文件`, duration: 1800, archive: false });
+        }
+    });
+    textarea?.addEventListener("paste", (e) => {
+        if (e.clipboardData?.files?.length) {
+            addFiles(Array.from(e.clipboardData.files));
+            lvNotify.capsule({ source: "一键记事", message: `📎 已添加剪贴板文件`, duration: 1800, archive: false });
+        }
+    });
+
     const savedDraft = ls?.getItem(QUICK_NOTE_DRAFT_KEY);
     if (savedDraft && textarea) {
         textarea.value = savedDraft;
@@ -12160,12 +13641,13 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
     });
     badgeBtn?.addEventListener("click", () => {
         hapticFeedback(6);
-        if (targetMode === "daily") targetMode = currentDoc ? "current" : (conf.quickNoteDocumentId?.trim() ? "custom" : "daily");
-        else if (targetMode === "current") targetMode = conf.quickNoteDocumentId?.trim() ? "custom" : "daily";
+        if (targetMode === "daily") targetMode = currentDoc ? "current" : "custom";
+        else if (targetMode === "current") targetMode = "custom";
         else targetMode = "daily";
         try { ls?.setItem(QUICK_NOTE_TARGET_KEY, targetMode); } catch { /* ignore */ }
         badgeBtn.textContent = getBadgeLabel();
         if (nbRow) nbRow.style.display = targetMode === "daily" ? "flex" : "none";
+        if (customDocRow) customDocRow.style.display = targetMode === "custom" ? "flex" : "none";
     });
     mask.querySelector(".lv-qw-tags-row")?.addEventListener("click", (e) => {
         const chip = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-qw-tag-chip");
@@ -12216,15 +13698,32 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
 
 export function openLifeLogDialog(): void {
     const conf = getQuickWorkspaceConfig();
+    const currentDoc = getCurrentOpenDocInfo();
+    const ls = getSafeLocalStorage();
     const categories = conf.lifeLogCategories?.length ? [...conf.lifeLogCategories] : [...DEFAULT_LIFELOG_CATEGORIES];
     const defaultSet = new Set(DEFAULT_LIFELOG_CATEGORIES);
     let selectedCat = categories[0] || "日记";
     let chosenNotebookId = conf.lifeLogNotebookId || "";
     let timeOffsetMinutes = 0;
     let addingCategory = false;
-    // 待写入配图（弹层生命周期内）：path 为 assets 路径，thumb 为压缩时的 dataURL 缩略图
-    const pendingPhotos: Array<{ path: string; thumb: string; busy?: boolean }> = [];
-    let photoUploading = false;
+
+    // 目标存储模式：今日日记 (默认) / 当前文档 / 指定文档（与一键记事统一体验）
+    const savedMode = ls?.getItem("lv-lifelog-target-mode");
+    let targetMode: "daily" | "current" | "custom" =
+        savedMode === "current" && currentDoc ? "current"
+            : (savedMode === "custom" && conf.lifeLogDocumentId?.trim() ? "custom"
+                : "daily");
+    let customDocId = conf.lifeLogDocumentId?.trim() || "";
+    let customDocTitle = conf.lifeLogDocumentTitle?.trim() || "";
+
+    const getBadgeLabel = () => targetMode === "current" && currentDoc
+        ? `目标: ${currentDoc.title.slice(0, 12)} ↻`
+        : targetMode === "custom" ? `目标: ${(customDocTitle || "指定文档").slice(0, 12)} ↻` : "目标: 今日日记 ↻";
+
+    // 附件管理队列与当前插入模式（支持图片、视频、文件及知识库/本地直链）
+    const attachments: QnAttachment[] = [];
+    let currentLinkMode: "assets" | "local-link" = conf.quickNoteAttachMode === "local-link" ? "local-link" : "assets";
+
     const computeTimeStr = () => {
         const d = new Date(Date.now() - timeOffsetMinutes * 60_000);
         return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -12245,37 +13744,188 @@ export function openLifeLogDialog(): void {
     // 今日状态条：条数 + 分类计数 + 最近一条 + 块级「撤销」按钮（共享基建）
     const renderStrip = (): string => buildTodayWriteStripHtml(getTodayLifeLogHistory(), { catCounts: true });
     const recentStripHtml = renderStrip();
+    const docLinkChip = currentDoc
+        ? `<button type="button" class="lv-qw-tag-chip" data-insert="doclink" title="插入当前文档双链">📎 当前文档</button>`
+        : "";
 
     let textarea: HTMLTextAreaElement | null = null;
-    const ls = getSafeLocalStorage();
 
     const mask = mountQuickModal({
         icon: "📒",
         title: "LifeLog 流",
-        badgeHtml: `<select class="lv-qw-badge lv-qw-badge-btn lv-qw-ll-nb-select" title="选择 LifeLog 写入的目标日记本" style="max-width:170px;"><option value="">叶归 · 默认日记本</option></select>`,
-        bodyHtml: `<div class="lv-qw-categories">${renderCats()}</div><textarea class="lv-qw-textarea b3-text-field" placeholder="${isMobileFrontend() ? "记录进展、状态或思考（点下方 📷 可添加照片）" : "记录进展、状态或思考... (Ctrl+Enter 记录，可直接 Ctrl+V 粘贴截图)"}" rows="4"></textarea><div class="lv-qw-attach-strip" style="display:none;"></div><div class="lv-qw-attach-actions"><button type="button" class="lv-qw-tag-chip lv-qw-photo-btn" aria-label="添加照片" title="添加照片（支持多选 / Ctrl+V 粘贴截图，压缩后存入 assets 随日志写入日记）">📷 照片</button><input type="file" class="lv-qw-photo-input" accept="image/*" multiple style="display:none;" /></div><div class="lv-qw-draft-hint" style="display:none;"><span class="lv-qw-draft-hint-text">🌱 已恢复未保存草稿</span><button type="button" class="lv-qw-draft-clear">清空</button></div><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;"><div class="lv-qw-preview-tag" style="flex:1;min-width:170px;">预览：<span class="lv-qw-preview-text">${computeTimeStr()} ${escapeHtml(selectedCat)}：...</span></div><div class="lv-qw-time-offsets"><button type="button" class="lv-qw-time-chip active" data-offset="0">现在</button><button type="button" class="lv-qw-time-chip" data-offset="5">-5分</button><button type="button" class="lv-qw-time-chip" data-offset="15">-15分</button><button type="button" class="lv-qw-time-chip" data-offset="30">-30分</button><button type="button" class="lv-qw-time-chip" data-offset="60">-1时</button></div></div>${recentStripHtml}`,
+        badgeHtml: `<button type="button" class="lv-qw-badge lv-qw-badge-btn lv-qw-ll-badge-target" title="点击切换存储目标（今日日记 / 当前文档 / 指定文档）">${escapeHtml(getBadgeLabel())}</button>`,
+        bodyHtml: `
+            <div class="lv-qw-nb-row" style="${targetMode === "daily" ? "" : "display:none;"}">
+                <span class="lv-qw-tags-label">📔 日记本</span>
+                <select class="lv-qw-nb-select lv-qw-ll-nb-select"><option value="">✨ 自动识别默认日记本</option></select>
+            </div>
+            <div class="lv-qw-custom-doc-row" style="${targetMode === "custom" ? "" : "display:none;"}">
+                <span class="lv-qw-tags-label">📄 指定文档</span>
+                <span class="lv-qw-custom-doc-name" title="${customDocTitle || ''}">${escapeHtml(customDocTitle || (customDocId ? '已选文档' : '尚未设定指定文档'))}</span>
+                <div class="lv-qw-custom-doc-btns">
+                    ${currentDoc ? `<button type="button" class="lv-qw-tag-chip lv-qw-bind-cur-btn" title="将当前打开的《${escapeHtml(currentDoc.title)}》设为指定文档">📎 设为当前</button>` : ""}
+                    <button type="button" class="lv-qw-tag-chip lv-qw-pick-doc-btn" title="搜索并绑定思源笔记本中的任意文档">🔍 选取文档</button>
+                </div>
+            </div>
+            <div class="lv-qw-categories">${renderCats()}</div>
+            <div class="lv-qw-tags-row">
+                <span class="lv-qw-tags-label">标记:</span>
+                <button type="button" class="lv-qw-tag-chip" data-insert="#进展 ">#进展</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="#待办 ">#待办</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="- [ ] ">- [ ] 待办</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="> ">&gt; 引用</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="time">⏱ 时间</button>
+                <button type="button" class="lv-qw-tag-chip" data-insert="date">📅 日期</button>
+                ${docLinkChip}
+            </div>
+            <textarea class="lv-qw-textarea b3-text-field" placeholder="${isMobileFrontend() ? "记录进展、状态或思考（点下方 📷 可添加照片）..." : "记录进展、状态或思考... (Ctrl+Enter 记录，Tab 缩进，支持列表续行/拖拽/粘贴)"}" rows="5"></textarea>
+            <div class="lv-qw-attach-bar">
+                <div class="lv-qw-attach-triggers">
+                    <button type="button" class="lv-qw-tag-chip lv-qw-btn-img lv-qw-photo-btn" title="添加本地图片 (PNG/JPG/GIF/WebP/SVG)">🖼️ 图片</button>
+                    <button type="button" class="lv-qw-tag-chip lv-qw-btn-video" title="添加本地视频 (MP4/WebM/MOV/MKV)">📹 视频</button>
+                    <button type="button" class="lv-qw-tag-chip lv-qw-btn-file" title="添加任意本地文件">📎 文件</button>
+                    <input type="file" class="lv-qw-hidden-file-input" multiple style="display:none;" />
+                </div>
+                <div class="lv-qw-link-mode-group" title="电脑端插入方式：存入知识库 assets 跨端漫游，或仅插入本地路径 file:// 直链节省存储">
+                    <button type="button" class="lv-qw-mode-pill ${currentLinkMode === "assets" ? "is-active" : ""}" data-attach-mode="assets" title="【存入知识库】：将文件复制上传至思源 assets 目录，支持多端同步漫游">💾 存入知识库</button>
+                    <button type="button" class="lv-qw-mode-pill ${currentLinkMode === "local-link" ? "is-active" : ""}" data-attach-mode="local-link" title="【对应链接】：仅插入本地文件路径直链 (file:///)，不拷贝大文件，节省磁盘与流量">🔗 对应链接</button>
+                </div>
+            </div>
+            <div class="lv-qw-attach-strip lv-qw-attach-list" style="display:none;"></div>
+            <div class="lv-qw-draft-hint" style="display:none;"><span class="lv-qw-draft-hint-text">🌱 已恢复未保存草稿</span><button type="button" class="lv-qw-draft-clear">清空</button></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                <div class="lv-qw-preview-tag" style="flex:1;min-width:170px;">预览：<span class="lv-qw-preview-text">${computeTimeStr()} ${escapeHtml(selectedCat)}：...</span></div>
+                <div class="lv-qw-time-offsets">
+                    <button type="button" class="lv-qw-time-chip active" data-offset="0">现在</button>
+                    <button type="button" class="lv-qw-time-chip" data-offset="5">-5分</button>
+                    <button type="button" class="lv-qw-time-chip" data-offset="15">-15分</button>
+                    <button type="button" class="lv-qw-time-chip" data-offset="30">-30分</button>
+                    <button type="button" class="lv-qw-time-chip" data-offset="60">-1时</button>
+                </div>
+            </div>
+            ${recentStripHtml}
+        `,
         primaryLabel: "记录到日记",
         secondaryLabel: "记完继续",
         onSave: async (saveBtn, cleanup, continueMode) => {
-            const val = textarea?.value?.trim();
-            if (!val) { lvNotify.capsule({ source: "LifeLog", message: "请输入日志内容", duration: 1800, archive: false }); textarea?.focus(); return; }
-            if (photoUploading) { lvNotify.capsule({ source: "LifeLog", message: "📷 图片仍在处理中，请稍候再记录", duration: 2000, archive: false }); return; }
+            const val = textarea?.value?.trim() || "";
+            if (!val && attachments.length === 0) {
+                lvNotify.capsule({ source: "LifeLog", message: "请输入日志内容或添加附件", duration: 1800, archive: false });
+                textarea?.focus();
+                return;
+            }
+            if (targetMode === "custom" && !customDocId) {
+                lvNotify.capsule({ source: "LifeLog", message: "请先指定目标文档", duration: 2400, level: "warn", archive: false });
+                openDocPicker((doc) => {
+                    customDocId = doc.id;
+                    customDocTitle = doc.content;
+                    saveQuickWorkspaceConfig({ lifeLogDocumentId: customDocId, lifeLogDocumentTitle: customDocTitle });
+                    updateCustomDocUi();
+                });
+                return;
+            }
+
             const origLabel = saveBtn?.textContent || "记录到日记";
-            if (saveBtn) saveBtn.textContent = "记录中…";
-            const lineText = `${computeTimeStr()} ${selectedCat}：${val}`;
-            const donePhotos = pendingPhotos.filter((p) => p.path);
-            const photoLines = donePhotos.map((p) => `![📷 LifeLog](${p.path})`).join("\n");
-            const payloadMd = photoLines ? `${lineText}\n${photoLines}\n` : `${lineText}\n`;
+            if (saveBtn) saveBtn.textContent = attachments.length > 0 ? "处理附件中…" : "记录中…";
+
             try {
-                const res = await appendMarkdownToDailyNote(payloadMd, chosenNotebookId || conf.lifeLogNotebookId);
+                const attachMarkdownLines: string[] = [];
+                if (attachments.length > 0) {
+                    const stamp = Date.now();
+                    for (let i = 0; i < attachments.length; i++) {
+                        const att = attachments[i];
+                        if (!att) continue;
+                        if (att.mode === "assets") {
+                            const ext = att.name.includes(".") ? att.name.split(".").pop() : "bin";
+                            const safeName = `lv-lifelog-${stamp}-${i}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+                            try {
+                                if (att.type === "image") {
+                                    const out = await compressAndPutImageFile(att.file, `${stamp}`, i + 1);
+                                    if (out?.path) {
+                                        attachMarkdownLines.push(`![${att.name}](${out.path})`);
+                                    } else {
+                                        const fd = new FormData();
+                                        fd.append("path", `/data/assets/${safeName}`);
+                                        fd.append("file", att.file, safeName);
+                                        fd.append("isDir", "false");
+                                        await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                        attachMarkdownLines.push(`![${att.name}](assets/${safeName})`);
+                                    }
+                                } else {
+                                    const fd = new FormData();
+                                    fd.append("path", `/data/assets/${safeName}`);
+                                    fd.append("file", att.file, safeName);
+                                    fd.append("isDir", "false");
+                                    await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                    if (att.type === "video") {
+                                        attachMarkdownLines.push(`<video controls src="assets/${safeName}" style="max-width:100%; border-radius:8px;"></video>`);
+                                    } else {
+                                        attachMarkdownLines.push(`[📎 ${att.name}](assets/${safeName})`);
+                                    }
+                                }
+                            } catch (err) {
+                                console.warn("[LvLifeLog] 附件写入 assets 失败:", err);
+                            }
+                        } else {
+                            // local-link 模式 (file:///)
+                            const abs = att.localPath || (att.file as any).path || "";
+                            if (abs) {
+                                const normalized = abs.replace(/\\/g, "/");
+                                const uri = normalized.startsWith("/") ? `file://${normalized}` : `file:///${normalized}`;
+                                if (att.type === "image") {
+                                    attachMarkdownLines.push(`![${att.name}](${uri})`);
+                                } else if (att.type === "video") {
+                                    attachMarkdownLines.push(`<video controls src="${uri}" style="max-width:100%; border-radius:8px;"></video>\n[📹 本地视频: ${att.name}](${uri})`);
+                                } else {
+                                    attachMarkdownLines.push(`[📎 本地文件: ${att.name}](${uri})`);
+                                }
+                            } else {
+                                const ext = att.name.includes(".") ? att.name.split(".").pop() : "bin";
+                                const safeName = `lv-lifelog-${stamp}-${i}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+                                try {
+                                    const fd = new FormData();
+                                    fd.append("path", `/data/assets/${safeName}`);
+                                    fd.append("file", att.file, safeName);
+                                    fd.append("isDir", "false");
+                                    await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                    attachMarkdownLines.push(att.type === "image" ? `![${att.name}](assets/${safeName})` : `[📎 ${att.name}](assets/${safeName})`);
+                                } catch { /* soft */ }
+                            }
+                        }
+                    }
+                }
+
+                const lineText = `${computeTimeStr()} ${selectedCat}：${val}`;
+                const attachBlock = attachMarkdownLines.length ? attachMarkdownLines.join("\n\n") : "";
+                const fullPayload = attachBlock
+                    ? `${lineText}\n\n${attachBlock}\n{: custom-lifelog-type="${selectedCat}" }\n`
+                    : `${lineText}\n{: custom-lifelog-type="${selectedCat}" }\n`;
+
+                const parentID = targetMode === "current" && currentDoc ? currentDoc.id : (targetMode === "custom" && customDocId ? customDocId : "");
+                let res: { ok: boolean; msg?: string; docId?: string; blockId?: string; ids?: string[] };
+                if (parentID) {
+                    const aRes = await lvKernelPost("/api/block/appendBlock", { data: fullPayload, dataType: "markdown", parentID });
+                    const listed = extractAppendIdsList(aRes.data);
+                    res = { ok: aRes.code === 0, msg: aRes.msg, docId: listed.docId || parentID, blockId: listed.blockId, ids: listed.ids };
+                } else {
+                    res = await appendMarkdownToDailyNote(fullPayload, chosenNotebookId || conf.lifeLogNotebookId);
+                }
+
                 if (res.ok) {
-                    try { ls?.removeItem(LIFELOG_DRAFT_KEY); ls?.removeItem(LIFELOG_DRAFT_AT_KEY); } catch { /* ignore */ }
+                    try { ls?.removeItem(LIFELOG_DRAFT_KEY); ls?.removeItem(LIFELOG_DRAFT_AT_KEY); } catch {}
                     const jumpId = res.blockId || res.docId;
                     const extraIds = (res.ids || []).filter((id) => id !== res.blockId);
-                    const histLine = donePhotos.length ? `${lineText} 📷×${donePhotos.length}` : lineText;
+                    const photoCount = attachments.filter((a) => a.type === "image").length;
+                    const fileCount = attachments.filter((a) => a.type !== "image").length;
+                    const badgeParts: string[] = [];
+                    if (photoCount) badgeParts.push(`📷×${photoCount}`);
+                    if (fileCount) badgeParts.push(`📎×${fileCount}`);
+                    const histLine = badgeParts.length ? `${lineText} ${badgeParts.join(" ")}` : lineText;
                     pushTodayLifeLogHistory(histLine, res.blockId, extraIds);
-                    pendingPhotos.length = 0;
-                    renderAttachStrip();
+
+                    attachments.length = 0;
+                    renderAttachments();
+
                     try {
                         getActivityHub().record({
                             category: "note",
@@ -12283,27 +13933,26 @@ export function openLifeLogDialog(): void {
                             title: `${selectedCat}：${val.replace(/[\r\n]+/g, " ").slice(0, 24)}`,
                             linkBlockId: jumpId,
                         });
-                    } catch { /* ignore */ }
+                    } catch {}
+
                     if (continueMode) {
                         if (textarea) { textarea.value = ""; textarea.dispatchEvent(new Event("input")); textarea.focus(); }
                         const draftHintEl = mask?.querySelector<HTMLElement>(".lv-qw-draft-hint");
                         if (draftHintEl) draftHintEl.style.display = "none";
                         const recEl = mask?.querySelector<HTMLElement>(".lv-qw-recent-strip");
-                        if (recEl) {
-                            recEl.outerHTML = renderStrip();
-                        }
-                        if (saveBtn) saveBtn.textContent = donePhotos.length ? `✓ 已记 · 📷×${donePhotos.length}，继续` : "✓ 已记，继续";
+                        if (recEl) recEl.outerHTML = renderStrip();
+                        if (saveBtn) saveBtn.textContent = attachments.length ? `✓ 已记 · 📎×${attachments.length}，继续` : "✓ 已记，继续";
                         window.setTimeout(() => { if (saveBtn && saveBtn.isConnected) saveBtn.textContent = origLabel; }, 1200);
-                        lvNotify.capsule({ source: "LifeLog", message: `📒 已记录（${selectedCat}${donePhotos.length ? ` · 📷×${donePhotos.length}` : ""}），继续下一条`, duration: 1800, archive: false });
+                        lvNotify.capsule({ source: "LifeLog", message: `📒 已记录（${selectedCat}${attachments.length ? ` · 📎×${attachments.length}` : ""}），继续下一条`, duration: 1800, archive: false });
                     } else {
                         cleanup();
                         lvNotify.capsule({
                             source: "LifeLog",
-                            message: `📒 已记录至今日日记（${selectedCat}${donePhotos.length ? ` · 📷×${donePhotos.length}` : ""}）`,
+                            message: `📒 已记录至${targetMode === "current" ? "当前文档" : targetMode === "custom" ? "指定文档" : "今日日记"}（${selectedCat}${attachments.length ? ` · 📎×${attachments.length}` : ""}）`,
                             duration: 2600,
                             level: "success",
                             archive: false,
-                            action: { label: "看日记", onClick: () => { if (jumpId) void openDocumentById(jumpId); else void openDiaryBottom(); } },
+                            action: { label: "查看", onClick: () => { if (jumpId) void openDocumentById(jumpId); else void openDiaryBottom(); } },
                         });
                     }
                 } else {
@@ -12324,18 +13973,287 @@ export function openLifeLogDialog(): void {
     const draftHint = mask.querySelector<HTMLElement>(".lv-qw-draft-hint");
     const nbSelect = mask.querySelector<HTMLSelectElement>(".lv-qw-ll-nb-select");
 
+    const targetBadgeBtn = mask.querySelector<HTMLButtonElement>(".lv-qw-ll-badge-target");
+    const nbRow = mask.querySelector<HTMLElement>(".lv-qw-nb-row");
+    const customDocRow = mask.querySelector<HTMLElement>(".lv-qw-custom-doc-row");
+    const customDocNameEl = mask.querySelector<HTMLElement>(".lv-qw-custom-doc-name");
+
+    const updateCustomDocUi = () => {
+        if (customDocNameEl) {
+            customDocNameEl.textContent = customDocTitle || (customDocId ? "已选文档" : "尚未设定指定文档");
+            customDocNameEl.title = customDocTitle || "";
+        }
+        if (targetBadgeBtn) targetBadgeBtn.textContent = getBadgeLabel();
+    };
+
+    if (targetBadgeBtn) {
+        targetBadgeBtn.addEventListener("click", () => {
+            if (targetMode === "daily") targetMode = currentDoc ? "current" : "custom";
+            else if (targetMode === "current") targetMode = "custom";
+            else targetMode = "daily";
+
+            try { ls?.setItem("lv-lifelog-target-mode", targetMode); } catch {}
+            if (nbRow) nbRow.style.display = targetMode === "daily" ? "flex" : "none";
+            if (customDocRow) customDocRow.style.display = targetMode === "custom" ? "flex" : "none";
+            targetBadgeBtn.textContent = getBadgeLabel();
+            hapticFeedback(6);
+        });
+    }
+
     if (nbSelect) {
         void listOpenNotebooks().then((nbs) => {
             if (!nbSelect.isConnected || !nbs.length) return;
-            nbSelect.innerHTML = `<option value="">叶归 · 默认日记本</option>` + nbs.map((nb) =>
+            nbSelect.innerHTML = `<option value="">✨ 自动识别默认日记本</option>` + nbs.map((nb) =>
                 `<option value="${escapeHtml(nb.id)}" ${nb.id === chosenNotebookId ? "selected" : ""}>📔 ${escapeHtml(nb.name)}</option>`
             ).join("");
-        }).catch(() => { /* ignore */ });
+        }).catch(() => {});
         nbSelect.addEventListener("change", () => {
             chosenNotebookId = nbSelect.value.trim();
             saveQuickWorkspaceConfig({ lifeLogNotebookId: chosenNotebookId || undefined });
         });
     }
+
+    // 绑定当前文档为指定目标
+    mask.querySelector(".lv-qw-bind-cur-btn")?.addEventListener("click", () => {
+        if (currentDoc) {
+            customDocId = currentDoc.id;
+            customDocTitle = currentDoc.title;
+            saveQuickWorkspaceConfig({ lifeLogDocumentId: customDocId, lifeLogDocumentTitle: customDocTitle });
+            updateCustomDocUi();
+            hapticFeedback(8);
+            lvNotify.capsule({ source: "LifeLog", message: `已设定指定文档为《${currentDoc.title}》`, duration: 2200, archive: false });
+        }
+    });
+
+    // 搜索选取任意文档为指定目标
+    const openDocPicker = (onSelect: (doc: { id: string; content: string }) => void) => {
+        const card = mask.querySelector(".lv-qw-card");
+        if (!card) return;
+        const existing = card.querySelector(".lv-qw-doc-picker-modal");
+        if (existing) { existing.remove(); return; }
+        const modal = document.createElement("div");
+        modal.className = "lv-qw-doc-picker-modal";
+        modal.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <strong style="font-size:12px;color:var(--lv-lp-text);">🔍 选取 LifeLog 指定目标文档</strong>
+                <button type="button" class="lv-qw-doc-picker-close" style="border:none;background:transparent;cursor:pointer;color:var(--lv-lp-text-sub);font-size:13px;">✕</button>
+            </div>
+            <input type="text" class="lv-qw-doc-search-input" placeholder="输入关键词搜索文档..." autofocus />
+            <div class="lv-qw-doc-results"></div>
+        `;
+        const input = modal.querySelector<HTMLInputElement>(".lv-qw-doc-search-input");
+        const resultsEl = modal.querySelector<HTMLElement>(".lv-qw-doc-results");
+        const close = () => modal.remove();
+        modal.querySelector(".lv-qw-doc-picker-close")?.addEventListener("click", close);
+
+        const doSearch = async (kw: string) => {
+            if (!resultsEl) return;
+            resultsEl.innerHTML = `<div style="text-align:center;padding:12px;font-size:11.5px;color:var(--lv-lp-text-sub);">搜索中…</div>`;
+            try {
+                const cleanKw = kw.trim();
+                const sql = cleanKw
+                    ? `SELECT id, content FROM blocks WHERE type='d' AND content LIKE '%${cleanKw.replace(/'/g, "''")}%' ORDER BY updated DESC LIMIT 15`
+                    : `SELECT id, content FROM blocks WHERE type='d' ORDER BY updated DESC LIMIT 15`;
+                const res = await lvKernelPost("/api/query/sql", { stmt: sql });
+                const rows = Array.isArray(res.data) ? res.data : [];
+                if (rows.length > 0) {
+                    resultsEl.innerHTML = rows.map((r: any) => `
+                        <button type="button" class="lv-qw-doc-item" data-doc-id="${r.id}" data-doc-title="${escapeHtml(r.content || '未命名文档')}">
+                            <span>📄 ${escapeHtml(r.content || '未命名文档')}</span>
+                            <small style="color:var(--lv-lp-text-sub);font-size:10px;">${r.id.slice(0, 15)}</small>
+                        </button>
+                    `).join("");
+                    resultsEl.querySelectorAll<HTMLButtonElement>(".lv-qw-doc-item").forEach((btn) => {
+                        btn.addEventListener("click", () => {
+                            const id = btn.getAttribute("data-doc-id") || "";
+                            const title = btn.getAttribute("data-doc-title") || "";
+                            onSelect({ id, content: title });
+                            close();
+                        });
+                    });
+                } else {
+                    resultsEl.innerHTML = `<div style="text-align:center;padding:12px;font-size:11.5px;color:var(--lv-lp-text-sub);">未找到相关文档</div>`;
+                }
+            } catch {
+                if (resultsEl) resultsEl.innerHTML = `<div style="text-align:center;padding:12px;font-size:11.5px;color:var(--lv-lp-text-sub);">搜索失败</div>`;
+            }
+        };
+
+        let timer: number | null = null;
+        input?.addEventListener("input", () => {
+            if (timer) clearTimeout(timer);
+            timer = window.setTimeout(() => { doSearch(input.value); }, 120);
+        });
+        card.appendChild(modal);
+        void doSearch("");
+        window.setTimeout(() => input?.focus(), 40);
+    };
+
+    mask.querySelector(".lv-qw-pick-doc-btn")?.addEventListener("click", () => {
+        hapticFeedback(6);
+        openDocPicker((doc) => {
+            customDocId = doc.id;
+            customDocTitle = doc.content;
+            saveQuickWorkspaceConfig({ lifeLogDocumentId: customDocId, lifeLogDocumentTitle: customDocTitle });
+            updateCustomDocUi();
+            lvNotify.capsule({ source: "LifeLog", message: `已设定指定文档为《${doc.content}》`, duration: 2200, archive: false });
+        });
+    });
+
+    // 附件管理交互逻辑（图片、视频、文件）
+    const fileInput = mask.querySelector<HTMLInputElement>(".lv-qw-hidden-file-input");
+    const attachListEl = mask.querySelector<HTMLElement>(".lv-qw-attach-list");
+    const modePills = mask.querySelectorAll<HTMLButtonElement>(".lv-qw-mode-pill");
+
+    modePills.forEach((p) => {
+        p.addEventListener("click", () => {
+            const m = p.getAttribute("data-attach-mode") as "assets" | "local-link";
+            if (m && m !== currentLinkMode) {
+                currentLinkMode = m;
+                modePills.forEach((pill) => pill.classList.toggle("is-active", pill.getAttribute("data-attach-mode") === m));
+                saveQuickWorkspaceConfig({ quickNoteAttachMode: m });
+                attachments.forEach((a) => { a.mode = m; });
+                renderAttachments();
+                hapticFeedback(6);
+                lvNotify.capsule({ source: "LifeLog", message: m === "assets" ? "已切换：存入知识库 (assets 跨端漫游)" : "已切换：插入对应链接 (file:// 本地直链)", duration: 1800, archive: false });
+            }
+        });
+    });
+
+    const renderAttachments = () => {
+        if (!attachListEl) return;
+        if (attachments.length === 0) {
+            attachListEl.style.display = "none";
+            attachListEl.innerHTML = "";
+            updatePreview();
+            return;
+        }
+        attachListEl.style.display = "flex";
+        attachListEl.innerHTML = attachments.map((a) => `
+            <div class="lv-qw-attach-chip" data-att-id="${a.id}">
+                ${a.previewUrl ? `<img class="lv-qw-attach-thumb" src="${a.previewUrl}" alt="${escapeHtml(a.name)}" />` : `<span style="font-size:14px;">${a.type === "video" ? "📹" : "📎"}</span>`}
+                <span class="lv-qw-attach-name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</span>
+                <small class="lv-qw-attach-size">${a.sizeStr}</small>
+                <button type="button" class="lv-qw-item-mode-btn" data-toggle="${a.id}" title="点击切换此文件的插入模式">${a.mode === "assets" ? "💾 知识库" : "🔗 本地链"}</button>
+                <button type="button" class="lv-qw-attach-remove" data-del="${a.id}" title="移除附件">✕</button>
+            </div>
+        `).join("");
+
+        attachListEl.querySelectorAll<HTMLButtonElement>("[data-toggle]").forEach((b) => {
+            b.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const id = b.getAttribute("data-toggle");
+                const it = attachments.find((a) => a.id === id);
+                if (it) {
+                    it.mode = it.mode === "assets" ? "local-link" : "assets";
+                    renderAttachments();
+                }
+            });
+        });
+        attachListEl.querySelectorAll<HTMLButtonElement>("[data-del]").forEach((b) => {
+            b.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const id = b.getAttribute("data-del");
+                const idx = attachments.findIndex((a) => a.id === id);
+                if (idx >= 0) {
+                    const targetAtt = attachments[idx];
+                    if (targetAtt) {
+                        if (targetAtt.previewUrl) {
+                            try { URL.revokeObjectURL(targetAtt.previewUrl); } catch {}
+                        }
+                        // 已上传但未写入日记的资产顺手清理，避免 assets 孤儿文件堆积
+                        void lvKernelPost("/api/file/removeFile", { path: `/data/assets/${targetAtt.name}` }).catch(() => {});
+                    }
+                    attachments.splice(idx, 1);
+                    renderAttachments();
+                }
+            });
+        });
+        updatePreview();
+    };
+
+    const addFiles = (files: File[]) => {
+        for (const f of files) {
+            const type = f.type.startsWith("image/") ? "image" : (f.type.startsWith("video/") ? "video" : "file");
+            const localPath = String((f as any).path || "");
+            const sizeStr = f.size > 1024 * 1024 ? `${(f.size / (1024 * 1024)).toFixed(1)}MB` : `${Math.round(f.size / 1024)}KB`;
+            const previewUrl = type === "image" ? URL.createObjectURL(f) : undefined;
+            attachments.push({
+                id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                file: f,
+                name: f.name,
+                sizeStr,
+                type,
+                mode: currentLinkMode,
+                localPath,
+                previewUrl,
+            });
+        }
+        renderAttachments();
+        hapticFeedback(8);
+    };
+
+    mask.querySelector(".lv-qw-btn-img")?.addEventListener("click", () => {
+        if (fileInput) { fileInput.accept = "image/*"; fileInput.click(); }
+    });
+    mask.querySelector(".lv-qw-btn-video")?.addEventListener("click", () => {
+        if (fileInput) { fileInput.accept = "video/*"; fileInput.click(); }
+    });
+    mask.querySelector(".lv-qw-btn-file")?.addEventListener("click", () => {
+        if (fileInput) { fileInput.accept = "*/*"; fileInput.click(); }
+    });
+    fileInput?.addEventListener("change", () => {
+        if (fileInput.files?.length) {
+            addFiles(Array.from(fileInput.files));
+            fileInput.value = "";
+        }
+    });
+
+    textarea?.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        textarea.classList.add("is-dragover");
+    });
+    textarea?.addEventListener("dragleave", () => {
+        textarea.classList.remove("is-dragover");
+    });
+    textarea?.addEventListener("drop", (e) => {
+        e.preventDefault();
+        textarea.classList.remove("is-dragover");
+        if (e.dataTransfer?.files?.length) {
+            addFiles(Array.from(e.dataTransfer.files));
+            lvNotify.capsule({ source: "LifeLog", message: `📎 已拖入 ${e.dataTransfer.files.length} 个文件`, duration: 1800, archive: false });
+        }
+    });
+    textarea?.addEventListener("paste", (e) => {
+        const ce = e as ClipboardEvent;
+        if (ce.clipboardData?.files?.length) {
+            addFiles(Array.from(ce.clipboardData.files));
+            lvNotify.capsule({ source: "LifeLog", message: `📎 已添加剪贴板文件`, duration: 1800, archive: false });
+        }
+    });
+
+    // 格式标记快捷插入
+    mask.querySelector(".lv-qw-tags-row")?.addEventListener("click", (e) => {
+        const chip = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-qw-tag-chip");
+        if (!chip || !textarea) return;
+        const ins = chip.getAttribute("data-insert") || "";
+        hapticFeedback(6);
+        let txt = ins;
+        if (ins === "time") {
+            txt = `${String(new Date().getHours()).padStart(2, "0")}:${String(new Date().getMinutes()).padStart(2, "0")} `;
+        } else if (ins === "date") {
+            const d = new Date();
+            txt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} `;
+        } else if (ins === "doclink" && currentDoc) {
+            txt = `[《${currentDoc.title}》](siyuan://blocks/${currentDoc.id}) `;
+        }
+        const s = textarea.selectionStart ?? textarea.value.length, end = textarea.selectionEnd ?? textarea.value.length;
+        textarea.value = textarea.value.slice(0, s) + txt + textarea.value.slice(end);
+        textarea.selectionStart = textarea.selectionEnd = s + txt.length;
+        textarea.dispatchEvent(new Event("input"));
+        textarea.focus();
+        try { ls?.setItem(LIFELOG_DRAFT_KEY, textarea.value); } catch {}
+    });
 
     const savedDraft = ls?.getItem(LIFELOG_DRAFT_KEY);
     if (savedDraft && textarea) {
@@ -12368,106 +14286,9 @@ export function openLifeLogDialog(): void {
         if (draftHint) draftHint.style.display = "none";
         textarea?.focus();
     });
-    // ---- 配图管线：缩略图条渲染 / 文件选择 + 粘贴摄取 / 移除 ----
-    const attachStripEl = mask.querySelector<HTMLElement>(".lv-qw-attach-strip");
-    const renderAttachStrip = () => {
-        if (!attachStripEl) return;
-        if (pendingPhotos.length === 0) {
-            attachStripEl.style.display = "none";
-            attachStripEl.innerHTML = "";
-            return;
-        }
-        attachStripEl.style.display = "flex";
-        attachStripEl.innerHTML = pendingPhotos.map((p, i) =>
-            p.busy
-                ? `<span class="lv-qw-attach-thumb lv-qw-attach-busy" title="正在处理第 ${i + 1} 张图…"></span>`
-                : `<span class="lv-qw-attach-thumb"><img src="${escapeHtml(p.thumb)}" alt="待写入配图 ${i + 1}" /><button type="button" class="lv-qw-attach-del" data-attach-del="${i}" aria-label="移除这张配图" title="移除">×</button></span>`
-        ).join("");
-    };
 
-    const ingestPhotoFiles = async (files: Array<File | Blob>) => {
-        if (photoUploading) return;
-        const list = files.filter((f) => f && String((f as File).type || "").startsWith("image/"));
-        if (!list.length) return;
-        photoUploading = true;
-        try {
-            const d = new Date();
-            const stampBase = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
-            for (let i = 0; i < list.length; i++) {
-                const imgFile = list[i];
-                if (!imgFile) continue;
-                const slot: { path: string; thumb: string; busy?: boolean } = { path: "", thumb: "", busy: true };
-                pendingPhotos.push(slot);
-                renderAttachStrip();
-                const out = await compressAndPutImageFile(imgFile, stampBase, i + 1);
-                const idx = pendingPhotos.indexOf(slot);
-                if (out && idx !== -1) {
-                    slot.path = out.path;
-                    slot.thumb = out.thumb;
-                    slot.busy = false;
-                } else {
-                    if (idx !== -1) pendingPhotos.splice(idx, 1);
-                    lvNotify.capsule({ source: "LifeLog", message: "📷 图片处理失败（请使用 JPG/PNG 等常见格式）", duration: 2400, level: "warn", archive: false });
-                }
-                renderAttachStrip();
-            }
-            hapticFeedback(8);
-        } finally {
-            photoUploading = false;
-            updatePreview();
-        }
-    };
-
-    const photoBtn = mask.querySelector<HTMLElement>(".lv-qw-photo-btn");
-    const photoInput = mask.querySelector<HTMLInputElement>(".lv-qw-photo-input");
-    photoBtn?.addEventListener("click", () => {
-        hapticFeedback(6);
-        photoInput?.click();
-    });
-    photoInput?.addEventListener("change", () => {
-        const files = Array.from(photoInput.files || []) as File[];
-        try { photoInput.value = ""; } catch { /* ignore */ }
-        void ingestPhotoFiles(files);
-    });
-    // 文本域直接粘贴截图 → 进入配图管线（不影响普通文本粘贴）
-    textarea?.addEventListener("paste", (e) => {
-        const ce = e as ClipboardEvent;
-        const items = ce.clipboardData?.items;
-        if (!items) return;
-        const imgFiles: File[] = [];
-        for (let i = 0; i < items.length; i++) {
-            const it = items[i];
-            if (!it) continue;
-            if (it.kind === "file" && it.type.startsWith("image/")) {
-                const f = it.getAsFile();
-                if (f) imgFiles.push(f);
-            }
-        }
-        if (imgFiles.length) {
-            e.preventDefault();
-            e.stopPropagation();
-            void ingestPhotoFiles(imgFiles);
-        }
-    });
+    // 图片缩略图点击预览 (Lightbox)
     mask.addEventListener("click", (e) => {
-        const delBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-qw-attach-del");
-        if (!delBtn) return;
-        e.stopPropagation();
-        const idx = Number(delBtn.getAttribute("data-attach-del") || "-1");
-        const target = idx >= 0 ? pendingPhotos[idx] : undefined;
-        if (target && !target.busy) {
-            // 已上传但未写入日记的资产顺手清理，避免 assets 孤儿文件堆积
-            if (target.path) {
-                void lvKernelPost("/api/file/removeFile", { path: `/${target.path}` }).catch(() => { /* 清理失败静默 */ });
-            }
-            pendingPhotos.splice(idx, 1);
-            hapticFeedback(8);
-            renderAttachStrip();
-            updatePreview();
-            return;
-        }
-
-        // 点击照片缩略图直接原图浮层预览（Lightbox）
         const thumbImg = (e.target as HTMLElement | null)?.closest<HTMLImageElement>(".lv-qw-attach-thumb img");
         if (thumbImg?.src) {
             e.stopPropagation();
@@ -12484,12 +14305,13 @@ export function openLifeLogDialog(): void {
 
     const updatePreview = () => {
         if (!previewEl) return;
-        const doneCount = pendingPhotos.filter((p) => p.path).length;
-        const photoTag = doneCount > 0 ? ` 📷×${doneCount}` : "";
-        previewEl.textContent = `${computeTimeStr()} ${selectedCat}：${textarea?.value?.trim() || "..."}${photoTag}`;
-        if (photoBtn) {
-            photoBtn.textContent = doneCount > 0 ? `📷 照片 (${doneCount})` : "📷 照片";
-        }
+        const photoCount = attachments.filter((a) => a.type === "image").length;
+        const fileCount = attachments.filter((a) => a.type !== "image").length;
+        const badgeParts: string[] = [];
+        if (photoCount) badgeParts.push(`📷×${photoCount}`);
+        if (fileCount) badgeParts.push(`📎×${fileCount}`);
+        const attTag = badgeParts.length ? ` ${badgeParts.join(" ")}` : "";
+        previewEl.textContent = `${computeTimeStr()} ${selectedCat}：${textarea?.value?.trim() || "..."}${attTag}`;
     };
     updatePreview();
 

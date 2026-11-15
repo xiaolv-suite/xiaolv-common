@@ -179,14 +179,16 @@ export function tokenizeCodeLine(line: string, _lang = ""): CodeToken[] {
 
 /** 纯函数：将文本行中的行内格式（粗体、行内代码、链接、变量）解析为 Token 序列 */
 export function tokenizeMarkdownInlines(text: string): MarkdownInlineToken[] {
+    if (!text) return [];
     const tokens: MarkdownInlineToken[] = [];
     let i = 0;
     const len = text.length;
+    let safetyCounter = len * 2 + 10;
 
-    while (i < len) {
-        // 变量优先：{{xlc:...}}
-        if (text.slice(i).startsWith("{{xlc:")) {
-            const endIdx = text.indexOf("}}", i);
+    while (i < len && --safetyCounter > 0) {
+        // 1. 变量优先：{{xlc:...}}
+        if (text.startsWith("{{xlc:", i)) {
+            const endIdx = text.indexOf("}}", i + 6);
             if (endIdx !== -1) {
                 tokens.push({type: "variable", text: text.slice(i, endIdx + 2)});
                 i = endIdx + 2;
@@ -194,7 +196,7 @@ export function tokenizeMarkdownInlines(text: string): MarkdownInlineToken[] {
             }
         }
 
-        // 行内代码：`code`
+        // 2. 行内代码：`code`
         if (text[i] === "`") {
             const endIdx = text.indexOf("`", i + 1);
             if (endIdx !== -1) {
@@ -204,8 +206,8 @@ export function tokenizeMarkdownInlines(text: string): MarkdownInlineToken[] {
             }
         }
 
-        // 粗体：**bold**
-        if (text.slice(i, i + 2) === "**") {
+        // 3. 粗体：**bold**
+        if (text.startsWith("**", i)) {
             const endIdx = text.indexOf("**", i + 2);
             if (endIdx !== -1) {
                 tokens.push({type: "bold", text: text.slice(i + 2, endIdx)});
@@ -214,9 +216,9 @@ export function tokenizeMarkdownInlines(text: string): MarkdownInlineToken[] {
             }
         }
 
-        // 链接：[title](url)
+        // 4. 链接：[title](url)（仅解析合规 markdown 链接，普通方括号文本自动降级为普通字面量）
         if (text[i] === "[") {
-            const closeBracket = text.indexOf("]", i);
+            const closeBracket = text.indexOf("]", i + 1);
             if (closeBracket !== -1 && text[closeBracket + 1] === "(") {
                 const closeParen = text.indexOf(")", closeBracket + 2);
                 if (closeParen !== -1) {
@@ -229,23 +231,26 @@ export function tokenizeMarkdownInlines(text: string): MarkdownInlineToken[] {
             }
         }
 
-        // 普通字符聚合成 text token
-        let plain = "";
+        // 5. 普通字符聚合成 text token（保证每次至少单步消费当前字符，彻底杜绝死循环）
+        let plain = text[i]!;
+        i++;
         while (i < len) {
             if (
-                text.slice(i).startsWith("{{xlc:") ||
+                text.startsWith("{{xlc:", i) ||
                 text[i] === "`" ||
-                text.slice(i, i + 2) === "**" ||
+                text.startsWith("**", i) ||
                 text[i] === "["
             ) {
                 break;
             }
-            plain += text[i];
+            plain += text[i]!;
             i++;
         }
-        if (plain) {
-            tokens.push({type: "text", text: plain});
-        }
+        tokens.push({type: "text", text: plain});
+    }
+
+    if (i < len) {
+        tokens.push({type: "text", text: text.slice(i)});
     }
 
     return tokens;
@@ -448,19 +453,21 @@ export function renderSafePreview(
     }
 
     const trimmed = text.trim();
-    const isCodeItem = itemType === "code" || /^```[\w+#.-]*\s*\n[\s\S]*\n```\s*$/.test(trimmed);
+    const isTruncated = trimmed.length > 20000;
+    const safeText = isTruncated ? trimmed.slice(0, 20000) : text;
+    const isCodeItem = itemType === "code" || /^```[\w+#.-]*\s*\n[\s\S]*\n```\s*$/.test(safeText.trim());
 
     // 模式 A：代码模式渲染
     if (isCodeItem) {
-        let codeBody = text;
+        let codeBody = safeText;
         let lang = "";
 
         if (trimmed.startsWith("```")) {
-            const firstNl = text.indexOf("\n");
+            const firstNl = safeText.indexOf("\n");
             if (firstNl !== -1) {
-                lang = text.slice(0, firstNl).replace(/^```/, "").trim();
-                const lastFence = text.lastIndexOf("```");
-                codeBody = lastFence > firstNl ? text.slice(firstNl + 1, lastFence) : text.slice(firstNl + 1);
+                lang = safeText.slice(0, firstNl).replace(/^```/, "").trim();
+                const lastFence = safeText.lastIndexOf("```");
+                codeBody = lastFence > firstNl ? safeText.slice(firstNl + 1, lastFence) : safeText.slice(firstNl + 1);
             }
         }
 
@@ -533,7 +540,7 @@ export function renderSafePreview(
     }
 
     // 模式 B：富文本 Markdown / 结构化渲染
-    const blocks = parseMarkdownBlocks(text);
+    const blocks = parseMarkdownBlocks(safeText);
 
     for (const block of blocks) {
         if (block.type === "hr") {
@@ -802,6 +809,14 @@ export function renderSafePreview(
         }
 
         container.appendChild(el);
+    }
+
+    if (isTruncated) {
+        const truncateNotice = doc.createElement("div");
+        truncateNotice.className = "xlc-preview-truncate-notice";
+        truncateNotice.style.cssText = "margin-top:10px;padding:6px 10px;font-size:11px;color:var(--b3-theme-on-surface-light,#888);background:var(--b3-theme-surface,#f5f5f5);border-radius:4px;";
+        truncateNotice.textContent = "… (内容较长，已截取前 20,000 字符展示，复制与插入仍保留完整内容)";
+        container.appendChild(truncateNotice);
     }
 }
 

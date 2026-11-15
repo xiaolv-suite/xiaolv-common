@@ -118,7 +118,9 @@ export function openShareCardDialog(
     // 提示栏
     const tip = document.createElement("div");
     tip.className = "xlc-share-card-tip";
-    tip.textContent = deps.t("shareCardTip") || "💡 对方无需任何配置，直接在小驴常用主搜索框中粘贴此分享码（Ctrl+V），即可秒级自动导入！";
+    tip.textContent = deps.t("shareCardTip") || (isMobileModal
+        ? "💡 对方无需任何配置，直接在小驴常用主搜索框中粘贴此分享码，即可秒级自动导入！"
+        : "💡 对方无需任何配置，直接在小驴常用主搜索框中粘贴此分享码（Ctrl+V），即可秒级自动导入！");
 
     // 底部按钮栏
     const foot = document.createElement("div");
