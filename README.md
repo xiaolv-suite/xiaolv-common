@@ -25,6 +25,43 @@
 
 ---
 
+## 🚀 本次更新要点（v0.10.87）
+
+- **剪贴板 100% CPU 卡死死循环彻底根除**：重构 Markdown 单 pass 内联解析器（tokenizeMarkdownInlines），增加步进保证与迭代安全熔断器（len * 2 + 10），彻底消除畸形符号导致主线程假死崩溃；
+- **防 ReDoS 正则灾难性回溯**：优化代码片段注解与标签解析器，超长或多行文本毫秒级 $O(1)$ 快速退出；
+- **超大文本 20,000 字符硬截断防护**：预览超万字剪贴内容时增加安全长度保护与友好提示，杜绝 DOM 节点数量爆炸；
+- **全生态罗盘顶栏常驻与防横跳**：消除思源 3.8.x 内置重排对罗盘中枢的推挤，单插件环境下亦可一键唤起全功能罗盘工作台；
+- **通知去重与长效免打扰**：升级通知高可见胶囊呈现，重复通知原位折叠计数（×N），免打扰设置跨重启严格固化。
+
+<details>
+<summary>展开查看历史版本更新记录（v0.10.86 及更早版本 · 完整记录见 CHANGELOG.md）</summary>
+
+- **v0.10.86**：全生态基础设施升级与交互打磨（罗盘启动防抖对齐、LifeLog 照片流与原子多块撤销、全生态联合灾备恢复、移动端全面去电脑化）。
+- **v0.10.85**：思源 3.8.10+ 原生文档树菜单、半角斜杠标题防截断保护、片段 Dock 搜索 IME 守卫。
+- **v0.10.84**：顶栏罗盘微任务防抖、二级抽屉鼠标锁定与组织迁移。
+</details>
+
+---
+
+## 🐴 小驴思源全家桶生态矩阵与交流
+
+本插件为「小驴思源生态」8 大官方集市插件之一。所有插件共享小驴罗盘（顶栏常驻中枢）、全域穿透搜索与统一备份恢复：
+
+| 插件名称 | 核心用途 | 官方集市 / 仓库 |
+| :--- | :--- | :--- |
+| **小驴打卡** | 本地优先习惯打卡、日程提醒与多维人生热力图工作台 | [`siyuan-checkin`](https://github.com/xiaolv-suite/siyuan-checkin) |
+| **小驴管家** | 家庭成员中心视角档案、证照保单到期预警与 LifeLog 流水协同 | [`siyuan-home`](https://github.com/xiaolv-suite/siyuan-home) |
+| **小驴人脉** | 一人一文档人际管理、圈层力导向关系网络与会前破冰速览 | [`siyuan-contacts`](https://github.com/xiaolv-suite/siyuan-contacts) |
+| **小驴拾遗** | 剪藏文章深度消化、视线同焦伴生导读与 4 大学术著录 | [`siyuan-glean`](https://github.com/xiaolv-suite/siyuan-glean) |
+| **小驴闪卡** | 原生 FSRS 算法调度、文档内质感序号流与全场景极速制卡 | [`siyuan-lv-cards`](https://github.com/xiaolv-suite/siyuan-lv-cards) |
+| **小驴考试** | 全真模拟考场环境、错题靶向归因复训与苏格拉底启发式 AI 导师 | [`siyuan-exam`](https://github.com/xiaolv-suite/siyuan-exam) |
+| **小驴常用** | 代码片段工作室、零卡死安全剪贴板历史与一键记事沙盒 | [`xiaolv-common`](https://github.com/xiaolv-suite/xiaolv-common) |
+| **小驴雷切** | 毫秒级多文档穿透切换、左右双文档实时分栏对照与切片代码画板 | [`siyuan-speed-switch`](https://github.com/xiaolv-suite/siyuan-speed-switch) |
+
+💬 **官方交流与需求反馈 QQ 群**：**871707735**（开发者实时在线，欢迎反馈问题、交流使用体验与提交新功能构想）。
+
+---
+
 ## 🎯 为什么需要小驴常用？它解决什么问题？
 
 在日常使用电脑、写作、编码、沟通时，我们每天都在重复输入大量相同或相似的内容：公司的开票资料、固定的客户答复话术、精调好的 AI 提示词（Prompt）、一段经常调用的 SQL 或脚手架代码。
@@ -180,58 +217,8 @@
 
 ---
 
-## 🐴 小驴系列插件家族
-
-小驴系列插件各自独立，可按需安装和组合使用：
-
-| 插件名称 | 一句话简介 | GitHub 仓库 |
-| :--- | :--- | :--- |
-| [小驴雷切](https://github.com/xiaolv-suite/siyuan-speed-switch) | 思源中的统一导航与工作上下文平台，连接页签、工作台、片段和快捷入口。 | [xiaolv-suite/siyuan-speed-switch](https://github.com/xiaolv-suite/siyuan-speed-switch) |
-| [小驴打卡](https://github.com/xiaolv-suite/siyuan-checkin) | 本地优先的习惯、目标打卡与复盘工作台。 | [xiaolv-suite/siyuan-checkin](https://github.com/xiaolv-suite/siyuan-checkin) |
-| [小驴人脉](https://github.com/xiaolv-suite/siyuan-contacts) | 在思源中管理联系人、人际关系、组织归属和重要日期。 | [xiaolv-suite/siyuan-contacts](https://github.com/xiaolv-suite/siyuan-contacts) |
-| [小驴拾遗](https://github.com/xiaolv-suite/siyuan-glean) | 整理思源剪藏和导入文章，支持状态分拣、阅读管理与日后回顾。 | [xiaolv-suite/siyuan-glean](https://github.com/xiaolv-suite/siyuan-glean) |
-| [小驴考试（内测版）](https://github.com/xiaolv-suite/siyuan-exam) | 本地题库备考工作台，支持多格式导入、刷题、模考、错题复盘与 AI 辅助。 | [xiaolv-suite/siyuan-exam](https://github.com/xiaolv-suite/siyuan-exam) |
-| [小驴管家（内测版）](https://github.com/xiaolv-suite/siyuan-home) | 管理家庭与生活资料、成员档案、台账、到期提醒和事务跟进。 | [xiaolv-suite/siyuan-home](https://github.com/xiaolv-suite/siyuan-home) |
-| [小驴闪卡（内测版）](https://github.com/xiaolv-suite/siyuan-lv-cards) | 思源中的知识捕获、制卡、练习与复习平台，使用内核原生 FSRS 排期。 | [xiaolv-suite/siyuan-lv-cards](https://github.com/xiaolv-suite/siyuan-lv-cards) |
-| [小驴常用（内测版）](https://github.com/xiaolv-suite/xiaolv-common) | 基于思源块保存、搜索并快速调用常用语、模板、代码和链接，支持变量填充。 | [xiaolv-suite/xiaolv-common](https://github.com/xiaolv-suite/xiaolv-common) |
-
-交流与反馈 QQ 群：**871707735**（可反馈 Bug、提交需求和交流使用体验）。
-
----
-
-## 📝 最近更新动态
-
-- **思源 3.8.10+ 原生特性适配**：全域穿透搜索结果行、来源预览与标题支持右键呼出原生文档树菜单（`showDocTreeNativeMenu`），零 SQL 内核实时解析笔记本归属；半角斜杠标题防截断保留；支持快捷复制纯文本（`Alt+Shift+R` / `Alt+Shift+C`）。
-- **输入法与剪贴板健壮性**：片段 Dock 搜索框增加 IME 合成期守卫，方向键选字不再被劫持误插切片；设置页 Quicker/AHK/cURL/Raycast 脚本导出与独立孤儿笔记本 ID 复制补齐失败捕获与错误提示（全生态剪贴板覆盖契约固化）。
-- **移动端与触控打磨**：收录表单操作条补齐 iOS 安全区内边距；标签芯片达 32px 舒适触控下限；同步策略下拉框统一 16px 防自动缩放。
-- **检索性能与交互**：发现页筛选渲染与同步比对视图重建防抖；关闭按钮、芯片与面包屑增加桌面端 hover 悬停高亮；i18n 键集与无障碍滚动监听契约收编。
-
-<details>
-<summary>展开查看历史版本更新（v0.10.84 及更早版本 · 完整记录见 <a href="./CHANGELOG.md">CHANGELOG.md</a>）</summary>
-
-### [v0.10.84] — 2026-11-10（GitHub 组织迁移与体验加固）
-
-- **顶栏罗盘全面提速与自愈**：8 插件并发启动的顶栏收敛改为微任务防抖批量投影（重绘 8 次 → 1 次）；思源云同步/重启销毁罗盘节点后 100ms 自动重建；
-- **桌面端二级抽屉鼠标锁定**与磁贴右键就地聚焦；手机端长按二级菜单防合成 click 误入主界面；
-- **输入法与触控四重防线**：软键盘弹起、输入焦点与表单内滚动不再误触面板关闭；
-- **全生态按钮即时反馈补齐**：记账/打卡视图/复制/分栏/排版微胶囊与触感振动；
-- **仓库与提交身份迁移**：全量迁移至 `xiaolv-suite` 组织。
-
-<details>
-<summary>展开查看历史版本更新（v0.10.83 及更早版本 · 完整记录见 <a href="./CHANGELOG.md">CHANGELOG.md</a>）</summary>
-
-### [v0.10.83] — 2026-11-04
-
-- Epoch 7 全生态统一基础设施套件全面落地（原位微动效、瞬时微胶囊、后台主时钟、思源内核写锁、统一浮层焦点栈、AI网关、全家桶灾备总线、小驴罗盘动态徽标与穿透搜索）。
-
-### [v0.10.82] — 2026-11-01
-
-- 开箱即用套件市场（Starter Packs Hub）、行业专属场景套件与思源专属大纲文档一键新建、极窄单列悬浮迷你模式（Mini Mode）。
-
-</details>
-
----
-
 ## 📄 许可证 (License)
+
+[MIT License](LICENSE) · Copyright (c) 2026 xiaolv-suite
 
 [MIT License](LICENSE) · Copyright (c) 2026 xiaolv-suite
