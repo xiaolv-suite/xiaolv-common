@@ -1,0 +1,293 @@
+{
+  "browser": "153.0.8010.12",
+  "reports": [
+    {
+      "name": "search",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 1280,
+          "h": 900
+        },
+        "body": {
+          "sw": 1280,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-dialog",
+          "w": 896,
+          "h": 706,
+          "sw": 896,
+          "sh": 706,
+          "overflow": "visible"
+        }
+      },
+      "violations": []
+    },
+    {
+      "name": "search-dark",
+      "theme": "dark",
+      "geometry": {
+        "viewport": {
+          "w": 1280,
+          "h": 900
+        },
+        "body": {
+          "sw": 1280,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-dialog",
+          "w": 896,
+          "h": 706,
+          "sw": 896,
+          "sh": 706,
+          "overflow": "visible"
+        }
+      },
+      "violations": []
+    },
+    {
+      "name": "mobile",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 981,
+          "h": 2123
+        },
+        "body": {
+          "sw": 981,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-dialog xlc-dialog--mobile",
+          "w": 917,
+          "h": 605,
+          "sw": 917,
+          "sh": 605,
+          "overflow": "visible"
+        }
+      },
+      "violations": []
+    },
+    {
+      "name": "landscape",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 980,
+          "h": 453
+        },
+        "body": {
+          "sw": 980,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-dialog xlc-dialog--mobile",
+          "w": 948,
+          "h": 605,
+          "sw": 948,
+          "sh": 605,
+          "overflow": "visible"
+        }
+      },
+      "violations": []
+    },
+    {
+      "name": "capture",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 981,
+          "h": 2123
+        },
+        "body": {
+          "sw": 981,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-form xlc-capture",
+          "w": 580,
+          "h": 811,
+          "sw": 580,
+          "sh": 811,
+          "overflow": "visible"
+        }
+      },
+      "violations": []
+    },
+    {
+      "name": "settings",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 1280,
+          "h": 900
+        },
+        "body": {
+          "sw": 1280,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-form xlc-settings",
+          "w": 680,
+          "h": 1631,
+          "sw": 680,
+          "sh": 1631,
+          "overflow": "visible"
+        }
+      },
+      "violations": []
+    },
+    {
+      "name": "setup",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 981,
+          "h": 2123
+        },
+        "body": {
+          "sw": 981,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-form xlc-setup",
+          "w": 640,
+          "h": 700,
+          "sw": 640,
+          "sh": 700,
+          "overflow": "visible"
+        }
+      },
+      "violations": []
+    },
+    {
+      "name": "discovery",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 981,
+          "h": 2123
+        },
+        "body": {
+          "sw": 981,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-form xlc-discovery",
+          "w": 882.125,
+          "h": 800,
+          "sw": 882,
+          "sh": 800,
+          "overflow": "auto"
+        }
+      },
+      "violations": [
+        {
+          "id": "label-content-name-mismatch",
+          "impact": "serious",
+          "description": "Ensure that elements labelled through their content must have their visible text as part of their accessible name",
+          "nodes": [
+            {
+              "target": [
+                "button[data-tag=\"客服\"]"
+              ],
+              "summary": "Fix any of the following:\n  Text inside the element is not included in the accessible name",
+              "html": "<button type=\"button\" class=\"b3-button xlc-tag-facet\" data-xlc-control=\"discovery.tag-facet\" data-tag=\"客服\" aria-pressed=\"false\" aria-label=\"按标签「客服」筛选，共 2 条\">#客服 · 2</button>"
+            },
+            {
+              "target": [
+                "button[data-tag=\"地址\"]"
+              ],
+              "summary": "Fix any of the following:\n  Text inside the element is not included in the accessible name",
+              "html": "<button type=\"button\" class=\"b3-button xlc-tag-facet\" data-xlc-control=\"discovery.tag-facet\" data-tag=\"地址\" aria-pressed=\"false\" aria-label=\"按标签「地址」筛选，共 1 条\">#地址 · 1</button>"
+            },
+            {
+              "target": [
+                "button[data-tag=\"延期\"]"
+              ],
+              "summary": "Fix any of the following:\n  Text inside the element is not included in the accessible name",
+              "html": "<button type=\"button\" class=\"b3-button xlc-tag-facet\" data-xlc-control=\"discovery.tag-facet\" data-tag=\"延期\" aria-pressed=\"false\" aria-label=\"按标签「延期」筛选，共 1 条\">#延期 · 1</button>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "discovery-landscape",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 980,
+          "h": 453
+        },
+        "body": {
+          "sw": 980,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-form xlc-discovery",
+          "w": 881.1875,
+          "h": 376.75,
+          "sw": 881,
+          "sh": 1024,
+          "overflow": "auto"
+        }
+      },
+      "violations": [
+        {
+          "id": "label-content-name-mismatch",
+          "impact": "serious",
+          "description": "Ensure that elements labelled through their content must have their visible text as part of their accessible name",
+          "nodes": [
+            {
+              "target": [
+                "button[data-tag=\"客服\"]"
+              ],
+              "summary": "Fix any of the following:\n  Text inside the element is not included in the accessible name",
+              "html": "<button type=\"button\" class=\"b3-button xlc-tag-facet\" data-xlc-control=\"discovery.tag-facet\" data-tag=\"客服\" aria-pressed=\"false\" aria-label=\"按标签「客服」筛选，共 2 条\">#客服 · 2</button>"
+            },
+            {
+              "target": [
+                "button[data-tag=\"地址\"]"
+              ],
+              "summary": "Fix any of the following:\n  Text inside the element is not included in the accessible name",
+              "html": "<button type=\"button\" class=\"b3-button xlc-tag-facet\" data-xlc-control=\"discovery.tag-facet\" data-tag=\"地址\" aria-pressed=\"false\" aria-label=\"按标签「地址」筛选，共 1 条\">#地址 · 1</button>"
+            },
+            {
+              "target": [
+                "button[data-tag=\"延期\"]"
+              ],
+              "summary": "Fix any of the following:\n  Text inside the element is not included in the accessible name",
+              "html": "<button type=\"button\" class=\"b3-button xlc-tag-facet\" data-xlc-control=\"discovery.tag-facet\" data-tag=\"延期\" aria-pressed=\"false\" aria-label=\"按标签「延期」筛选，共 1 条\">#延期 · 1</button>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "import",
+      "theme": "light",
+      "geometry": {
+        "viewport": {
+          "w": 981,
+          "h": 2123
+        },
+        "body": {
+          "sw": 981,
+          "sh": 0
+        },
+        "root": {
+          "class": "xlc-form",
+          "w": 500,
+          "h": 412.390625,
+          "sw": 500,
+          "sh": 412,
+          "overflow": "visible"
+        }
+      },
+      "violations": []
+    }
+  ]
+}
