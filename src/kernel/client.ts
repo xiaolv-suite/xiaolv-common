@@ -208,12 +208,24 @@ export function createKernelClient(options: {
         const requestedTimeout = requestOptions.timeoutMs ?? timeoutMs;
         const effectiveTimeout = Number.isFinite(requestedTimeout) ? Math.max(1, requestedTimeout) : LIMITS.kernelTimeoutMs;
         let timer: ReturnType<typeof setTimeout> | undefined;
-        const requestPromise = Promise.resolve().then(() => doFetch(ENDPOINTS[endpoint], payload, {
-            signal: controller.signal,
-            attempt,
-            timeoutMs: effectiveTimeout,
-            idempotencyKey: requestOptions.idempotencyKey,
-        }));
+        const targetUrl = ENDPOINTS[endpoint];
+        const isAi = (endpoint === "chatGPT" || targetUrl?.startsWith("/api/ai/")) && typeof window !== "undefined";
+        const requestPromise = isAi && typeof fetch === "function"
+            ? fetch(targetUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload ?? {}),
+                signal: controller.signal,
+            }).then(async (res) => {
+                const text = await res.text();
+                try { return JSON.parse(text); } catch { return { code: res.ok ? 0 : -1, msg: text, data: text }; }
+            })
+            : Promise.resolve().then(() => doFetch(targetUrl, payload, {
+                signal: controller.signal,
+                attempt,
+                timeoutMs: effectiveTimeout,
+                idempotencyKey: requestOptions.idempotencyKey,
+            }));
         const timeoutPromise = new Promise<never>((_, reject) => {
             timer = setTimeout(() => {
                 controller.abort();

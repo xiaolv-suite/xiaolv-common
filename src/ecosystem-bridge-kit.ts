@@ -300,9 +300,9 @@ export interface TaskHorizonActionPayload {
 }
 
 export function formatTaskHorizonItem(quote: string, docId: string, title: string, blockId?: string): string {
-    const cleanQuote = quote.replace(/[\r\n]+/g, " ").trim().slice(0, 80);
+    const cleanQuote = quote.replace(/[\r\n]+/g, " ").replace(/"/g, "”").trim().slice(0, 80);
     const refId = blockId || docId;
-    const cleanTitle = title || "文章";
+    const cleanTitle = (title || "文章").replace(/[\r\n]+/g, " ").replace(/'/g, "’");
     return `- [ ] 落地阅读行动项：${cleanQuote} 来源：(( ${refId} '${cleanTitle}' )) {: custom-status="todo" custom-priority="medium" }`;
 }
 
@@ -642,7 +642,8 @@ export async function pushToGleanReadingSafely(options: {
     module: string;
     summary?: string;
 }): Promise<{ mode: "bridge" | "clipboard"; text: string; state?: BridgeCallOutcome<unknown>["state"]; docId?: string }> {
-    const fallbackText = `📖 【渐进阅读切片 · ${options.title}】\n* 来源：小驴管家 · ${options.module}\n${options.docId ? `* 关联文档：((${options.docId} '${options.title}'))\n` : ""}${options.summary ? `* 要点摘要：${options.summary}\n` : ""}* 渐进建议：每日消化 1~2 个条款切片，厘清权益与免责条款。`;
+    const cleanTitle = (options.title || "").replace(/[\r\n]+/g, " ").replace(/'/g, "’");
+    const fallbackText = `📖 【渐进阅读切片 · ${cleanTitle}】\n* 来源：小驴管家 · ${options.module}\n${options.docId ? `* 关联文档：((${options.docId} '${cleanTitle}'))\n` : ""}${options.summary ? `* 要点摘要：${options.summary}\n` : ""}* 渐进建议：每日消化 1~2 个条款切片，厘清权益与免责条款。`;
 
     if (typeof window === "undefined") {
         return { mode: "clipboard", text: fallbackText };

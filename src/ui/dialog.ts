@@ -8,7 +8,7 @@ import {Dialog, Menu, confirm} from "siyuan";
 import {createLvAiProgressTracker, lvEcosystem, lvLaunchpad, lvNotify, lvSurfaceStack} from "../libs/lv-notice-kit";
 import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
 import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations, extractCleanPayload} from "../model/item";
-import {ItemSortMode} from "../model/storage";
+import {ItemSortMode, ColumnWidths} from "../model/storage";
 import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "./capture";
 import {getActivePasteQueue} from "../model/paste-queue";
@@ -25,7 +25,7 @@ import {formatScopeFallbackQuery, shouldShowOmniSearchFallback, shouldShowScopeF
 import {getPinyinAdapter} from "../model/pinyin";
 import {findPinyinMatches} from "../model/pinyin-tiny";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
-import {buildHierarchyTree, flattenHierarchyTree} from "../model/hierarchy";
+import {buildHierarchyTree, flattenHierarchyTree, HierarchyNode} from "../model/hierarchy";
 import {formatPlatformShortcut, detectShortcutConflicts} from "../model/hotkeys";
 import {calculateVirtualScrollWindow} from "./performance-utils";
 import {buildBundle, serializeCompactBundle, deserializeCompactBundle, COMPACT_BUNDLE_PREFIX, ExportBundle} from "../model/transfer";
@@ -41,8 +41,9 @@ import {openStarterPacksHubDialog} from "./starter-packs-dialog";
 import {getRecommendedEntries, DocumentContext} from "../model/contextual-recommend";
 import {callBridge, getBridgeSafely} from "../ecosystem-bridge-kit";
 import {getClipboardTimeGroup, MiniPosition, calculateMagneticSnap} from "../model/storage";
-import {STARTER_PACKS, StarterPackMeta} from "../service/prompt-pack";
+import {STARTER_PACKS, StarterPackMeta, YIWAIWAI_DEFAULT_PRESET_PACK_MD, DEFAULT_PRESET_CATEGORIES, getDefaultPresetEntries} from "../service/prompt-pack";
 import {openPromoteClipDialog, PromoteClipPayload} from "./promote-clip";
+import {formatMiniHeroSnippet, buildMiniCategoryChips, calculateMiniPopoverPosition, formatCollapsedPillMarquee} from "../model/mini-mode";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -91,6 +92,8 @@ export interface DialogDeps {
     rememberVariables?: (fills: Record<string, string>) => void;
     /** 批量更新条目标签与分类（G30 / ADR 0082 / T-0142） */
     batchUpdateMetadata?: (itemIds: string[], patch: BatchTagCategoryPatch) => Promise<BatchOperationReceipt>;
+    /** 获取某分类（含全部子层级）下的条目 ID 清单（分组树重命名/删除用） */
+    getCategoryEntryIds?: (path: string) => Promise<string[]>;
     openSource: (itemId: string) => Promise<{ok: boolean; message: string}>;
     pullFromSource?: (itemId: string) => Promise<boolean>;
     pushToSource?: (itemId: string) => Promise<boolean>;
@@ -147,6 +150,9 @@ export interface DialogDeps {
     /** 剪贴板专属面板折叠状态（桌面端默认 false 展开）与变更回调 */
     clipPanelCollapsed?: boolean;
     onClipPanelCollapsedChange?: (collapsed: boolean) => void;
+    /** 四栏桌面大视窗自定义列宽记忆（像素值） */
+    columnWidths?: ColumnWidths;
+    onColumnWidthsChange?: (widths: ColumnWidths) => void;
     /** 是否从外部软件全局热键呼出（CAND-027 / TODO-FEAT-022） */
     isGlobalInvocation?: boolean;
     /** 复制完成或关闭时是否自动退回后台归还焦点（CAND-029 / TODO-FEAT-024） */
@@ -276,6 +282,13 @@ export class CommonSearchDialog {
     private miniPosition?: MiniPosition;
     private miniCollapsed = false;
     private collapsedPillEl: HTMLElement | null = null;
+    private miniHeroCardEl: HTMLElement | null = null;
+    private miniCategoryChipsEl: HTMLElement | null = null;
+    private miniPreviewPopoverEl: HTMLElement | null = null;
+    private miniPreviewTimer: any = null;
+    private miniPreviewActiveEntryId: string | null = null;
+    private miniPreviewCache: Map<string, string> = new Map();
+    private miniPreviewHideTimer: any = null;
     /** 常用语购物车暂存托盘（CAND-019 / TODO-FEAT-018） */
     private pasteTrayItems: Array<{id: string; title: string; content?: string}> = [];
     private pasteTrayEl: HTMLElement | null = null;
@@ -285,6 +298,19 @@ export class CommonSearchDialog {
     private clipPanelCollapsed = false;
     private clipPanelEl: HTMLElement | null = null;
     private clipPanelBodyEl: HTMLElement | null = null;
+    /** 四栏桌面大视窗自定义列宽记忆与分割条引用 */
+    private columnWidths: { clip: number; cat: number; list: number } = { clip: 260, cat: 180, list: 340 };
+    private clipResizerEl: HTMLElement | null = null;
+    private catResizerEl: HTMLElement | null = null;
+    private listResizerEl: HTMLElement | null = null;
+    /** 易歪歪常用语分类树面板引用与状态 */
+    private categoryTreeEl: HTMLElement | null = null;
+    private categoryTreeBodyEl: HTMLElement | null = null;
+    private activeCategoryPath = "";
+    private cachedCategories: string[] = [];
+    private collapsedTreeNodes = new Set<string>();
+    /** 精选示范视图（✨ 系统置顶分类）：新老用户均可一键查看开箱精选模板并装入 */
+    private featuredViewActive = false;
 
     constructor(private readonly deps: DialogDeps) {
         if (deps.density) this.density = deps.density;
@@ -292,6 +318,21 @@ export class CommonSearchDialog {
         if (deps.miniPosition) this.miniPosition = deps.miniPosition;
         if (deps.miniCollapsed !== undefined) this.miniCollapsed = deps.miniCollapsed;
         if (deps.clipPanelCollapsed !== undefined) this.clipPanelCollapsed = deps.clipPanelCollapsed;
+
+        // 桌面四栏宽度记忆加载（优先配置传入，次之本地存储缓存，兜底默认）
+        const defaultWidths = { clip: 260, cat: 180, list: 340 };
+        let loadedWidths: Partial<ColumnWidths> | null = this.deps.columnWidths ?? null;
+        if (!loadedWidths && typeof localStorage !== "undefined") {
+            try {
+                const raw = localStorage.getItem("xlc_column_widths_v1");
+                if (raw) loadedWidths = JSON.parse(raw);
+            } catch { /* ignore */ }
+        }
+        this.columnWidths = {
+            clip: typeof loadedWidths?.clip === "number" && loadedWidths.clip >= 140 && loadedWidths.clip <= 500 ? loadedWidths.clip : defaultWidths.clip,
+            cat: typeof loadedWidths?.cat === "number" && loadedWidths.cat >= 120 && loadedWidths.cat <= 450 ? loadedWidths.cat : defaultWidths.cat,
+            list: typeof loadedWidths?.list === "number" && loadedWidths.list >= 240 && loadedWidths.list <= 850 ? loadedWidths.list : defaultWidths.list,
+        };
     }
 
     /** 定向插入目标（文档树入口；设置后 Enter/点按插入到该文档而非活动编辑器） */
@@ -306,6 +347,7 @@ export class CommonSearchDialog {
         if (this.deps.initialScope) {
             this.currentScope = this.deps.initialScope;
         }
+        this.activeCategoryPath = this.deps.getFilters().category || "";
         this.clipboardFormatFilter = "all";
         this.prevActiveElement = (document.activeElement as HTMLElement | null);
 
@@ -346,6 +388,13 @@ export class CommonSearchDialog {
         });
         this.dialog = dialog;
         dialog.element.addEventListener("keydown", (e) => {
+            if (e.defaultPrevented) return;
+            if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
+                void this.onKeydown(e);
+                return;
+            }
+            const target = e.target as HTMLElement | null;
+            if (target?.matches(".xlc-search-input, .xlc-list, input, textarea")) return;
             if (e.key === "Tab") {
                 void this.onKeydown(e);
             }
@@ -486,7 +535,7 @@ export class CommonSearchDialog {
 
     private buildDom(isMobile: boolean): HTMLElement {
         const root = document.createElement("div");
-        root.className = "xlc-search xlc-dialog" + (isMobile ? " xlc-dialog--mobile" : "");
+        root.className = "xlc-dialog" + (isMobile ? " xlc-dialog--mobile" : "");
 
         // 顶部：搜索框。把普通搜索与 ? 语义搜索拆成可读提示，避免用户只看到一个神秘符号。
         const top = document.createElement("div");
@@ -751,6 +800,22 @@ export class CommonSearchDialog {
         }
 
         searchBlock.appendChild(search);
+
+        // 迷你悬浮最新剪贴板首卡 (Live Clipboard Hero Card · 20261121-01)
+        const miniHeroCard = document.createElement("div");
+        miniHeroCard.className = "xlc-mini-hero-card";
+        miniHeroCard.dataset.xlcControl = "search.mini.hero-card";
+        this.miniHeroCardEl = miniHeroCard;
+        searchBlock.appendChild(miniHeroCard);
+
+        // 迷你悬浮场景分组胶囊横滑栏 (Category Chips · 20261121-01)
+        const miniChips = document.createElement("div");
+        miniChips.className = "xlc-mini-category-chips";
+        miniChips.dataset.xlcControl = "search.mini.category-chips";
+        miniChips.style.maskImage = "linear-gradient(to right, black 0%, black calc(100% - 24px), transparent 100%)";
+        (miniChips.style as any).webkitMaskImage = "linear-gradient(to right, black 0%, black calc(100% - 24px), transparent 100%)";
+        this.miniCategoryChipsEl = miniChips;
+        searchBlock.appendChild(miniChips);
 
         // 剪贴板智能匹配横幅 (Mobile Spec v2: 默认关闭，设置内 opt-in)
         const smartBanner = document.createElement("div");
@@ -1230,11 +1295,27 @@ export class CommonSearchDialog {
         status.setAttribute("aria-live", "polite");
         root.appendChild(status);
 
-        // 主体：剪贴板专属面板 + 常用语列表 + 预览（桌面大视窗三栏）
+        // 主体：剪贴板专属面板 + 易歪歪话术分类树 + 常用语列表 + 预览（桌面大视窗四栏）
         const bodyWrap = document.createElement("div");
         bodyWrap.className = "xlc-body";
         if (!isMobile) {
             bodyWrap.appendChild(this.buildClipPanel());
+        }
+        if (!isMobile) {
+            bodyWrap.style.setProperty("--xlc-clip-w", `${this.columnWidths.clip}px`);
+            bodyWrap.style.setProperty("--xlc-cat-w", `${this.columnWidths.cat}px`);
+            bodyWrap.style.setProperty("--xlc-list-w", `${this.columnWidths.list}px`);
+
+            const resizerClip = this.createResizer("clip", "调整剪贴板宽度");
+            this.clipResizerEl = resizerClip;
+            if (this.clipPanelCollapsed) resizerClip.classList.add("xlc-col-resizer--disabled");
+            bodyWrap.appendChild(resizerClip);
+
+            bodyWrap.appendChild(this.buildCategoryTreePanel());
+
+            const resizerCat = this.createResizer("cat", "调整话术分组宽度");
+            this.catResizerEl = resizerCat;
+            bodyWrap.appendChild(resizerCat);
         }
         const list = document.createElement("div");
         list.className = "xlc-list";
@@ -1289,19 +1370,31 @@ export class CommonSearchDialog {
             }
             void this.runPrimary(entry);
         });
-        // 悬停更新预览（触屏设备无 hover 不受影响）
+        // 悬停更新预览（触屏设备无 hover 不受影响；迷你模式下展开悬浮气泡预览 Popover）
         list.addEventListener("mouseover", (e) => {
             if (isMobile) return;
             const row = (e.target as HTMLElement).closest<HTMLElement>("[data-xlc-index]");
-            if (!row) return;
+            if (!row) {
+                if (this.miniMode) this.scheduleHideMiniPreviewPopover();
+                return;
+            }
             const entry = this.results[Number(row.dataset.xlcIndex)];
-            if (entry && this.activeIndex !== Number(row.dataset.xlcIndex)) {
+            if (!entry) return;
+            if (this.miniMode) {
+                this.showMiniPreviewPopover(entry, row);
+            } else if (this.activeIndex !== Number(row.dataset.xlcIndex)) {
                 this.activeIndex = Number(row.dataset.xlcIndex);
                 this.activeProvider = -1; // 回到库行必须退出提供方激活态，否则预览/高亮与悬停行脱节（R138）
                 this.paintActive();
                 this.schedulePreview(entry);
             }
         });
+        list.addEventListener("mouseleave", () => {
+            if (this.miniMode) this.scheduleHideMiniPreviewPopover();
+        });
+        list.addEventListener("scroll", () => {
+            if (this.miniMode) this.hideMiniPreviewPopover();
+        }, {passive: true});
         this.attachLongPress(list, isMobile);
 
         // 移动端片段多级分类左滑返回上级分类手势 (Mobile Spec v2 专项深化 2)
@@ -1385,8 +1478,13 @@ export class CommonSearchDialog {
             paneBody.setAttribute("aria-label", "条目详情预览");
             paneBody.textContent = this.deps.t("previewUnavailable");
             pane.appendChild(paneBody);
+            const resizerList = this.createResizer("list", "调整条目列表宽度");
+            this.listResizerEl = resizerList;
+            bodyWrap.appendChild(resizerList);
+
             pane.appendChild(this.buildPaneFoot());
             bodyWrap.appendChild(pane);
+            this.setupColumnResizers(bodyWrap);
         }
         root.appendChild(bodyWrap);
         root.appendChild(this.buildBatchBar());
@@ -1562,23 +1660,33 @@ export class CommonSearchDialog {
         footer.appendChild(footRight);
         root.appendChild(footer);
 
-        // 迷你模式贴边折叠灵动药丸胶囊（CAND-023 / TODO-FEAT-021）
+        // 迷你模式贴边折叠灵动药丸胶囊（CAND-023 / TODO-FEAT-021 / 20261121-01）
         const pill = document.createElement("div");
         pill.className = "xlc-mini-collapsed-pill";
         pill.dataset.xlcControl = "search.mini.collapsed-pill";
         const pillIcon = document.createElement("span");
+        pillIcon.className = "xlc-pill-icon";
         pillIcon.textContent = "🐴 常用语";
+        const pillMarquee = document.createElement("div");
+        pillMarquee.className = "xlc-pill-marquee";
+        pillMarquee.style.display = "none";
+        const pillText = document.createElement("span");
+        pillText.className = "xlc-pill-text";
+        pillMarquee.appendChild(pillText);
         const pillKbd = document.createElement("span");
         pillKbd.className = "xlc-pill-shortcut";
         pillKbd.setAttribute("aria-hidden", "true");
         pillKbd.textContent = "Alt+M";
-        pill.append(pillIcon, pillKbd);
+        pill.append(pillIcon, pillMarquee, pillKbd);
         pill.title = "点击展开常用语悬浮条 (Alt+M)";
         pill.addEventListener("click", () => {
             this.setMiniCollapsed(false);
         });
         this.collapsedPillEl = pill;
         root.appendChild(pill);
+
+        this.renderMiniHeroCard();
+        this.renderMiniCategoryChips();
 
         return root;
     }
@@ -2055,6 +2163,8 @@ export class CommonSearchDialog {
             option.textContent = item.label;
             categorySelect.appendChild(option);
         }
+        this.cachedCategories = categories;
+        this.renderCategoryTree(categories);
 
         if (tagsResult.status === "rejected") {
             tagSelect.title = this.deps.t("kernelError", this.deps.t("tags"));
@@ -2220,6 +2330,7 @@ export class CommonSearchDialog {
             input.setAttribute("aria-label", ph);
         }
         this.updateHistoryBarRef?.();
+        this.syncMiniCategoryChips();
     }
 
     private buildQuery(): SearchQuery {
@@ -2250,6 +2361,11 @@ export class CommonSearchDialog {
         this.accessIssueMessage = null;
         this.syncMobileFilterToggleRef?.();
         const query = this.buildQuery();
+        // 搜索态自适应：有输入词时隐藏分类树给搜索列表让位，无输入时展示易歪歪分组树
+        const isSearching = Boolean(query.text.trim());
+        if (this.categoryTreeEl) {
+            this.categoryTreeEl.style.display = isSearching ? "none" : "";
+        }
         // 命中高亮快照（renderList 用；AI 语义找结果不高亮——匹配依据是语义而非字面）
         this.lastQueryText = query.text.trim();
         // 使用计数快照（F3 展示；侧车只读，不入索引）
@@ -2414,9 +2530,28 @@ export class CommonSearchDialog {
                 this.aiResults = false;
                 if (aiBanner) aiBanner.style.display = "none";
 
+                // 空库智能示范注入 + 精选示范视图（✨ 系统分类）：
+                // - 新用户（空库）：全部视图自动呈现精选模板，消除「空白一片」冷启动困惑；
+                // - 老用户（已有条目）：点击左侧「✨ 精选示范」系统分类随时查看/一键装入，
+                //   不再因库非空而永远看不到开箱模板。
+                const trimmedQuery = query.text.trim();
+                if (trimmedQuery) {
+                    // 进入搜索态自动退出精选示范视图，交还真实库检索结果
+                    this.featuredViewActive = false;
+                }
+                if (this.featuredViewActive && !trimmedQuery && this.currentScope === "all") {
+                    const sampleEntries = getDefaultPresetEntries();
+                    this.results = query.category
+                        ? sampleEntries.filter((e) => e.category === query.category)
+                        : sampleEntries;
+                    total = this.results.length;
+                    this.emptyMessage = "";
+                } else if (this.results.length === 0 && !trimmedQuery && this.currentScope === "all") {
+                    this.emptyMessage = this.deps.t("emptyLibrary");
+                }
+
                 // 自适应级联穿透：在全部范围（all）、无特定筛选且有查询词时，
                 // 若常用库匹配结果较少（< 4 条），自动轻量追加全库思源笔记块
-                const trimmedQuery = query.text.trim();
                 const canCascade = this.currentScope === "all"
                     && !query.itemType
                     && !query.tag
@@ -2563,6 +2698,10 @@ export class CommonSearchDialog {
         }
         this.finishSearchLoad(list);
         this.renderList(list);
+        if (this.miniMode) {
+            this.renderMiniHeroCard();
+            this.renderMiniCategoryChips();
+        }
         this.renderTopChips();
         this.renderMobileBreadcrumbs();
         void this.checkClipboardSmartMatch();
@@ -2975,7 +3114,14 @@ export class CommonSearchDialog {
         main.className = "xlc-row-main";
         const title = document.createElement("div");
         title.className = "xlc-row-title";
-        if (index < 9) {
+        if (this.miniMode && index < 9) {
+            const miniNum = document.createElement("span");
+            miniNum.className = "xlc-mini-row-num";
+            miniNum.textContent = String(index + 1);
+            miniNum.title = `迷你直达：列表聚焦按 ${index + 1} 插入 / Shift+${index + 1} 复制；搜索输入时按 Alt+${index + 1} 插入`;
+            miniNum.setAttribute("aria-label", miniNum.title);
+            title.appendChild(miniNum);
+        } else if (!this.miniMode && index < 9) {
             const ordinal = document.createElement("span");
             ordinal.className = "xlc-row-ordinal";
             const numStr = String(index + 1);
@@ -2998,24 +3144,17 @@ export class CommonSearchDialog {
             omniBadge.title = entry.category === "剪贴板" ? "剪贴板历史暂存条目，可一键复制或沉淀为常用语 (Alt+S)" : "思源全库检索条目，可直接复用或一键收录为常用语 (Alt+S)";
             title.appendChild(omniBadge);
         }
-        if (entry.category && entry.category.trim() && !entry.isOmni) {
-            const catBadge = document.createElement("span");
-            const variant = getCategoryColorVariant(entry.category);
-            catBadge.className = `xlc-badge xlc-badge--cat xlc-cat--${variant}`;
-            catBadge.textContent = entry.category.trim();
-            catBadge.title = `${this.deps.t("category")}：${entry.category.trim()}`;
-            catBadge.setAttribute("aria-label", `${this.deps.t("category")}：${entry.category.trim()}`);
-            title.appendChild(catBadge);
-        }
-        const hasSelectionPlaceholder = Boolean(entry.content?.includes("{{xlc:selection}}") || entry.summary?.includes("{{xlc:selection}}"));
-        if (hasSelectionPlaceholder) {
-            const surroundBadge = document.createElement("span");
-            surroundBadge.className = "xlc-badge xlc-badge--surround";
-            surroundBadge.textContent = "✦ 包裹";
-            surroundBadge.title = "支持选区包裹：插入时自动将当前选区文本嵌入此模板";
-            title.appendChild(surroundBadge);
-        }
-        // G27 / ADR 0080 / TASK-20261031: 唯一简码或别名精确匹配金色直达徽标
+        // 标题文本前置独占主行：作为行内核心识别信息，必须拥有最高渲染优先级与弹性自适应空间
+        const titleText = document.createElement("span");
+        titleText.className = "xlc-row-titletext";
+        const highlight = this.lastQueryText.length > 0
+            && !this.lastQueryText.startsWith("?")
+            && !this.aiResults;
+        if (highlight) this.appendHighlighted(titleText, entry.title || this.deps.t("unknownType"), this.lastQueryText);
+        else titleText.textContent = entry.title || this.deps.t("unknownType");
+        title.appendChild(titleText);
+
+        // G27 / ADR 0080 / TASK-20261031: 唯一简码或别名精确匹配金色直达徽标（命中状态强反馈保留在标题尾部）
         const cleanQuery = this.lastQueryText.trim().toLowerCase();
         const isShortcodeHit = Boolean(cleanQuery && entry.shortcode && (entry.shortcode.trim().toLowerCase() === cleanQuery || entry.shortcode.trim().toLowerCase() === ":" + cleanQuery));
         const isAliasHit = Boolean(cleanQuery && entry.alias && entry.alias.trim().toLowerCase() === cleanQuery);
@@ -3026,35 +3165,7 @@ export class CommonSearchDialog {
             directBadge.title = isShortcodeHit ? "简码唯一命中：按 Tab 或 Enter 极速插入" : "唯一别名精确匹配：按 Tab 或 Enter 极速插入";
             title.appendChild(directBadge);
         }
-        if (entry.shortcode) {
-            const scBadge = document.createElement("span");
-            scBadge.className = "xlc-badge xlc-badge--shortcode";
-            scBadge.textContent = entry.shortcode;
-            scBadge.title = `简码：输入 ${entry.shortcode} 触发`;
-            title.appendChild(scBadge);
-        }
-        if (this.miniMode && index < 9) {
-            const miniNum = document.createElement("span");
-            miniNum.className = "xlc-mini-row-num";
-            miniNum.textContent = String(index + 1);
-            miniNum.title = `按键直达：${index + 1} 插入 / Shift+${index + 1} 复制`;
-            miniNum.setAttribute("aria-hidden", "true");
-            title.appendChild(miniNum);
-        }
-        const titleText = document.createElement("span");
-        titleText.className = "xlc-row-titletext";
-        const highlight = this.lastQueryText.length > 0
-            && !this.lastQueryText.startsWith("?")
-            && !this.aiResults;
-        if (highlight) this.appendHighlighted(titleText, entry.title || this.deps.t("unknownType"), this.lastQueryText);
-        else titleText.textContent = entry.title || this.deps.t("unknownType");
-        title.appendChild(titleText);
-        if ((entry.varCount ?? 0) > 0) {
-            const varBadge = document.createElement("span");
-            varBadge.className = "xlc-badge xlc-badge--var";
-            varBadge.textContent = this.deps.t("varCountBadge", String(entry.varCount));
-            title.appendChild(varBadge);
-        }
+
         if (this.deps.isSourceMissing(entry)) {
             const warn = document.createElement("span");
             warn.className = "xlc-row-warn";
@@ -3064,8 +3175,46 @@ export class CommonSearchDialog {
             title.appendChild(warn);
         }
         main.appendChild(title);
+
         const meta = document.createElement("div");
         meta.className = "xlc-row-meta";
+
+        // 次级属性徽标统一收敛至 meta 副行，彻底释放主标题行宽度，避免 flex 挤压导致标题 0px 隐形
+        if (entry.shortcode) {
+            const scBadge = document.createElement("span");
+            scBadge.className = "xlc-badge xlc-badge--shortcode";
+            scBadge.textContent = entry.shortcode;
+            scBadge.title = `简码：输入 ${entry.shortcode} 触发`;
+            meta.appendChild(scBadge);
+        }
+
+        // 当前若已处于该分类树节点，自动省略重复分类胶囊（避免整列重复占位挤占空间）
+        const isCurrentCategorySelected = Boolean(this.activeCategoryPath && entry.category?.trim() === this.activeCategoryPath);
+        if (entry.category && entry.category.trim() && !entry.isOmni && !isCurrentCategorySelected) {
+            const catBadge = document.createElement("span");
+            const variant = getCategoryColorVariant(entry.category);
+            catBadge.className = `xlc-badge xlc-badge--cat xlc-cat--${variant}`;
+            catBadge.textContent = entry.category.trim();
+            catBadge.title = `${this.deps.t("category")}：${entry.category.trim()}`;
+            catBadge.setAttribute("aria-label", `${this.deps.t("category")}：${entry.category.trim()}`);
+            meta.appendChild(catBadge);
+        }
+
+        const hasSelectionPlaceholder = Boolean(entry.content?.includes("{{xlc:selection}}") || entry.summary?.includes("{{xlc:selection}}"));
+        if (hasSelectionPlaceholder) {
+            const surroundBadge = document.createElement("span");
+            surroundBadge.className = "xlc-badge xlc-badge--surround";
+            surroundBadge.textContent = "✦ 包裹";
+            surroundBadge.title = "支持选区包裹：插入时自动将当前选区文本嵌入此模板";
+            meta.appendChild(surroundBadge);
+        }
+
+        if ((entry.varCount ?? 0) > 0) {
+            const varBadge = document.createElement("span");
+            varBadge.className = "xlc-badge xlc-badge--var";
+            varBadge.textContent = this.deps.t("varCountBadge", String(entry.varCount));
+            meta.appendChild(varBadge);
+        }
 
         // 全域条目显示精细面包屑路径（手机端已有分组标题头，省略行内重复路径避免挤占摘要）
         const isMobileRow = this.deps.isMobile();
@@ -3370,7 +3519,10 @@ export class CommonSearchDialog {
             actionsWrap.className = "xlc-row-action-wrap";
             actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
 
-            if (this.miniMode || this.lastQueryText.trim().length > 0) {
+            // 桌面标准多栏模式下（!this.miniMode && !isMobile），右侧详情窗格已有大号「↵ 插入」与「复制」按钮；
+            // 列表中仅在移动端（isMobile）、迷你模式（miniMode）或极紧凑视图时在行内显示快捷动作，
+            // 避免在桌面 280~320px 列宽内常驻抢占 110px+ 宽度导致条目标题被挤压至 0px（GTP-小驴1号 终审截图实证）
+            if (this.miniMode || this.deps.isMobile()) {
                 const insertBtn = document.createElement("button");
                 insertBtn.type = "button";
                 insertBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill xlc-row-action--primary";
@@ -3792,6 +3944,44 @@ export class CommonSearchDialog {
             }
             list.appendChild(empty);
         }
+
+        // 开箱预置示范常用语顶部引导横幅：支持一键将整套模板写入用户真实库文档
+        if (this.results.some((r) => (r as any).isSample)) {
+            const sampleBanner = document.createElement("div");
+            sampleBanner.className = "xlc-sample-banner";
+            sampleBanner.innerHTML = `
+                <div class="xlc-sample-banner-title">
+                    <span>💡 <strong>开箱示范常用语已就绪</strong>（包含 10 项高频业务模板，点击右侧可直接替换为您的资料）：</span>
+                </div>
+                <button type="button" class="b3-button b3-button--small xlc-btn-primary xlc-install-samples-btn" style="padding: 2px 8px; font-size: 11px; white-space: nowrap;">
+                    🚀 一键装入到我的常用库
+                </button>
+            `;
+            const installBtn = sampleBanner.querySelector<HTMLButtonElement>(".xlc-install-samples-btn");
+            installBtn?.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                if (this.deps.importStarterPackDirect) {
+                    installBtn.disabled = true;
+                    installBtn.textContent = "⏳ 正在装入...";
+                    try {
+                        const res = await this.deps.importStarterPackDirect(YIWAIWAI_DEFAULT_PRESET_PACK_MD);
+                        if (res.ok) {
+                            this.deps.notify?.("info", `✓ 已成功装入 ${res.count} 项常用语！您可以在思源正文直接编辑或在右侧替换为自己的内容。`);
+                            void this.refresh();
+                        } else {
+                            installBtn.disabled = false;
+                            installBtn.textContent = "🚀 一键装入到我的常用库";
+                            this.deps.notify?.("error", "装入失败，请稍后重试");
+                        }
+                    } catch {
+                        installBtn.disabled = false;
+                        installBtn.textContent = "🚀 一键装入到我的常用库";
+                    }
+                }
+            });
+            list.appendChild(sampleBanner);
+        }
+
         // 分组头（F4 完整形态，原型屏 1）：浏览态（全部范围 + 非标题排序）按
         // 「置顶(manual) → 分类(α) → 无分类」分区展示；搜索结果同样分组（原型屏 1 同款）。
         // 分组 = 对 this.results 重排到展示序（仅展示副本，不动索引/真源），键盘/Alt+N 线性导航不变。
@@ -4770,17 +4960,27 @@ export class CommonSearchDialog {
         if (paneTitle) paneTitle.textContent = entry?.title ?? "";
         if (paneAi) paneAi.style.display = this.aiResults ? "" : "none";
         paintUsageBadge(entry);
+        const isSampleEntry = Boolean((entry as any)?.isSample);
         if (paneWarn) {
             const missing = Boolean(entry && this.deps.isSourceMissing(entry));
-            paneWarn.style.display = missing ? "" : "none";
-            if (missing) paneWarn.textContent = "⚠ " + this.deps.t("sourceGone");
+            if (isSampleEntry) {
+                paneWarn.style.display = "";
+                paneWarn.textContent = "💡 示例常用语：可在思源正文中直接编辑或在右侧替换为您自己的真实资料";
+                paneWarn.style.color = "var(--xlc-accent, var(--b3-theme-primary))";
+            } else {
+                paneWarn.style.display = missing ? "" : "none";
+                paneWarn.style.color = "";
+                if (missing) paneWarn.textContent = "⚠ " + this.deps.t("sourceGone");
+            }
         }
         this.paintPaneVars(null, entry?.itemType);
             paneBody.classList.add("xlc-pane-body--muted");
             paneBody.textContent = this.deps.t("loading"); // 本地内核预览不用「AI 处理中」文案，避免误导（R138）
-        const previewPromise = (entry?.isOmni && (entry.content || entry.summary))
-            ? this.deps.preview(id).then((t) => t || entry?.content || entry?.summary || "")
-            : this.deps.preview(id);
+        const previewPromise = isSampleEntry && entry?.content
+            ? Promise.resolve(entry.content)
+            : (entry?.isOmni && (entry.content || entry.summary))
+                ? this.deps.preview(id).then((t) => t || entry?.content || entry?.summary || "")
+                : this.deps.preview(id);
         void previewPromise.then((text) => {
             if (seq !== this.previewSeq) return;
             const finalText = text || this.deps.t("previewUnavailable");
@@ -4848,6 +5048,18 @@ export class CommonSearchDialog {
         const cleanQuery = this.lastQueryText.replace(/^\?+/, "").trim();
         if (cleanQuery) this.deps.addRecentQuery?.(cleanQuery);
         if (this.primaryBusy || this.varFormOpen) return;
+        if ((entry as any)?.isSample) {
+            this.primaryBusy = true;
+            try {
+                const txt = entry.content || entry.summary || entry.title || "";
+                await this.deps.copyProviderPayload(txt);
+                if (!this.pinWindow) this.destroy();
+                this.deps.notify?.("info", "已插入示例话术内容");
+            } finally {
+                this.primaryBusy = false;
+            }
+            return;
+        }
         if (this.deps.defaultActionMode === "copy") {
             this.primaryBusy = true;
             try {
@@ -7477,7 +7689,7 @@ export class CommonSearchDialog {
                 this.destroy();
                 this.deps.newItem(queryText);
             }
-        } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
             if (e.repeat || this.primaryBusy) return;
             this.primaryBusy = true;
             e.preventDefault();
@@ -7595,10 +7807,14 @@ export class CommonSearchDialog {
             this.toggleMultiSelectMode();
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
-            // Alt+M: 切换极窄迷你模式；选中条目时复制条目原始 Markdown 语法到剪贴板
+            // Alt+M: 切换极窄迷你模式；若在折叠状态则秒级展开唤醒
             e.preventDefault();
             if (this.miniMode) {
-                this.toggleMiniMode();
+                if (this.miniCollapsed) {
+                    this.setMiniCollapsed(false);
+                } else {
+                    this.toggleMiniMode();
+                }
                 return;
             }
             if (this.quickLookOpen) this.closeQuickLook();
@@ -7671,11 +7887,10 @@ export class CommonSearchDialog {
             this.toggleQuickLook();
             return;
         } else if (
-            this.miniMode && !e.ctrlKey && !e.metaKey && !e.altKey
-            && (!isInputFocused || input?.value.trim() === "")
+            this.miniMode && !isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey
             && (/^[1-9]$/.test(e.key) || /^Digit[1-9]$/.test(e.code))
         ) {
-            // 迷你常驻模式下前9项单数字键极速直达（CAND-026 / TODO-OPT-07）
+            // 迷你模式下：搜索框有焦点时数字始终正常输入检索；失焦或列表焦点时前9项单数字键极速直达（CAND-026 / 20261121-01）
             let num: number | null = null;
             if (/^[1-9]$/.test(e.key)) num = Number(e.key);
             else if (/^Digit[1-9]$/.test(e.code)) num = Number(e.code.replace("Digit", ""));
@@ -8023,6 +8238,13 @@ export class CommonSearchDialog {
             this.renderList(miniListEl);
         }
 
+        if (this.miniMode) {
+            this.renderMiniHeroCard();
+            this.renderMiniCategoryChips();
+        } else {
+            this.hideMiniPreviewPopover();
+        }
+
         this.applyMiniCollapse();
     }
 
@@ -8060,6 +8282,423 @@ export class CommonSearchDialog {
         const containerEl = dialogWrap.querySelector<HTMLElement>(".b3-dialog__container");
         if (containerEl) {
             containerEl.classList.toggle("xlc-dialog--collapsed", isCollapsed);
+        }
+        if (isCollapsed) {
+            this.updateCollapsedPillText();
+            this.hideMiniPreviewPopover();
+        }
+    }
+
+    /**
+     * 渲染最新剪贴板动态首卡 (Live Clipboard Hero Card · 20261121-01)
+     */
+    private renderMiniHeroCard(): void {
+        if (!this.miniHeroCardEl) return;
+        this.miniHeroCardEl.replaceChildren();
+
+        const clips = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
+        const latest = clips[0];
+        if (!latest || !latest.text) {
+            const emptyTip = document.createElement("div");
+            emptyTip.className = "xlc-mini-hero-empty";
+            emptyTip.textContent = "📋 暂无剪贴板历史（复制文本后置顶呈现）";
+            this.miniHeroCardEl.appendChild(emptyTip);
+            return;
+        }
+
+        const headRow = document.createElement("div");
+        headRow.className = "xlc-mini-hero-head";
+
+        const badge = document.createElement("span");
+        badge.className = "xlc-mini-hero-badge";
+        badge.textContent = "⚡ 最新剪贴板";
+
+        const timeSpan = document.createElement("span");
+        timeSpan.className = "xlc-mini-hero-time";
+        timeSpan.textContent = formatRelativeTime(latest.copiedAt);
+
+        headRow.append(badge, timeSpan);
+        this.miniHeroCardEl.appendChild(headRow);
+
+        const textPreview = document.createElement("div");
+        textPreview.className = "xlc-mini-hero-text";
+        textPreview.textContent = formatMiniHeroSnippet(latest.text, 160);
+        textPreview.title = latest.text;
+        this.miniHeroCardEl.appendChild(textPreview);
+
+        const actionsRow = document.createElement("div");
+        actionsRow.className = "xlc-mini-hero-actions";
+
+        const insertBtn = document.createElement("button");
+        insertBtn.type = "button";
+        insertBtn.className = "b3-button xlc-btn-primary xlc-mini-hero-btn";
+        insertBtn.dataset.xlcControl = "search.mini.hero-insert";
+        insertBtn.textContent = "↵ 插入";
+        insertBtn.title = "直接插入当前光标处 (Enter)";
+        insertBtn.setAttribute("aria-label", "插入最新剪贴板内容");
+        insertBtn.addEventListener("click", () => void this.insertClipDirect(latest.text));
+
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "b3-button xlc-mini-hero-btn";
+        copyBtn.dataset.xlcControl = "search.mini.hero-copy";
+        copyBtn.textContent = "📋 复制";
+        copyBtn.title = "复制到剪贴板";
+        copyBtn.setAttribute("aria-label", "复制最新剪贴板内容");
+        copyBtn.addEventListener("click", () => {
+            void this.deps.copyText(latest.text).then((ok) => {
+                if (ok) lvNotify.inline(copyBtn, "已复制");
+            });
+        });
+
+        const promoteBtn = document.createElement("button");
+        promoteBtn.type = "button";
+        promoteBtn.className = "b3-button b3-button--text xlc-mini-hero-btn xlc-mini-hero-promote";
+        promoteBtn.dataset.xlcControl = "search.mini.hero-promote";
+        promoteBtn.textContent = "+ 存为常用语";
+        promoteBtn.title = "一键将此剪贴板内容沉淀为常用语";
+        promoteBtn.setAttribute("aria-label", "将最新剪贴板内容存为常用语");
+        promoteBtn.addEventListener("click", () => this.promoteClipToCommon(latest.text));
+
+        actionsRow.append(insertBtn, copyBtn, promoteBtn);
+        this.miniHeroCardEl.appendChild(actionsRow);
+    }
+
+    /**
+     * 渲染迷你状态下的场景胶囊分组横滑栏 (Category Chips · 20261121-01)
+     */
+    private renderMiniCategoryChips(): void {
+        if (!this.miniCategoryChipsEl) return;
+        this.miniCategoryChipsEl.replaceChildren();
+
+        const chips = buildMiniCategoryChips(this.cachedCategories);
+        const currentCatFilter = this.deps.getFilters().category;
+
+        for (const chip of chips) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "xlc-mini-chip";
+            btn.dataset.xlcControl = `search.mini.chip.${chip.key}`;
+            btn.textContent = chip.label;
+            btn.title = `按「${chip.label}」过滤`;
+            btn.setAttribute("aria-label", `按${chip.label}过滤`);
+
+            let isActive = false;
+            if (chip.type === "scope") {
+                isActive = this.currentScope === chip.scopeVal && !currentCatFilter;
+            } else if (chip.type === "category") {
+                isActive = this.currentScope === "all" && currentCatFilter === chip.catVal;
+            }
+
+            if (isActive) {
+                btn.classList.add("xlc-mini-chip--active");
+                btn.setAttribute("aria-pressed", "true");
+            } else {
+                btn.setAttribute("aria-pressed", "false");
+            }
+
+            btn.addEventListener("focus", () => {
+                btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+            });
+
+            btn.addEventListener("click", () => {
+                if (chip.type === "scope") {
+                    this.currentScope = (chip.scopeVal as any) || "all";
+                    this.activeCategoryPath = "";
+                    this.deps.setFilters({ ...this.deps.getFilters(), category: "" });
+                } else if (chip.type === "category") {
+                    if (currentCatFilter === chip.catVal) {
+                        this.deps.setFilters({ ...this.deps.getFilters(), category: "" });
+                        this.activeCategoryPath = "";
+                    } else {
+                        this.currentScope = "all";
+                        this.deps.setFilters({ ...this.deps.getFilters(), category: chip.catVal || "" });
+                        this.activeCategoryPath = chip.catVal || "";
+                    }
+                }
+                this.syncScopeChips();
+                this.renderMiniCategoryChips();
+                void this.refresh();
+            });
+
+            this.miniCategoryChipsEl.appendChild(btn);
+        }
+    }
+
+    private syncMiniCategoryChips(): void {
+        if (!this.miniCategoryChipsEl) return;
+        const currentCatFilter = this.deps.getFilters().category;
+        this.miniCategoryChipsEl.querySelectorAll<HTMLButtonElement>(".xlc-mini-chip").forEach((btn) => {
+            const ctrl = btn.dataset.xlcControl || "";
+            let isActive = false;
+            if (ctrl === "search.mini.chip.all") {
+                isActive = this.currentScope === "all" && !currentCatFilter && !this.activeCategoryPath;
+            } else if (ctrl === "search.mini.chip.clipboard") {
+                isActive = this.currentScope === "clipboard";
+            } else if (ctrl === "search.mini.chip.favorites") {
+                isActive = this.currentScope === "favorites";
+            } else if (ctrl.startsWith("search.mini.chip.cat-")) {
+                const cat = ctrl.replace("search.mini.chip.cat-", "");
+                isActive = this.currentScope === "all" && (currentCatFilter === cat || this.activeCategoryPath === cat);
+            }
+            btn.classList.toggle("xlc-mini-chip--active", isActive);
+            btn.setAttribute("aria-pressed", String(isActive));
+        });
+    }
+
+    /**
+     * 迷你悬浮气泡式完整预览 (Popover Full Preview · 20261121-01 / 20261122-01)
+     */
+    private showMiniPreviewPopover(entry: SearchEntry, anchorEl: HTMLElement): void {
+        if (!this.miniMode || this.miniCollapsed || !this.dialog?.element) return;
+        // 触屏设备（仅当纯触屏且无任何鼠标 hover 硬件时防护；桌面触屏/触控笔笔电一律允许鼠标 hover）
+        if (typeof window !== "undefined" && window.matchMedia) {
+            const noHover = window.matchMedia("(hover: none)").matches;
+            const canHover = window.matchMedia("(hover: hover)").matches;
+            if (noHover && !canHover) return;
+        }
+
+        // 清理离开隐藏延时器
+        if (this.miniPreviewHideTimer) {
+            clearTimeout(this.miniPreviewHideTimer);
+            this.miniPreviewHideTimer = null;
+        }
+
+        // 防同一条目内鼠标子元素抖动重复触发
+        if (this.miniPreviewActiveEntryId === entry.id && (this.miniPreviewPopoverEl || this.miniPreviewTimer)) {
+            return;
+        }
+
+        this.miniPreviewActiveEntryId = entry.id;
+
+        // 若切换到新条目，重置定时器
+        if (this.miniPreviewTimer) {
+            clearTimeout(this.miniPreviewTimer);
+            this.miniPreviewTimer = null;
+        }
+
+        // 轻量去抖（100ms，既保证丝滑即时响应，又避免鼠标掠过整列时的无谓 DOM 抖动）
+        this.miniPreviewTimer = setTimeout(async () => {
+            this.miniPreviewTimer = null;
+            if (!this.miniMode || this.miniCollapsed || !this.dialog?.element) return;
+            if (this.miniPreviewActiveEntryId !== entry.id) return;
+
+            // 移除已有旧气泡 DOM
+            this.hideMiniPreviewPopoverDOM();
+
+            const popover = document.createElement("div");
+            popover.className = "xlc-mini-preview-popover";
+            popover.dataset.xlcControl = "search.mini.popover";
+
+            const head = document.createElement("div");
+            head.className = "xlc-mini-popover-head";
+
+            const titleEl = document.createElement("div");
+            titleEl.className = "xlc-mini-popover-title";
+            titleEl.textContent = entry.title || "未命名常用语";
+            head.appendChild(titleEl);
+
+            const badges = document.createElement("div");
+            badges.className = "xlc-mini-popover-badges";
+            if (entry.category) {
+                const b = document.createElement("span");
+                b.className = "xlc-mini-popover-badge";
+                b.textContent = `📁 ${entry.category}`;
+                badges.appendChild(b);
+            }
+            if (entry.alias) {
+                const b = document.createElement("span");
+                b.className = "xlc-mini-popover-badge";
+                b.textContent = `:${entry.alias}`;
+                badges.appendChild(b);
+            } else if (entry.shortcode) {
+                const b = document.createElement("span");
+                b.className = "xlc-mini-popover-badge";
+                b.textContent = entry.shortcode;
+                badges.appendChild(b);
+            }
+            if (entry.itemType) {
+                const b = document.createElement("span");
+                b.className = "xlc-mini-popover-badge";
+                b.textContent = (TYPE_BADGES[entry.itemType] ?? entry.itemType).toUpperCase();
+                badges.appendChild(b);
+            }
+            if ((entry.varCount ?? 0) > 0) {
+                const b = document.createElement("span");
+                b.className = "xlc-mini-popover-badge xlc-mini-popover-badge--var";
+                b.textContent = `${entry.varCount}个变量`;
+                badges.appendChild(b);
+            }
+            if (entry.tags && entry.tags.length > 0) {
+                for (const tg of entry.tags.slice(0, 3)) {
+                    const b = document.createElement("span");
+                    b.className = "xlc-mini-popover-badge";
+                    b.textContent = `#${tg}`;
+                    badges.appendChild(b);
+                }
+            }
+            head.appendChild(badges);
+            popover.appendChild(head);
+
+            const body = document.createElement("div");
+            body.className = "xlc-mini-popover-body";
+
+            // 内容富文本渲染：优先从内存缓存读取完整正文；若无缓存则先呈现 summary，并异步拉取完整 preview
+            const renderContent = (rawText: string) => {
+                body.replaceChildren();
+                if (!rawText) {
+                    body.textContent = this.deps.t("previewUnavailable") || "暂无内容";
+                    return;
+                }
+                try {
+                    const parsed = (entry.itemType !== "code") ? parseSnippetAnnotations(rawText) : null;
+                    const cleanText = parsed && parsed.cleanText ? parsed.cleanText : rawText;
+                    if (entry.itemType !== "code" && hasDynamicMacros(cleanText)) {
+                        const expanded = expandMacroPreview(cleanText);
+                        renderDualMacroPreview(
+                            body,
+                            cleanText,
+                            expanded,
+                            entry.itemType,
+                            {
+                                templateSource: this.deps.t("previewTemplateSource") || "模板源码",
+                                expandedEffect: this.deps.t("previewExpandedEffect") || "展开后真实效果",
+                            }
+                        );
+                    } else {
+                        renderSafePreview(body, cleanText, entry.itemType);
+                    }
+                    if (parsed && parsed.tags.length > 0) {
+                        const annotHint = document.createElement("div");
+                        annotHint.className = "xlc-form-hint";
+                        annotHint.style.marginTop = "6px";
+                        annotHint.style.fontSize = "11px";
+                        annotHint.style.color = "var(--b3-theme-primary)";
+                        annotHint.textContent = `🏷️ 检索关键字：${parsed.tags.map((t) => `@${t}`).join(" ")}`;
+                        body.appendChild(annotHint);
+                    }
+                } catch {
+                    body.textContent = rawText;
+                }
+            };
+
+            const cachedText = this.miniPreviewCache.get(entry.id);
+            if (cachedText !== undefined) {
+                renderContent(cachedText);
+            } else {
+                const initialText = entry.content || entry.summary || "";
+                renderContent(initialText);
+                if (typeof this.deps.preview === "function") {
+                    void this.deps.preview(entry.id).then((fetched) => {
+                        const textToCache = fetched || entry.content || entry.summary || "";
+                        this.miniPreviewCache.set(entry.id, textToCache);
+                        if (this.miniPreviewActiveEntryId === entry.id && popover.isConnected) {
+                            renderContent(textToCache);
+                        }
+                    }).catch(() => {});
+                }
+            }
+
+            popover.appendChild(body);
+
+            const foot = document.createElement("div");
+            foot.className = "xlc-mini-popover-foot";
+            const index = Number(anchorEl.dataset.xlcIndex ?? "-1");
+            const numStr = (index >= 0 && index < 9) ? String(index + 1) : "";
+            foot.textContent = numStr
+                ? `快捷直达：按 ${numStr} 插入 · Shift+${numStr} 复制 · Alt+${numStr} 穿透`
+                : "快捷直达：↵ 插入 · Ctrl+Enter 复制 · Esc 关闭";
+            popover.appendChild(foot);
+
+            // 悬停进气泡时保持展示（支持滚动与长文细阅），离开气泡时延时隐藏
+            popover.addEventListener("mouseenter", () => {
+                if (this.miniPreviewHideTimer) {
+                    clearTimeout(this.miniPreviewHideTimer);
+                    this.miniPreviewHideTimer = null;
+                }
+            });
+            popover.addEventListener("mouseleave", () => {
+                this.scheduleHideMiniPreviewPopover();
+            });
+
+            const container = this.dialog?.element?.querySelector<HTMLElement>(".b3-dialog__container") ?? this.dialog?.element;
+            const containerRect = container?.getBoundingClientRect() ?? {left: 100, right: 480};
+            const anchorRect = anchorEl.getBoundingClientRect();
+            const viewport = {
+                width: typeof window !== "undefined" ? window.innerWidth : 1024,
+                height: typeof window !== "undefined" ? window.innerHeight : 768,
+            };
+
+            const popoverSize = {width: 340, height: 320};
+            const pos = calculateMiniPopoverPosition(containerRect, anchorRect, viewport, popoverSize);
+            popover.style.left = `${pos.left}px`;
+            popover.style.top = `${pos.top}px`;
+
+            this.miniPreviewPopoverEl = popover;
+            document.body.appendChild(popover);
+        }, 100);
+    }
+
+    private hideMiniPreviewPopoverDOM(): void {
+        if (this.miniPreviewPopoverEl) {
+            this.miniPreviewPopoverEl.remove();
+            this.miniPreviewPopoverEl = null;
+        }
+        if (typeof document !== "undefined") {
+            document.querySelectorAll(".xlc-mini-preview-popover").forEach((el) => el.remove());
+        }
+    }
+
+    private scheduleHideMiniPreviewPopover(): void {
+        if (this.miniPreviewTimer) {
+            clearTimeout(this.miniPreviewTimer);
+            this.miniPreviewTimer = null;
+        }
+        if (this.miniPreviewHideTimer) {
+            clearTimeout(this.miniPreviewHideTimer);
+        }
+        this.miniPreviewHideTimer = setTimeout(() => {
+            this.hideMiniPreviewPopover();
+        }, 160);
+    }
+
+    private hideMiniPreviewPopover(): void {
+        if (this.miniPreviewTimer) {
+            clearTimeout(this.miniPreviewTimer);
+            this.miniPreviewTimer = null;
+        }
+        if (this.miniPreviewHideTimer) {
+            clearTimeout(this.miniPreviewHideTimer);
+            this.miniPreviewHideTimer = null;
+        }
+        this.miniPreviewActiveEntryId = null;
+        this.hideMiniPreviewPopoverDOM();
+    }
+
+    /**
+     * 更新折叠贴边胶囊动态跑马灯摘要 (Collapsed Pill Marquee · 20261121-01)
+     */
+    private updateCollapsedPillText(): void {
+        if (!this.collapsedPillEl) return;
+        const pillIcon = this.collapsedPillEl.querySelector<HTMLElement>(".xlc-pill-icon");
+        const pillMarquee = this.collapsedPillEl.querySelector<HTMLElement>(".xlc-pill-marquee");
+        const pillText = this.collapsedPillEl.querySelector<HTMLElement>(".xlc-pill-text");
+        if (!pillIcon || !pillMarquee || !pillText) return;
+
+        const clips = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
+        const latest = clips[0];
+        const marqueeInfo = formatCollapsedPillMarquee(latest?.text);
+
+        if (marqueeInfo.hasContent) {
+            pillIcon.textContent = "🐴";
+            pillText.textContent = marqueeInfo.text;
+            pillMarquee.style.display = "block";
+            this.collapsedPillEl.title = `最新剪贴板: ${latest!.text.trim()}\n点击或按 Alt+M 展开常用语`;
+        } else {
+            pillIcon.textContent = "🐴 常用语";
+            pillText.textContent = "";
+            pillMarquee.style.display = "none";
+            this.collapsedPillEl.title = "点击展开常用语悬浮条 (Alt+M)";
         }
     }
 
@@ -8732,9 +9371,15 @@ export class CommonSearchDialog {
     private isDestroying = false;
     private prevActiveElement: HTMLElement | null = null;
 
+    getColumnResizers(): { clip: HTMLElement | null; cat: HTMLElement | null; list: HTMLElement | null } {
+        return { clip: this.clipResizerEl, cat: this.catResizerEl, list: this.listResizerEl };
+    }
+
     destroy(): void {
         if (this.isDestroying) return;
         this.isDestroying = true;
+        this.hideMiniPreviewPopover();
+        this.miniPreviewCache.clear();
         if (this.inputDebounce) {
             clearTimeout(this.inputDebounce);
             this.inputDebounce = null;
@@ -8759,6 +9404,8 @@ export class CommonSearchDialog {
         }
         this.surfaceUnregister?.();
         this.surfaceUnregister = undefined;
+        this.categoryTreeEl = null;
+        this.categoryTreeBodyEl = null;
         const dlg = this.dialog;
         this.dialog = null;
         dlg?.destroy();
@@ -8958,21 +9605,459 @@ export class CommonSearchDialog {
         }
     }
 
+    /** 2026-11-21 i18n 债务收敛：双核面板区文案统一走 dualPanel.* 键（缺失回退原中文，{var} 插值）。 */
+    private dualT(key: string, fallback: string, vars?: Record<string, string | number>): string {
+        let v = this.deps.t(key);
+        if (!v || v === key) v = fallback;
+        if (vars) for (const [name, value] of Object.entries(vars)) v = v.split(`{${name}}`).join(String(value));
+        return v;
+    }
+
+
+    /**
+     * 易歪歪 (YiWaiWai) 风格常用语多级分类树导航面板
+     * 支持系统置顶分类（全部、收藏、最近）与用户多级业务文件夹树
+     */
+    private buildCategoryTreePanel(): HTMLElement {
+        const treeNav = document.createElement("nav");
+        treeNav.className = "xlc-cat-tree";
+        treeNav.setAttribute("aria-label", "常用语话术分组");
+        treeNav.dataset.xlcControl = "panel.category-tree";
+        this.categoryTreeEl = treeNav;
+
+        const head = document.createElement("div");
+        head.className = "xlc-cat-tree-head";
+
+        const titleBox = document.createElement("div");
+        titleBox.className = "xlc-cat-head-title";
+        const icon = document.createElement("span");
+        icon.className = "xlc-cat-head-icon";
+        icon.textContent = "📁";
+        const text = document.createElement("strong");
+        text.textContent = this.dualT("dualPanel.groupTitle", "话术分组");
+        titleBox.append(icon, text);
+
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "b3-button b3-button--text xlc-cat-add-btn";
+        addBtn.textContent = this.dualT("dualPanel.addGroup", "+ 新建");
+        addBtn.title = this.dualT("dualPanel.addGroupTip", "新建常用语分类（支持层级如 售后/退款）");
+        addBtn.setAttribute("aria-label", this.dualT("dualPanel.addGroupTitle", "新建常用语分类"));
+        addBtn.addEventListener("click", () => {
+            openTextPromptDialog({
+                title: this.dualT("dualPanel.addGroupTitle", "新建常用语分类"),
+                label: this.dualT("dualPanel.groupNameLabel", "分类名称（支持层级路径，例如：售前咨询 或 售后/退款）"),
+                placeholder: this.dualT("dualPanel.groupNamePlaceholder", "例如：售前咨询"),
+                confirmText: this.dualT("dualPanel.createAndEnter", "创建并进入"),
+                cancelText: this.dualT("dualPanel.cancel", "取消"),
+                onConfirm: (catName) => {
+                    const cleanName = catName.trim();
+                    if (!cleanName) return false;
+                    this.featuredViewActive = false;
+                    this.activeCategoryPath = cleanName;
+                    if (!this.cachedCategories.includes(cleanName)) {
+                        this.cachedCategories.push(cleanName);
+                    }
+                    this.deps.setFilters({ ...this.deps.getFilters(), category: cleanName });
+                    const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+                    if (categorySelect) categorySelect.value = cleanName;
+                    this.renderCategoryTree(this.cachedCategories);
+                    this.deps.notify?.("info", this.dualT("dualPanel.createdSwitched", "已创建并切换到分类「{cleanName}」，点击右上角【+ 常用语】即可添加条目", {cleanName}));
+                    void this.refresh();
+                    return true;
+                },
+            });
+        });
+
+        head.append(titleBox, addBtn);
+        treeNav.appendChild(head);
+
+        const body = document.createElement("div");
+        body.className = "xlc-cat-tree-body";
+        body.setAttribute("role", "tree");
+        this.categoryTreeBodyEl = body;
+        treeNav.appendChild(body);
+
+        this.renderCategoryTree();
+        return treeNav;
+    }
+
+    /**
+     * 渲染常用语分类树内容（系统视图 + 递归层级树）
+     */
+    private renderCategoryTree(categories?: string[]): void {
+        if (!this.categoryTreeBodyEl) return;
+        const body = this.categoryTreeBodyEl;
+        body.replaceChildren();
+
+        const rawCats = categories || this.cachedCategories || [];
+        const cats = rawCats.length > 0 ? rawCats : DEFAULT_PRESET_CATEGORIES;
+
+        // 1. 系统置顶视图项：全部、收藏、最近
+        const systemGroup = document.createElement("div");
+        systemGroup.className = "xlc-cat-system-group";
+
+        const makeSystemItem = (id: string, iconStr: string, label: string, isMatch: () => boolean, onClick: () => void) => {
+            const item = document.createElement("div");
+            item.className = "xlc-cat-node xlc-cat-node--system" + (isMatch() ? " xlc-cat-node--active" : "");
+            item.setAttribute("role", "treeitem");
+            item.setAttribute("aria-selected", String(isMatch()));
+            item.dataset.xlcCatId = id;
+
+            const iconSpan = document.createElement("span");
+            iconSpan.className = "xlc-cat-node-icon";
+            iconSpan.textContent = iconStr;
+
+            const nameSpan = document.createElement("span");
+            nameSpan.className = "xlc-cat-node-name";
+            nameSpan.textContent = label;
+
+            item.append(iconSpan, nameSpan);
+            item.addEventListener("click", () => {
+                onClick();
+                this.syncCategoryTreeActive();
+            });
+            return item;
+        };
+
+        const allItem = makeSystemItem(
+            "__all__",
+            "🗂️",
+            this.dualT("dualPanel.allSnippets", "全部常用"),
+            () => !this.activeCategoryPath && this.currentScope === "all" && !this.featuredViewActive,
+            () => {
+                this.featuredViewActive = false;
+                this.activeCategoryPath = "";
+                this.currentScope = "all";
+                this.deps.setFilters({ ...this.deps.getFilters(), category: "" });
+                const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+                if (categorySelect) categorySelect.value = "";
+                void this.refresh();
+            }
+        );
+
+        const favItem = makeSystemItem(
+            "__favorites__",
+            "⭐",
+            this.dualT("dualPanel.favoriteSnippets", "常用收藏"),
+            () => this.currentScope === "favorites",
+            () => {
+                this.featuredViewActive = false;
+                this.activeCategoryPath = "";
+                this.currentScope = "favorites";
+                this.syncScopeChips();
+                void this.refresh();
+            }
+        );
+
+        const recentItem = makeSystemItem(
+            "__recent__",
+            "🕒",
+            this.dualT("dualPanel.recentFrequent", "最近高频"),
+            () => this.currentScope === "recent",
+            () => {
+                this.featuredViewActive = false;
+                this.activeCategoryPath = "";
+                this.currentScope = "recent";
+                this.syncScopeChips();
+                void this.refresh();
+            }
+        );
+
+        const featuredItem = makeSystemItem(
+            "__featured__",
+            "✨",
+            this.dualT("dualPanel.featuredDemo", "精选示范"),
+            () => this.featuredViewActive && this.currentScope === "all",
+            () => {
+                this.featuredViewActive = true;
+                this.activeCategoryPath = "";
+                this.currentScope = "all";
+                this.deps.setFilters({ ...this.deps.getFilters(), category: "" });
+                const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+                if (categorySelect) categorySelect.value = "";
+                void this.refresh();
+            }
+        );
+
+        systemGroup.append(allItem, favItem, recentItem, featuredItem);
+        body.appendChild(systemGroup);
+
+        const divider = document.createElement("div");
+        divider.className = "xlc-cat-divider";
+        body.appendChild(divider);
+
+        // 2. 业务分类层级树
+        if (cats.length > 0) {
+            const countsMap = new Map<string, number>();
+            for (const r of this.results) {
+                if (r.category) {
+                    countsMap.set(r.category, (countsMap.get(r.category) || 0) + 1);
+                }
+            }
+            if (countsMap.size === 0) {
+                countsMap.set("问候礼貌", 3);
+                countsMap.set("商务财务", 3);
+                countsMap.set("售后沟通", 2);
+                countsMap.set("研发效率", 2);
+            }
+
+            const treeNodes = buildHierarchyTree(cats, countsMap);
+
+            const renderHierarchyNode = (node: HierarchyNode) => {
+                const nodeEl = document.createElement("div");
+                const isSelected = this.activeCategoryPath === node.path && this.currentScope === "all";
+                const isCollapsed = this.collapsedTreeNodes.has(node.path);
+                nodeEl.className = "xlc-cat-node" + (isSelected ? " xlc-cat-node--active" : "");
+                nodeEl.setAttribute("role", "treeitem");
+                nodeEl.setAttribute("aria-selected", String(isSelected));
+                nodeEl.dataset.xlcCatPath = node.path;
+                nodeEl.style.paddingLeft = `${node.depth * 14 + 10}px`;
+
+                if (node.children && node.children.length > 0) {
+                    const arrow = document.createElement("span");
+                    arrow.className = "xlc-cat-arrow";
+                    arrow.textContent = isCollapsed ? "▸" : "▾";
+                    arrow.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        if (this.collapsedTreeNodes.has(node.path)) {
+                            this.collapsedTreeNodes.delete(node.path);
+                        } else {
+                            this.collapsedTreeNodes.add(node.path);
+                        }
+                        this.renderCategoryTree();
+                    });
+                    nodeEl.appendChild(arrow);
+                } else {
+                    const placeholder = document.createElement("span");
+                    placeholder.className = "xlc-cat-arrow-placeholder";
+                    nodeEl.appendChild(placeholder);
+                }
+
+                const folderIcon = document.createElement("span");
+                folderIcon.className = "xlc-cat-node-icon";
+                folderIcon.textContent = isCollapsed ? "📁" : "📂";
+
+                const nameSpan = document.createElement("span");
+                nameSpan.className = "xlc-cat-node-name";
+                nameSpan.textContent = node.name;
+                nameSpan.title = node.path;
+
+                nodeEl.append(folderIcon, nameSpan);
+
+                if (node.count > 0) {
+                    const countBadge = document.createElement("span");
+                    countBadge.className = "xlc-cat-node-count";
+                    countBadge.textContent = String(node.count);
+                    nodeEl.appendChild(countBadge);
+                }
+
+                nodeEl.addEventListener("click", () => {
+                    this.featuredViewActive = false;
+                    this.activeCategoryPath = node.path;
+                    this.currentScope = "all";
+                    this.deps.setFilters({ ...this.deps.getFilters(), category: node.path });
+                    const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+                    if (categorySelect) categorySelect.value = node.path;
+                    this.syncCategoryTreeActive();
+                    void this.refresh();
+                });
+
+                // 分组编辑入口（易歪歪惯例：悬停显影 ⋯ 菜单，支持重命名/删除分组）
+                const editBtn = document.createElement("button");
+                editBtn.type = "button";
+                editBtn.className = "xlc-cat-edit-btn";
+                editBtn.textContent = "⋯";
+                editBtn.title = this.dualT("dualPanel.groupActions", "分组操作（重命名 / 删除，条目正文始终保留）");
+                editBtn.setAttribute("aria-label", this.dualT("dualPanel.groupMenuAria", "分组「{path}」操作菜单", {path: node.path}));
+                editBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    this.openCategoryNodeMenu(node, editBtn);
+                });
+                nodeEl.appendChild(editBtn);
+
+                body.appendChild(nodeEl);
+
+                if (!isCollapsed && node.children && node.children.length > 0) {
+                    for (const child of node.children) {
+                        renderHierarchyNode(child);
+                    }
+                }
+            };
+
+            for (const rootNode of treeNodes) {
+                renderHierarchyNode(rootNode);
+            }
+        } else {
+            const emptyHint = document.createElement("div");
+            emptyHint.className = "xlc-cat-empty-hint";
+            emptyHint.textContent = this.dualT("dualPanel.emptyGroups", "暂无自定义分组");
+            body.appendChild(emptyHint);
+        }
+    }
+
+    private syncCategoryTreeActive(): void {
+        if (!this.categoryTreeBodyEl) return;
+        const allNodes = this.categoryTreeBodyEl.querySelectorAll<HTMLElement>(".xlc-cat-node");
+        allNodes.forEach((el) => {
+            let active = false;
+            if (el.dataset.xlcCatId === "__all__") {
+                active = !this.activeCategoryPath && this.currentScope === "all" && !this.featuredViewActive;
+            } else if (el.dataset.xlcCatId === "__favorites__") {
+                active = this.currentScope === "favorites";
+            } else if (el.dataset.xlcCatId === "__recent__") {
+                active = this.currentScope === "recent";
+            } else if (el.dataset.xlcCatId === "__featured__") {
+                active = this.featuredViewActive && this.currentScope === "all";
+            } else if (el.dataset.xlcCatPath) {
+                active = this.activeCategoryPath === el.dataset.xlcCatPath && this.currentScope === "all" && !this.featuredViewActive;
+            }
+            el.classList.toggle("xlc-cat-node--active", active);
+            el.setAttribute("aria-selected", String(active));
+        });
+    }
+
+    /**
+     * 分组节点操作菜单（易歪歪话术分组惯例）：重命名 / 删除，条目正文永不删除
+     */
+    private openCategoryNodeMenu(node: HierarchyNode, anchorEl: HTMLElement): void {
+        const menu = new Menu("xlc-cat-node-menu");
+        menu.addItem({
+            icon: "iconEdit",
+            label: this.dualT("dualPanel.renameGroup", "✏️ 重命名分组"),
+            click: () => void this.renameCategoryNode(node),
+        });
+        menu.addItem({
+            icon: "iconTrash",
+            label: this.dualT("dualPanel.deleteGroup", "🗑️ 删除分组（条目移入未分类）"),
+            click: () => void this.deleteCategoryNode(node),
+        });
+        const rect = anchorEl.getBoundingClientRect();
+        menu.open({
+            x: rect.left,
+            y: rect.bottom + 4,
+            isLeft: true,
+        });
+    }
+
+    /** 计算某分组路径（含全部子层级）受影响的条目数（供重命名/删除确认文案使用） */
+    private async countCategoryEntries(path: string): Promise<number> {
+        if (!this.deps.getCategoryEntryIds) return 0;
+        try {
+            const ids = await this.deps.getCategoryEntryIds(path);
+            return ids.length;
+        } catch {
+            return 0;
+        }
+    }
+
+    /**
+     * 重命名分组：支持层级路径级联（如 售后 → 售前，售后/退款 同步变为 售前/退款），
+     * 仅改写条目的分类元数据属性，严禁触碰条目正文。
+     */
+    private async renameCategoryNode(node: HierarchyNode): Promise<void> {
+        if (!this.deps.getCategoryEntryIds || !this.deps.batchUpdateMetadata) {
+            this.deps.notify?.("error", this.dualT("dualPanel.renameUnsupported", "当前版本暂不支持分组重命名（缺少批量元数据能力）"));
+            return;
+        }
+        const affectedCount = await this.countCategoryEntries(node.path);
+        openTextPromptDialog({
+            title: this.dualT("dualPanel.renameGroupTitle", "重命名常用语分组"),
+            label: this.dualT("dualPanel.renameGroupPrompt", "原分组「{path}」{affected}，请输入新分组路径（子层级将级联更新，例如 售后/退款）：", {path: node.path, affected: affectedCount > 0 ? `（含 ${affectedCount} 个条目）` : ""}),
+            defaultValue: node.path,
+            placeholder: node.path,
+            maxLength: 64,
+            confirmText: this.dualT("dualPanel.confirmRename", "确认重命名"),
+            cancelText: this.dualT("dualPanel.cancel", "取消"),
+            onConfirm: (value) => {
+                const nextPath = value.trim().replace(/^\/+|\/+$/g, "");
+                if (!nextPath || nextPath === node.path) return;
+                if (nextPath.startsWith(node.path + "/")) {
+                    this.deps.notify?.("error", this.dualT("dualPanel.renameIntoChildError", "不能将分组重命名到其自身的子层级下"));
+                    return;
+                }
+                if (this.cachedCategories.includes(nextPath)) {
+                    this.deps.notify?.("error", this.dualT("dualPanel.groupExistsError", "分组「{path}」已存在，请换一个名称（如需合并请手动移动条目）", {path: nextPath}));
+                    return;
+                }
+                void (async () => {
+                    const ids = await this.deps.getCategoryEntryIds!(node.path);
+                    const receipt = await this.deps.batchUpdateMetadata!(ids, {renameCategoryPrefix: {from: node.path, to: nextPath}});
+                    if (receipt.failed > 0) {
+                        this.deps.notify?.("error", this.dualT("dualPanel.renamePartialFail", "重命名完成但部分条目失败：成功 {ok} 项，失败 {fail} 项", {ok: receipt.updated, fail: receipt.failed}));
+                    } else {
+                        this.deps.notify?.("info", this.dualT("dualPanel.renameSuccess", "✓ 分组已重命名为「{path}」{updated}", {path: nextPath, updated: receipt.updated > 0 ? `，${receipt.updated} 个条目同步更新` : ""}));
+                    }
+                    // 本地缓存同步重写（含子层级前缀），保持树即时反映新路径
+                    const remap = (cat: string) => cat === node.path || cat.startsWith(node.path + "/")
+                        ? nextPath + cat.slice(node.path.length)
+                        : cat;
+                    this.cachedCategories = Array.from(new Set(this.cachedCategories.map(remap)));
+                    if (this.activeCategoryPath === node.path || this.activeCategoryPath.startsWith(node.path + "/")) {
+                        this.activeCategoryPath = remap(this.activeCategoryPath);
+                        this.deps.setFilters({ ...this.deps.getFilters(), category: this.activeCategoryPath });
+                        const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+                        if (categorySelect) categorySelect.value = this.activeCategoryPath;
+                    }
+                    this.renderCategoryTree(this.cachedCategories);
+                    void this.refresh();
+                })();
+            },
+        });
+    }
+
+    /**
+     * 删除分组：仅清除条目的分类归属（移入未分类），绝不删除条目正文块，零数据丢失。
+     */
+    private async deleteCategoryNode(node: HierarchyNode): Promise<void> {
+        if (!this.deps.getCategoryEntryIds || !this.deps.batchUpdateMetadata) {
+            this.deps.notify?.("error", this.dualT("dualPanel.deleteUnsupported", "当前版本暂不支持分组删除（缺少批量元数据能力）"));
+            return;
+        }
+        const affectedCount = await this.countCategoryEntries(node.path);
+        const childHint = node.children && node.children.length > 0 ? "及其全部子分组" : "";
+        confirm(
+            this.dualT("dualPanel.deleteGroupTitle", "删除常用语分组"),
+            this.dualT("dualPanel.deleteGroupConfirm", "确定删除分组「{name}」？{childHint}下的 {n} 个条目将保留全部正文，仅移入「未分类」，之后可随时重新分组。", {name: node.name, childHint, n: affectedCount}),
+            () => {
+                void (async () => {
+                    const ids = await this.deps.getCategoryEntryIds!(node.path);
+                    const receipt = await this.deps.batchUpdateMetadata!(ids, {setCategory: ""});
+                    if (receipt.failed > 0) {
+                        this.deps.notify?.("error", this.dualT("dualPanel.deletePartialFail", "删除完成但部分条目失败：成功 {ok} 项，失败 {fail} 项", {ok: receipt.updated, fail: receipt.failed}));
+                    } else {
+                        this.deps.notify?.("info", this.dualT("dualPanel.deleteGroupSuccess", "✓ 分组「{name}」已删除，{n} 个条目已移入未分类（正文保留）", {name: node.name, n: receipt.updated}));
+                    }
+                    // 本地缓存移除该分组及其全部子层级
+                    this.cachedCategories = this.cachedCategories.filter((c) => c !== node.path && !c.startsWith(node.path + "/"));
+                    if (this.activeCategoryPath === node.path || this.activeCategoryPath.startsWith(node.path + "/")) {
+                        this.activeCategoryPath = "";
+                        this.deps.setFilters({ ...this.deps.getFilters(), category: "" });
+                        const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+                        if (categorySelect) categorySelect.value = "";
+                    }
+                    this.renderCategoryTree(this.cachedCategories);
+                    void this.refresh();
+                })();
+            }
+        );
+    }
+
     /**
      * 构建桌面端左侧专属剪贴板快调面板（开门即可调用剪贴板内容，支持直插、转存与清洗）
      */
     private buildClipPanel(): HTMLElement {
         const panel = document.createElement("aside");
         panel.className = "xlc-clip-panel" + (this.clipPanelCollapsed ? " xlc-clip-panel--collapsed" : "");
-        panel.setAttribute("aria-label", "剪贴板专属快调面板");
+        panel.setAttribute("aria-label", this.dualT("dualPanel.clipPanelAria", "剪贴板专属快调面板"));
         panel.dataset.xlcControl = "panel.clipboard";
         this.clipPanelEl = panel;
 
         // 折叠侧条（收起状态下只占极窄宽度，点击一键展开）
         const collapsedStrip = document.createElement("div");
         collapsedStrip.className = "xlc-clip-collapsed-strip";
-        collapsedStrip.title = "展开剪贴板面板";
-        collapsedStrip.setAttribute("aria-label", "展开剪贴板面板");
+        collapsedStrip.title = this.dualT("dualPanel.expandClipPanel", "展开剪贴板面板");
+        collapsedStrip.setAttribute("aria-label", this.dualT("dualPanel.expandClipPanel", "展开剪贴板面板"));
         const stripIcon = document.createElement("span");
         stripIcon.className = "xlc-clip-collapsed-icon";
         stripIcon.textContent = "📋";
@@ -9000,7 +10085,7 @@ export class CommonSearchDialog {
         titleIcon.className = "xlc-clip-head-icon";
         titleIcon.textContent = "📋";
         const titleText = document.createElement("strong");
-        titleText.textContent = "剪贴板快调";
+        titleText.textContent = this.dualT("dualPanel.clipPanelTitle", "剪贴板快调");
         titleWrap.append(titleIcon, titleText);
 
         const toolsWrap = document.createElement("div");
@@ -9011,20 +10096,20 @@ export class CommonSearchDialog {
         refreshBtn.type = "button";
         refreshBtn.className = "b3-button b3-button--text xlc-clip-tool-btn";
         refreshBtn.textContent = "⟳";
-        refreshBtn.title = "从操作系统同步最新剪贴板";
-        refreshBtn.setAttribute("aria-label", "同步系统剪贴板");
+        refreshBtn.title = this.dualT("dualPanel.syncClipTip", "从操作系统同步最新剪贴板");
+        refreshBtn.setAttribute("aria-label", this.dualT("dualPanel.syncClipAria", "同步系统剪贴板"));
         refreshBtn.addEventListener("click", async () => {
             refreshBtn.classList.add("xlc-spinning");
             try {
                 const txt = await this.deps.syncSystemClipboard?.();
                 if (txt) {
-                    this.deps.notify?.("info", "已同步最新系统剪贴板内容");
+                    this.deps.notify?.("info", this.dualT("dualPanel.clipSynced", "已同步最新系统剪贴板内容"));
                 } else {
-                    this.deps.notify?.("info", "剪贴板暂无新文本");
+                    this.deps.notify?.("info", this.dualT("dualPanel.clipNoNewText", "剪贴板暂无新文本"));
                 }
                 this.renderClipPanelContent();
             } catch {
-                this.deps.notify?.("error", "读取系统剪贴板失败，请检查浏览器权限");
+                this.deps.notify?.("error", this.dualT("dualPanel.clipReadError", "读取系统剪贴板失败，请检查浏览器权限"));
             } finally {
                 setTimeout(() => refreshBtn.classList.remove("xlc-spinning"), 300);
             }
@@ -9035,12 +10120,12 @@ export class CommonSearchDialog {
         clearBtn.type = "button";
         clearBtn.className = "b3-button b3-button--text xlc-clip-tool-btn";
         clearBtn.textContent = "🗑";
-        clearBtn.title = "清空剪贴板暂存历史";
-        clearBtn.setAttribute("aria-label", "清空剪贴板暂存历史");
+        clearBtn.title = this.dualT("dualPanel.clearHistoryTip", "清空剪贴板暂存历史");
+        clearBtn.setAttribute("aria-label", this.dualT("dualPanel.clearHistoryTip", "清空剪贴板暂存历史"));
         clearBtn.addEventListener("click", () => {
-            confirm("⚠️ 清空暂存", "确定清空全部剪贴板暂存记录？", () => {
+            confirm(this.dualT("dualPanel.clearHistoryTitle", "⚠️ 清空暂存"), this.dualT("dualPanel.clearHistoryConfirm", "确定清空全部剪贴板暂存记录？"), () => {
                 this.deps.clearClipboardHistory?.();
-                this.deps.notify?.("info", "已清空剪贴板历史暂存");
+                this.deps.notify?.("info", this.dualT("dualPanel.historyCleared", "已清空剪贴板历史暂存"));
                 this.renderClipPanelContent();
                 this.updateHistoryBarRef?.();
             });
@@ -9051,8 +10136,8 @@ export class CommonSearchDialog {
         collapseBtn.type = "button";
         collapseBtn.className = "b3-button b3-button--text xlc-clip-tool-btn";
         collapseBtn.textContent = "◀";
-        collapseBtn.title = "收起剪贴板面板";
-        collapseBtn.setAttribute("aria-label", "收起剪贴板面板");
+        collapseBtn.title = this.dualT("dualPanel.collapseClipPanel", "收起剪贴板面板");
+        collapseBtn.setAttribute("aria-label", this.dualT("dualPanel.collapseClipPanel", "收起剪贴板面板"));
         collapseBtn.addEventListener("click", () => this.toggleClipPanelCollapse(true));
 
         toolsWrap.append(refreshBtn, clearBtn, collapseBtn);
@@ -9089,23 +10174,23 @@ export class CommonSearchDialog {
 
             const emptyText = document.createElement("div");
             emptyText.className = "xlc-clip-empty-text";
-            emptyText.textContent = "剪贴板暂无内容";
+            emptyText.textContent = this.dualT("dualPanel.clipEmpty", "剪贴板暂无内容");
 
             const emptySub = document.createElement("div");
             emptySub.className = "xlc-clip-empty-sub";
-            emptySub.textContent = "在系统或文档中复制文本即可在此秒级调用";
+            emptySub.textContent = this.dualT("dualPanel.clipEmptyHint", "在系统或文档中复制文本即可在此秒级调用");
 
             const syncNowBtn = document.createElement("button");
             syncNowBtn.type = "button";
             syncNowBtn.className = "b3-button b3-button--outline xlc-btn-small xlc-clip-sync-btn";
-            syncNowBtn.textContent = "⟳ 读取系统剪贴板";
+            syncNowBtn.textContent = this.dualT("dualPanel.readClipBtn", "⟳ 读取系统剪贴板");
             syncNowBtn.addEventListener("click", async () => {
                 const txt = await this.deps.syncSystemClipboard?.();
                 if (txt) {
-                    this.deps.notify?.("info", "已读取剪贴板内容");
+                    this.deps.notify?.("info", this.dualT("dualPanel.clipReadDone", "已读取剪贴板内容"));
                     this.renderClipPanelContent();
                 } else {
-                    this.deps.notify?.("info", "系统剪贴板暂无文本");
+                    this.deps.notify?.("info", this.dualT("dualPanel.clipNoText", "系统剪贴板暂无文本"));
                 }
             });
 
@@ -9125,7 +10210,7 @@ export class CommonSearchDialog {
 
         const nowBadge = document.createElement("span");
         nowBadge.className = "xlc-badge xlc-badge--primary";
-        nowBadge.textContent = "⚡ 当前最新剪贴板";
+        nowBadge.textContent = this.dualT("dualPanel.clipLatestBadge", "⚡ 当前最新剪贴板");
 
         const timeBadge = document.createElement("span");
         timeBadge.className = "xlc-clip-time-badge";
@@ -9147,24 +10232,24 @@ export class CommonSearchDialog {
         const insertBtn = document.createElement("button");
         insertBtn.type = "button";
         insertBtn.className = "b3-button xlc-btn-primary xlc-clip-act-btn";
-        insertBtn.textContent = "⤓ 插入当前";
-        insertBtn.title = "直接插入到思源当前文档光标位置 (Enter)";
+        insertBtn.textContent = this.dualT("dualPanel.insertCurrentBtn", "⤓ 插入当前");
+        insertBtn.title = this.dualT("dualPanel.insertCurrentTip", "直接插入到思源当前文档光标位置 (Enter)");
         insertBtn.addEventListener("click", () => void this.insertClipDirect(latest.text));
 
         // ⭐ 存为常用语
         const promoteBtn = document.createElement("button");
         promoteBtn.type = "button";
         promoteBtn.className = "b3-button b3-button--outline xlc-clip-act-btn";
-        promoteBtn.textContent = "⭐ 存常用";
-        promoteBtn.title = "将此剪贴板内容保存沉淀为常用语片段";
+        promoteBtn.textContent = this.dualT("dualPanel.promoteBtn", "⭐ 存常用");
+        promoteBtn.title = this.dualT("dualPanel.promoteTip", "将此剪贴板内容保存沉淀为常用语片段");
         promoteBtn.addEventListener("click", () => this.promoteClipToCommon(latest.text));
 
         // 🧼 清洗
         const cleanBtn = document.createElement("button");
         cleanBtn.type = "button";
         cleanBtn.className = "b3-button b3-button--text xlc-clip-act-btn";
-        cleanBtn.textContent = "🧼 清洗";
-        cleanBtn.title = "去空行/换行/去跟踪参数/转Markdown表格";
+        cleanBtn.textContent = this.dualT("dualPanel.cleanBtn", "🧼 清洗");
+        cleanBtn.title = this.dualT("dualPanel.cleanTip", "去空行/换行/去跟踪参数/转Markdown表格");
         cleanBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             this.showClipCleanMenu(latest.text, cleanBtn);
@@ -9174,11 +10259,11 @@ export class CommonSearchDialog {
         const copyBtn = document.createElement("button");
         copyBtn.type = "button";
         copyBtn.className = "b3-button b3-button--text xlc-clip-act-btn";
-        copyBtn.textContent = "📋 复制";
-        copyBtn.title = "重新复制到系统剪贴板";
+        copyBtn.textContent = this.dualT("dualPanel.copyBtn", "📋 复制");
+        copyBtn.title = this.dualT("dualPanel.copyTip", "重新复制到系统剪贴板");
         copyBtn.addEventListener("click", async () => {
             await this.deps.copyText(latest.text);
-            this.deps.notify?.("info", "已复制到剪贴板");
+            this.deps.notify?.("info", this.dualT("dualPanel.copied", "已复制到剪贴板"));
         });
 
         actionsBar.append(insertBtn, promoteBtn, cleanBtn, copyBtn);
@@ -9189,7 +10274,7 @@ export class CommonSearchDialog {
         if (history.length > 1) {
             const historyHead = document.createElement("div");
             historyHead.className = "xlc-clip-history-head";
-            historyHead.textContent = `近期历史 (${history.length})`;
+            historyHead.textContent = this.dualT("dualPanel.recentHistory", "近期历史 ({n})", {n: history.length});
             body.appendChild(historyHead);
 
             const historyList = document.createElement("div");
@@ -9210,7 +10295,7 @@ export class CommonSearchDialog {
 
                 const lenSpan = document.createElement("span");
                 lenSpan.className = "xlc-clip-item-len";
-                lenSpan.textContent = `${item.text.length}字`;
+                lenSpan.textContent = this.dualT("dualPanel.charCount", "{n}字", {n: item.text.length});
 
                 metaRow.append(timeSpan, lenSpan);
 
@@ -9226,8 +10311,8 @@ export class CommonSearchDialog {
                 const actInsert = document.createElement("button");
                 actInsert.type = "button";
                 actInsert.className = "b3-button b3-button--small xlc-clip-mini-btn";
-                actInsert.textContent = "⤓ 插入";
-                actInsert.title = "直接插入当前光标处";
+                actInsert.textContent = this.dualT("dualPanel.insertBtn", "⤓ 插入");
+                actInsert.title = this.dualT("dualPanel.insertTip", "直接插入当前光标处");
                 actInsert.addEventListener("click", (e) => {
                     e.stopPropagation();
                     void this.insertClipDirect(item.text);
@@ -9237,7 +10322,7 @@ export class CommonSearchDialog {
                 actPromote.type = "button";
                 actPromote.className = "b3-button b3-button--small xlc-clip-mini-btn";
                 actPromote.textContent = "⭐";
-                actPromote.title = "存为常用语";
+                actPromote.title = this.dualT("dualPanel.promoteMiniTip", "存为常用语");
                 actPromote.addEventListener("click", (e) => {
                     e.stopPropagation();
                     this.promoteClipToCommon(item.text);
@@ -9247,7 +10332,7 @@ export class CommonSearchDialog {
                 actClean.type = "button";
                 actClean.className = "b3-button b3-button--small xlc-clip-mini-btn";
                 actClean.textContent = "🧼";
-                actClean.title = "清洗格式后插入或复制";
+                actClean.title = this.dualT("dualPanel.cleanMiniTip", "清洗格式后插入或复制");
                 actClean.addEventListener("click", (e) => {
                     e.stopPropagation();
                     this.showClipCleanMenu(item.text, actClean);
@@ -9261,7 +10346,7 @@ export class CommonSearchDialog {
                 actCopy.addEventListener("click", async (e) => {
                     e.stopPropagation();
                     await this.deps.copyText(item.text);
-                    this.deps.notify?.("info", "已复制到剪贴板");
+                    this.deps.notify?.("info", this.dualT("dualPanel.copied", "已复制到剪贴板"));
                 });
 
                 itemActions.append(actInsert, actPromote, actClean, actCopy);
@@ -9280,8 +10365,156 @@ export class CommonSearchDialog {
         this.clipPanelCollapsed = collapse !== undefined ? collapse : !this.clipPanelCollapsed;
         if (this.clipPanelEl) {
             this.clipPanelEl.classList.toggle("xlc-clip-panel--collapsed", this.clipPanelCollapsed);
+            if (!this.clipPanelCollapsed) {
+                this.clipPanelEl.style.width = `${this.columnWidths.clip}px`;
+                this.clipPanelEl.style.flex = `0 0 ${this.columnWidths.clip}px`;
+            } else {
+                this.clipPanelEl.style.width = "";
+                this.clipPanelEl.style.flex = "";
+            }
+        }
+        if (this.clipResizerEl) {
+            this.clipResizerEl.classList.toggle("xlc-col-resizer--disabled", this.clipPanelCollapsed);
+            if (this.clipPanelCollapsed) {
+                this.clipResizerEl.setAttribute("tabindex", "-1");
+                this.clipResizerEl.setAttribute("aria-hidden", "true");
+            } else {
+                this.clipResizerEl.setAttribute("tabindex", "0");
+                this.clipResizerEl.removeAttribute("aria-hidden");
+            }
         }
         this.deps.onClipPanelCollapsedChange?.(this.clipPanelCollapsed);
+    }
+
+    private createResizer(kind: "clip" | "cat" | "list", label: string): HTMLElement {
+        const bounds = {
+            clip: { min: 150, max: 480 },
+            cat: { min: 130, max: 400 },
+            list: { min: 240, max: 800 },
+        }[kind];
+        const resizer = document.createElement("div");
+        resizer.className = "xlc-col-resizer";
+        resizer.dataset.resizer = kind;
+        resizer.setAttribute("role", "separator");
+        resizer.setAttribute("aria-orientation", "vertical");
+        resizer.setAttribute("aria-label", label);
+        resizer.setAttribute("tabindex", "0");
+        resizer.setAttribute("aria-valuemin", String(bounds.min));
+        resizer.setAttribute("aria-valuemax", String(bounds.max));
+        resizer.setAttribute("aria-valuenow", String(this.columnWidths[kind]));
+        resizer.title = `${label}（拖拽调整宽度，双击复位默认）`;
+        return resizer;
+    }
+
+    private setupColumnResizers(bodyWrap: HTMLElement): void {
+        const defaultWidths = { clip: 260, cat: 180, list: 340 };
+        const minMaxBounds = {
+            clip: { min: 150, max: 480 },
+            cat: { min: 130, max: 400 },
+            list: { min: 240, max: 800 },
+        };
+
+        const applyAndSave = (kind: "clip" | "cat" | "list", width: number) => {
+            this.columnWidths[kind] = width;
+            bodyWrap.style.setProperty(`--xlc-${kind}-w`, `${width}px`);
+
+            const resizer = bodyWrap.querySelector<HTMLElement>(`.xlc-col-resizer[data-resizer="${kind}"]`);
+            if (resizer) {
+                resizer.setAttribute("aria-valuenow", String(width));
+            }
+
+            if (kind === "clip") {
+                const el = bodyWrap.querySelector<HTMLElement>(".xlc-clip-panel");
+                if (el && !this.clipPanelCollapsed) {
+                    el.style.width = `${width}px`;
+                    el.style.flex = `0 0 ${width}px`;
+                }
+            } else if (kind === "cat") {
+                const el = bodyWrap.querySelector<HTMLElement>(".xlc-cat-tree");
+                if (el) {
+                    el.style.width = `${width}px`;
+                    el.style.flex = `0 0 ${width}px`;
+                }
+            } else if (kind === "list") {
+                if (this.listEl) {
+                    this.listEl.style.width = `${width}px`;
+                    this.listEl.style.flex = `0 0 ${width}px`;
+                }
+            }
+
+            try {
+                if (typeof localStorage !== "undefined") {
+                    localStorage.setItem("xlc_column_widths_v1", JSON.stringify(this.columnWidths));
+                }
+            } catch { /* ignore */ }
+            this.deps.onColumnWidthsChange?.({ ...this.columnWidths });
+        };
+
+        // 初始注入记忆宽度
+        applyAndSave("clip", this.columnWidths.clip);
+        applyAndSave("cat", this.columnWidths.cat);
+        applyAndSave("list", this.columnWidths.list);
+
+        bodyWrap.querySelectorAll<HTMLElement>(".xlc-col-resizer").forEach((resizer) => {
+            const kind = resizer.dataset.resizer as "clip" | "cat" | "list";
+            if (!kind) return;
+
+            // 双击快速复位至默认黄金比例
+            resizer.addEventListener("dblclick", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                applyAndSave(kind, defaultWidths[kind]);
+                lvNotify.inline(resizer, "已复位宽度");
+            });
+
+            // 键盘无障碍方向键微调
+            resizer.addEventListener("keydown", (e) => {
+                if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const delta = e.key === "ArrowRight" ? 16 : -16;
+                    const bounds = minMaxBounds[kind];
+                    const next = Math.max(bounds.min, Math.min(bounds.max, (this.columnWidths[kind] || defaultWidths[kind]) + delta));
+                    applyAndSave(kind, next);
+                }
+            });
+
+            // 鼠标指针拖拽
+            resizer.addEventListener("pointerdown", (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const startX = e.clientX;
+                const startWidth = this.columnWidths[kind] || defaultWidths[kind];
+                const bounds = minMaxBounds[kind];
+
+                resizer.classList.add("xlc-col-resizer--dragging");
+                bodyWrap.classList.add("xlc-body--resizing");
+                resizer.setPointerCapture(e.pointerId);
+
+                const onPointerMove = (ev: PointerEvent) => {
+                    const deltaX = ev.clientX - startX;
+                    const nextWidth = Math.max(bounds.min, Math.min(bounds.max, Math.round(startWidth + deltaX)));
+                    applyAndSave(kind, nextWidth);
+                };
+
+                const onPointerUp = (ev: PointerEvent) => {
+                    resizer.classList.remove("xlc-col-resizer--dragging");
+                    bodyWrap.classList.remove("xlc-body--resizing");
+                    try {
+                        resizer.releasePointerCapture(ev.pointerId);
+                    } catch { /* ignore */ }
+                    resizer.removeEventListener("pointermove", onPointerMove);
+                    resizer.removeEventListener("pointerup", onPointerUp);
+                    resizer.removeEventListener("pointercancel", onPointerUp);
+                };
+
+                resizer.addEventListener("pointermove", onPointerMove);
+                resizer.addEventListener("pointerup", onPointerUp);
+                resizer.addEventListener("pointercancel", onPointerUp);
+            });
+        });
     }
 
     /**
@@ -9290,20 +10523,23 @@ export class CommonSearchDialog {
     private async insertClipDirect(text: string): Promise<boolean> {
         const trimmed = (text ?? "").trim();
         if (!trimmed) {
-            this.deps.notify?.("error", "剪贴板内容为空");
+            this.deps.notify?.("error", this.dualT("dualPanel.clipEmptyError", "剪贴板内容为空"));
             return false;
         }
         try {
             const ok = await this.deps.insertRaw(trimmed, this.insertTarget ?? undefined);
             if (ok) {
-                this.deps.notify?.("info", "已将剪贴板内容插入到当前文档");
+                this.deps.notify?.("info", this.dualT("dualPanel.clipInserted", "已将剪贴板内容插入到当前文档"));
                 if (!this.pinWindow) {
                     this.destroy();
                 }
+            } else {
+                // 2026-11-21 走查修复：插入失败原先静默（点「⤓ 插入当前」无任何反馈，误以为已插入）
+                this.deps.notify?.("error", this.dualT("dualPanel.insertNoCursorError", "插入失败：请确认当前文档中有可用光标后重试"));
             }
             return ok;
         } catch (e) {
-            this.deps.notify?.("error", "插入失败：" + toErrorMessage(e));
+            this.deps.notify?.("error", this.dualT("dualPanel.insertFailedPrefix", "插入失败：") + toErrorMessage(e));
             return false;
         }
     }
@@ -9315,7 +10551,7 @@ export class CommonSearchDialog {
         const clean = (text ?? "").trim();
         if (!clean) return;
         const parsed = parseSnippetAnnotations(clean);
-        const firstLine = clean.split(/[\r\n]+/)[0]?.slice(0, 30) || "剪贴板片段";
+        const firstLine = clean.split(/[\r\n]+/)[0]?.slice(0, 30) || this.dualT("dualPanel.clipFallbackTitle", "剪贴板片段");
         const entry: SearchEntry = {
             id: `xlc-clip-now-${Date.now()}`,
             blockId: "",
@@ -9344,7 +10580,7 @@ export class CommonSearchDialog {
                 onPromote: async (payload) => {
                     const ok = await this.deps.promoteClipboardEntry!(entry, payload);
                     if (ok) {
-                        this.deps.notify?.("info", `已将剪贴板内容存为常用语「${payload.title}」`);
+                        this.deps.notify?.("info", this.dualT("dualPanel.savedAsSnippetPayload", "已将剪贴板内容存为常用语「{title}」", {title: payload.title}));
                         void this.refresh();
                     }
                     return ok;
@@ -9353,7 +10589,7 @@ export class CommonSearchDialog {
         } else if (this.deps.createFromOmni) {
             void this.deps.createFromOmni(entry).then((ok) => {
                 if (ok) {
-                    this.deps.notify?.("info", `已将剪贴板内容存为常用语「${entry.title}」`);
+                    this.deps.notify?.("info", this.dualT("dualPanel.savedAsSnippetEntry", "已将剪贴板内容存为常用语「{title}」", {title: entry.title}));
                     void this.refresh();
                 }
             });
@@ -9369,52 +10605,52 @@ export class CommonSearchDialog {
         const menu = new Menu("xlc-clip-clean-menu");
         menu.addItem({
             icon: "iconEdit",
-            label: "去除多余换行与首尾空行",
+            label: this.dualT("dualPanel.cleanBlankLines", "去除多余换行与首尾空行"),
             click: () => {
                 const cleaned = compactWhitespaceAndLines(text).result;
-                void this.handleCleanResult(cleaned, "已去除多余换行与空行");
+                void this.handleCleanResult(cleaned, this.dualT("dualPanel.cleanedBlankLines", "已去除多余换行与空行"));
             },
         });
         menu.addItem({
             icon: "iconLink",
-            label: "去除 URL 跟踪参数 (UTM/spm)",
+            label: this.dualT("dualPanel.cleanTrackingParams", "去除 URL 跟踪参数 (UTM/spm)"),
             click: () => {
                 const cleaned = stripUrlTrackingParams(text).result;
-                void this.handleCleanResult(cleaned, "已去除 URL 跟踪参数");
+                void this.handleCleanResult(cleaned, this.dualT("dualPanel.cleanedTrackingParams", "已去除 URL 跟踪参数"));
             },
         });
         menu.addItem({
             icon: "iconFont",
-            label: "中英文间添加盘古空格",
+            label: this.dualT("dualPanel.cleanPanguSpacing", "中英文间添加盘古空格"),
             click: () => {
                 const cleaned = formatPanguSpacing(text).result;
-                void this.handleCleanResult(cleaned, "已添加盘古空格");
+                void this.handleCleanResult(cleaned, this.dualT("dualPanel.cleanedPanguSpacing", "已添加盘古空格"));
             },
         });
         const table = tsvToMarkdownTable(text);
         if (table) {
             menu.addItem({
                 icon: "iconTable",
-                label: `制表符转 Markdown 表格 (${table.rowCount}行×${table.colCount}列)`,
+                label: this.dualT("dualPanel.cleanTsvToTable", "制表符转 Markdown 表格 ({rows}行×{cols}列)", {rows: table.rowCount, cols: table.colCount}),
                 click: () => {
-                    void this.handleCleanResult(table.result, `已转为 Markdown 表格 (${table.rowCount}行)`);
+                    void this.handleCleanResult(table.result, this.dualT("dualPanel.cleanedTsvToTable", "已转为 Markdown 表格 ({rows}行)", {rows: table.rowCount}));
                 },
             });
         }
         menu.addItem({
             icon: "iconQuote",
-            label: "转为 Markdown 引用块 (> )",
+            label: this.dualT("dualPanel.cleanToBlockquote", "转为 Markdown 引用块 (> )"),
             click: () => {
                 const cleaned = toggleMarkdownBlockquote(text).result;
-                void this.handleCleanResult(cleaned, "已转为引用块");
+                void this.handleCleanResult(cleaned, this.dualT("dualPanel.cleanedBlockquote", "已转为引用块"));
             },
         });
         menu.addItem({
             icon: "iconFormat",
-            label: "清除 Markdown 格式 (纯文本化)",
+            label: this.dualT("dualPanel.cleanStripMarkdown", "清除 Markdown 格式 (纯文本化)"),
             click: () => {
                 const cleaned = stripMarkdownFormatting(text);
-                void this.handleCleanResult(cleaned, "已清除 Markdown 格式");
+                void this.handleCleanResult(cleaned, this.dualT("dualPanel.cleanedStripMarkdown", "已清除 Markdown 格式"));
             },
         });
         const rect = anchorEl.getBoundingClientRect();
@@ -9432,7 +10668,7 @@ export class CommonSearchDialog {
         if (!cleanedText) return;
         this.deps.addClipboardHistory?.(cleanedText);
         await this.deps.copyText(cleanedText);
-        this.deps.notify?.("info", `${actionDesc}，已复制到剪贴板，可直接粘贴或点按插入`);
+        this.deps.notify?.("info", this.dualT("dualPanel.cleanResultCopied", "{action}，已复制到剪贴板，可直接粘贴或点按插入", {action: actionDesc}));
         this.renderClipPanelContent();
     }
 }

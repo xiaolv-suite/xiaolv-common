@@ -9,7 +9,7 @@
 
 ---
 
-## 🚀 What's New in v0.10.89 (Cumulative Updates)
+## 🚀 What's New in v0.10.90 (Cumulative Updates)
 
 - **Dedicated Clipboard Panel & Expanded Three-Column Layout**: Added a resident clipboard lane and history drawer in the desktop modal, enabling one-click insertion, saving to favorites, text cleaning, and copying; collapsible to a 36px bar with layout persistence; enlarged workbench modal (`min(1280px, 95vw) × min(880px, 94vh)`);
 - **SiYuan Desktop Exoskeleton Interop**: Launchpad integration with live status badges ("Online / Inactive") and secondary action shortcuts;

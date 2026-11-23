@@ -6,7 +6,7 @@ import {
 } from "siyuan";
 import type {IMenuItem} from "siyuan";
 import {fetchSyncPost} from "siyuan";
-import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock, lvTicker, showDocTreeNativeMenu, safeDocTitleFromHPath, pushDiagError} from "./libs/lv-notice-kit";
+import {lvActivity, lvBackup, lvLaunchpad, lvNotify, lvOmnisearch, lvSurfaceStack, withDocLock, lvTicker, showDocTreeNativeMenu, safeDocTitleFromHPath, pushDiagError, getCleanBlockText} from "./libs/lv-notice-kit";
 import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./ui/dialog-dom";
 import "@/styles/index.scss";
 import {EXPORT_SCHEMA_VERSION, LIMITS, PLUGIN_VERSION, PROTOCOL_NAME, SIDECAR_LOAD_TIMEOUT_MS, STORAGE_KEYS} from "./constants";
@@ -43,6 +43,7 @@ import {CommonSearchDialog} from "./ui/dialog";
 import type {SearchScope} from "./ui/empty-state";
 import {openDiscoveryDialog, type DiscoveryDialogController} from "./ui/discovery-dialog";
 import {CaptureDialog, confirmDelete, classifyLinkTarget} from "./ui/capture";
+import {safePerfMark, safePerfMeasure} from "./model/perf";
 import {openQuickEditDialog} from "./ui/quick-edit";
 import {ICONS} from "./ui/icons";
 import type {SettingsUiContext} from "./ui/settings-dialog";
@@ -86,6 +87,9 @@ const hostSyncPost: SyncPost = async (url, data, context?: SyncPostContext) => {
 };
 
 export default class XiaolvCommonPlugin extends Plugin {
+    static readonly safePerfMark = safePerfMark;
+    static readonly safePerfMeasure = safePerfMeasure;
+
     private kernelClient!: IKernelClient;
     private library!: LibraryService;
     private host!: HostBridge;
@@ -127,6 +131,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     private bridgeDisposer: (() => void) | null = null;
     /** 雷切工作台小组件卸载器（Epoch 6 标准） */
     private raikiriDisposer: (() => void) | null = null;
+    private clipboardTrackingTimer: ReturnType<typeof setTimeout> | null = null;
     private clipboardListenerCleanup: (() => void) | null = null;
     private discoveryDialog: DiscoveryDialogController | null = null;
     private dockView: DockView | null = null;
@@ -150,6 +155,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     private unloading = false;
 
     async onload(): Promise<void> {
+        safePerfMark("xiaolv-common-onload-start");
         this.unloading = false;
         this.sidecarStateWritable = false;
         setPluginChunkPath(this.name);
@@ -165,7 +171,13 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.state = normalizeState(null);
         this.registerEntries();
         this.registerCommands();
-        this.setupClipboardTracking();
+        // 剪贴板监听启动前 5 秒静默调度（msg#1663 / msg#1666：不阻塞用户主动快捷命令）
+        const CLIPBOARD_TRACKING_DELAY_MS = 5000;
+        this.clipboardTrackingTimer = setTimeout(() => {
+            this.clipboardTrackingTimer = null;
+            if (this.unloading) return;
+            this.setupClipboardTracking();
+        }, CLIPBOARD_TRACKING_DELAY_MS);
 
         // 全局遮罩点击即关（Backdrop Scrim Click-to-Dismiss · 对齐常用全弹窗人体工程学）
         if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
@@ -229,6 +241,8 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.ai.updateSettings(this.state.ai);
         this.applyPinyinAdapter();
         this.sidecarReady = true;
+        safePerfMark("xiaolv-common-onload-end");
+        safePerfMeasure("xiaolv-common-onload", "xiaolv-common-onload-start", "xiaolv-common-onload-end");
     }
 
     private bootServices(): void {
@@ -327,103 +341,13 @@ export default class XiaolvCommonPlugin extends Plugin {
         } catch {
             // 旧宿主无 addAgentCapability：智能体能力缺席，不影响插件本体
         }
-        this.capture = new CaptureDialog({
-            t: this.i18nFn(),
-            getSelectionText: () => getSelectionInfo(),
-            currentDocId: () => this.host.currentDocId(),
-            readClipboardText: async () => {
-                if (!navigator.clipboard?.readText) throw new Error("clipboard unavailable");
-                return navigator.clipboard.readText();
-            },
-            createItem: async (input, options) => {
-                const result = await this.library.createItem(input, undefined, options);
-                if (!result.ok) return {ok: false, message: result.message};
-                this.notify("info", this.i18nFn()("saved", result.data.item.title));
-                this.notifyExternalDataChange();
-                return {ok: true, message: result.data.item.title, itemId: result.data.item.id};
-            },
-            notify: this.notify,
-            getBlockKramdown: async (blockId) => {
-                const kd = await this.library.getItemKramdown({
-                    id: "xlc-proxy", blockId, libraryDocId: "", itemType: "blockref", title: "", alias: "",
-                    tags: [], category: "", summary: "", varCount: 0, source: {sourceDocId: "", sourceBlockId: blockId, sourceType: "block"},
-                    url: "", targetBlockId: blockId, createdAt: 0, updatedAt: 0, droppedFields: [],
-                });
-                return kd.ok ? kd.data : null;
-            },
-            exportDocContent: async (docId) => {
-                const result = await this.library.exportDocContent(docId);
-                return result.ok ? result.data : null;
-            },
-            aiEnabled: () => this.state.ai.enabled,
-            aiTidy: async (content) => {
-                try {
-                    return {ok: true as const, ...await this.ai.tidy(content)};
-                } catch (err) {
-                    return {ok: false as const, message: this.aiErrorText(err)};
-                }
-            },
-            aiDraft: async (description) => {
-                try {
-                    return {ok: true as const, text: await this.ai.draft(description)};
-                } catch (err) {
-                    return {ok: false as const, message: this.aiErrorText(err)};
-                }
-            },
-            findDuplicate: async (content, options) => {
-                const idx = await this.library.ensureIndex();
-                // 查重失败必须回到表单错误态，不能把“无法检查”伪装成“没有重复”。
-                return findDuplicateByContent(content, idx.entries, options);
-            },
-            getLibraryName: async () => {
-                const cfg = this.config;
-                if (!cfg) return null;
-                if (cfg.mode === "notebook") {
-                    const first = cfg.notebookIds[0];
-                    if (!first) return null;
-                    const nbs = await this.library.listNotebooks();
-                    return nbs.ok ? nbs.data.find((nb) => nb.id === first)?.name ?? null : null;
-                }
-                const docId = cfg.containerDocIds[0];
-                if (!docId) return null;
-                return await this.library.getDocPath(docId);
-            },
-            isConfigured: () => Boolean(this.config),
-            onNotConfigured: () => this.openSetup(),
-            getExistingTags: () => {
-                const idx = this.library.getIndex();
-                if (!idx) return [];
-                const set = new Set<string>();
-                for (const e of idx.entries) {
-                    if (e.tags) for (const t of e.tags) if (t) set.add(t);
-                }
-                return Array.from(set).slice(0, 10);
-            },
-            getExistingCategories: () => {
-                const idx = this.library.getIndex();
-                if (!idx) return [];
-                const set = new Set<string>();
-                for (const e of idx.entries) {
-                    if (e.category) set.add(e.category);
-                }
-                return Array.from(set).slice(0, 10);
-            },
-            checkAliasConflict: (alias: string) => {
-                const trimmed = alias.trim();
-                if (!trimmed) return {conflict: false};
-                const idx = this.library.getIndex();
-                if (!idx) return {conflict: false};
-                const match = idx.entries.find((e) => e.alias && e.alias.toLowerCase() === trimmed.toLowerCase());
-                return {conflict: Boolean(match), itemTitle: match?.title};
-            },
-        });
         // 协议命令面（稳定 ID；雷切等通过 app.plugins 获取本插件后调用）
         this.protocolCommands["xiaolv.common.open"] = async () => {
             this.openSearch();
             return {ok: true};
         };
         this.protocolCommands["xiaolv.common.saveSelection"] = async () => {
-            await this.capture?.saveSelection();
+            await this.getCapture().saveSelection();
             return {ok: true};
         };
         this.protocolCommands["xiaolv.common.insert"] = async (payload) => {
@@ -599,6 +523,105 @@ export default class XiaolvCommonPlugin extends Plugin {
         } catch {
             // 环境防御
         }
+    }
+
+    /**
+     * 业务弹窗按需实例化（轨道 A 启动减负 · 将 CaptureDialog 剥离出 onload 启动热路径）
+     */
+    private getCapture(): CaptureDialog {
+        if (!this.capture) {
+            this.capture = new CaptureDialog({
+                t: this.i18nFn(),
+                getSelectionText: () => getSelectionInfo(),
+                currentDocId: () => this.host.currentDocId(),
+                readClipboardText: async () => {
+                    if (!navigator.clipboard?.readText) throw new Error("clipboard unavailable");
+                    return navigator.clipboard.readText();
+                },
+                createItem: async (input, options) => {
+                    const result = await this.library.createItem(input, undefined, options);
+                    if (!result.ok) return {ok: false, message: result.message};
+                    this.notify("info", this.i18nFn()("saved", result.data.item.title));
+                    this.notifyExternalDataChange();
+                    return {ok: true, message: result.data.item.title, itemId: result.data.item.id};
+                },
+                notify: this.notify,
+                getBlockKramdown: async (blockId) => {
+                    const kd = await this.library.getItemKramdown({
+                        id: "xlc-proxy", blockId, libraryDocId: "", itemType: "blockref", title: "", alias: "",
+                        tags: [], category: "", summary: "", varCount: 0, source: {sourceDocId: "", sourceBlockId: blockId, sourceType: "block"},
+                        url: "", targetBlockId: blockId, createdAt: 0, updatedAt: 0, droppedFields: [],
+                    });
+                    return kd.ok ? kd.data : null;
+                },
+                exportDocContent: async (docId) => {
+                    const result = await this.library.exportDocContent(docId);
+                    return result.ok ? result.data : null;
+                },
+                aiEnabled: () => this.state.ai.enabled,
+                aiTidy: async (content) => {
+                    try {
+                        return {ok: true as const, ...await this.ai.tidy(content)};
+                    } catch (err) {
+                        return {ok: false as const, message: this.aiErrorText(err)};
+                    }
+                },
+                aiDraft: async (description) => {
+                    try {
+                        return {ok: true as const, text: await this.ai.draft(description)};
+                    } catch (err) {
+                        return {ok: false as const, message: this.aiErrorText(err)};
+                    }
+                },
+                findDuplicate: async (content, options) => {
+                    const idx = await this.library.ensureIndex();
+                    // 查重失败必须回到表单错误态，不能把“无法检查”伪装成“没有重复”。
+                    return findDuplicateByContent(content, idx.entries, options);
+                },
+                getLibraryName: async () => {
+                    const cfg = this.config;
+                    if (!cfg) return null;
+                    if (cfg.mode === "notebook") {
+                        const first = cfg.notebookIds[0];
+                        if (!first) return null;
+                        const nbs = await this.library.listNotebooks();
+                        return nbs.ok ? nbs.data.find((nb) => nb.id === first)?.name ?? null : null;
+                    }
+                    const docId = cfg.containerDocIds[0];
+                    if (!docId) return null;
+                    return await this.library.getDocPath(docId);
+                },
+                isConfigured: () => Boolean(this.config),
+                onNotConfigured: () => this.openSetup(),
+                getExistingTags: () => {
+                    const idx = this.library.getIndex();
+                    if (!idx) return [];
+                    const set = new Set<string>();
+                    for (const e of idx.entries) {
+                        if (e.tags) for (const t of e.tags) if (t) set.add(t);
+                    }
+                    return Array.from(set).slice(0, 10);
+                },
+                getExistingCategories: () => {
+                    const idx = this.library.getIndex();
+                    if (!idx) return [];
+                    const set = new Set<string>();
+                    for (const e of idx.entries) {
+                        if (e.category) set.add(e.category);
+                    }
+                    return Array.from(set).slice(0, 10);
+                },
+                checkAliasConflict: (alias: string) => {
+                    const trimmed = alias.trim();
+                    if (!trimmed) return {conflict: false};
+                    const idx = this.library.getIndex();
+                    if (!idx) return {conflict: false};
+                    const match = idx.entries.find((e) => e.alias && e.alias.toLowerCase() === trimmed.toLowerCase());
+                    return {conflict: Boolean(match), itemTitle: match?.title};
+                },
+            });
+        }
+        return this.capture;
     }
 
     /** 当前文档发现的统一入口，供命令面板、右键菜单和协议调用复用。 */
@@ -845,14 +868,60 @@ export default class XiaolvCommonPlugin extends Plugin {
         };
     }
 
-    async onLayoutReady(): Promise<void> {
-        // 后台预热索引：打开搜索时通常已就绪（零等待）；失败静默——打开时会重建并如实报错
-        try {
-            await this.library.ensureIndex();
-            await this.updateProtyleSlash();
-        } catch {
-            // 预热失败不打扰用户
+    private idleWarmupTimer: any = null;
+
+    /**
+     * 空闲静默回填索引：在主线程空闲时预热索引并补全斜杠菜单动态条目，
+     * 避免在 onload / onLayoutReady 启动热路径上触发全库扫描（getChildBlocks + batchGetBlockAttrs）。
+     */
+    private scheduleIdleIndexWarmup(timeoutMs: number = 3500): void {
+        if (this.unloading) return;
+        this.clearIdleIndexWarmup();
+        const runWarmup = async () => {
+            this.idleWarmupTimer = null;
+            if (this.unloading || !this.library || !this.config) return;
+            try {
+                if (!this.library.getIndex()) {
+                    await this.library.ensureIndex();
+                }
+                await this.updateProtyleSlash();
+                this.syncLaunchpadRegistry();
+            } catch {
+                // 静默容错：空闲预热失败不打扰用户，后续主动打开搜索/面板时按需现场重构
+            }
+        };
+        if (typeof window !== "undefined" && typeof (window as any).requestIdleCallback === "function") {
+            this.idleWarmupTimer = (window as any).requestIdleCallback(() => {
+                void runWarmup();
+            }, { timeout: timeoutMs });
+        } else if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+            this.idleWarmupTimer = window.setTimeout(() => {
+                void runWarmup();
+            }, timeoutMs);
         }
+    }
+
+    private clearIdleIndexWarmup(): void {
+        if (this.idleWarmupTimer !== null) {
+            if (typeof window !== "undefined" && typeof (window as any).cancelIdleCallback === "function") {
+                try { (window as any).cancelIdleCallback(this.idleWarmupTimer); } catch {}
+            }
+            if (typeof window !== "undefined" && typeof window.clearTimeout === "function") {
+                try { window.clearTimeout(this.idleWarmupTimer); } catch {}
+            }
+            this.idleWarmupTimer = null;
+        }
+    }
+
+    async onLayoutReady(): Promise<void> {
+        safePerfMark("xiaolv-common-layoutready-start");
+        // 启动性能优化（低风险切片）：移除 onLayoutReady 阶段同步阻塞式的 ensureIndex 全库扫描，
+        // 改为空闲时间（requestIdleCallback / setTimeout）静默回填，彻底消灭首屏 IPC 洪峰；
+        // 用户主动搜索、打开弹窗或编辑时，由对应功能的 ensureIndex 按需即时保障就绪。
+        this.scheduleIdleIndexWarmup();
+        safePerfMark("xiaolv-common-layoutready-end");
+        safePerfMeasure("xiaolv-common-layoutready", "xiaolv-common-layoutready-start", "xiaolv-common-layoutready-end");
+        safePerfMeasure("xiaolv-common-startup-total", "xiaolv-common-onload-start", "xiaolv-common-layoutready-end");
     }
 
     /**
@@ -1064,31 +1133,31 @@ export default class XiaolvCommonPlugin extends Plugin {
         this.addCommand({
             langKey: "saveSelection",
             hotkey: "⌥⇧E",
-            callback: () => void this.capture?.saveSelection(),
+            callback: () => void this.getCapture().saveSelection(),
         });
         this.addCommand({
             langKey: "saveClipboard",
-            callback: () => void this.capture?.captureFromClipboard(),
+            callback: () => void this.getCapture().captureFromClipboard(),
         });
         this.addCommand({
             langKey: "quickCapture",
             hotkey: "⌥⇧V",
-            callback: () => void this.capture?.quickCaptureFromClipboard(),
+            callback: () => void this.getCapture().quickCaptureFromClipboard(),
         });
         this.addCommand({
             // 手动新建也进入命令面板，给不在编辑器上下文里的用户一条明确入口。
             langKey: "newItem",
             hotkey: "⌥⇧N",
-            callback: () => void this.capture?.newManual(),
+            callback: () => void this.getCapture().newManual(),
         });
         this.addCommand({
             langKey: "captureBlock",
             hotkey: "⌥⇧B",
-            callback: () => void this.capture?.captureCurrentBlock(),
+            callback: () => void this.getCapture().captureCurrentBlock(),
         });
         this.addCommand({
             langKey: "captureDoc",
-            callback: () => void this.capture?.captureCurrentDoc(),
+            callback: () => void this.getCapture().captureCurrentDoc(),
         });
         this.addCommand({
             langKey: "insertCmd",
@@ -1153,7 +1222,7 @@ export default class XiaolvCommonPlugin extends Plugin {
         if (selectedText) {
             // 如果划选的内容较长（如超过 120 字符）或包含换行，说明用户意图大概率是保存大段模板/文章
             if (selectedText.length > 120 || selectedText.includes("\n")) {
-                void this.capture?.saveSelection();
+                void this.getCapture().saveSelection();
             } else {
                 // 简短词句（如“产业”）：直接弹出搜索弹窗并自动填入选定内容，立等检索并支持一键新建
                 this.openSearch(undefined, selectedText);
@@ -1211,7 +1280,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     id: "xiaolv-common-slash-new",
                     callback: (protyle: any) => {
                         this.host?.recordActiveEditor(protyle);
-                        void this.capture?.newManual();
+                        void this.getCapture().newManual();
                     },
                 },
                 {
@@ -1220,7 +1289,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     id: "xiaolv-common-slash-clip",
                     callback: (protyle: any) => {
                         this.host?.recordActiveEditor(protyle);
-                        void this.capture?.quickCaptureFromClipboard();
+                        void this.getCapture().quickCaptureFromClipboard();
                     },
                 },
             ];
@@ -1278,7 +1347,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     menu.addItem({
                         icon: "iconXlcCommon",
                         label: this.i18nFn()("saveSelection"),
-                        click: () => void this.capture?.saveSelection(),
+                        click: () => void this.getCapture().saveSelection(),
                     });
                 } else {
                     // 无选区时：呈现常用调用、当前块捕获与文档发现
@@ -1290,7 +1359,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                     menu.addItem({
                         icon: "iconXlcCommon",
                         label: this.i18nFn()("captureBlock"),
-                        click: () => void this.capture?.captureCurrentBlock(),
+                        click: () => void this.getCapture().captureCurrentBlock(),
                     });
                     menu.addItem({
                         icon: "iconXlcCommon",
@@ -1309,7 +1378,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 menu.addItem({
                     icon: "iconXlcCommon",
                     label: this.i18nFn()("captureBlockRefMenu"),
-                    click: () => this.capture?.captureBlockRef(blockId, element.textContent ?? ""),
+                    click: () => this.getCapture().captureBlockRef(blockId, element.textContent ?? ""),
                 });
             };
             this.eventBus.on("open-menu-blockref", this.blockRefMenuHandler);
@@ -1322,7 +1391,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 menu.addItem({
                     icon: "iconXlcCommon",
                     label: this.i18nFn()("captureLinkMenu"),
-                    click: () => this.capture?.captureLink(href, element.textContent ?? ""),
+                    click: () => this.getCapture().captureLink(href, element.textContent ?? ""),
                 });
             };
             this.eventBus.on("open-menu-link", this.linkMenuHandler);
@@ -1336,7 +1405,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 menu.addItem({
                     icon: "iconXlcCommon",
                     label: this.i18nFn()("captureImageMenu"),
-                    click: () => this.capture?.captureImage(target.value, element?.getAttribute?.("title") ?? ""),
+                    click: () => this.getCapture().captureImage(target.value, element?.getAttribute?.("title") ?? ""),
                 });
             };
             this.eventBus.on("open-menu-image", this.imageMenuHandler);
@@ -1453,18 +1522,18 @@ export default class XiaolvCommonPlugin extends Plugin {
                     menu.addItem({
                         icon: "iconXlcCommon",
                         label: `合并选中的 ${blockIds.length} 个块存入小驴常用`,
-                        click: () => void this.capture?.captureBlocksById(blockIds, docId),
+                        click: () => void this.getCapture().captureBlocksById(blockIds, docId),
                     });
                 } else {
                     menu.addItem({
                         icon: "iconXlcCommon",
                         label: this.i18nFn()("captureBlock") || "存入小驴常用（复制块正文）",
-                        click: () => void this.capture?.captureBlocksById(blockIds, docId),
+                        click: () => void this.getCapture().captureBlocksById(blockIds, docId),
                     });
                     menu.addItem({
                         icon: "iconXlcCommon",
                         label: this.i18nFn()("captureBlockRefMenu") || "存为小驴块引用（跟随原块实时变化）",
-                        click: () => this.capture?.captureBlockRef(firstBlockId, firstEl?.textContent ?? "", docId),
+                        click: () => this.getCapture().captureBlockRef(firstBlockId, getCleanBlockText(firstEl), docId),
                     });
                 }
             };
@@ -1714,7 +1783,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 const res = await this.service.openSource(itemId);
                 return {ok: res.ok, message: res.message ?? ""};
             },
-            newItem: (initialTitle) => void this.capture?.newManual(initialTitle),
+            newItem: (initialTitle) => void this.getCapture().newManual(initialTitle),
             openSettings: () => this.openSetting(),
             openLibraryDoc: () => {
                 this.openLibraryDocument();
@@ -1839,7 +1908,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     /** 动态更新思源编辑器斜杠菜单（protyleSlash）：自动将包含简码、别名、常用或高频的条目注册为行内斜杠项 */
-    public async updateProtyleSlash(): Promise<void> {
+    public async updateProtyleSlash(allowBuild: boolean = false): Promise<void> {
         const baseSlash = [
             {
                 filter: ["常用", "常用语", "xiaolv", "cy", "changyong", "xlc", "snippet", "snippets"],
@@ -1865,7 +1934,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 id: "xiaolv-common-slash-new",
                 callback: (protyle: any) => {
                     this.host?.recordActiveEditor(protyle);
-                    void this.capture?.newManual();
+                    void this.getCapture().newManual();
                 },
             },
             {
@@ -1874,7 +1943,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 id: "xiaolv-common-slash-clip",
                 callback: (protyle: any) => {
                     this.host?.recordActiveEditor(protyle);
-                    void this.capture?.quickCaptureFromClipboard();
+                    void this.getCapture().quickCaptureFromClipboard();
                 },
             },
         ];
@@ -1885,7 +1954,14 @@ export default class XiaolvCommonPlugin extends Plugin {
         }
 
         try {
-            const idx = this.library.getIndex() ?? await this.library.ensureIndex(60_000);
+            // 启动性能优化：未明确传 allowBuild 时只使用内存中已就绪的有效索引，
+            // 严禁在 onload / 启动阶段反向触发全库扫库 ensureIndex；
+            // 动态简码与高频条目在用户主动使用或空闲回填索引完成后自动补齐。
+            const idx = this.library.getIndex() ?? (allowBuild ? await this.library.ensureIndex(60_000) : null);
+            if (!idx) {
+                this.protyleSlash = baseSlash;
+                return;
+            }
             const dynamicSlash: typeof baseSlash = [];
             const safeEscape = (s: string) => (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -2034,9 +2110,11 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     private setupClipboardTracking(): void {
+        if (this.unloading) return;
         let lastFocusReadAt = 0;
         let lastReadText = "";
         const onCopyCut = (e: ClipboardEvent) => {
+            if (this.unloading) return;
             if (!this.state.clipboardHistoryEnabled) return;
             try {
                 const text = e.clipboardData?.getData("text/plain") || window.getSelection()?.toString();
@@ -2049,6 +2127,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         };
         const onWindowFocus = async () => {
+            if (this.unloading) return;
             if (!this.state.clipboardHistoryEnabled) return;
             const now = Date.now();
             if (now - lastFocusReadAt < 1500) return;
@@ -2056,6 +2135,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             try {
                 if (navigator.clipboard?.readText && window.isSecureContext) {
                     const txt = await navigator.clipboard.readText();
+                    if (this.unloading) return;
                     if (txt && txt !== lastReadText) {
                         lastReadText = txt;
                         this.recordClipboard(txt);
@@ -2381,7 +2461,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             autoMinimizeOnDone?: boolean;
         }
     ): void {
-        if (!this.library || !this.capture || !this.service) {
+        if (!this.library || !this.service) {
             this.notify("error", this.i18nFn()("startupFailed", "services unavailable"));
             return;
         }
@@ -2454,6 +2534,11 @@ export default class XiaolvCommonPlugin extends Plugin {
                 this.state.search.clipPanelCollapsed = collapsed;
                 this.persistSoon();
             },
+            columnWidths: this.state.search.columnWidths,
+            onColumnWidthsChange: (widths) => {
+                this.state.search.columnWidths = widths;
+                this.persistSoon();
+            },
             getProfilePresets: () => this.state.profilePresets ?? {},
             getDocumentContext: () => {
                 const info = this.host.currentDocInfo();
@@ -2475,6 +2560,10 @@ export default class XiaolvCommonPlugin extends Plugin {
                 void this.prefetchSourceHealth(entries);
                 // 全库加载失败时透传首条错误（诚实失败优先于「无条目」）
                 const error = entries.length === 0 && idx.errors.length > 0 ? idx.errors[0] : undefined;
+                if (loading) {
+                    void this.updateProtyleSlash();
+                    this.syncLaunchpadRegistry();
+                }
                 return {entries, truncated: idx.truncated, total: idx.entries.length, loading, error};
             },
             searchDocs: async (k) => {
@@ -2598,7 +2687,7 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
             },
             captureOmniWithForm: (entry: SearchEntry) => {
-                this.capture?.captureOmniWithForm(entry);
+                this.getCapture().captureOmniWithForm(entry);
             },
             quickEditBlock: (blockId: string, currentContent: string) => {
                 openQuickEditDialog({
@@ -3086,10 +3175,16 @@ export default class XiaolvCommonPlugin extends Plugin {
                 }
                 return receipt;
             },
+            getCategoryEntryIds: async (path: string) => {
+                const idx = await this.library.ensureIndex(5 * 60_000);
+                return idx.entries
+                    .filter((e) => e.category === path || (typeof e.category === "string" && e.category.startsWith(path + "/")))
+                    .map((e) => e.id);
+            },
             getUsage: () => this.state.usage,
             resetItemUsage: (itemId: string) => this.resetItemUsage(itemId),
-            newItem: (titleCandidate?: string) => this.capture?.newManual(titleCandidate),
-            newWithContent: (content: string, options?: {title?: string}) => this.capture?.newWithContent(content, options),
+            newItem: (titleCandidate?: string) => this.getCapture().newManual(titleCandidate),
+            newWithContent: (content: string, options?: {title?: string}) => this.getCapture().newWithContent(content, options),
             openSource: async (itemId) => {
                 const got = await this.library.getItem(itemId);
                 if (!got.ok) {
@@ -3845,7 +3940,7 @@ export default class XiaolvCommonPlugin extends Plugin {
             }
         } else if (action.includes("剪贴板保存") || action.includes("从剪贴板") || action.includes("新建")) {
             lvLaunchpad.haptic(12);
-            void this.capture?.quickCaptureFromClipboard();
+            void this.getCapture().quickCaptureFromClipboard();
         } else if (action.includes("剪贴板历史") || action.includes("历史")) {
             this.openSearch(undefined, undefined, undefined, undefined, "clipboard");
         } else if (action.includes("变体") || action.includes("智能生成")) {
@@ -3996,6 +4091,7 @@ export default class XiaolvCommonPlugin extends Plugin {
     }
 
     async onunload(): Promise<void> {
+        this.clearIdleIndexWarmup();
         this.scrimClickCleaner?.();
         this.scrimClickCleaner = undefined;
         const unloadStartedAt = Date.now();
@@ -4064,6 +4160,10 @@ export default class XiaolvCommonPlugin extends Plugin {
             // 忽略
         }
         this.raikiriDisposer = null;
+        if (this.clipboardTrackingTimer) {
+            clearTimeout(this.clipboardTrackingTimer);
+            this.clipboardTrackingTimer = null;
+        }
         try {
             this.clipboardListenerCleanup?.();
         } catch {
@@ -4202,3 +4302,5 @@ function getSelectionInfo(): {text: string; blockId: string | null} {
     const block = el?.closest?.("[data-node-id]") as HTMLElement | null;
     return {text, blockId: block?.getAttribute("data-node-id") ?? null};
 }
+
+export {safePerfMark, safePerfMeasure};

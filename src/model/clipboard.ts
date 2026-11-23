@@ -114,6 +114,14 @@ export function renderSafeHtmlFromMarkdown(markdown: string): string {
         return placeholder;
     });
 
+    // 4.5 提取并保护数学公式 $...$ 与 $$...$$（防止内部 _ 和 * 被斜体粗体语法篡改撕裂）
+    const mathFormulas: string[] = [];
+    safe = safe.replace(/(\$\$[\s\S]+?\$\$|\$[^\$\n]+?\$)/g, (_match, formula: string) => {
+        const placeholder = `XLCMATHFORMULA${mathFormulas.length}XLC`;
+        mathFormulas.push(formula);
+        return placeholder;
+    });
+
     // 5. 超链接解析：仅限 http://、https:// 与 mailto: 协议，其余保持字面文本
     safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, (_match, text: string, href: string) => {
         return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: #0969da; text-decoration: underline;">${text}</a>`;
@@ -227,6 +235,9 @@ export function renderSafeHtmlFromMarkdown(markdown: string): string {
     });
     finalHtml = finalHtml.replace(/XLCCODEBLOCK(\d+)XLC/g, (_m, idxStr: string) => {
         return codeBlocks[Number(idxStr)] ?? "";
+    });
+    finalHtml = finalHtml.replace(/XLCMATHFORMULA(\d+)XLC/g, (_m, idxStr: string) => {
+        return mathFormulas[Number(idxStr)] ?? "";
     });
 
     // 9. 外部包装器（增强邮件与富文本应用的排版兼容性）

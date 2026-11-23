@@ -43,8 +43,8 @@ export function buildZip(entries: readonly ZipEntry[]): Uint8Array {
     if (entries.length === 0) throw new Error("zip: no entries");
     if (entries.length > 65535) throw new Error("zip: too many entries");
     const {time, date} = dosDateTime();
-    const localParts: number[][] = [];
-    const centralParts: number[][] = [];
+    const localParts: Uint8Array[] = [];
+    const centralParts: Uint8Array[] = [];
     let offset = 0;
     for (const entry of entries) {
         if (!entry.name || entry.name.startsWith("/") || entry.name.includes("..") || entry.name.includes("\\")) {
@@ -66,7 +66,7 @@ export function buildZip(entries: readonly ZipEntry[]): Uint8Array {
         u16(local, 0);
         local.push(...nameBytes);
         const headerOffset = offset;
-        localParts.push(local, Array.from(entry.data));
+        localParts.push(new Uint8Array(local), entry.data);
 
         const central: number[] = [];
         u32(central, 0x02014b50);
@@ -87,15 +87,12 @@ export function buildZip(entries: readonly ZipEntry[]): Uint8Array {
         u32(central, 0);
         u32(central, headerOffset);
         central.push(...nameBytes);
-        centralParts.push(central);
+        centralParts.push(new Uint8Array(central));
         offset += local.length + entry.data.length;
     }
     const centralStart = offset;
     let centralSize = 0;
-    const out: number[] = [];
-    for (const part of localParts) out.push(...part);
     for (const part of centralParts) {
-        out.push(...part);
         centralSize += part.length;
     }
     const eocd: number[] = [];
@@ -107,8 +104,24 @@ export function buildZip(entries: readonly ZipEntry[]): Uint8Array {
     u32(eocd, centralSize);
     u32(eocd, centralStart);
     u16(eocd, 0);
-    out.push(...eocd);
-    return new Uint8Array(out);
+    const eocdBytes = new Uint8Array(eocd);
+
+    let totalSize = 0;
+    for (const part of localParts) totalSize += part.length;
+    totalSize += centralSize + eocdBytes.length;
+
+    const out = new Uint8Array(totalSize);
+    let pos = 0;
+    for (const part of localParts) {
+        out.set(part, pos);
+        pos += part.length;
+    }
+    for (const part of centralParts) {
+        out.set(part, pos);
+        pos += part.length;
+    }
+    out.set(eocdBytes, pos);
+    return out;
 }
 
 /** 极简 ZIP 读取（测试回读用）：校验签名/条目数/CRC 一致性，返回名称与内容。 */

@@ -11,5 +11,4 @@ tests/.build/
 prep-r*.tmp
 .jeikcode/codegraph/
 .zcode/
-.tasks/
 scripts/.last-live-instance.json

@@ -139,6 +139,14 @@ export interface SearchPrefs {
     miniCollapsed?: boolean;
     /** 剪贴板常驻专属面板折叠状态（默认展开 false，用户点击折叠后为 true） */
     clipPanelCollapsed?: boolean;
+    /** 桌面四栏大视窗自定义列宽记忆（像素值） */
+    columnWidths?: ColumnWidths;
+}
+
+export interface ColumnWidths {
+    clip?: number;
+    cat?: number;
+    list?: number;
 }
 
 export type SavedDiscoveryScope = "document" | "notebook" | "tree" | "selected-notebook" | "all-notebooks";
@@ -383,6 +391,7 @@ export function normalizeState(raw: unknown): PluginState {
             miniPosition: normalizeMiniPosition((obj.search as SearchPrefs)?.miniPosition),
             miniCollapsed: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).miniCollapsed === true),
             clipPanelCollapsed: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).clipPanelCollapsed === true),
+            columnWidths: normalizeColumnWidths((obj.search as SearchPrefs)?.columnWidths),
         },
         // 插入偏好默认开（F1/F3）；显式 false 才关
         insert: {
@@ -402,6 +411,16 @@ export function normalizeState(raw: unknown): PluginState {
             ? obj.pinnedTopChips.filter((x): x is string => typeof x === "string" && x.startsWith("xlc-") && x.length <= 48).slice(0, 5)
             : [],
     };
+}
+
+export function normalizeColumnWidths(raw: unknown): ColumnWidths | undefined {
+    if (!raw || typeof raw !== "object") return undefined;
+    const o = raw as Record<string, unknown>;
+    const clip = typeof o.clip === "number" && o.clip >= 140 && o.clip <= 500 ? Math.round(o.clip) : undefined;
+    const cat = typeof o.cat === "number" && o.cat >= 120 && o.cat <= 450 ? Math.round(o.cat) : undefined;
+    const list = typeof o.list === "number" && o.list >= 240 && o.list <= 850 ? Math.round(o.list) : undefined;
+    if (clip === undefined && cat === undefined && list === undefined) return undefined;
+    return { clip, cat, list };
 }
 
 export function normalizeDailyUsage(raw: unknown): Record<string, number> {

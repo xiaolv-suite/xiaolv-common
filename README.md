@@ -8,7 +8,7 @@
 
 将零散的代码片段、客服话术、Prompt 提示词、常用表格、文本模板沉淀为有元数据、有来源追溯、可参数化动态求值的思源笔记原生块资产
 
-**当前版本：v0.10.89** ｜ [English Documentation](README.en-US.md) ｜ [更新日志](CHANGELOG.md)
+**当前版本：v0.10.90** ｜ [English Documentation](README.en-US.md) ｜ [更新日志](CHANGELOG.md)
 
 [![CI](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/github/v/tag/xiaolv-suite/xiaolv-common?label=%E7%89%88%E6%9C%AC&sort=semver)](https://github.com/xiaolv-suite/xiaolv-common/releases)
@@ -25,7 +25,7 @@
 
 ---
 
-## 🚀 本次更新要点（v0.10.89 · 累积迭代汇总）
+## 🚀 本次更新要点（v0.10.90 · 累积迭代汇总）
 
 - **剪贴板专属快调面板与三栏大视窗**：桌面端新增常驻剪贴板专属栏与历史记录直取，一键「⤓ 插入当前 / ⭐ 存常用 / 🧼 清洗 / 📋 复制」，支持折叠为 36px 窄条并跨会话记忆；工作台弹窗升级为 `min(1280px, 95vw) × min(880px, 94vh)` 三栏大视窗；
 - **思源外骨骼生态互通**：小驴罗盘新增「思源外骨骼」磁贴与二级动作直达（速记、划笔、搜块、待办），支持本地 HTTP 与自定义协议多级降级；

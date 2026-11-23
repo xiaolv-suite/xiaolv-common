@@ -148,12 +148,20 @@ export function isValidFormatPattern(pattern: string): boolean {
     return true;
 }
 
-/** 加 N 个月并把「日」钳制在目标月月末（1/31 +1m → 2/28；闰年 2/29 +1y → 2/28）。 */
+/** 加 N 个月并把「日」钳制在目标月月末（1/31 +1m → 2/28；闰年 2/29 +1y → 2/28），完整保全时分秒。 */
 function addMonthsClamped(base: Date, months: number): Date {
     const y = base.getFullYear();
     const m = base.getMonth() + months;
     const lastDay = new Date(y, m + 1, 0).getDate();
-    return new Date(y, m, Math.min(base.getDate(), lastDay));
+    return new Date(
+        y,
+        m,
+        Math.min(base.getDate(), lastDay),
+        base.getHours(),
+        base.getMinutes(),
+        base.getSeconds(),
+        base.getMilliseconds()
+    );
 }
 
 /** 计算日期偏移并返回目标 Date，非法参数返回 null */

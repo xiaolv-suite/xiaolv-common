@@ -13,6 +13,8 @@ import {SearchEntry, SearchQuery, findExactAliasMatch, findExactShortcodeMatch} 
 import {InsertMode} from "../model/actions";
 import {toErrorMessage} from "../model/errors";
 import {lvNotify, lvSurfaceStack} from "../libs/lv-notice-kit";
+// DL2 阶段0：生态外观偏好自举（导入即写 data-lv-* 全局属性并订阅偏好广播）
+import "../libs/lv-ui-prefs";
 import {hasDynamicMacros, expandMacroPreview} from "../model/variables";
 import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {parseSnippetAnnotations} from "../model/item";

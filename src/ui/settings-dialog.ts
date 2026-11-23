@@ -21,6 +21,8 @@ import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doct
 import {calculateUsageInsights, calculateHeatmap, buildDailyUsageMap, filterKnownTopItems, type UsageItemMeta} from "../model/usage-insights";
 import {detectEcosystem} from "../service/ecosystem";
 import {lvEcosystem} from "../libs/lv-notice-kit";
+// DL2 阶段0：生态统一「外观与动效」偏好分组（庆祝/吉祥物/光效可关）
+import {mountLvUiPrefsSection} from "../libs/lv-ui-prefs";
 import {openSanitizerOptionsDialog} from "./export-sanitizer-modal";
 import type {SanitizerOptions} from "../model/export-sanitizer";
 import {openSyncDiffModal} from "./sync-diff-modal";
@@ -207,6 +209,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
         {id: "xlc-settings-search", label: "🔍 搜索配置"},
         {id: "xlc-settings-health", label: "🏥 健康体检"},
         {id: "xlc-settings-ext", label: "⚡ 外部联动"},
+        {id: "xlc-settings-appearance", label: "🎨 外观与动效"},
         {id: "xlc-settings-data", label: "💾 数据导入导出"},
     ];
     // 激活态统一入口：点击导航与滚动感知（scroll-spy）共用，避免两处口径漂移。
@@ -370,6 +373,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     buildHealthSection(ctx, root);
     buildExternalIntegrationSection(ctx, root);
     buildProviderSection(ctx, root);
+    buildAppearancePrefsSection(ctx, root);
     buildDataSection(ctx, root);
     const ecoOverviewBadge = document.createElement("div");
     ecoOverviewBadge.className = "xlc-settings-eco-badge";
@@ -422,6 +426,11 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
 
 /** 模板包导出（F6，原型屏 8 右帧）：包名 / 分类筛选 / 内容清单 → items.md+assets ZIP。
  *  分享的是「活的块」：导入方得到真实思源块，可继续编辑与再分享。 */
+function localExportDayKey(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
     const t = ctx.t;
     const idx = await ctx.library.ensureIndex();
@@ -640,7 +649,7 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
             a.href = URL.createObjectURL(blob);
             // 全部替换成特殊字符时保底名，避免产出「--.zip」（R138）
             const safeName = packName.replace(/[\\/:*?"<>|\s]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "pack";
-            a.download = `${safeName}-${new Date().toISOString().slice(0, 10)}.zip`;
+            a.download = `${safeName}-${localExportDayKey()}.zip`;
             a.click();
             setTimeout(() => URL.revokeObjectURL(a.href), 4000); // 下载启动后再回收（R138）
             dialog.destroy();
@@ -2755,6 +2764,20 @@ fi`;
     root.appendChild(sec);
 }
 
+/** DL2 阶段0：生态统一「外观与动效」偏好分组（庆祝/吉祥物/光效，生态键唯一写入方） */
+function buildAppearancePrefsSection(_ctx: SettingsUiContext, root: HTMLElement): void {
+    const sec = document.createElement("div");
+    sec.className = "xlc-form-field xlc-card";
+    sec.id = "xlc-settings-appearance";
+    sec.dataset.xlcControl = "settings.appearance";
+    const label = document.createElement("span");
+    label.className = "xlc-form-label";
+    label.textContent = "🎨 外观与动效";
+    sec.appendChild(label);
+    mountLvUiPrefsSection(sec);
+    root.appendChild(sec);
+}
+
 function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const t = ctx.t;
     // 数据区：当前库 + 重建索引 + 清空最近 + 标签体检 + 导出/导入
@@ -2922,7 +2945,7 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
         const blob = new Blob([json], {type: "application/json"});
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = `xiaolv-common-export-${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `xiaolv-common-export-${localExportDayKey()}.json`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 4000);
         const message = t("exportDone", String(count));

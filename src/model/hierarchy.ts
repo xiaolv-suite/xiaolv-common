@@ -165,10 +165,15 @@ export function flattenHierarchyTree(
 export function reparentHierarchyPath(currentPath: string, newParentPath: string): string {
     const segments = splitHierarchyPath(currentPath);
     if (segments.length === 0) return "";
+    const cleanCurrent = segments.join("/");
+    const cleanNewParent = splitHierarchyPath(newParentPath).join("/");
+    // 禁止将节点移动到自身或其子孙路径下（防回环与拓扑断裂）
+    if (cleanNewParent && isHierarchicalChild(cleanNewParent, cleanCurrent)) {
+        return cleanCurrent;
+    }
     const leafName = segments[segments.length - 1]!;
-    const parentSegments = splitHierarchyPath(newParentPath);
-    if (parentSegments.length === 0) return leafName;
-    return `${parentSegments.join("/")}/${leafName}`;
+    if (!cleanNewParent) return leafName;
+    return `${cleanNewParent}/${leafName}`;
 }
 
 /**

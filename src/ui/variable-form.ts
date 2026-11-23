@@ -8,7 +8,7 @@ import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/vari
 import {ItemType} from "../model/item";
 import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, maskTextRange, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
-import {transformCase} from "../model/placeholders";
+import {applyPlaceholders, transformCase} from "../model/placeholders";
 import {escapeHtml} from "../model/clipboard";
 import {matchProfilePreset} from "../model/storage";
 import {openNativeAssetPicker} from "../libs/lv-notice-kit";
@@ -30,6 +30,10 @@ export interface VariableFillOptions {
     /** 模板原始内容（用于交互式实时展开预览，G24 / ADR 0076） */
     templateText?: string;
     itemId?: string;
+    /** 是否启用动态占位符（宏）求值，默认为 true */
+    enablePlaceholders?: boolean;
+    /** 文档上下文对象 */
+    docContext?: {title: string; path: string; selection?: string} | null;
     /** 用户预存的参数预设方案字典（方案名 -> 字段值对） */
     presets?: Record<string, Record<string, string>>;
     onSavePreset?: (name: string, fills: Record<string, string>) => void;
@@ -44,11 +48,19 @@ export interface VariableFillOptions {
 
 /**
  * 纯函数：根据当前已收集填充值渲染实时展开预览文本（G24 / ADR 0076）
- * 自动剥离光标标记，纯文本防 XSS，支持超长安全截断
+ * 自动剥离光标标记，纯文本防 XSS，支持超长安全截断与文档上下文感知
  */
-export function renderLivePreviewText(templateText: string, fills: Record<string, string>, maxChars = 1000): string {
+export function renderLivePreviewText(
+    templateText: string,
+    fills: Record<string, string>,
+    maxChars = 1000,
+    now: Date = new Date(),
+    enablePlaceholders = true,
+    docContext?: {title: string; path: string; selection?: string} | null
+): string {
     if (!templateText) return "";
-    const expanded = stripCursorToken(expandAsks(templateText, fills));
+    let expanded = stripCursorToken(expandAsks(templateText, fills));
+    expanded = applyPlaceholders(expanded, now, enablePlaceholders, docContext);
     if (expanded.length > maxChars) {
         return expanded.slice(0, maxChars) + "…";
     }
@@ -475,7 +487,14 @@ export function openVariableFillCard(options: VariableFillOptions): void {
 
         const updatePreview = () => {
             if (!previewBox || !options.templateText) return;
-            const text = renderLivePreviewText(options.templateText, collect());
+            const text = renderLivePreviewText(
+                options.templateText,
+                collect(),
+                1000,
+                new Date(),
+                options.enablePlaceholders ?? true,
+                options.docContext
+            );
             previewBox.textContent = text;
         };
 
@@ -834,12 +853,12 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         {id: "date", text: "{{xlc:date}}"},
         {id: "year", text: "{{xlc:year}}"},
         {id: "quarter", text: "{{xlc:quarter}}"},
-        {id: "date.tomorrow", text: "{{xlc:date:明天}}"},
-        {id: "date.nextweek", text: "{{xlc:date:下周一}}"},
+        {id: "date.tomorrow", text: "{{xlc:date|明天}}"},
+        {id: "date.nextweek", text: "{{xlc:date|下周一}}"},
         {id: "date.offset", text: "{{xlc:date|+3d}}"},
         {id: "week", text: "{{xlc:week}}"},
         {id: "timestamp", text: "{{xlc:timestamp}}"},
-        {id: "calc", text: "{{xlc:calc:100*1.13}}"},
+        {id: "calc", text: "{{xlc:calc|100*1.13}}"},
         {id: "count", text: "{{xlc:count:chars|文本}}"},
         {id: "hash", text: "{{xlc:hash|文本}}"},
         {id: "number", text: "{{xlc:number:lines|文本}}"},

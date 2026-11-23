@@ -776,6 +776,8 @@ export class DiscoveryDialog implements DiscoveryDialogController {
         this.filterTag.addEventListener("input", () => {
             this.filter.tag = this.filterTag?.value.trim().toLocaleLowerCase() ?? "";
             this.page = 0;
+            this.updateScopeControlState();
+            this.updateSelectionState();
             this.scheduleFilterRender();
         });
         if (this.filter.tag) this.filterTag.value = this.options.initialTag?.trim().slice(0, 64) ?? "";

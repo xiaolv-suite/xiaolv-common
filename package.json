@@ -1,9 +1,10 @@
 {
   "name": "xiaolv-common",
-  "version": "0.10.89",
+  "version": "0.10.90",
   "description": "SiYuan plugin: quick recall and reuse of common content anchored to real SiYuan blocks.",
   "main": "index.js",
   "scripts": {
+    "test:fast": "node --test tests/ecosystem-reliability.test.cjs",
     "test:ecosystem:reliability": "node --test tests/ecosystem-reliability.test.cjs",
     "dev": "webpack --config webpack.config.js --mode development",
     "build": "node --max-old-space-size=4096 ./node_modules/webpack/bin/webpack.js --config webpack.config.js --mode production",

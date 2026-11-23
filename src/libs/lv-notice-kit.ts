@@ -116,7 +116,7 @@ export interface LvSurfaceHandle {
 /* 3. 全局单例接口与自协商常量                                               */
 /* ========================================================================= */
 
-const PROTOCOL_VERSION = 186; // 1.8.6 (diagnostic error ring buffer + one-click diagnostic report in compass inbox)
+const PROTOCOL_VERSION = 187; // 1.8.7 (robust disk mute sync + read-merge + close button dismiss safeguard)
 const STORAGE_PREFIX = "lv_notice_mute_today_";
 const HISTORY_STORAGE_PREFIX = "lv_notice_history_";
 const MAX_PERSISTED_HISTORY = 50;
@@ -355,6 +355,7 @@ interface LvLaunchpadHub {
     pasteToDailyNote?: () => void | Promise<void>;
     getQuickWorkspaceConfig?: () => LvQuickWorkspaceConfig;
     saveQuickWorkspaceConfig?: (patch: Partial<LvQuickWorkspaceConfig>) => void;
+    openQuickWorkspaceConfig?: (tab?: string) => void;
 }
 
 interface LvOmnisearchHub {
@@ -818,6 +819,8 @@ const STYLES = `
     display: flex;
     align-items: flex-end;
     justify-content: center;
+    overscroll-behavior: contain;
+    touch-action: none;
     animation: lvSheetMaskIn 160ms ease-out both;
 }
 :is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) #lv-launchpad-sheet-mask {
@@ -838,6 +841,8 @@ const STYLES = `
     max-height: min(92dvh, 780px);
     overflow-y: auto;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
     background: var(--lv-lp-bg);
     color: var(--lv-lp-text);
     border-radius: 22px 22px 0 0;
@@ -947,6 +952,7 @@ const STYLES = `
 .lv-sheet-title { font-size: 14.5px; font-weight: 700; color: var(--lv-lp-text); letter-spacing: -0.01em; white-space: nowrap; flex-shrink: 0; }
 .lv-sheet-head-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; min-width: 0; flex-shrink: 1; }
 .lv-sheet-close {
+    position: relative;
     border: 1px solid var(--lv-lp-border);
     background: var(--lv-lp-card-bg);
     width: 30px;
@@ -961,6 +967,11 @@ const STYLES = `
     cursor: pointer;
     flex-shrink: 0;
     transition: transform 0.12s ease, background-color 0.14s ease, color 0.14s ease;
+}
+.lv-sheet-close::before {
+    content: "";
+    position: absolute;
+    inset: -7px;
 }
 .lv-sheet-close:active { transform: scale(0.92); background: var(--lv-lp-accent-soft); color: var(--lv-lp-accent); }
 .lv-sheet-search-wrap { position: relative; display: flex; align-items: center; margin-bottom: 5px; }
@@ -1161,7 +1172,7 @@ const STYLES = `
     -webkit-tap-highlight-color: transparent;
     touch-action: none;
     cursor: pointer;
-    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease, box-shadow 200ms ease;
+    transition: left 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease, box-shadow 200ms ease;
 }
 :is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark) #lv-launchpad-mobile-ball {
     color: #f8fafc;
@@ -1322,11 +1333,27 @@ const STYLES = `
 .lv-conflict-tab.active{background:var(--lv-lp-accent-soft,rgba(37,99,235,.14));border-color:var(--lv-lp-accent,#2563eb);color:var(--lv-lp-accent,#2563eb)}
 .lv-diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .lv-conflict-tab-view{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y}
+.lv-reconcile-stat-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border,rgba(15,23,42,.1));font-size:11px;font-weight:600}
+.lv-reconcile-filter-chip{padding:3px 9px;border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,.12));background:var(--lv-lp-panel-bg,#f8fafc);color:var(--lv-lp-text-sub,#64748b);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.lv-reconcile-filter-chip:hover{background:var(--lv-lp-accent-soft,rgba(37,99,235,.08));color:var(--lv-lp-accent,#2563eb)}
+.lv-reconcile-filter-chip.active{background:var(--lv-lp-accent-soft,rgba(37,99,235,.14));border-color:var(--lv-lp-accent,#2563eb);color:var(--lv-lp-accent,#2563eb)}
 @media (max-width:560px){
   .lv-diff-grid{grid-template-columns:1fr!important}
 }
 @media (max-width:600px){
   .lv-conflict-tab-view{max-height:calc(85dvh - 150px)!important}
+}
+.lv-cfg-container{display:flex;width:100%;height:100%;min-height:0}
+.lv-cfg-sidebar{width:184px;flex-shrink:0;border-right:1px solid var(--lv-lp-border,rgba(15,23,42,.08));background:var(--lv-lp-panel-bg,#f8fafc);display:flex;flex-direction:column;padding:10px 8px;gap:4px;overflow-y:auto;box-sizing:border-box}
+.lv-cfg-tab-btn{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:7px;font-size:12.5px;font-weight:500;color:var(--lv-lp-text-sub,#64748b);background:transparent;border:1px solid transparent;cursor:pointer;text-align:left;transition:all .15s ease;user-select:none;font-family:inherit}
+.lv-cfg-tab-btn:hover{background:var(--lv-lp-card-bg,#fff);color:var(--lv-lp-text,#0f172a);border-color:var(--lv-lp-border,rgba(15,23,42,.08))}
+.lv-cfg-tab-btn.active{background:var(--lv-lp-accent-soft,rgba(37,99,235,.12));color:var(--lv-lp-accent,#2563eb);font-weight:600;border-color:rgba(37,99,235,.2)}
+.lv-cfg-panel{flex:1 1 auto;min-width:0;min-height:0;padding:16px 22px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;font-size:12.5px;color:var(--lv-lp-text,#0f172a);box-sizing:border-box}
+@media (max-width:600px){
+  .lv-cfg-container{flex-direction:column!important}
+  .lv-cfg-sidebar{width:100%!important;flex-direction:row!important;overflow-x:auto!important;border-right:none!important;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,.08))!important;padding:6px!important;white-space:nowrap!important}
+  .lv-cfg-tab-btn{padding:6px 10px!important;font-size:12px!important}
+  .lv-cfg-panel{padding:12px 14px!important}
 }
 
 /* ===== 设备矩阵适配：平板 / 折叠屏内屏（≥600px）底部抽屉 → 居中悬浮卡片 ===== */
@@ -1553,6 +1580,9 @@ function clearCategorySnoozeImpl(category: string): void {
 }
 
 function loadMuteUntilMap(): Record<string, number> {
+    if (!hasSyncedMuteFromDisk && typeof window !== "undefined") {
+        void syncMuteUntilFromDisk();
+    }
     const ls = getSafeLocalStorage();
     const now = Date.now();
     const active: Record<string, number> = {};
@@ -1580,14 +1610,159 @@ function loadMuteUntilMap(): Record<string, number> {
     return active;
 }
 
-function saveMuteUntilMap(map: Record<string, number>): void {
+const NOTICE_MUTE_FILE_PATH = "/data/storage/petal/xiaolv-suite/notice-mute.json";
+let hasSyncedMuteFromDisk = false;
+let isDiskMuteSyncInFlight = false;
+let diskMuteSyncTimer: any = null;
+// 2026-11-21 走查修复：本地已删除（取消免打扰）但磁盘仍存的 key 墓碑集合。
+// 磁盘 Read-Merge-Write 不感知本地删除会把已取消项回写磁盘，重启后 sync 再灌回 localStorage，
+// 表现为"取消免打扰跨重启失效"。墓碑在本会话内屏蔽旧值复活，成功写盘后清除。
+const pendingDeletedMuteKeys = new Set<string>();
+
+/**
+ * 跨端口持久化拉取：从思源内核磁盘文件 (/data/storage/petal/xiaolv-suite/notice-mute.json) 拉取免打扰表。
+ * 彻底根治思源 Electron 桌面端随机端口导致 LocalStorage 隔离清空的系统级痛点。
+ */
+async function syncMuteUntilFromDisk(): Promise<void> {
+    if (typeof window === "undefined" || hasSyncedMuteFromDisk) return;
+    const g = globalThis as any;
+    if (typeof g.process !== "undefined" && (g.process.env?.NODE_ENV === "test" || g.process.env?.VITEST)) return;
+    hasSyncedMuteFromDisk = true;
+    try {
+        let parsed: any = null;
+        if (typeof fetch === "function") {
+            try {
+                const resp = await fetch("/api/file/getFile", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ path: NOTICE_MUTE_FILE_PATH }),
+                });
+                if (resp.status === 200) {
+                    const txt = await resp.text();
+                    try { parsed = JSON.parse(txt); } catch { /* ignore */ }
+                }
+            } catch { /* ignore */ }
+        }
+        if (!parsed) {
+            try {
+                const res = await lvKernelPost("/api/file/getFile", { path: NOTICE_MUTE_FILE_PATH });
+                if (res) {
+                    if (res.code === 0 && res.data) {
+                        const text = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+                        try { parsed = JSON.parse(text); } catch { /* ignore */ }
+                    } else if (typeof (res as any).code === "undefined" && typeof res === "object") {
+                        parsed = res;
+                    }
+                }
+            } catch { /* ignore */ }
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+
+        const now = Date.now();
+        const map = loadMuteUntilMap();
+        let updated = false;
+
+        for (const [k, v] of Object.entries(parsed)) {
+            if (pendingDeletedMuteKeys.has(k)) continue; // 本会话已显式取消的 key 不再从磁盘复活
+            if (typeof v === "number" && Number.isFinite(v) && v > now) {
+                if (!map[k] || v > map[k]) {
+                    map[k] = v;
+                    updated = true;
+                }
+            }
+        }
+
+        if (updated) {
+            saveMuteUntilMap(map, false);
+        }
+    } catch {
+        // 2026-11-21 走查修复：内核离线/请求失败时复位同步标记，允许下次 loadMuteUntilMap 惰性重试。
+        // 原先标志位先行置 true 且永不复位，启动失败后整个会话免打扰表缺失（随机端口漂移场景最致命）。
+        hasSyncedMuteFromDisk = false;
+    }
+}
+
+// 模块加载即尝试静默预热拉取磁盘免打扰表
+if (typeof window !== "undefined") {
+    void syncMuteUntilFromDisk();
+}
+
+/**
+ * 异步防抖写盘：将免打扰表双写至思源持久化磁盘文件，确保重启与端口漂移后永久存留。
+ * 具备防竞态读合并（Read-Merge-Write）机制，绝不冲掉磁盘中已存在的其他插件免打扰记录。
+ */
+function scheduleSaveMuteUntilToDisk(map: Record<string, number>): void {
+    if (typeof window === "undefined") return;
+    const g = globalThis as any;
+    if (typeof g.process !== "undefined" && (g.process.env?.NODE_ENV === "test" || g.process.env?.VITEST)) return;
+    if (diskMuteSyncTimer) clearTimeout(diskMuteSyncTimer);
+    diskMuteSyncTimer = setTimeout(async () => {
+        diskMuteSyncTimer = null;
+        if (isDiskMuteSyncInFlight) return;
+        isDiskMuteSyncInFlight = true;
+        // 本次写盘周期开始时的墓碑快照：写盘成功后仅清除这些（期间新增墓碑保留给下一轮）
+        const settledTombstones = new Set(pendingDeletedMuteKeys);
+        try {
+            let diskMap: Record<string, number> = {};
+            if (typeof fetch === "function") {
+                try {
+                    const resp = await fetch("/api/file/getFile", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ path: NOTICE_MUTE_FILE_PATH }),
+                    });
+                    if (resp.status === 200) {
+                        const txt = await resp.text();
+                        try {
+                            const p = JSON.parse(txt);
+                            if (p && typeof p === "object" && !Array.isArray(p)) diskMap = p;
+                        } catch { /* ignore */ }
+                    }
+                } catch { /* ignore */ }
+            }
+            const now = Date.now();
+            const merged: Record<string, number> = {};
+            for (const [k, v] of Object.entries(diskMap)) {
+                if (pendingDeletedMuteKeys.has(k)) continue; // 墓碑 key 不从磁盘旧值复活（取消免打扰跨重启失效根治）
+                if (typeof v === "number" && Number.isFinite(v) && v > now) {
+                    merged[k] = v;
+                }
+            }
+            for (const [k, v] of Object.entries(map)) {
+                if (typeof v === "number" && Number.isFinite(v) && v > now) {
+                    merged[k] = Math.max(merged[k] ?? 0, v);
+                }
+            }
+
+            const bodyStr = JSON.stringify(merged, null, 2);
+            if (typeof FormData !== "undefined" && typeof Blob !== "undefined" && typeof fetch === "function") {
+                const fd = new FormData();
+                fd.append("path", NOTICE_MUTE_FILE_PATH);
+                fd.append("file", new Blob([bodyStr], { type: "application/json" }), "notice-mute.json");
+                await fetch("/api/file/putFile", { method: "POST", body: fd });
+                // 写盘成功后墓碑使命完成（磁盘已不含被删 key）；仅清本轮快照，期间新增墓碑留给下一轮
+                for (const k of settledTombstones) pendingDeletedMuteKeys.delete(k);
+            }
+        } catch {
+            /* 磁盘写入降级 */
+        } finally {
+            isDiskMuteSyncInFlight = false;
+        }
+    }, 400);
+}
+
+function saveMuteUntilMap(map: Record<string, number>, persistToDisk = true): void {
     memoryMuteUntilCache = { ...map };
     if (typeof window !== "undefined") (window as any).__LV_MUTE_UNTIL_CACHE__ = memoryMuteUntilCache;
     const ls = getSafeLocalStorage();
-    if (!ls) return;
-    try {
-        ls.setItem(MUTE_UNTIL_STORAGE_KEY, JSON.stringify(map));
-    } catch { /* ignore */ }
+    if (ls) {
+        try {
+            ls.setItem(MUTE_UNTIL_STORAGE_KEY, JSON.stringify(map));
+        } catch { /* ignore */ }
+    }
+    if (persistToDisk) {
+        scheduleSaveMuteUntilToDisk(map);
+    }
 }
 
 function muteCategoryUntilImpl(category: string, untilTimestamp: number): void {
@@ -1680,6 +1855,7 @@ function clearCategoryMuteImpl(category: string): void {
     for (const k of Object.keys(map)) {
         if (k === category || cleanCategoryKey(k) === cleanCat) {
             delete map[k];
+            pendingDeletedMuteKeys.add(k); // 墓碑：防止磁盘 Read-Merge-Write 把本次取消回写复活
             changed = true;
         }
     }
@@ -1705,7 +1881,9 @@ function getMutedCategoriesImpl(): Array<{ category: string; until: number; unti
     for (const [cat, until] of Object.entries(map)) {
         if (until > now) {
             const d = new Date(until);
-            const untilStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+            const untilStr = until >= now + 365 * 24 * 3600 * 1000
+                ? "永久免打扰"
+                : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
             out.push({ category: cat, until, untilStr });
         }
     }
@@ -2055,6 +2233,9 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl =
                         if (!resolvedSnoozeOpts.some(o => o.muteDays === 7)) {
                             resolvedSnoozeOpts.push({ label: "未来一周不通知", muteDays: 7 });
                         }
+                        if (!resolvedSnoozeOpts.some(o => (o.muteDays && o.muteDays >= 365) || (o as any).muteForever)) {
+                            resolvedSnoozeOpts.push({ label: "永久不再通知", muteDays: 3650 });
+                        }
                     }
                 }
 
@@ -2114,13 +2295,20 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl =
                             muteCategoryDaysImpl(packet.category, opt.muteDays);
                             if (typeof hub.muteDays === "function") hub.muteDays(packet.category, opt.muteDays);
                             hub.dismiss(packet.id);
-                            const desc = opt.muteDays === 7 ? "未来一周" : `未来 ${opt.muteDays} 天`;
+                            const desc = opt.muteDays >= 365 ? "永久" : opt.muteDays === 7 ? "未来一周" : `未来 ${opt.muteDays} 天`;
                             lvNotify.capsule({
                                 source: packet.source || "免打扰",
                                 message: `🔕 已关闭「${packet.title || packet.category}」提醒（${desc}不通知）`,
                                 duration: 2800,
                                 archive: false,
                             });
+                            if (opt.muteDays >= 365 && typeof window !== "undefined") {
+                                try {
+                                    window.dispatchEvent(new CustomEvent("lv-notice-mute-forever", {
+                                        detail: { category: packet.category, source: packet.source, days: opt.muteDays }
+                                    }));
+                                } catch { /* ignore */ }
+                            }
                         } else if (opt?.muteToday && packet.category) {
                             muteCategoryTodayImpl(packet.category);
                             if (typeof hub.muteToday === "function") hub.muteToday(packet.category);
@@ -2220,6 +2408,9 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl =
             // 首启弹层队列：firstRun 卡片同一时刻只渲染一张，关闭后 400ms 串行补投，
             // 当天内按指纹去重（新工作区首启多家引导/提醒卡同屏堆叠的根治）。
             // 补投实例（__frqReplay）跳过指纹门但保留 active 计数与 dismiss 包装，令队列链持续。
+            // 2026-11-21 走查修复：active 占用与 dismiss 包装移至「确认渲染」处（下方 push 前）——
+            // 原先在 silent 归档（专注模式）与同卡合并早退路径之前就 active++，这两条路径永不触发
+            // onDismiss，导致 active 泄漏、当日后续 firstRun 卡全部积压 pending 的队列死锁。
             if (packet.firstRun && packet.mode === "card") {
                 const replayPacket = packet as unknown as { __frqReplay?: boolean };
                 const isReplay = replayPacket.__frqReplay === true;
@@ -2231,8 +2422,6 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl =
                         return;
                     }
                 }
-                getFirstRunShared().active++;
-                packet = wrapFirstRunDismiss(packet, () => flushFirstRunPending(() => hub.post.bind(hub)));
             }
 
             // 专注模式：card/capsule 全生态降级为 silent（仅应归档通知入历史，瞬时回执直接忽略）
@@ -2284,6 +2473,12 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl =
                 }
                 render();
                 return;
+            }
+
+            // 首启队列占用：仅在走到真正的渲染分支（未走 silent 归档/合并早退）时才计数并包装 dismiss
+            if (packet.firstRun && packet.mode === "card") {
+                getFirstRunShared().active++;
+                packet = wrapFirstRunDismiss(packet, () => flushFirstRunPending(() => hub.post.bind(hub)));
             }
 
             activePackets.push(packet);
@@ -2582,7 +2777,9 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl =
             if (isExternalModal) {
                 const raw = (el.textContent || "").replace(/\s+/g, " ").trim();
                 if (raw && !raw.includes("小驴全家桶") && !raw.includes("小驴罗盘")) {
-                    const snippet = raw.length > 70 ? raw.slice(0, 70) + "…" : raw;
+                    // 快照清洗与 body 级哨兵一致：去掉「N 个提醒」计数头与「稍后处理」按钮壳文本
+                    const cleaned = raw.replace(/\d+\s*个提醒/g, " ").replace(/稍后处理/g, " ").replace(/\s+/g, " ").trim() || raw;
+                    const snippet = cleaned.length > 70 ? cleaned.slice(0, 70) + "…" : cleaned;
                     const packetId = `sy_ext_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                     hub.post({
                         id: packetId,
@@ -2700,12 +2897,167 @@ function wireExternalModalHarmonizer(hub: LvNoticeHub): () => void {
         return () => {};
     }
     const win = window as unknown as {
-        __LV_MODAL_HARMONIZER__?: { obs: MutationObserver | null; refCount: number };
+        __LV_MODAL_HARMONIZER__?: {
+            obs: MutationObserver | null;
+            refCount: number;
+            sweepStopped: boolean;
+            sweepTimer: ReturnType<typeof setTimeout> | null;
+            processedEls: WeakSet<HTMLElement> | null;
+            recentSigs: Map<string, number> | null;
+        };
     };
-    const holder = win.__LV_MODAL_HARMONIZER__ || (win.__LV_MODAL_HARMONIZER__ = { obs: null, refCount: 0 });
+    const holder = win.__LV_MODAL_HARMONIZER__ ||
+        (win.__LV_MODAL_HARMONIZER__ = { obs: null, refCount: 0, sweepStopped: false, sweepTimer: null, processedEls: null, recentSigs: null });
     holder.refCount++;
 
+    // 罗盘自有浮层根：通知栈/弹射坞桌面与移动端——这些容器内的通知快照文本可能恰好含「个提醒+稍后处理」签名，扫描时必须排除
+    const LV_OWN_SURFACE_SELECTOR = "#lv-notice-host, #lv-launchpad-sheet-mask, #lv-launchpad-mobile-ball, #lv-launchpad-mobile-entry, #lvLaunchpadDesktopEntry, #lv-desktop-launchpad-popover";
+
+    if (!holder.processedEls) holder.processedEls = new WeakSet<HTMLElement>();
+    if (!holder.recentSigs) holder.recentSigs = new Map<string, number>();
+    const processedEls = holder.processedEls;
+    const recentSigs = holder.recentSigs;
+
+    const isOwnSurface = (el: HTMLElement): boolean => {
+        try { return Boolean(el.closest?.(LV_OWN_SURFACE_SELECTOR)); } catch { return false; }
+    };
+    // 用户正在该弹层内输入或悬停时本轮跳过，绝不抢在用户点击前收走弹层
+    const isInteracting = (el: HTMLElement): boolean => {
+        try {
+            const active = typeof document !== "undefined" ? document.activeElement : null;
+            if (active && el.contains?.(active)) return true;
+            // 编辑/配置型弹层（含输入控件）不视为"裸提醒"，避免误收第三方正在编辑的表单
+            if (typeof el.querySelector === "function") {
+                if (el.querySelector("textarea, input[type=text], input[type=search], [contenteditable=true], .protyle-wysiwyg")) return true;
+            }
+            if (typeof el.matches === "function" && el.matches(":hover")) return true;
+        } catch { /* ignore */ }
+        return false;
+    };
+
+    /** 统一收拢动作：捕获进罗盘通知中心 + 优先点击自带关闭（保留任务视界内部状态一致），否则隐藏防遮挡 */
+    const collapseExternalReminderEl = (el: HTMLElement) => {
+        try {
+            processedEls.add(el);
+            const raw = (el.textContent || "").replace(/\s+/g, " ").trim();
+            if (raw && !raw.includes("小驴全家桶") && !raw.includes("小驴罗盘")) {
+                // 快照清洗：去掉弹窗壳文本（「N 个提醒」计数头与「稍后处理」按钮），保留提醒条目本体
+                const clean = raw.replace(/\d+\s*个提醒/g, " ").replace(/稍后处理/g, " ").replace(/\s+/g, " ").trim();
+                const base = clean || raw;
+                const snippet = base.length > 70 ? base.slice(0, 70) + "…" : base;
+                // 签名去重：同一弹窗若被第三方反复重建，60 秒窗口内只收拢一次，避免通知中心被刷屏
+                const sig = snippet.slice(0, 40);
+                const now = Date.now();
+                try {
+                    for (const [key, ts] of recentSigs) {
+                        if (now - ts > 60000) recentSigs.delete(key);
+                    }
+                } catch { /* ignore */ }
+                if (!recentSigs.has(sig)) {
+                    recentSigs.set(sig, now);
+                    hub.post({
+                        id: `sy_ext_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                        mode: "card",
+                        source: "日程与任务",
+                        category: "external-reminder",
+                        title: "日程提醒已由罗盘统一收拢",
+                        message: snippet,
+                        level: "info",
+                        createdAt: Date.now(),
+                        repeatCount: 1,
+                        read: false,
+                        actions: [
+                            {
+                                label: "查看罗盘",
+                                primary: true,
+                                onClick: () => getLaunchpadHub().open(),
+                                dismissAfterClick: true,
+                            }
+                        ]
+                    });
+                }
+            }
+            const closeBtn = el.querySelector<HTMLElement>('.tm-calendar-reminder-close, [data-tm-semantic-action="close"], [data-tm-penalty-action="close"], .tm-semantic-date-confirm-close');
+            if (closeBtn && typeof closeBtn.click === "function") {
+                setTimeout(() => { try { closeBtn.click(); } catch { /* ignore */ } }, 60);
+            } else {
+                el.style.setProperty("display", "none", "important");
+                el.style.setProperty("pointer-events", "none", "important");
+            }
+        } catch { /* ignore */ }
+    };
+
+    /**
+     * 周期扫描兜底：补齐两类既有观察盲区——
+     * ① 第三方「先挂空宿主容器、后往里填弹层」模式（宿主早已插入 body，后续内容变更对 body 级观察者不可见）；
+     * ② 启动竞态（第三方弹层先于哨兵装配就已插入，MutationObserver 只看未来变更）。
+     */
+    const sweepExternalReminderEls = () => {
+        try {
+            const body = document.body;
+            if (!body || typeof body.querySelectorAll !== "function") return;
+            // 结构化候选：第三方已知弹层类（querySelectorAll 任意深度可达，含宿主容器内部，代价极低）
+            const structural = body.querySelectorAll<HTMLElement>(
+                ".tm-remind-modal, .tm-semantic-date-confirm-modal, .tm-calendar-reminder-toast, .tm-prompt-modal, [data-tm-semantic-summary]",
+            );
+            structural.forEach((el) => {
+                if (processedEls.has(el) || isOwnSurface(el) || isInteracting(el)) return;
+                // tm-prompt-modal 是通用提示壳，仅当文本确含提醒签名时才收拢，避免误吞第三方普通对话框
+                if (el.classList?.contains?.("tm-prompt-modal")) {
+                    const t = el.textContent || "";
+                    if (!(t.includes("个提醒") && t.includes("稍后处理"))) return;
+                }
+                collapseExternalReminderEl(el);
+            });
+            // 文本签名兜底：扫 body 顶层 + 一层子容器（第三方常见 `#host > .x` 两级挂载），
+            // 且仅对带提醒语义标识的节点求值 textContent（前缀预筛保证零大树遍历）
+            const looksLikeReminderHost = (classId: string): boolean =>
+                classId.includes("tm-") || classId.includes("task-horizon") ||
+                /remind|notif|alert|popup|dialog|modal/i.test(classId);
+            const candidates: HTMLElement[] = [];
+            const children = body.children;
+            for (let i = 0; i < children.length; i++) {
+                const el = children[i] as HTMLElement;
+                if (!el || el.nodeType !== 1) continue;
+                const classId = `${el.className || ""} ${el.id || ""}`;
+                if (!looksLikeReminderHost(classId)) continue;
+                candidates.push(el);
+                const grand = el.children;
+                for (let j = 0; j < grand.length; j++) {
+                    const g = grand[j] as HTMLElement;
+                    if (!g || g.nodeType !== 1) continue;
+                    const gc = `${g.className || ""} ${g.id || ""}`;
+                    if (looksLikeReminderHost(gc)) candidates.push(g);
+                }
+            }
+            for (const el of candidates) {
+                if (processedEls.has(el) || isOwnSurface(el) || isInteracting(el)) continue;
+                const text = el.textContent || "";
+                if (!(text.includes("个提醒") && text.includes("稍后处理"))) continue;
+                if (text.includes("小驴全家桶") || text.includes("小驴罗盘") || text.includes("小驴通知中心")) continue;
+                collapseExternalReminderEl(el);
+            }
+        } catch { /* ignore */ }
+    };
+
+    // 自续链扫描调度：用裸 setTimeout 逐轮自排（vm 测试环境会进入 context 计时账本随 close() 清空；
+    // 生产环境等价 3 秒轮询，且不留存活的 interval 句柄——杜绝 node --test 事件循环被 interval 挂死）
+    const scheduleSweep = (delayMs: number) => {
+        if (holder.sweepStopped) return;
+        try {
+            holder.sweepTimer = setTimeout(() => {
+                holder.sweepTimer = null;
+                if (holder.sweepStopped) return;
+                sweepExternalReminderEls();
+                scheduleSweep(3000);
+            }, delayMs);
+        } catch { /* ignore */ }
+    };
+
     if (!holder.obs) {
+        // 启动竞态兜底：装配后 1.2s 先扫一遍已存在的弹层，随后每 3 秒一轮轻量扫描
+        //（结构化选择器 + tm- 前缀预筛的顶层文本签名）
+        scheduleSweep(1200);
         holder.obs = new MutationObserver((muts) => {
             for (const m of muts) {
                 m.addedNodes?.forEach?.((n) => {
@@ -2718,41 +3070,7 @@ function wireExternalModalHarmonizer(hub: LvNoticeHub): () => void {
                         (el.textContent?.includes("个提醒") && el.textContent?.includes("稍后处理"))
                     );
                     if (isExternalModal) {
-                        try {
-                            const raw = (el.textContent || "").replace(/\s+/g, " ").trim();
-                            if (raw && !raw.includes("小驴全家桶") && !raw.includes("小驴罗盘")) {
-                                const snippet = raw.length > 70 ? raw.slice(0, 70) + "…" : raw;
-                                const packetId = `sy_ext_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-                                hub.post({
-                                    id: packetId,
-                                    mode: "card",
-                                    source: "日程与任务",
-                                    category: "external-reminder",
-                                    title: "日程提醒已由罗盘统一收拢",
-                                    message: snippet,
-                                    level: "info",
-                                    createdAt: Date.now(),
-                                    repeatCount: 1,
-                                    read: false,
-                                    actions: [
-                                        {
-                                            label: "查看罗盘",
-                                            primary: true,
-                                            onClick: () => getLaunchpadHub().open(),
-                                            dismissAfterClick: true,
-                                        }
-                                    ]
-                                });
-                            }
-                            // 自动静默该离散弹窗自身：优先点击自带关闭/稍后处理，否则隐藏防遮挡
-                            const closeBtn = el.querySelector<HTMLElement>('[data-tm-semantic-action="close"], [data-tm-penalty-action="close"], .tm-semantic-date-confirm-close');
-                            if (closeBtn && typeof closeBtn.click === "function") {
-                                setTimeout(() => { try { closeBtn.click(); } catch {} }, 60);
-                            } else {
-                                el.style.setProperty("display", "none", "important");
-                                el.style.setProperty("pointer-events", "none", "important");
-                            }
-                        } catch { /* ignore */ }
+                        collapseExternalReminderEl(el);
                     }
                 });
             }
@@ -2767,12 +3085,20 @@ function wireExternalModalHarmonizer(hub: LvNoticeHub): () => void {
         if (holder.refCount <= 0 && holder.obs) {
             try { holder.obs.disconnect(); } catch { /* ignore */ }
             holder.obs = null;
+            holder.sweepStopped = true;
+            if (holder.sweepTimer !== null) {
+                try { clearTimeout(holder.sweepTimer); } catch { /* ignore */ }
+                holder.sweepTimer = null;
+            }
             delete win.__LV_MODAL_HARMONIZER__;
         }
     };
 }
 
 function escapeHtml(str: string): string {
+    // 2026-11-21 走查修复：入参收敛为字符串。跨仓调用方传数字/undefined 的 packet.title/message
+    // 时原实现 .replace 直接抛 TypeError 且 render() 无兜底，整屏通知渲染中断。
+    str = String(str ?? "");
     return str
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -3381,6 +3707,11 @@ export const lvNotify = {
         return isCategoryMutedImpl(category);
     },
 
+    /** 跨端口主动拉取磁盘免打扰表（/data/storage/petal/xiaolv-suite/notice-mute.json） */
+    syncMuteFromDisk(): Promise<void> {
+        return syncMuteUntilFromDisk();
+    },
+
     clearCategoryMute(category: string): void {
         const hub = getHub();
         if (typeof hub.clearCategoryMute === "function") {
@@ -3982,6 +4313,102 @@ export const LV_FEEDBACK_EMAIL = "68298100@qq.com";
  * 唤起腾讯 QQ 客户端申请加入小驴全家桶官方交流反馈群（871707735）并自动复制群号到剪贴板。
  * 兼容 Desktop Electron 原生协议（shell.openExternal）、网页端跳转及无 QQ 环境自动复制兜底。
  */
+export const LV_SPONSOR_CARD_IMAGE = "data:image/png;base64,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";
+
+/**
+ * 呼起小驴全生态「投喂 Token / 赞助支持」高质感弹层。
+ * 展示双通道（微信赞赏码 + 支付宝）已技术脱敏的二合一赞助卡片。
+ * 平时不打扰用户，仅在用户主动点击「⚡ 投喂 Token」时呼起。
+ */
+export function openSponsorModal(): void {
+    if (typeof document === "undefined") return;
+    const existing = document.getElementById("lv-sponsor-modal-mask");
+    if (existing) {
+        try { existing.remove(); } catch { /* ignore */ }
+    }
+
+    const mask = document.createElement("div");
+    mask.id = "lv-sponsor-modal-mask";
+    mask.style.cssText = `
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: rgba(15, 23, 42, 0.58);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        animation: lvNoticeFadeIn 0.16s ease-out both;
+    `;
+
+    const dialog = document.createElement("div");
+    dialog.style.cssText = `
+        position: relative;
+        background: var(--lv-lp-card-bg, #ffffff);
+        border: 1px solid var(--lv-lp-border-strong, rgba(15, 23, 42, 0.14));
+        border-radius: 18px;
+        box-shadow: 0 20px 48px -12px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+        max-width: min(92vw, 680px);
+        max-height: min(92vh, 840px);
+        overflow-y: auto;
+        padding: 20px 22px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        box-sizing: border-box;
+    `;
+
+    dialog.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(234, 179, 8, 0.15);color:#eab308;font-size:16px;">⚡</span>
+                <strong style="font-size:15px;color:var(--lv-lp-text, #0f172a);letter-spacing:-0.01em;">为小飞驴投喂 Token 算力</strong>
+            </div>
+            <button type="button" class="lv-sponsor-close-btn" style="border:none;background:var(--lv-lp-panel-bg, #f1f5f9);color:var(--lv-lp-text-sub, #64748b);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.15s ease;" title="关闭">✕</button>
+        </div>
+        <div style="font-size:12px;color:var(--lv-lp-text-sub, #64748b);line-height:1.55;text-align:center;max-width:560px;">
+            小飞驴全生态 8 大插件由独立开发者业余倾力打磨。您的每一份投喂，都将直接转化为源源不断的 Token 算力、模型测试与功能进化动力！
+        </div>
+        <div style="width:100%;display:flex;justify-content:center;border-radius:12px;overflow:hidden;border:1px solid var(--lv-lp-border, rgba(15, 23, 42, 0.08));box-shadow:0 4px 14px rgba(15, 23, 42, 0.06);">
+            <img src="${LV_SPONSOR_CARD_IMAGE}" alt="小飞驴生态投喂 Token 赞助码" style="width:100%;max-width:620px;height:auto;display:block;border-radius:12px;" />
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;padding-top:2px;flex-wrap:wrap;gap:8px;">
+            <span style="font-size:11px;color:var(--lv-lp-text-sub, #94a3b8);">📱 打开微信 / 支付宝 [扫一扫] 直接投喂 · 点击空白处或 Esc 键关闭</span>
+            <button type="button" class="lv-pop-sub-btn lv-sponsor-done-btn" style="padding:5px 16px;font-size:12px;font-weight:600;border-radius:8px;background:var(--lv-lp-panel-bg, #f1f5f9);color:var(--lv-lp-text, #0f172a);border:1px solid var(--lv-lp-border, rgba(15,23,42,0.12));cursor:pointer;">
+                <span>✕ 关闭</span>
+            </button>
+        </div>
+    `;
+
+    mask.appendChild(dialog);
+    document.body.appendChild(mask);
+
+    const onKeyDown = (ke: KeyboardEvent) => {
+        if (ke.key === "Escape") {
+            close();
+        }
+    };
+
+    const close = () => {
+        try {
+            document.removeEventListener("keydown", onKeyDown);
+            mask.remove();
+        } catch { /* ignore */ }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+
+    mask.addEventListener("click", (e) => {
+        if (e.target === mask) close();
+    });
+    dialog.querySelector(".lv-sponsor-close-btn")?.addEventListener("click", close);
+    dialog.querySelector(".lv-sponsor-done-btn")?.addEventListener("click", close);
+}
+
 export function openJoinQqGroup(): void {
     const groupNum = LV_FEEDBACK_QQ_GROUP; // "871707735"
     // 1. 自动写入系统剪贴板（保底：即使用户未装 QQ 客户端或协议唤起被拦截，群号已在剪贴板中）
@@ -4277,6 +4704,12 @@ export interface LvConflictDocItem {
     title: string;
     updated: string;
     length?: number;
+    childCount?: number;
+    baseDocId?: string;
+    baseDocTitle?: string;
+    baseDocHPath?: string;
+    baseDocLength?: number;
+    baseDocUpdated?: string;
 }
 
 export interface LvDuplicateDocEntry {
@@ -4298,6 +4731,52 @@ export interface LvDuplicateDocGroup {
     /** 同名文档间正文内容是否完全不同（表明属于不同主题，不应合并或误删） */
     isContentDivergent?: boolean;
     divergenceReason?: string;
+    /** 是否已加入用户白名单（忽略此组同名） */
+    isIgnored?: boolean;
+    /** 是否包含 0 字且 0 子文档的误建空壳 */
+    hasEmptyShell?: boolean;
+    /** 是否属于疑似同目录版本分叉 */
+    isSuspectedFork?: boolean;
+}
+
+export const RECONCILIATION_WHITELIST_KEY = "lv_reconciliation_whitelist_v1";
+
+export function getReconciliationWhitelist(): Set<string> {
+    try {
+        const ls = getSafeLocalStorage();
+        const raw = ls?.getItem(RECONCILIATION_WHITELIST_KEY);
+        if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) return new Set(arr.map((s) => String(s).trim()).filter(Boolean));
+        }
+    } catch { /* ignore */ }
+    return new Set();
+}
+
+export function saveReconciliationWhitelist(set: Set<string>): void {
+    try {
+        const ls = getSafeLocalStorage();
+        ls?.setItem(RECONCILIATION_WHITELIST_KEY, JSON.stringify(Array.from(set)));
+    } catch { /* ignore */ }
+}
+
+export function addReconciliationWhitelist(title: string): void {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const set = getReconciliationWhitelist();
+    set.add(trimmed);
+    saveReconciliationWhitelist(set);
+}
+
+export function removeReconciliationWhitelist(title: string): void {
+    const trimmed = title.trim();
+    const set = getReconciliationWhitelist();
+    set.delete(trimmed);
+    saveReconciliationWhitelist(set);
+}
+
+export function isReconciliationWhitelisted(title: string): boolean {
+    return getReconciliationWhitelist().has(title.trim());
 }
 
 export interface LvOrphanDailyNoteEntry {
@@ -4373,21 +4852,260 @@ export function isBenignHomonymTitle(title: string): boolean {
     return false;
 }
 
+/* ========================================================================= */
+/* 10b. 双栏内容级 Diff 与 LCS 差异比对引擎                                   */
+/* ========================================================================= */
+
+export interface LvDocDiffResult {
+    totalBlocksA: number;
+    totalBlocksB: number;
+    identicalCount: number;
+    uniqueCountA: number;
+    uniqueCountB: number;
+    uniqueWordsA: number;
+    uniqueWordsB: number;
+    similarityPercent: number;
+    rows: Array<{
+        type: "identical" | "diff" | "unique_a" | "unique_b";
+        blockA?: { id: string; content: string; type: string; diffHtml?: string };
+        blockB?: { id: string; content: string; type: string; diffHtml?: string };
+    }>;
+}
+
+export function computeStringSimilarity(s1: string, s2: string): number {
+    if (s1 === s2) return 1;
+    const len1 = s1.length;
+    const len2 = s2.length;
+    if (len1 === 0 || len2 === 0) return 0;
+    const bigrams1 = new Set<string>();
+    for (let i = 0; i < len1 - 1; i++) bigrams1.add(s1.slice(i, i + 2));
+    let common = 0;
+    for (let i = 0; i < len2 - 1; i++) {
+        if (bigrams1.has(s2.slice(i, i + 2))) common++;
+    }
+    return (2 * common) / (Math.max(1, len1 - 1) + Math.max(1, len2 - 1));
+}
+
+export function computeInlineTokenDiff(textA: string, textB: string): { htmlA: string; htmlB: string } {
+    const tokensA = textA.match(/[\u4e00-\u9fa5]|[\w]+|[^\s\w\u4e00-\u9fa5]|\s+/g) || [textA];
+    const tokensB = textB.match(/[\u4e00-\u9fa5]|[\w]+|[^\s\w\u4e00-\u9fa5]|\s+/g) || [textB];
+    const maxT = 160;
+    const tA = tokensA.slice(0, maxT);
+    const tB = tokensB.slice(0, maxT);
+
+    const dp: number[][] = Array.from({ length: tA.length + 1 }, () => new Array<number>(tB.length + 1).fill(0));
+    for (let i = 1; i <= tA.length; i++) {
+        const row = dp[i]!;
+        const prevRow = dp[i - 1]!;
+        const tokA = tA[i - 1] || "";
+        for (let j = 1; j <= tB.length; j++) {
+            const tokB = tB[j - 1] || "";
+            if (tokA === tokB) {
+                row[j] = (prevRow[j - 1] || 0) + 1;
+            } else {
+                row[j] = Math.max(prevRow[j] || 0, row[j - 1] || 0);
+            }
+        }
+    }
+
+    let i = tA.length;
+    let j = tB.length;
+    const outA: string[] = [];
+    const outB: string[] = [];
+
+    while (i > 0 || j > 0) {
+        const tokA = tA[i - 1] || "";
+        const tokB = tB[j - 1] || "";
+        const curRow = dp[i];
+        const prevRow = dp[i - 1];
+
+        if (i > 0 && j > 0 && tokA === tokB) {
+            outA.push(escapeHtml(tokA));
+            outB.push(escapeHtml(tokB));
+            i--; j--;
+        } else if (j > 0 && (i === 0 || ((curRow?.[j - 1] ?? 0) >= (prevRow?.[j] ?? 0)))) {
+            outB.push(`<ins style="background:rgba(16,185,129,0.22);color:#059669;text-decoration:none;border-radius:2px;padding:0 2px;font-weight:600;">${escapeHtml(tokB)}</ins>`);
+            j--;
+        } else if (i > 0 && (j === 0 || ((curRow?.[j - 1] ?? 0) < (prevRow?.[j] ?? 0)))) {
+            outA.push(`<del style="background:rgba(239,68,68,0.2);color:#ef4444;text-decoration:none;border-radius:2px;padding:0 2px;font-weight:600;">${escapeHtml(tokA)}</del>`);
+            i--;
+        }
+    }
+    const rawA = outA.reverse().join("").replace(/<\/del><del[^>]*>/g, "");
+    const rawB = outB.reverse().join("").replace(/<\/ins><ins[^>]*>/g, "");
+    return { htmlA: rawA, htmlB: rawB };
+}
+
+export function computeBlockLevelLcsDiff(
+    blocksA: Array<{ id: string; content: string; type: string }>,
+    blocksB: Array<{ id: string; content: string; type: string }>
+): LvDocDiffResult {
+    const m = blocksA.length;
+    const n = blocksB.length;
+    const normA = blocksA.map(b => b.content.replace(/\s+/g, " ").trim());
+    const normB = blocksB.map(b => b.content.replace(/\s+/g, " ").trim());
+
+    const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+    for (let i = 1; i <= m; i++) {
+        const row = dp[i]!;
+        const prevRow = dp[i - 1]!;
+        const nA = normA[i - 1] || "";
+        for (let j = 1; j <= n; j++) {
+            const nB = normB[j - 1] || "";
+            if (nA === nB || computeStringSimilarity(nA, nB) >= 0.4) {
+                row[j] = (prevRow[j - 1] || 0) + 1;
+            } else {
+                row[j] = Math.max(prevRow[j] || 0, row[j - 1] || 0);
+            }
+        }
+    }
+
+    let i = m;
+    let j = n;
+    const alignedRev: LvDocDiffResult["rows"] = [];
+    let identicalCount = 0;
+    let uniqueCountA = 0;
+    let uniqueCountB = 0;
+    let uniqueWordsA = 0;
+    let uniqueWordsB = 0;
+
+    while (i > 0 || j > 0) {
+        const blkA = blocksA[i - 1];
+        const blkB = blocksB[j - 1];
+        const nA = normA[i - 1] || "";
+        const nB = normB[j - 1] || "";
+        const curRow = dp[i];
+        const prevRow = dp[i - 1];
+
+        if (i > 0 && j > 0 && blkA && blkB && nA === nB) {
+            alignedRev.push({
+                type: "identical",
+                blockA: blkA,
+                blockB: blkB,
+            });
+            identicalCount++;
+            i--;
+            j--;
+        } else if (i > 0 && j > 0 && blkA && blkB && computeStringSimilarity(nA, nB) >= 0.4) {
+            const inline = computeInlineTokenDiff(blkA.content, blkB.content);
+            alignedRev.push({
+                type: "diff",
+                blockA: { id: blkA.id, content: blkA.content, type: blkA.type, diffHtml: inline.htmlA },
+                blockB: { id: blkB.id, content: blkB.content, type: blkB.type, diffHtml: inline.htmlB },
+            });
+            i--;
+            j--;
+        } else if (j > 0 && (i === 0 || ((curRow?.[j - 1] ?? 0) >= (prevRow?.[j] ?? 0)))) {
+            if (blkB) {
+                alignedRev.push({
+                    type: "unique_b",
+                    blockB: blkB,
+                });
+                uniqueCountB++;
+                uniqueWordsB += blkB.content.length;
+            }
+            j--;
+        } else if (i > 0 && (j === 0 || ((curRow?.[j - 1] ?? 0) < (prevRow?.[j] ?? 0)))) {
+            if (blkA) {
+                alignedRev.push({
+                    type: "unique_a",
+                    blockA: blkA,
+                });
+                uniqueCountA++;
+                uniqueWordsA += blkA.content.length;
+            }
+            i--;
+        }
+    }
+
+    const rows = alignedRev.reverse();
+
+    const total = m + n;
+    const similarityPercent = total > 0 ? Math.min(100, Math.round(((identicalCount * 2) / total) * 100)) : 100;
+
+    return {
+        totalBlocksA: m,
+        totalBlocksB: n,
+        identicalCount,
+        uniqueCountA,
+        uniqueCountB,
+        uniqueWordsA,
+        uniqueWordsB,
+        similarityPercent,
+        rows,
+    };
+}
+
 export const lvDeduplicator = {
-    /** 扫描全库因同步冲突产生的带 (冲突 或 conflict 字样的分叉文档 */
+    /** 扫描全库因同步冲突产生的带 (冲突 或 conflict 字样的分叉文档（并自动检索匹配原件真身） */
     async scanConflictDocs(): Promise<LvConflictDocItem[]> {
         try {
             const sql = `SELECT id, root_id, box, hpath, content, updated, length FROM blocks WHERE type='d' AND (content LIKE '%(冲突%' OR content LIKE '%_conflict_%' OR content LIKE '%conflict%') ORDER BY updated DESC LIMIT 50`;
             const res = await lvKernelPost("/api/query/sql", { stmt: sql });
             if (res.code === 0 && Array.isArray(res.data)) {
-                return res.data.map((row: any) => ({
-                    id: String(row.id || row.root_id),
-                    box: String(row.box || ""),
-                    hpath: String(row.hpath || ""),
-                    title: String(row.content || ""),
-                    updated: String(row.updated || ""),
-                    length: Number(row.length) || 0,
-                }));
+                const items: LvConflictDocItem[] = [];
+                for (const row of res.data) {
+                    const id = String(row.id || row.root_id);
+                    const box = String(row.box || "");
+                    const hpath = String(row.hpath || "");
+                    const title = String(row.content || "");
+                    const updated = String(row.updated || "");
+                    const length = Number(row.length) || 0;
+
+                    // 智能逆向推导原件标题（剥离 (冲突)、_conflict_ 等分叉标记）
+                    const cleanTitle = title
+                        .replace(/\s*[\(_（](?:冲突|conflict)[^\)）]*[\)）]/gi, "")
+                        .replace(/_conflict_\w+/gi, "")
+                        .replace(/_conflict/gi, "")
+                        .trim();
+
+                    let baseDocId: string | undefined;
+                    let baseDocTitle: string | undefined;
+                    let baseDocHPath: string | undefined;
+                    let baseDocLength: number | undefined;
+                    let baseDocUpdated: string | undefined;
+
+                    if (cleanTitle && cleanTitle !== title) {
+                        try {
+	                            const baseSql = `SELECT id, box, hpath, content, updated, length FROM blocks WHERE type='d' AND content='${cleanTitle.replace(/'/g, "''")}' AND id != '${id.replace(/'/g, "''")}' LIMIT 1`;
+                            const baseRes = await lvKernelPost("/api/query/sql", { stmt: baseSql });
+                            if (baseRes.code === 0 && Array.isArray(baseRes.data) && baseRes.data[0]?.id) {
+                                const bRow = baseRes.data[0];
+                                baseDocId = String(bRow.id);
+                                baseDocTitle = String(bRow.content || cleanTitle);
+                                baseDocHPath = String(bRow.hpath || "");
+                                baseDocLength = Number(bRow.length) || 0;
+                                baseDocUpdated = String(bRow.updated || "");
+                            }
+                        } catch { /* ignore */ }
+                    }
+
+                    // 检索子文档数
+                    let childCount = 0;
+                    try {
+                        const childSql = `SELECT count(1) as cnt FROM blocks WHERE parent_id='${id.replace(/'/g, "''")}' AND type='d' LIMIT 1`;
+                        const cRes = await lvKernelPost("/api/query/sql", { stmt: childSql });
+                        if (cRes.code === 0 && Array.isArray(cRes.data) && cRes.data[0]?.cnt) {
+                            childCount = Number(cRes.data[0].cnt) || 0;
+                        }
+                    } catch { /* ignore */ }
+
+                    items.push({
+                        id,
+                        box,
+                        hpath,
+                        title,
+                        updated,
+                        length,
+                        childCount,
+                        baseDocId,
+                        baseDocTitle,
+                        baseDocHPath,
+                        baseDocLength,
+                        baseDocUpdated,
+                    });
+                }
+                return items;
             }
         } catch { /* ignore */ }
         return [];
@@ -4396,14 +5114,15 @@ export const lvDeduplicator = {
     /** 扫描全库所有同名重复文档（智能区分合法同名与重复副本，支持内容指纹深度比对） */
     async scanDuplicateDocTitles(limit = 40): Promise<LvDuplicateDocGroup[]> {
         try {
+            const safeLimit = Math.min(200, Math.max(1, Math.trunc(Number(limit) || 40)));
             const sql = `
                 SELECT content as title, count(1) as cnt, group_concat(id, '|||') as ids, group_concat(box, '|||') as boxes, group_concat(hpath, '|||') as paths, group_concat(updated, '|||') as updateds, group_concat(length, '|||') as lengths
-                FROM blocks 
+                FROM blocks
                 WHERE type='d' AND content != ''
                 GROUP BY content
                 HAVING count(1) > 1
                 ORDER BY cnt DESC, max(updated) DESC
-                LIMIT ${limit}
+                LIMIT ${safeLimit}
             `;
             const res = await lvKernelPost("/api/query/sql", { stmt: sql });
             if (res.code === 0 && Array.isArray(res.data)) {
@@ -4447,8 +5166,11 @@ export const lvDeduplicator = {
                     const recommendedKeepId = docs[0]?.id || "";
 
                     const isBenign = isBenignHomonymTitle(title);
+                    const isIgnored = isReconciliationWhitelisted(title);
+                    const hasEmptyShell = docs.some((d) => d.length === 0 && (d.childCount || 0) === 0);
                     let isContentDivergent = false;
                     let divergenceReason: string | undefined;
+                    let isSuspectedFork = false;
                     const parentPaths = new Set(docs.map((d) => d.hpath.split("/").slice(0, -1).join("/")));
                     if (parentPaths.size > 1) {
                         const minLen = Math.min(...docs.map((d) => d.length));
@@ -4457,6 +5179,8 @@ export const lvDeduplicator = {
                             isContentDivergent = true;
                             divergenceReason = "位于不同分类路径且内容体量不同，属于独立文档";
                         }
+                    } else if (!isBenign && docs.length > 1) {
+                        isSuspectedFork = true;
                     }
 
                     return {
@@ -4467,6 +5191,9 @@ export const lvDeduplicator = {
                         isBenign,
                         isContentDivergent,
                         divergenceReason,
+                        isIgnored,
+                        hasEmptyShell,
+                        isSuspectedFork,
                     };
                 });
             }
@@ -4488,14 +5215,40 @@ export const lvDeduplicator = {
         return "";
     },
 
+    /** 块级拉取文档正文块列表（上限 200 块以保护性能） */
+    async getDocContentBlocks(docId: string, limit = 200): Promise<Array<{ id: string; content: string; type: string }>> {
+        if (!docId) return [];
+        try {
+            const sql = `SELECT id, content, type FROM blocks WHERE root_id = '${docId.replace(/'/g, "''")}' AND type IN ('p', 'h', 'b', 'i', 'c', 't', 'm', 'q') AND content != '' ORDER BY sort ASC LIMIT ${limit}`;
+            const res = await lvKernelPost("/api/query/sql", { stmt: sql });
+            if (res.code === 0 && Array.isArray(res.data)) {
+                return res.data.map((r: any) => ({
+                    id: String(r.id),
+                    content: String(r.content || "").replace(/[\r\n\t]+/g, " ").trim(),
+                    type: String(r.type || "p"),
+                })).filter((b: any) => b.content.length > 0);
+            }
+        } catch { /* ignore */ }
+        return [];
+    },
+
+    /** 对比两组文档块列表并产出 LCS 差异高亮与对账统计 */
+    computeBlockDiff(
+        blocksA: Array<{ id: string; content: string; type: string }>,
+        blocksB: Array<{ id: string; content: string; type: string }>
+    ): LvDocDiffResult {
+        return computeBlockLevelLcsDiff(blocksA, blocksB);
+    },
+
     /** 扫描指定文档内部重复粘贴的段落/列表/代码块 (type IN p, h, b, i, c) */
     async scanDocDuplicateBlocks(docId: string, minLength = 6): Promise<LvDocDuplicateBlockGroup[]> {
         if (!docId) return [];
         try {
+            const safeMinLength = Math.min(10000, Math.max(1, Math.trunc(Number(minLength) || 6)));
             const sql = `
                 SELECT content, type, count(1) as cnt, group_concat(id, '|||') as ids
                 FROM blocks
-                WHERE root_id = '${docId.replace(/'/g, "''")}' AND type IN ('p', 'h', 'b', 'i', 'c') AND length(content) >= ${minLength}
+                WHERE root_id = '${docId.replace(/'/g, "''")}' AND type IN ('p', 'h', 'b', 'i', 'c') AND length(content) >= ${safeMinLength}
                 GROUP BY content
                 HAVING count(1) > 1
                 ORDER BY cnt DESC
@@ -4546,14 +5299,23 @@ export const lvDeduplicator = {
     async safeRemoveDocToRecycle(docId: string, notebookId?: string): Promise<boolean> {
         if (!docId) return false;
         try {
-            let nb = notebookId;
-            if (!nb) {
-                const bRes = await lvKernelPost("/api/block/getBlockInfo", { id: docId });
-                nb = bRes?.data?.box;
+            // 删除前必须通过 getBlockInfo 实时校验 docId 是否存在，并获取最新的 notebook box 与真实 storage path
+            const bRes = await lvKernelPost("/api/block/getBlockInfo", { id: docId });
+            if (bRes?.code !== 0 || !bRes?.data) {
+                // 文档已被删除或 ID 无效，安全跳过，避免触发思源原生 block not found 报错
+                return false;
             }
-            if (!nb) return false;
-            const res = await lvKernelPost("/api/filetree/removeDoc", { notebook: nb, path: `/${docId}.sy` });
-            return res.code === 0;
+            const nb = bRes.data.box || notebookId;
+            const realPath = bRes.data.path || `/${docId}.sy`;
+            if (!nb || !realPath) return false;
+
+            // 优先按真实物理路径移入废纸篓
+            const res = await lvKernelPost("/api/filetree/removeDoc", { notebook: nb, path: realPath });
+            if (res?.code === 0) return true;
+
+            // 若因路径变动或端点差异失败，安全回退到 removeDocByID 兜底
+            const fallbackRes = await lvKernelPost("/api/filetree/removeDocByID", { id: docId, notebook: nb });
+            return fallbackRes?.code === 0;
         } catch { return false; }
     },
 
@@ -4563,16 +5325,18 @@ export const lvDeduplicator = {
         let groups = 0;
         const details: string[] = [];
         try {
-            const targetDate = dateStr || (() => {
+            const targetDate = (dateStr || (() => {
                 const d = new Date();
                 return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-            })();
+            })()).replace(/\D/g, "").slice(0, 8);
+            if (!targetDate) return { removedCount: 0, duplicateGroups: 0, details: [] };
             const sql = `
-                SELECT b.id, b.root_id, b.content, b.created 
-                FROM attributes a 
-                JOIN blocks b ON a.block_id = b.id 
+                SELECT b.id, b.root_id, b.content, b.created
+                FROM attributes a
+                JOIN blocks b ON a.block_id = b.id
                 WHERE a.name = 'custom-lifelog-type' AND (b.created LIKE '${targetDate}%' OR a.value LIKE '%${targetDate}%')
                 ORDER BY b.created ASC
+                LIMIT 2000
             `;
             const res = await lvKernelPost("/api/query/sql", { stmt: sql });
             if (res.code === 0 && Array.isArray(res.data)) {
@@ -4650,18 +5414,20 @@ export const lvDeduplicator = {
     async scanOrphanDailyNotes(): Promise<LvOrphanDailyNoteEntry[]> {
         const results: LvOrphanDailyNoteEntry[] = [];
         try {
-            const mainNbId = await resolveDailyNotebookId();
-            const openNbs = await listOpenNotebooks();
-            const nbMap = new Map<string, string>(openNbs.map((n) => [n.id, n.name]));
+	            const mainNbId = await resolveDailyNotebookId();
+	            const openNbs = await listOpenNotebooks();
+	            const nbMap = new Map<string, string>(openNbs.map((n) => [n.id, n.name]));
 
-            const sql = `
-                SELECT id, box, hpath, ial, updated, length
-                FROM blocks
-                WHERE type='d' 
-                  AND (ial LIKE '%custom-dailynote-%' OR hpath LIKE '%/daily note/%')
-                ORDER BY updated DESC
-                LIMIT 50
-            `;
+	            const excludeBoxClause = mainNbId ? `AND box != '${mainNbId.replace(/'/g, "''")}'` : "";
+	            const sql = `
+	                SELECT id, box, hpath, ial, updated, length
+	                FROM blocks
+	                WHERE type='d' 
+	                  AND (ial LIKE '%custom-dailynote-%' OR hpath LIKE '%/daily note/%')
+	                  ${excludeBoxClause}
+	                ORDER BY updated DESC
+	                LIMIT 100
+	            `;
             const res = await lvKernelPost("/api/query/sql", { stmt: sql });
             if (res.code === 0 && Array.isArray(res.data)) {
                 for (const row of res.data) {
@@ -4841,12 +5607,12 @@ export const lvDeduplicator = {
                 parts.pop();
                 const parentHPath = "/" + parts.join("/");
                 if (parentHPath === "/" || parentHPath === "") break;
-                const checkSql = `SELECT id FROM blocks WHERE box='${boxId.replace(/'/g, "''")}' AND hpath LIKE '${parentHPath}/%' AND id != '${docId}' LIMIT 1`;
-                const cRes = await lvKernelPost("/api/query/sql", { stmt: checkSql });
-                if (cRes.code === 0 && Array.isArray(cRes.data) && cRes.data.length === 0) {
-                    const pDocRes = await lvKernelPost("/api/query/sql", {
-                        stmt: `SELECT id FROM blocks WHERE type='d' AND box='${boxId.replace(/'/g, "''")}' AND hpath='${parentHPath}' LIMIT 1`,
-                    });
+	                const checkSql = `SELECT id FROM blocks WHERE box='${boxId.replace(/'/g, "''")}' AND hpath LIKE '${parentHPath.replace(/'/g, "''")}/%' AND id != '${docId.replace(/'/g, "''")}' LIMIT 1`;
+	                const cRes = await lvKernelPost("/api/query/sql", { stmt: checkSql });
+	                if (cRes.code === 0 && Array.isArray(cRes.data) && cRes.data.length === 0) {
+	                    const pDocRes = await lvKernelPost("/api/query/sql", {
+	                        stmt: `SELECT id FROM blocks WHERE type='d' AND box='${boxId.replace(/'/g, "''")}' AND hpath='${parentHPath.replace(/'/g, "''")}' LIMIT 1`,
+	                    });
                     if (pDocRes.code === 0 && Array.isArray(pDocRes.data) && pDocRes.data[0]?.id) {
                         await this.safeRemoveDocToRecycle(String(pDocRes.data[0].id), boxId);
                     }
@@ -4926,6 +5692,233 @@ export const lvDeduplicator = {
         return lines.join("\n");
     },
 
+    /** 一键清理全库所有 0 字空壳同名副本（严格满足 length===0 且 childCount===0，且组内保留有实质内容的真身） */
+    async cleanAllEmptyShells(groups: LvDuplicateDocGroup[]): Promise<{ cleanedCount: number; affectedGroups: number }> {
+        let cleanedCount = 0;
+        let affectedGroups = 0;
+        try {
+            for (const g of groups) {
+                const realDocs = g.docs.filter((d) => d.length > 0 || (d.childCount || 0) > 0);
+                const keepId = realDocs[0]?.id || g.recommendedKeepId;
+                const toRecycle = g.docs.filter((d) => d.id !== keepId && d.length === 0 && (d.childCount || 0) === 0);
+                if (toRecycle.length > 0) {
+                    affectedGroups++;
+                    for (const d of toRecycle) {
+                        if (await this.safeRemoveDocToRecycle(d.id, d.box)) {
+                            cleanedCount++;
+                        }
+                    }
+                }
+            }
+        } catch { /* ignore */ }
+        return { cleanedCount, affectedGroups };
+    },
+
+    /** 安全重命名思源文档（自动按文档 ID 查询物理路径并调用 /api/filetree/renameDoc） */
+    async renameDoc(docId: string, newTitle: string, notebookId?: string): Promise<{ ok: boolean; error?: string }> {
+        const cleanTitle = sanitizeFileNameSegment(newTitle, "", 120);
+        if (!docId || !cleanTitle) return { ok: false, error: "标题或文档 ID 为空" };
+        try {
+            let nb = notebookId;
+            let path = "";
+            const sql = `SELECT path, box FROM blocks WHERE id='${docId.replace(/'/g, "''")}' LIMIT 1`;
+            const qRes = await lvKernelPost("/api/query/sql", { stmt: sql });
+            if (qRes.code === 0 && Array.isArray(qRes.data) && qRes.data[0]) {
+                nb = nb || qRes.data[0].box;
+                path = String(qRes.data[0].path || "");
+            }
+            if (!nb) {
+                const bRes = await lvKernelPost("/api/block/getBlockInfo", { id: docId });
+                nb = bRes?.data?.box;
+            }
+            if (!nb) return { ok: false, error: "无法解析笔记本 ID" };
+            if (!path) path = `/${docId}.sy`;
+            if (!path.endsWith(".sy")) path += ".sy";
+
+            const res = await lvKernelPost("/api/filetree/renameDoc", {
+                notebook: nb,
+                path,
+                title: cleanTitle,
+            });
+            return { ok: res.code === 0, error: res.msg };
+        } catch (e: any) {
+            return { ok: false, error: e?.message || String(e) };
+        }
+    },
+
+    /**
+     * 极度严谨的跨文档增量合并：
+     * 将 sourceDoc 中的新增实质段落增量追加至 targetDoc 文末，杜绝重复段落；
+     * 合并成功后可选软删除 sourceDoc 到回收站。
+     */
+    async mergeDocBlocks(targetDocId: string, sourceDocId: string, options?: { recycleSource?: boolean; sourceBox?: string }): Promise<{ ok: boolean; mergedCount: number; msg: string }> {
+        if (!targetDocId || !sourceDocId) return { ok: false, mergedCount: 0, msg: "目标或来源文档 ID 为空" };
+        if (targetDocId === sourceDocId) return { ok: false, mergedCount: 0, msg: "同一文档无需合并" };
+	        try {
+	            const sRes = await lvKernelPost("/api/query/sql", {
+	                stmt: `SELECT id, type, content, markdown FROM blocks WHERE root_id='${sourceDocId.replace(/'/g, "''")}' AND type IN ('p','h','i','b','c') AND length(content) > 0 ORDER BY sort ASC LIMIT 2000`,
+	            });
+	            const sourceBlocks: Array<{ id?: string; type?: string; content?: string; markdown?: string }> = (sRes.code === 0 && Array.isArray(sRes.data)) ? sRes.data : [];
+
+	            const tRes = await lvKernelPost("/api/query/sql", {
+	                stmt: `SELECT content FROM blocks WHERE root_id='${targetDocId.replace(/'/g, "''")}' AND type IN ('p','h','i','b','c') LIMIT 2000`,
+	            });
+	            const existingContents = new Set<string>();
+	            if (tRes.code === 0 && Array.isArray(tRes.data)) {
+	                for (const tb of tRes.data) {
+	                    const c = (tb.content || "").replace(/[\r\n\t\s]+/g, " ").trim();
+	                    if (c) existingContents.add(c);
+	                }
+	            }
+
+	            const toMergeMarkdown: string[] = [];
+	            for (const sb of sourceBlocks) {
+	                const c = (sb.content || "").replace(/[\r\n\t\s]+/g, " ").trim();
+	                if (!c) continue;
+	                if (existingContents.has(c)) continue;
+	                // 铁律：必须优先使用真实完整的 markdown 语法（剥离尾部 IAL 标签），绝不可使用纯文本 content，完整保留公式/加粗/超链接
+	                let blockMd = "";
+	                if (typeof sb.markdown === "string" && sb.markdown.trim()) {
+	                    blockMd = sb.markdown.replace(/\{:[^}]*\}\s*$/g, "").trim();
+	                }
+	                if (!blockMd) {
+	                    blockMd = String(sb.content);
+	                }
+	                toMergeMarkdown.push(blockMd);
+	            }
+
+            let mergedCount = 0;
+            if (toMergeMarkdown.length > 0) {
+                const payloadMd = toMergeMarkdown.join("\n\n");
+                const appendRes = await withDocLock(targetDocId, async () => {
+                    return await lvKernelPost("/api/block/appendBlock", {
+                        parentID: targetDocId,
+                        data: payloadMd,
+                        dataType: "markdown",
+                    });
+                });
+                if (appendRes.code !== 0) {
+                    return { ok: false, mergedCount: 0, msg: `追加内容失败: ${appendRes.msg || "未知错误"}` };
+                }
+                mergedCount = toMergeMarkdown.length;
+            }
+
+            if (options?.recycleSource !== false) {
+                await this.safeRemoveDocToRecycle(sourceDocId, options?.sourceBox);
+            }
+
+            return {
+                ok: true,
+                mergedCount,
+                msg: mergedCount > 0 ? `✓ 成功将 ${mergedCount} 处增量段落合并至真身，副本已安全归档` : "✓ 副本内容已完全包含在真身中，无新增段落，已直接归档副本",
+            };
+        } catch (e: any) {
+            return { ok: false, mergedCount: 0, msg: `合并异常: ${e?.message || String(e)}` };
+        }
+    },
+
+    /** 批量合并全库所有孤立日记至主日记 */
+    async batchMergeOrphanDailyNotes(): Promise<{ mergedTotal: number; cleanedTotal: number; count: number }> {
+        const orphans = await this.scanOrphanDailyNotes();
+        let mergedTotal = 0;
+        let cleanedTotal = 0;
+        for (const o of orphans) {
+            const res = await this.mergeOrphanDailyNote(o.id);
+            if (res.ok) {
+                if (res.mergedCount > 0) mergedTotal += res.mergedCount;
+                cleanedTotal++;
+            }
+        }
+        return { mergedTotal, cleanedTotal, count: orphans.length };
+    },
+
+    /** 全库对账宏观健康度诊断（AI 智能参谋 + 离线启发式高精度双引擎） */
+    async aiSummarizeVaultHealth(params: {
+        dupDocGroups: LvDuplicateDocGroup[];
+        conflictDocs: LvConflictDocItem[];
+        orphanDailyNotes: LvOrphanDailyNoteEntry[];
+        dupClips: LvDuplicateClipGroup[];
+    }): Promise<{
+        score: number;
+        level: "excellent" | "good" | "warning" | "danger";
+        summaryHtml: string;
+        recommendations: string[];
+    }> {
+        const totalGroups = params.dupDocGroups.length;
+        const emptyGroups = params.dupDocGroups.filter((g) => g.hasEmptyShell).length;
+        const benignGroups = params.dupDocGroups.filter((g) => g.isBenign).length;
+        const forkGroups = params.dupDocGroups.filter((g) => g.isSuspectedFork && !g.isBenign).length;
+        const conflictCount = params.conflictDocs.length;
+        const orphanCount = params.orphanDailyNotes.length;
+
+        let deduction = conflictCount * 12 + emptyGroups * 4 + forkGroups * 5 + orphanCount * 6;
+        let score = Math.max(30, Math.min(100, 100 - deduction));
+        let level: "excellent" | "good" | "warning" | "danger" = "good";
+        if (score >= 95) level = "excellent";
+        else if (score >= 80) level = "good";
+        else if (score >= 60) level = "warning";
+        else level = "danger";
+
+        const recs: string[] = [];
+        if (conflictCount > 0) recs.push(`优先治理 ${conflictCount} 篇同步冲突分叉，防止跨设备编辑丢失增量`);
+        if (emptyGroups > 0) recs.push(`一键清理 ${emptyGroups} 组误建的 0 字空壳，快速净化知识库树`);
+        if (forkGroups > 0) recs.push(`对 ${forkGroups} 组同目录疑似版本分叉执行【双栏对比与增量合并】`);
+        if (benignGroups > 0) recs.push(`已自动智能保护 ${benignGroups} 组月份/结构同名，避免误删`);
+        if (orphanCount > 0) recs.push(`建议一键将 ${orphanCount} 篇插件专属本误建日记无损迁移回主日记`);
+        if (recs.length === 0) recs.push("全库文档健康度极佳，无冗余分叉与空壳！");
+
+        let aiComment = "";
+        try {
+            const prompt = `你是一位知识库架构与数据健康诊断专家。根据以下思源笔记全库对账指标：
+- 全库同名文档组：${totalGroups} 组（其中合法时间结构 ${benignGroups} 组，含 0 字空壳 ${emptyGroups} 组，疑似分叉 ${forkGroups} 组）
+- 同步冲突文档：${conflictCount} 篇
+- 跨笔记本孤立日记：${orphanCount} 篇
+- 健康评分：${score} 分
+请用简练、专业、鼓励性的两句话（不超过80字）向用户给出宏观评价与处置重心：`;
+            // 优先接入生态 5 级自适应 AI 路由，开箱即用免全局阻塞
+            const router = (window as any).LvAiRouter || (window as any).__LV_AI_ROUTER__;
+            if (router && typeof router.chat === "function") {
+                const outcome = await router.chat({
+                    messages: [{ role: "user", content: prompt }],
+                    taskType: "summary",
+                });
+                if (outcome.ok && outcome.content) {
+                    aiComment = outcome.content.trim();
+                }
+            }
+            if (!aiComment) {
+                const aiRes = await lvKernelPost("/api/ai/agent/chat", { prompt });
+                if (aiRes.code === 0 && typeof aiRes.data === "string" && aiRes.data.trim()) {
+                    aiComment = aiRes.data.trim();
+                } else if (aiRes.code === 0 && (aiRes.data as any)?.content) {
+                    aiComment = String((aiRes.data as any).content).trim();
+                }
+            }
+        } catch { /* soft */ }
+
+        if (!aiComment) {
+            aiComment = score >= 90
+                ? "全库数据架构基本健康，仅有少量零星空壳或历史分叉，处置后即可达到极简纯净状态。"
+                : "检测到多端同步分叉或部分误建空壳，建议优先一键清理 0 字空壳，并对冲突文档执行增量合并。";
+        }
+
+        const summaryHtml = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                <div style="font-size:24px;font-weight:800;color:${score >= 85 ? "#10b981" : score >= 70 ? "#f59e0b" : "#ef4444"};">
+                    ${score}<span style="font-size:12px;font-weight:600;opacity:.8;">/100分</span>
+                </div>
+                <div style="flex:1;font-size:11.5px;color:var(--lv-lp-text);line-height:1.5;">
+                    <strong>AI 参谋综述：</strong>${escapeHtml(aiComment)}
+                </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:10.5px;">
+                ${recs.map(r => `<span style="padding:2px 8px;border-radius:5px;background:rgba(37,99,235,0.08);color:var(--lv-lp-accent,#2563eb);border:1px solid var(--lv-lp-border);">💡 ${escapeHtml(r)}</span>`).join("")}
+            </div>
+        `;
+
+        return { score, level, summaryHtml, recommendations: recs };
+    },
+
     /** 将审计报告安全落盘至「🐴 小驴生态」大本营 */
     async saveAuditReportToHub(mdContent: string): Promise<{ ok: boolean; path?: string; docId?: string }> {
         try {
@@ -4965,14 +5958,17 @@ export interface LvAiJudgeDocInfo {
 }
 
 export interface LvAiJudgeReport {
-    channel: "siyuan-ai" | "heuristic";
+    channel: "siyuan-ai" | "heuristic" | "siyuan" | "user_custom" | "ollama" | "public_free" | "rule_fallback";
+    latencyMs?: number;
+    fallbackTrace?: string;
     similarityPercent: number;
     category: "independent-topic" | "shell-and-content" | "version-fork" | "identical-duplicate";
     categoryLabel: string;
     categoryBadgeColor: string;
     keyDifferences: string[];
     recommendation: string;
-    suggestedAction: "keep-both" | "keep-first" | "keep-second" | "manual-review";
+    suggestedAction: "keep-both" | "keep-first" | "keep-second" | "merge-incremental" | "smart-rename" | "manual-review";
+    suggestedRenameTitle?: string;
     rawMarkdown: string;
 }
 
@@ -4994,7 +5990,7 @@ export const lvAiJudge = {
                     `文档 A（${docA.hpath}）为 0 字空占位文档`,
                     `文档 B（${docB.hpath}）包含 ${docB.length} 字实体正文`,
                 ],
-                recommendation: "检测到文档 A 为误建的空壳占位文档，文档 B 含有完整正文。建议保留实体文档 B，并清理空壳文档 A。",
+                recommendation: "检测到文档 A 为误建的空壳占位文档，文档 B 含有完整正文。建议点击【采纳建议：清理空壳】。",
                 suggestedAction: "keep-second",
                 rawMarkdown: "### 1. 关系定性与相似度\n- 定性：空壳与实体\n- 相似度：0%\n\n### 2. 核心信息差异\n- 文档 A 为 0 字空壳，文档 B 含有完整正文。\n\n### 3. 专家处置建议\n- 建议保留文档 B 并清理文档 A。",
             };
@@ -5010,7 +6006,7 @@ export const lvAiJudge = {
                     `文档 A（${docA.hpath}）包含 ${docA.length} 字实体正文`,
                     `文档 B（${docB.hpath}）为 0 字空占位文档`,
                 ],
-                recommendation: "检测到文档 B 为误建的空壳占位文档，文档 A 含有完整正文。建议保留实体文档 A，并清理空壳文档 B。",
+                recommendation: "检测到文档 B 为误建的空壳占位文档，文档 A 含有完整正文。建议点击【采纳建议：清理空壳】。",
                 suggestedAction: "keep-first",
                 rawMarkdown: "### 1. 关系定性与相似度\n- 定性：空壳与实体\n- 相似度：0%\n\n### 2. 核心信息差异\n- 文档 B 为 0 字空壳，文档 A 含有完整正文。\n\n### 3. 专家处置建议\n- 建议保留文档 A 并清理文档 B。",
             };
@@ -5020,6 +6016,11 @@ export const lvAiJudge = {
             const lenDiff = Math.abs(docA.length - docB.length);
             const maxLen = Math.max(docA.length, docB.length, 1);
             const ratio = lenDiff / maxLen;
+            const parentParts = parentB.split("/").filter(Boolean);
+            const lastPart = parentParts[parentParts.length - 1];
+            const folderTag = lastPart ? lastPart.replace(/^\d+[-_.]\s*/, "") : "副本";
+            const suggestedRenameTitle = `${docB.title} (${folderTag})`;
+
             return {
                 channel: "heuristic",
                 similarityPercent: Math.max(5, Math.round((1 - ratio) * 45)),
@@ -5030,9 +6031,10 @@ export const lvAiJudge = {
                     `文档 A 位于分类路径「${parentA || "/"}」，字数 ${docA.length}`,
                     `文档 B 位于分类路径「${parentB || "/"}」，字数 ${docB.length}`,
                 ],
-                recommendation: "两篇文档位于完全不同的分类路径下，属于独立业务主题。强烈建议【保留两者】，切勿随意合并或删除！",
+                recommendation: "两篇文档位于完全不同的分类路径下，属于独立业务主题。强烈建议【保留两者】；若担心混淆，可点击【采纳建议：区分改名】。",
                 suggestedAction: "keep-both",
-                rawMarkdown: "### 1. 关系定性与相似度\n- 定性：独立主题文档\n- 相似度评估：低于 30%\n\n### 2. 核心信息差异\n- 位于不同知识库分支，业务范畴互不重叠。\n\n### 3. 专家处置建议\n- 建议：保留两者（请勿合并或删除）。",
+                suggestedRenameTitle,
+                rawMarkdown: "### 1. 关系定性与相似度\n- 定性：独立主题文档\n- 相似度评估：低于 30%\n\n### 2. 核心信息差异\n- 位于不同知识库分支，业务范畴互不重叠。\n\n### 3. 专家处置建议\n- 建议：保留两者（请勿合并或删除），或点击区分改名。",
             };
         }
 
@@ -5047,9 +6049,9 @@ export const lvAiJudge = {
                 `文档 A 更新于 ${formatSyTimestamp(docA.updated)} (${docA.length} 字)`,
                 `文档 B 更新于 ${formatSyTimestamp(docB.updated)} (${docB.length} 字)`,
             ],
-            recommendation: "两篇文档位于同一目录下，疑似多设备同步分叉或重复创建。建议点击下方摘要对比正文，或保留更新时间更近的一份。",
-            suggestedAction: "manual-review",
-            rawMarkdown: "### 1. 关系定性与相似度\n- 定性：疑似版本分叉副本\n- 相似度评估：约 85%\n\n### 2. 核心信息差异\n- 处于同一目录，可能系多端并发同步分叉。\n\n### 3. 专家处置建议\n- 建议用户对照正文后，保留更新时间较新的一份。",
+            recommendation: "两篇文档位于同一目录下，疑似多设备同步分叉或重复创建。建议点击【采纳建议：智能合并增量】，自动将副本新增段落追加至真身并归档副本。",
+            suggestedAction: "merge-incremental",
+            rawMarkdown: "### 1. 关系定性与相似度\n- 定性：疑似版本分叉副本\n- 相似度评估：约 85%\n\n### 2. 核心信息差异\n- 处于同一目录，可能系多端并发同步分叉。\n\n### 3. 专家处置建议\n- 建议用户点击【增量合并】保留双方新增内容，或保留更新时间较新的一份。",
         };
     },
 
@@ -5079,7 +6081,8 @@ ${docB.snippet || "(无正文/空文档)"}
 【重要原则】
 1. 绝对严谨：重名不代表重复！如果两篇文档在不同分类目录且正文关注点不同，必须判定为“独立主题文档”，并建议“保留两者”，严防误删！
 2. 若一方为 0 字空占位而另一方有实质内容，请判定为“空壳与实体”。
-3. 严禁代替用户决策！只给出客观的差异对比和处置建议。
+3. 若两篇在同一目录且正文相似但有增量，请判定为“版本分叉”，建议“增量合并”。
+4. 严禁代替用户决策！如果建议区分改名，请给出【推荐新标题：XXX】。
 
 请直接以清晰的 Markdown 结构输出以下 3 项（请勿输出开场白或多余废话）：
 ### 1. 关系定性与相似度
@@ -5091,22 +6094,49 @@ ${docB.snippet || "(无正文/空文档)"}
 - 文档 B 独有特征：...
 
 ### 3. 专家处置建议
-- 建议：[保留两者 / 建议保留文档 A 并清理空壳 B / 建议保留较新的 B 等]
+- 建议：[保留两者 / 建议保留文档 A 并清理空壳 B / 建议增量合并等]
+- 推荐新标题：[如需改名请填新标题，否则填无]
 - 理由：...
 `;
-            const aiRes = await lvKernelPost("/api/ai/chatGPT", { msg: prompt });
             let rawText = "";
-            if (aiRes.code === 0 && typeof aiRes.data === "string" && aiRes.data.trim()) {
-                rawText = aiRes.data.trim();
-            } else if (aiRes.code === 0 && (aiRes.data as any)?.text) {
-                rawText = String((aiRes.data as any).text).trim();
+            let usedChannel: any = "siyuan-ai";
+            let latencyMs = 0;
+            let fallbackTrace: string | undefined;
+
+            const router = (typeof window !== "undefined" && (window as any).getSharedAiRouter)
+                ? (window as any).getSharedAiRouter()
+                : null;
+
+            if (router) {
+                const aiRes = await router.chat({
+                    messages: [{ role: "user", content: prompt }],
+                    taskType: "chat",
+                });
+                if (aiRes.ok && aiRes.content) {
+                    rawText = aiRes.content.trim();
+                    usedChannel = aiRes.provider;
+                    latencyMs = aiRes.latencyMs;
+                    if (aiRes.fallbackHistory && aiRes.fallbackHistory.length > 0) {
+                        fallbackTrace = aiRes.fallbackHistory.map((h: any) => `${h.provider}: ${h.error}`).join(" ➔ ");
+                    }
+                }
+            } else {
+                let aiRes = await lvKernelPost("/api/ai/agent/chat", { prompt });
+                if (aiRes.code !== 0) {
+                    aiRes = await lvKernelPost("/api/ai/chat", { prompt });
+                }
+                if (aiRes.code === 0 && typeof aiRes.data === "string" && aiRes.data.trim()) {
+                    rawText = aiRes.data.trim();
+                } else if (aiRes.code === 0 && (aiRes.data as any)?.content) {
+                    rawText = String((aiRes.data as any).content).trim();
+                }
             }
 
             if (rawText && rawText.length > 20) {
                 let category: "independent-topic" | "shell-and-content" | "version-fork" | "identical-duplicate" = "independent-topic";
                 let categoryLabel = "🟢 独立主题文档 (保留两者)";
                 let categoryBadgeColor = "var(--b3-theme-success,#059669)";
-                let suggestedAction: "keep-both" | "keep-first" | "keep-second" | "manual-review" = "keep-both";
+                let suggestedAction: "keep-both" | "keep-first" | "keep-second" | "merge-incremental" | "smart-rename" | "manual-review" = "keep-both";
 
                 if (/空壳|占位/i.test(rawText)) {
                     category = "shell-and-content";
@@ -5122,28 +6152,98 @@ ${docB.snippet || "(无正文/空文档)"}
                     category = "version-fork";
                     categoryLabel = "⚠️ 版本演进分叉";
                     categoryBadgeColor = "var(--b3-theme-warning,#d97706)";
-                    suggestedAction = "manual-review";
+                    suggestedAction = "merge-incremental";
                 }
 
                 let sim = 30;
                 const mSim = rawText.match(/(\d{1,3})%/);
                 if (mSim && mSim[1]) sim = Number(mSim[1]);
 
+                let suggestedRenameTitle: string | undefined;
+                const mTitle = rawText.match(/推荐新标题[：:]\s*([^\r\n]+)/);
+                if (mTitle && mTitle[1] && !/无|不改|原名/i.test(mTitle[1])) {
+                    suggestedRenameTitle = mTitle[1].replace(/[《》]/g, "").trim();
+                }
+
                 return {
-                    channel: "siyuan-ai",
+                    channel: usedChannel,
+                    latencyMs,
+                    fallbackTrace,
                     similarityPercent: sim,
                     category,
                     categoryLabel,
                     categoryBadgeColor,
                     keyDifferences: [],
-                    recommendation: "思源 AI 已生成专业研判建议。请查看下方详情并手动处置。",
+                    recommendation: "AI 智能参谋已生成专业研判建议。请查看下方详情并选择一键采纳或手动处置。",
                     suggestedAction,
+                    suggestedRenameTitle,
                     rawMarkdown: rawText,
                 };
             }
         } catch { /* soft fallback */ }
 
         return this.heuristicJudge(docA, docB);
+    },
+
+    /** 同步冲突文档专属智能研判 */
+    judgeConflictPair(conflictDoc: LvConflictDocItem): {
+        recommendation: string;
+        suggestedAction: "merge-incremental" | "keep-base" | "keep-conflict" | "rename-conflict";
+        suggestedTitle: string;
+        details: string[];
+    } {
+        const cleanTitle = conflictDoc.title
+            .replace(/\s*[\(_（](?:冲突|conflict)[^\)）]*[\)）]/gi, "")
+            .replace(/_conflict_\w+/gi, "")
+            .trim();
+        const baseDoc = conflictDoc.baseDocId ? {
+            id: conflictDoc.baseDocId,
+            title: conflictDoc.baseDocTitle || cleanTitle,
+            length: conflictDoc.baseDocLength || 0,
+            updated: conflictDoc.baseDocUpdated || "",
+        } : null;
+
+        const suggestedTitle = `${cleanTitle} (离线分叉-${(conflictDoc.updated || "").slice(0, 8) || "副本"})`;
+
+        if (!baseDoc) {
+            return {
+                recommendation: "全库未检索到对应的原件文档，可能原件已被重命名或移除。建议先点击【打开对比】查阅内容，或重命名为独立文档保留。",
+                suggestedAction: "rename-conflict",
+                suggestedTitle,
+                details: ["未匹配到同名基础文档", "建议保留或人工排查"],
+            };
+        }
+
+        const lenDiff = (conflictDoc.length || 0) - baseDoc.length;
+        if (lenDiff > 0) {
+            return {
+                recommendation: `冲突版本 (${conflictDoc.length}字) 比原件 (${baseDoc.length}字) 多 ${lenDiff} 字！疑似移动端离线新增了实质内容。强烈建议点击【🔄 增量合并进原件】，将离线增量无损追加回原件！`,
+                suggestedAction: "merge-incremental",
+                suggestedTitle,
+                details: [
+                    `冲突版字数：${conflictDoc.length || 0} 字`,
+                    `原件字数：${baseDoc.length} 字`,
+                    `更新时间：冲突版 ${formatSyTimestamp(conflictDoc.updated)} vs 原件 ${formatSyTimestamp(baseDoc.updated)}`,
+                ],
+            };
+        } else if (conflictDoc.length === 0) {
+            return {
+                recommendation: "冲突版为 0 字空文档，原件保留有实质正文。可安全点击【🗑️ 清理冲突版】将其移入回收站。",
+                suggestedAction: "keep-base",
+                suggestedTitle,
+                details: ["冲突版为 0 字空文档", "原件数据完整健康"],
+            };
+        }
+
+        return {
+            recommendation: `冲突版与原件内容量接近 (差额 ${Math.abs(lenDiff)} 字)。建议点击【🔄 增量合并】自动保留双方新内容，或【✏️ 规范改名】消除冲突红标。`,
+            suggestedAction: "merge-incremental",
+            suggestedTitle,
+            details: [
+                `冲突版：${conflictDoc.length || 0} 字 · ${formatSyTimestamp(conflictDoc.updated)}`,
+                `原件：${baseDoc.length} 字 · ${formatSyTimestamp(baseDoc.updated)}`,
+            ],
+        };
     },
 
     /** 日记孤立文档专属 AI 研判 */
@@ -5260,10 +6360,19 @@ function getLaunchpadStates(): Record<string, "pinned" | "docked" | "hidden"> {
         const raw = ls.getItem(LAUNCHPAD_STORAGE_KEY);
         if (raw) {
             if (raw !== cachedLaunchpadStatesRaw || !cachedLaunchpadStatesParsed) {
-                cachedLaunchpadStatesParsed = JSON.parse(raw);
                 cachedLaunchpadStatesRaw = raw;
+                // 2026-11-21 走查修复：合法 JSON 标量（"abc"/数字等）会被对象展开成索引键混入
+                // pinned/docked/hidden 状态表，磁贴显隐错乱。形态不符时置空回退内存态。
+                try {
+                    const parsedStates = JSON.parse(raw);
+                    cachedLaunchpadStatesParsed = (parsedStates && typeof parsedStates === "object" && !Array.isArray(parsedStates))
+                        ? parsedStates
+                        : null;
+                } catch {
+                    cachedLaunchpadStatesParsed = null;
+                }
             }
-            return { ...memoryLaunchpadStates, ...cachedLaunchpadStatesParsed };
+            return { ...memoryLaunchpadStates, ...(cachedLaunchpadStatesParsed ?? {}) };
         }
         cachedLaunchpadStatesRaw = null;
         cachedLaunchpadStatesParsed = null;
@@ -5463,6 +6572,10 @@ function getLaunchpadHub(): LvLaunchpadHub {
 
         saveQuickWorkspaceConfig(patch: Partial<LvQuickWorkspaceConfig>): void {
             saveQuickWorkspaceConfig(patch);
+        },
+
+        openQuickWorkspaceConfig(tab?: string): void {
+            openQuickWorkspaceConfig(tab);
         }
     };
 
@@ -5472,12 +6585,19 @@ function getLaunchpadHub(): LvLaunchpadHub {
     (hub as any).openMobileSheet = () => openMobileSheet();
     (hub as any).closeMobileSheet = () => closeMobileSheet();
     (hub as any).openDesktopPopover = () => openDesktopLaunchpadPopover();
+    (hub as any).getTodaySummary = () => getTodaySummary(hub.getItems());
+    (hub as any).openQuickWorkspaceConfig = (tab?: string) => openQuickWorkspaceConfig(tab);
     window.__LV_LAUNCHPAD__ = hub;
     healMissingPluginsFromHost(sharedRegistry);
     return hub;
 }
 
 export const lvLaunchpad = {
+    /** 打开小驴罗盘与全生态统一设置中心（760×560px 独立分类窗口） */
+    openSettings(tab?: string): void {
+        openQuickWorkspaceConfig(tab);
+    },
+
     /** 向小驴罗盘注册插件入口（替代传统的 addTopBar，支持置顶/收敛/隐藏与二级行动） */
     register(item: LvLaunchpadItem): () => void {
         return getLaunchpadHub().register(item);
@@ -5706,6 +6826,11 @@ export const lvLaunchpad = {
         openJoinQqGroup();
     },
 
+    /** 呼起小驴全生态投喂 Token 赞助卡片 */
+    openSponsorModal(): void {
+        openSponsorModal();
+    },
+
     /** 唤醒移动端底部弹射坞（Bottom Sheet：磁贴网格 + 穿透搜索 + 长按展开二级行动） */
     openMobileSheet(): void {
         openMobileSheet();
@@ -5825,7 +6950,8 @@ export function normalizeBallPosition(raw: unknown): LvBallPosition {
     return { edge, yRatio: Math.min(0.85, Math.max(0.15, y)), immersive: obj.immersive === true };
 }
 
-function clampBallYRatio(v: number): number {
+/** 通用 yRatio 钳制带（持久化垃圾值消毒用；拖拽期请用与像素带同源的钳制） */
+export function clampBallYRatio(v: number): number {
     return Math.min(0.85, Math.max(0.15, v));
 }
 
@@ -6120,8 +7246,14 @@ function buildMobileBallButton(): boolean {
             const vh = typeof window !== "undefined" && Number.isFinite(window.innerHeight) ? window.innerHeight : 800;
             const top = Math.min(vh - 88, Math.max(56, y));
             ball.style.top = `${top}px`;
-            pos = { ...pos, edge: x < vw / 2 ? "left" : "right", yRatio: clampBallYRatio(top / vh) };
-            ball.style.left = pos.edge === "right" ? `${Math.max(8, vw - 56)}px` : "10px";
+            // yRatio 必须与拖拽像素带 [56, vh-88] 同源钳制：此前走 clampBallYRatio 的
+            // [0.15, 0.85] 通用带，在矮视口（横屏手机 vh≈360~580）松手后 applyBallPosition
+            // 会按 ratio 重算位置，球体从用户松手点跳走最多 ~64px。
+            const yMin = 56 / vh;
+            const yMax = Math.max(yMin, (vh - 88) / vh);
+            pos = { ...pos, edge: x < vw / 2 ? "left" : "right", yRatio: Math.min(yMax, Math.max(yMin, top / vh)) };
+            const ballLeft = Math.min(vw - 56, Math.max(10, Math.round(x - 23)));
+            ball.style.left = `${ballLeft}px`;
             ball.classList.remove("lv-ball-edge-left", "lv-ball-edge-right");
             ball.classList.add(pos.edge === "right" ? "lv-ball-edge-right" : "lv-ball-edge-left");
         } catch { /* ignore */ }
@@ -6189,7 +7321,7 @@ function buildMobileBallButton(): boolean {
     ball.addEventListener("click", () => {
         if (suppressClick) { suppressClick = false; return; } // 拖拽结束的合成 click 不开坞
         const now = Date.now();
-        if (now - lastBallClickTime < 240) {
+        if (now - lastBallClickTime < 250) {
             // 双击悬浮球：极速直达 LifeLog 流！
             lastBallClickTime = 0;
             if (ballSingleTimer !== undefined) {
@@ -6197,6 +7329,7 @@ function buildMobileBallButton(): boolean {
                 ballSingleTimer = undefined;
             }
             hapticFeedback(14);
+            closeMobileSheet(true);
             openLifeLogDialog();
             return;
         }
@@ -6206,7 +7339,7 @@ function buildMobileBallButton(): boolean {
             hapticFeedback(8);
             openMobileSheet();
             scheduleBallIdle(ball, pos);
-        }, 180);
+        }, 250);
     });
     ball.addEventListener("contextmenu", (e) => {
         e.preventDefault();
@@ -6533,6 +7666,9 @@ function ensureMobileEntry(): MobileEntryCleanup {
     if (typeof document === "undefined") return () => {};
     ensureStyles();
     if (!isMobileFrontend()) return () => {}; // 桌面端完全 no-op，不挂任何计时器
+    // 2026-11-21 走查修复（LPM-1）：LPM-1 的模态遮挡规避规则位于 ensureDesktopStyles 注入表，
+    // 原先该表只在桌面 popover 打开时注入 → 移动端规则缺失、修复不生效。移动入口创建时同步注入。
+    try { ensureDesktopStyles(); } catch { /* ignore */ }
     const owners = getSharedMobileEntryOwners();
     const owner = `owner_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     owners.add(owner);
@@ -6712,7 +7848,7 @@ function maybeShowDesktopConvergenceOnboarding(itemCount: number): void {
  * 8 大插件并发加载时，将频繁的连续全量顶栏收敛合并为 1 次批量同步，减少 87% 的启动期 DOM 回流
  */
 export function scheduleTopBarConvergence(delayMs = 80): void {
-    if (typeof window === "undefined" || isMobileFrontend()) return;
+    if (typeof window === "undefined" || typeof document === "undefined" || isMobileFrontend() || typeof window.setTimeout !== "function") return;
     const w = window as unknown as { __LV_TOPBAR_CONVERGENCE_TIMER__?: number | null };
     if (w.__LV_TOPBAR_CONVERGENCE_TIMER__ !== undefined && w.__LV_TOPBAR_CONVERGENCE_TIMER__ !== null) {
         window.clearTimeout(w.__LV_TOPBAR_CONVERGENCE_TIMER__);
@@ -6725,7 +7861,7 @@ export function scheduleTopBarConvergence(delayMs = 80): void {
 
 let mobileEntryDebounceTimer: number | null = null;
 export function scheduleMobileEntryDom(delayMs = 35): void {
-    if (typeof window === "undefined" || !isMobileFrontend()) return;
+    if (typeof window === "undefined" || typeof document === "undefined" || !isMobileFrontend() || typeof window.setTimeout !== "function") return;
     if (mobileEntryDebounceTimer !== null) {
         window.clearTimeout(mobileEntryDebounceTimer);
     }
@@ -7005,6 +8141,16 @@ function ensureDesktopStyles(): void {
 #lvLaunchpadDesktopEntry,
 #lvLaunchpadMobileEntry {
   transition: transform 0.14s ease, background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+/* LPM-1（2026-11-21 走查修复）：模态弹窗打开期间隐藏移动罗盘入口。
+   入口 z-index(960) 高于思源模态层（.b3-dialog z≈60），几何上完全压住全屏移动弹窗
+   左上角的返回/关闭控件（实证：打卡移动端关闭按钮 44×44 被完全遮挡，点击命中罗盘），
+   并在雷切/闪卡/考试弹窗左上角形成视觉叠压。用 opacity+visibility 保布局不回流；
+   思源移动端 WebView 已要求 Chromium 111+（同文件使用 color-mix），:has 安全。 */
+body:has(.b3-dialog--open) #lvLaunchpadMobileEntry {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 #lvLaunchpadDesktopEntry:active,
 #lvLaunchpadMobileEntry:active {
@@ -7669,6 +8815,141 @@ function ensureDesktopStyles(): void {
   .lv-desktop-launchpad-popover .lv-pop-header > div:last-child { width: 100%; flex-wrap: wrap; }
   .lv-desktop-launchpad-popover .lv-pop-footer { flex-wrap: wrap; }
 }
+
+/* ===== AI 智能调度中枢五级瀑布可视化与分级说明 ===== */
+.lv-ai-hub-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+}
+.lv-ai-waterfall-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--lv-lp-panel-bg, #f8fafc);
+  border: 1px solid var(--lv-lp-border, rgba(15,23,42,0.08));
+}
+.lv-ai-waterfall-track {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 6px 2px;
+  scrollbar-width: thin;
+}
+.lv-ai-wf-node {
+  flex: 1 1 0;
+  min-width: 105px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--lv-lp-card-bg, #fff);
+  border: 1px solid var(--lv-lp-border, rgba(15,23,42,0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+.lv-ai-wf-node.preferred {
+  border-color: var(--lv-lp-accent, #2563eb) !important;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--lv-lp-accent, #2563eb) 35%, transparent);
+  background: var(--lv-lp-accent-soft, rgba(37,99,235,0.08)) !important;
+}
+.lv-ai-wf-arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--lv-lp-text-sub, #64748b);
+  font-weight: 700;
+  font-size: 13px;
+  opacity: 0.55;
+  user-select: none;
+}
+.lv-ai-tier-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--lv-lp-card-bg, #fff);
+  border: 1px solid var(--lv-lp-border, rgba(15,23,42,0.08));
+  box-shadow: var(--lv-lp-card-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s ease;
+}
+.lv-ai-tier-card:hover {
+  border-color: var(--lv-lp-border-strong, rgba(15,23,42,0.18));
+}
+.lv-ai-tier-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lv-ai-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1.5px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: var(--lv-lp-panel-bg, #f8fafc);
+  border: 1px solid var(--lv-lp-border, rgba(15,23,42,0.08));
+  color: var(--lv-lp-text-sub, #64748b);
+  white-space: nowrap;
+}
+.lv-ai-chip.accent {
+  background: var(--lv-lp-accent-soft, rgba(37,99,235,0.08));
+  color: var(--lv-lp-accent, #2563eb);
+  border-color: color-mix(in srgb, var(--lv-lp-accent, #2563eb) 25%, transparent);
+}
+.lv-ai-chip.success {
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.lv-ai-referrals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  margin: 6px 0;
+}
+.lv-ai-referral-card {
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--lv-lp-panel-bg, #f8fafc);
+  border: 1px solid var(--lv-lp-border, rgba(15,23,42,0.08));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.lv-ai-referral-card.featured {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: color-mix(in srgb, #10b981 6%, var(--lv-lp-card-bg, #fff));
+  box-shadow: 0 2px 6px -1px rgba(16, 185, 129, 0.12);
+}
+.lv-ai-referral-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--lv-lp-border-strong, rgba(15,23,42,0.18));
+}
+.lv-ai-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1.5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid var(--lv-lp-border, rgba(15,23,42,0.1));
+  background: var(--lv-lp-panel-bg, #f8fafc);
+  color: var(--lv-lp-text-sub, #64748b);
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .lv-ai-referrals-grid { grid-template-columns: 1fr; }
+  .lv-ai-waterfall-track { flex-wrap: nowrap; }
+}
 `;
         if (!existing) document.head.appendChild(style);
     } catch { /* ignore */ }
@@ -8146,6 +9427,583 @@ function buildActionsDrawerInnerHtml(
     `;
 }
 
+/* ========================================================================= */
+/* AI 智能调度中枢：五级瀑布降级链路、五张分级说明卡与推荐厂商注册体系              */
+/* ========================================================================= */
+
+const FALLBACK_AI_REFERRALS = [
+    {
+        id: "siliconflow",
+        name: "硅基流动 (SiliconFlow)",
+        shortName: "硅基流动",
+        tagline: "国产高可用云端中转 · 极低门槛与丰富前沿模型",
+        freeQuotaHint: "🎁 注册即送 2000 万 Token (¥14 额度)",
+        costHint: "免费额度极充裕 · 赠额耗尽后极低成本 (约 ¥0.001/千字)",
+        badgeText: "重点推荐",
+        badgeColor: "#10b981",
+        baseUrl: "https://api.siliconflow.cn/v1",
+        defaultModel: "deepseek-ai/DeepSeek-V3",
+        recommendedModels: [
+            "deepseek-ai/DeepSeek-V3",
+            "deepseek-ai/DeepSeek-R1",
+            "Qwen/Qwen2.5-7B-Instruct",
+            "THUDM/glm-4-9b-chat",
+        ],
+        referralUrl: "https://cloud.siliconflow.cn/i/eFm443fW",
+        officialUrl: "https://siliconflow.cn/",
+        features: [
+            "注册即送 ¥14 / 2000万 Token 体验金",
+            "DeepSeek-V3 / R1 满血版极速直连",
+            "标准 OpenAI 协议无缝兼容",
+            "千兆骨干专线，平均延迟仅两三百毫秒",
+        ],
+    },
+    {
+        id: "deepseek",
+        name: "DeepSeek 官方开放平台",
+        shortName: "DeepSeek",
+        tagline: "开源之光 · 业界顶尖推理模型与极致性价比",
+        freeQuotaHint: "新用户注册绑定即送 500 万 Token 体验包",
+        costHint: "价格极度亲民 (输入仅 ¥1/M · 输出 ¥2/M)",
+        badgeText: "旗舰推理",
+        badgeColor: "#3b82f6",
+        baseUrl: "https://api.deepseek.com/v1",
+        defaultModel: "deepseek-chat",
+        recommendedModels: ["deepseek-chat", "deepseek-reasoner"],
+        referralUrl: "",
+        officialUrl: "https://platform.deepseek.com/",
+        features: [
+            "DeepSeek-V3 全能大模型",
+            "DeepSeek-R1 深度长思维链",
+            "命中上下文缓存享 1 折优惠",
+            "官方原生直连 API 端点",
+        ],
+    },
+    {
+        id: "bailian",
+        name: "阿里云百炼 (通义千问)",
+        shortName: "阿里百炼",
+        tagline: "企业级安全合规 · 阿里通义主力大模型集群",
+        freeQuotaHint: "新开通百炼赠送千问主力模型 100~400 万免费 Token",
+        costHint: "按量计费 · 阿里云基础设施稳定不丢包",
+        badgeText: "企业级稳定",
+        badgeColor: "#ff6a00",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        defaultModel: "qwen-plus",
+        recommendedModels: ["qwen-plus", "qwen-turbo", "qwen-max"],
+        referralUrl: "",
+        officialUrl: "https://bailian.console.aliyun.com/",
+        features: [
+            "阿里通义千问 2.5 旗舰集群",
+            "OpenAI 兼容模式一键接入",
+            "金融级安全合规与高可用保障",
+            "大厂 SLA 服务保证不掉线",
+        ],
+    },
+    {
+        id: "zhipu",
+        name: "智谱清言 (BigModel GLM)",
+        shortName: "智谱清言",
+        tagline: "清华自研基座 · 中文常识与语义结构化特化",
+        freeQuotaHint: "新注册赠送 2500 万 Token 资源包",
+        costHint: "GLM-4-Flash 个人开发者永久免费调用",
+        badgeText: "中文特化",
+        badgeColor: "#6366f1",
+        baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+        defaultModel: "glm-4-flash",
+        recommendedModels: ["glm-4-flash", "glm-4", "glm-4-air"],
+        referralUrl: "",
+        officialUrl: "https://open.bigmodel.cn/",
+        features: [
+            "GLM-4-Flash 个人永久免费",
+            "中文语境与知识结构化出色",
+            "支持 Function Calling / 深度拟题",
+        ],
+    },
+    {
+        id: "moonshot",
+        name: "月之暗面 Kimi (Moonshot)",
+        shortName: "Kimi",
+        tagline: "长文本理解先驱 · 超强长文摘要与考题拆解",
+        freeQuotaHint: "新注册赠送 ¥15 开发者体验金",
+        costHint: "长文本无损保持 · 阶梯式定价",
+        badgeText: "长文专家",
+        badgeColor: "#0ea5e9",
+        baseUrl: "https://api.moonshot.cn/v1",
+        defaultModel: "moonshot-v1-8k",
+        recommendedModels: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+        referralUrl: "",
+        officialUrl: "https://platform.moonshot.cn/",
+        features: [
+            "长达 128k/200k 超长上下文窗口",
+            "复杂笔记与大纲无损保持记忆",
+            "语义细节检索极其精准",
+        ],
+    },
+    {
+        id: "openrouter",
+        name: "OpenRouter (全球模型聚合)",
+        shortName: "OpenRouter",
+        tagline: "一处配置 · 随心调用全球主流开源与商业大模型",
+        freeQuotaHint: "内置数十款带有 :free 标签的永久 0 元开源模型",
+        costHint: "按 Token 实际成本扣费 · 支持单 Key 路由多模型",
+        badgeText: "全球聚合",
+        badgeColor: "#8b5cf6",
+        baseUrl: "https://openrouter.ai/api/v1",
+        defaultModel: "meta-llama/llama-3.1-70b-instruct",
+        recommendedModels: [
+            "meta-llama/llama-3.1-70b-instruct",
+            "google/gemini-flash-1.5",
+            "mistralai/mistral-7b-instruct:free",
+        ],
+        referralUrl: "",
+        officialUrl: "https://openrouter.ai/",
+        features: [
+            "聚合 Claude/GPT-4o/Llama/Gemini 全球模型",
+            "数十款 :free 社区开源模型 0 元免充值",
+            "统一 OpenAI 标准格式请求",
+        ],
+    },
+    {
+        id: "groq",
+        name: "Groq (极速推理引擎)",
+        shortName: "Groq",
+        tagline: "专用 LPU 硬件芯片 · 体验每秒 500+ 字闪电响应",
+        freeQuotaHint: "免费版提供充足的每分钟请求限制 (RPM/RPD)",
+        costHint: "超高吞吐 · 拟题与打卡闪念几乎 0 延迟秒出",
+        badgeText: "毫秒极速",
+        badgeColor: "#f43f5e",
+        baseUrl: "https://api.groq.com/openai/v1",
+        defaultModel: "llama-3.3-70b-versatile",
+        recommendedModels: [
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "mixtral-8x7b-32768",
+        ],
+        referralUrl: "",
+        officialUrl: "https://console.groq.com/",
+        features: [
+            "专用 LPU 芯片架构，500+ Token/s",
+            "流式输出几近无感知延迟",
+            "免费配额充裕，适合高速高频拟题",
+        ],
+    },
+];
+
+function getSafeAiReferrals(): typeof FALLBACK_AI_REFERRALS {
+    if (typeof window !== "undefined" && Array.isArray((window as any).AI_PROVIDER_REFERRALS)) {
+        return (window as any).AI_PROVIDER_REFERRALS;
+    }
+    return FALLBACK_AI_REFERRALS;
+}
+
+function buildAiWaterfallFlowchartHtml(prefProvider = "auto"): string {
+    const nodes = [
+        { key: "siyuan", tier: "Tier 1", name: "思源智能体", icon: "🟢", initial: "未检测" },
+        { key: "user_custom", tier: "Tier 2", name: "自配商用Key", icon: "🔵", initial: "未配置" },
+        { key: "ollama", tier: "Tier 3", name: "本地Ollama", icon: "🟣", initial: "未检测" },
+        { key: "public_free", tier: "Tier 4", name: "免密公用池", icon: "🌐", initial: "就绪" },
+        { key: "rule_fallback", tier: "Tier 5", name: "离线规则", icon: "⚡", initial: "始终就绪" },
+    ];
+
+    let trackHtml = "";
+    nodes.forEach((n, idx) => {
+        const isPref = prefProvider === n.key;
+        trackHtml += `
+          <div class="lv-ai-wf-node lv-ai-node-${n.key} ${isPref ? "preferred" : ""}" data-provider="${n.key}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
+              <span style="font-size:10px;font-weight:700;color:var(--lv-lp-accent,#2563eb);">${n.tier}</span>
+              ${isPref ? `<span style="font-size:9.5px;color:var(--lv-lp-accent,#2563eb);font-weight:600;">★首选</span>` : ""}
+            </div>
+            <div style="font-size:11.5px;font-weight:600;color:var(--lv-lp-text,#0f172a);display:flex;align-items:center;gap:3px;white-space:nowrap;">
+              <span>${n.icon}</span>
+              <span>${n.name}</span>
+            </div>
+            <span class="lv-ai-status-badge lv-ai-probe-${n.key}" style="font-size:9.5px;">${n.initial}</span>
+          </div>
+        `;
+        if (idx < nodes.length - 1) {
+            trackHtml += `<div class="lv-ai-wf-arrow">➔</div>`;
+        }
+    });
+
+    return `
+      <div class="lv-ai-waterfall-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:13px;">🌊</span>
+            <strong style="font-size:12px;color:var(--lv-lp-text,#0f172a);">五级自适应降级链路</strong>
+            <span style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);">自动级联 · 0 秒等待 · 毫秒兜底</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="lv-ai-global-test-summary" style="font-size:10.5px;font-weight:600;color:var(--lv-lp-text-sub);"></span>
+            <button type="button" class="lv-pop-sub-btn lv-ai-test-all-btn" style="padding:2px 8px;font-size:10.5px;font-weight:600;border-radius:6px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));color:var(--lv-lp-accent,#2563eb);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));cursor:pointer;">🧪 一键全级测速</button>
+          </div>
+        </div>
+        <div class="lv-ai-waterfall-track">
+          ${trackHtml}
+        </div>
+      </div>
+    `;
+}
+
+function buildAiReferralVendorsHtml(): string {
+    const referrals = getSafeAiReferrals();
+    let cardsHtml = "";
+    referrals.forEach((v) => {
+        const isFeatured = v.id === "siliconflow";
+        const hasReferral = Boolean(v.referralUrl && v.referralUrl.trim().length > 0);
+        cardsHtml += `
+          <div class="lv-ai-referral-card ${isFeatured ? "featured" : ""}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+              <strong style="font-size:12px;color:var(--lv-lp-text,#0f172a);">${escapeHtml(v.name)}</strong>
+              ${v.badgeText ? `<span class="lv-ai-chip" style="font-size:9.5px;color:${v.badgeColor || '#2563eb'};border-color:color-mix(in srgb, ${v.badgeColor || '#2563eb'} 35%, transparent);">${escapeHtml(v.badgeText)}</span>` : ""}
+            </div>
+            <div style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);line-height:1.4;">${escapeHtml(v.tagline)}</div>
+            <div style="font-size:11px;font-weight:600;color:#10b981;line-height:1.4;background:rgba(16,185,129,0.06);padding:3px 6px;border-radius:4px;border:1px dashed rgba(16,185,129,0.25);">
+              ${escapeHtml(v.freeQuotaHint)}
+            </div>
+            <div style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);">${escapeHtml(v.costHint)}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+              <button type="button" class="lv-pop-sub-btn lv-ai-fill-vendor-btn" data-base-url="${escapeHtml(v.baseUrl)}" data-model="${escapeHtml(v.defaultModel)}" data-vendor-name="${escapeHtml(v.shortName)}" style="padding:2.5px 8px;font-size:10.5px;font-weight:600;color:var(--lv-lp-accent,#2563eb);background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid var(--lv-lp-border);border-radius:5px;cursor:pointer;">
+                ⚡ 一键填入配置
+              </button>
+              ${hasReferral ? `
+                <button type="button" class="lv-pop-sub-btn lv-ai-open-referral-btn" data-url="${escapeHtml(v.referralUrl || '')}" style="padding:2.5px 8px;font-size:10.5px;font-weight:600;color:#10b981;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:5px;cursor:pointer;">
+                  🎁 领赠额 / 注册直达
+                </button>
+              ` : ""}
+            </div>
+          </div>
+        `;
+    });
+
+    return `
+      <div style="margin-top:6px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:11.5px;font-weight:700;color:var(--lv-lp-text,#0f172a);">🌟 推荐主流服务商与免费赠额直达</span>
+          <span style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);">点击「一键填入」即可极速配置</span>
+        </div>
+        <div class="lv-ai-referrals-grid">
+          ${cardsHtml}
+        </div>
+      </div>
+    `;
+}
+
+function buildAiTierCardsHtml(aiCfg: any, _isCompact = false): string {
+    const custom = aiCfg.userCustom || {};
+    const ollama = aiCfg.ollama || {};
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <!-- Card 1: 思源内核智能体 -->
+        <div class="lv-ai-tier-card" data-tier="1">
+          <div class="lv-ai-tier-header">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🟢 Tier 1 · 思源内核智能体 (Kernel Agent)</strong>
+              <span class="lv-ai-chip">思源全局设置计费</span>
+              <span class="lv-ai-chip">内核原生中转</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="lv-ai-status-badge lv-ai-tier-badge-siyuan lv-ai-probe-siyuan">未检测</span>
+              <button type="button" class="lv-pop-sub-btn lv-ai-test-tier-btn" data-provider="siyuan" style="padding:1.5px 7px;font-size:10px;">🧪 测速</button>
+            </div>
+          </div>
+          <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
+            💡 <strong>机制与定位</strong>：复用思源笔记「设置 ➔ 智能体」中的官方服务商或代理。若您已在思源配置好大模型，小驴全家桶自动优先调用，多插件零多余配置。
+          </div>
+        </div>
+
+        <!-- Card 2: 用户自配商用 API -->
+        <div class="lv-ai-tier-card" data-tier="2">
+          <div class="lv-ai-tier-header">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🔵 Tier 2 · 用户自配商用 API (OpenAI 协议)</strong>
+              <span class="lv-ai-chip success">赠海量免费额度</span>
+              <span class="lv-ai-chip accent">直连端点 · 本地脱敏</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="lv-ai-status-badge lv-ai-tier-badge-user_custom lv-ai-probe-user_custom">未配置</span>
+              <button type="button" class="lv-pop-sub-btn lv-ai-test-tier-btn" data-provider="user_custom" style="padding:1.5px 7px;font-size:10px;">🧪 测速</button>
+            </div>
+          </div>
+          <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
+            💡 <strong>机制与品质</strong>：直连云端商业大模型（支持 DeepSeek-V3/R1、Qwen2.5 等满血版）。新用户注册主流平台免费赠送数百万至两千万 Token，耗尽后每千字仅几厘钱，生成质量与思维链最佳。
+          </div>
+          ${buildAiReferralVendorsHtml()}
+          <div style="display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:11.5px;color:var(--lv-lp-text,#0f172a);font-weight:600;">API 基础地址</span>
+              <input type="text" class="lv-cfg-ai-custom-url lv-ai-custom-url-input b3-text-field" placeholder="https://api.siliconflow.cn/v1" value="${escapeHtml(custom.baseUrl || '')}" style="font-size:11px;padding:4px 8px;border-radius:6px;width:240px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);" />
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:11.5px;color:var(--lv-lp-text,#0f172a);font-weight:600;">API Key</span>
+              <input type="password" class="lv-cfg-ai-custom-key lv-ai-custom-key-input b3-text-field" placeholder="sk-..." value="${escapeHtml(custom.apiKey || '')}" style="font-size:11px;padding:4px 8px;border-radius:6px;width:240px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);" />
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:11.5px;color:var(--lv-lp-text,#0f172a);font-weight:600;">模型名称</span>
+              <input type="text" class="lv-cfg-ai-custom-model lv-ai-custom-model-input b3-text-field" placeholder="deepseek-ai/DeepSeek-V3" value="${escapeHtml(custom.model || '')}" style="font-size:11px;padding:4px 8px;border-radius:6px;width:240px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: 本地 Ollama 离线推理 -->
+        <div class="lv-ai-tier-card" data-tier="3">
+          <div class="lv-ai-tier-header">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🟣 Tier 3 · 本地 Ollama 离线推理 (物理级绝对隐私)</strong>
+              <span class="lv-ai-chip success">0 元永久免费</span>
+              <span class="lv-ai-chip">100% 数据不出设备</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="lv-ai-status-badge lv-ai-tier-badge-ollama lv-ai-probe-ollama">未检测</span>
+              <button type="button" class="lv-pop-sub-btn lv-ai-test-tier-btn" data-provider="ollama" style="padding:1.5px 7px;font-size:10px;">🧪 测速</button>
+            </div>
+          </div>
+          <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
+            💡 <strong>机制与隐私</strong>：自动感知本地运行的 Ollama 进程。笔记与题库 100% 在本机物理显卡/CPU 计算，断网环境畅通运行，永无任何外网传输风险。推荐模型：<code>qwen2.5:7b</code> / <code>deepseek-r1:7b</code>。
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:11.5px;color:var(--lv-lp-text,#0f172a);font-weight:600;">Ollama 服务地址</span>
+              <button type="button" class="lv-pop-sub-btn lv-ai-open-link-btn" data-url="https://ollama.com" style="padding:1px 6px;font-size:10px;color:var(--lv-lp-accent,#2563eb);">访问 Ollama 官网 ↗</button>
+            </div>
+            <input type="text" class="lv-cfg-ai-ollama-url lv-ai-ollama-url-input b3-text-field" placeholder="http://127.0.0.1:11434" value="${escapeHtml(ollama.baseUrl || 'http://127.0.0.1:11434')}" style="font-size:11px;padding:4px 8px;border-radius:6px;width:240px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);" />
+          </div>
+        </div>
+
+        <!-- Card 4: 公开免密免费通道 -->
+        <div class="lv-ai-tier-card" data-tier="4">
+          <div class="lv-ai-tier-header">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🌐 Tier 4 · 公开免密免费通道 (0 元免配置)</strong>
+              <span class="lv-ai-chip success">0 元免密即用</span>
+              <span class="lv-ai-chip accent">强制前置 PII 脱敏</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="lv-ai-status-badge lv-ai-tier-badge-public_free lv-ai-probe-public_free">就绪</span>
+              <button type="button" class="lv-pop-sub-btn lv-ai-test-tier-btn" data-provider="public_free" style="padding:1.5px 7px;font-size:10px;">🧪 测速</button>
+            </div>
+          </div>
+          <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
+            💡 <strong>机制与脱敏安全</strong>：开箱即用，无需申请任何 Key 或绑定手机。🛡️ <strong>本地 PII 隐私脱敏护盾自动生效</strong>：数据外发前纯本地抹除人名、电话、邮箱、身份证与内网 IP，绝不泄露个人隐私。
+          </div>
+        </div>
+
+        <!-- Card 5: 本地轻量规则兜底 -->
+        <div class="lv-ai-tier-card" data-tier="5">
+          <div class="lv-ai-tier-header">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">⚡ Tier 5 · 本地轻量规则离线兜底 (Heuristic Fallback)</strong>
+              <span class="lv-ai-chip">0 成本 · 0 延迟</span>
+              <span class="lv-ai-chip">100% 纯本地内存</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="lv-ai-status-badge lv-ai-tier-badge-rule_fallback lv-ai-probe-rule_fallback">始终就绪 (1ms)</span>
+              <button type="button" class="lv-pop-sub-btn lv-ai-test-tier-btn" data-provider="rule_fallback" style="padding:1.5px 7px;font-size:10px;">🧪 测速</button>
+            </div>
+          </div>
+          <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
+            💡 <strong>可靠性终极防线</strong>：内置纯 TypeScript 启发式语法分词与反思模板。当所有外部 API 离线或欠费时自动毫秒级接管，保障制卡、试卷解析绝不白屏报错。
+          </div>
+        </div>
+      </div>
+    `;
+}
+
+function updateTierStatusBadge(container: HTMLElement, provider: string, res: any): void {
+    const badges = container.querySelectorAll<HTMLElement>(`.lv-ai-probe-${provider}, .lv-ai-tier-badge-${provider}`);
+    badges.forEach((badge) => {
+        if (res.ok) {
+            const ms = typeof res.latencyMs === "number" ? res.latencyMs : 0;
+            const text = res.statusText || `${ms}ms`;
+            badge.textContent = `✓ ${text}`;
+            badge.style.color = "#10b981";
+            badge.style.borderColor = "rgba(16, 185, 129, 0.35)";
+            badge.style.background = "rgba(16, 185, 129, 0.08)";
+        } else {
+            const err = res.statusText || res.error || "未配置/不可用";
+            badge.textContent = `○ ${err}`;
+            const isUnconfigured = err.includes("未") || err.includes("已停用");
+            badge.style.color = isUnconfigured ? "var(--lv-lp-text-sub,#64748b)" : "#ef4444";
+            badge.style.borderColor = isUnconfigured ? "var(--lv-lp-border,rgba(15,23,42,0.12))" : "rgba(239, 68, 68, 0.35)";
+            badge.style.background = isUnconfigured ? "var(--lv-lp-panel-bg,#f8fafc)" : "rgba(239, 68, 68, 0.06)";
+        }
+    });
+}
+
+function attachAiHubEventListeners(
+    root: HTMLElement,
+    onSaveCallback?: () => void,
+    toastFn?: (msg: string) => void,
+): void {
+    // 1. 输入框与下拉变化自动保存
+    const triggerSave = () => {
+        onSaveCallback?.();
+        const prefVal = root.querySelector<HTMLSelectElement>(".lv-cfg-ai-pref-provider, .lv-ai-pref-provider-select")?.value || "auto";
+        root.querySelectorAll<HTMLElement>(".lv-ai-wf-node").forEach((node) => {
+            const p = node.getAttribute("data-provider");
+            node.classList.toggle("preferred", p === prefVal);
+        });
+        toastFn?.("✓ AI 调度配置已更新");
+    };
+
+    root.querySelectorAll("input, select").forEach((el) => {
+        el.addEventListener("change", triggerSave);
+    });
+
+    // 2. 厂商「一键填入配置」
+    root.querySelectorAll<HTMLButtonElement>(".lv-ai-fill-vendor-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const baseUrl = btn.getAttribute("data-base-url") || "";
+            const model = btn.getAttribute("data-model") || "";
+            const name = btn.getAttribute("data-vendor-name") || "推荐厂商";
+
+            const urlInput = root.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-url, .lv-ai-custom-url-input");
+            const modelInput = root.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-model, .lv-ai-custom-model-input");
+            const keyInput = root.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-key, .lv-ai-custom-key-input");
+
+            if (urlInput) urlInput.value = baseUrl;
+            if (modelInput) modelInput.value = model;
+            if (keyInput) keyInput.focus();
+
+            triggerSave();
+            const msg = `✓ 已填入 ${name} 接口与模型配置，请填入您的 API Key`;
+            if (toastFn) toastFn(msg);
+            else if (typeof lvNotify !== "undefined" && typeof lvNotify.capsule === "function") {
+                lvNotify.capsule({ source: "AI 调度中枢", message: msg, duration: 3000, level: "success", archive: false });
+            }
+        });
+    });
+
+    // 3. 推荐链接 / 官网跳转 (优先 Electron shell.openExternal)
+    root.querySelectorAll<HTMLButtonElement>(".lv-ai-open-referral-btn, .lv-ai-open-link-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const url = btn.getAttribute("data-url");
+            if (!url) return;
+
+            let launched = false;
+            try {
+                let electron: any = null;
+                if (typeof window !== "undefined" && (window as any).require) {
+                    try { electron = (window as any).require("electron"); } catch { /* ignore */ }
+                }
+                const shell = electron?.shell || ((window as any)?.require ? (window as any).require("electron")?.shell : null);
+                if (shell && typeof shell.openExternal === "function") {
+                    shell.openExternal(url).catch(() => {
+                        if (typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
+                    });
+                    launched = true;
+                }
+            } catch { /* ignore */ }
+
+            if (!launched && typeof window !== "undefined") {
+                try { window.open(url, "_blank", "noopener,noreferrer"); } catch { /* ignore */ }
+            }
+
+            if (typeof lvNotify !== "undefined" && typeof lvNotify.capsule === "function") {
+                lvNotify.capsule({ source: "AI 调度中枢", message: "✓ 正在呼起默认浏览器直达平台…", duration: 3000, level: "info", archive: false });
+            }
+        });
+    });
+
+    // 4. 一键全级测速
+    root.querySelectorAll<HTMLButtonElement>(".lv-ai-test-all-btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            btn.disabled = true;
+            btn.textContent = "⏳ 测速中...";
+
+            const summaryEl = root.querySelector<HTMLElement>(".lv-ai-global-test-summary");
+            if (summaryEl) summaryEl.textContent = "并发测速 5 级通道...";
+
+            const router = (typeof window !== "undefined" && (window as any).getSharedAiRouter) ? (window as any).getSharedAiRouter() : null;
+            if (!router) {
+                btn.disabled = false;
+                btn.textContent = "🧪 一键全级测速";
+                if (summaryEl) summaryEl.textContent = "未检测到调度中枢";
+                return;
+            }
+
+            try {
+                const results = typeof router.testAllTiers === "function"
+                    ? await router.testAllTiers()
+                    : {
+                        siyuan: await router.testChannel("siyuan"),
+                        user_custom: await router.testChannel("user_custom"),
+                        ollama: await router.testChannel("ollama"),
+                        public_free: await router.testChannel("public_free"),
+                        rule_fallback: await router.testChannel("rule_fallback"),
+                    };
+
+                btn.disabled = false;
+                btn.textContent = "🧪 重新全级测速";
+
+                let readyCount = 0;
+                for (const [provider, res] of Object.entries(results as Record<string, any>)) {
+                    if (res && res.ok) readyCount++;
+                    updateTierStatusBadge(root, provider, res);
+                }
+                if (summaryEl) {
+                    summaryEl.textContent = `✓ 5 级探测完毕：${readyCount} 级就绪`;
+                    summaryEl.style.color = readyCount >= 2 ? "#10b981" : "#f59e0b";
+                }
+            } catch (err: any) {
+                btn.disabled = false;
+                btn.textContent = "🧪 重新全级测速";
+                if (summaryEl) {
+                    summaryEl.textContent = `✗ 探测异常: ${err?.message || String(err)}`;
+                    summaryEl.style.color = "#ef4444";
+                }
+            }
+        });
+    });
+
+    // 5. 单级独立测速
+    root.querySelectorAll<HTMLButtonElement>(".lv-ai-test-tier-btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const provider = btn.getAttribute("data-provider");
+            if (!provider) return;
+
+            btn.disabled = true;
+            btn.textContent = "⏳ 测速...";
+
+            const router = (typeof window !== "undefined" && (window as any).getSharedAiRouter) ? (window as any).getSharedAiRouter() : null;
+            if (!router) {
+                btn.disabled = false;
+                btn.textContent = "🧪 测速";
+                return;
+            }
+
+            try {
+                let res: any;
+                if (provider === "siyuan" && typeof router.probeTier1 === "function") res = await router.probeTier1();
+                else if (provider === "user_custom" && typeof router.probeTier2 === "function") res = await router.probeTier2();
+                else if (provider === "ollama" && typeof router.probeTier3 === "function") res = await router.probeTier3();
+                else if (provider === "public_free" && typeof router.probeTier4 === "function") res = await router.probeTier4();
+                else if (provider === "rule_fallback" && typeof router.probeTier5 === "function") res = router.probeTier5();
+                else res = await router.testChannel(provider as any);
+
+                btn.disabled = false;
+                btn.textContent = "🧪 测速";
+                updateTierStatusBadge(root, provider, res);
+            } catch (err: any) {
+                btn.disabled = false;
+                btn.textContent = "🧪 测速";
+                updateTierStatusBadge(root, provider, { ok: false, error: err?.message || String(err), statusText: "异常" });
+            }
+        });
+    });
+}
+
 /**
  * R434 & Phase 12：罗盘 5.0 弹射坞 HTML 构建（纯函数，兼顾单测安全转义契约与完整 9 宫格设计目标）。
  * 注册数据（名称/描述/徽标/颜色/ID 来自兄弟插件 register 调用，非本插件可信输入）
@@ -8292,6 +10150,39 @@ export function buildLaunchpadPopoverHtml(
                 return `
                   <div style="font-weight:700;font-size:12px;color:var(--lv-lp-accent,#2563eb);margin-top:4px;">🔕 已设免打扰提醒分类 (${mutedCats.length})</div>
                   <div style="display:flex;flex-direction:column;gap:3px;">${mRows}</div>
+                `;
+            })()}
+            ${(() => {
+                const aiCfg = typeof window !== "undefined" && (window as any).loadAiRouterConfig
+                    ? (window as any).loadAiRouterConfig()
+                    : {
+                        enableSiyuan: true,
+                        enableRuleFallback: true,
+                        publicFree: { enabled: true },
+                        ollama: { enabled: true, baseUrl: "http://127.0.0.1:11434" },
+                    };
+                const prefProvider = aiCfg.preferredProvider || "auto";
+                return `
+                  <div style="font-weight:700;font-size:12px;color:var(--lv-lp-accent,#2563eb);margin-top:6px;display:flex;align-items:center;justify-content:space-between;">
+                    <span>🤖 小驴全生态 AI 智能调度中枢</span>
+                    <button type="button" class="lv-pop-sub-btn lv-ai-test-all-btn" title="一键测试全部五级通道连通性与响应延迟" style="padding:1.5px 7px;font-size:10px;">🧪 全级测速</button>
+                  </div>
+                  <div style="background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.18);padding:6px 10px;border-radius:6px;font-size:11px;line-height:1.45;color:var(--lv-lp-text);">
+                    💡 <strong>全家桶共享</strong>：在此配置一次，闪卡拟题、考试分析、打卡解析、罗盘对账等 8 大插件<strong>全域即刻生效</strong>。默认五级自适应瀑布降级（思源 ➔ 用户Key ➔ 本地Ollama ➔ 免费通道 ➔ 离线规则）。
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;">
+                    <span style="font-size:11.5px;color:var(--lv-lp-text);">首选通道模式</span>
+                    <select class="lv-ai-pref-provider-select" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:3px 8px;border-radius:6px;font-size:11px;width:196px;cursor:pointer;">
+                      <option value="auto" ${prefProvider === "auto" ? "selected" : ""}>🌊 五级自适应瀑布流 (推荐)</option>
+                      <option value="siyuan" ${prefProvider === "siyuan" ? "selected" : ""}>🟢 优先思源内核智能体</option>
+                      <option value="user_custom" ${prefProvider === "user_custom" ? "selected" : ""}>🔵 优先自填 Key (OpenAI)</option>
+                      <option value="ollama" ${prefProvider === "ollama" ? "selected" : ""}>🟣 优先本地 Ollama (100%离线)</option>
+                      <option value="public_free" ${prefProvider === "public_free" ? "selected" : ""}>🌐 优先免密免费通道</option>
+                      <option value="rule_fallback" ${prefProvider === "rule_fallback" ? "selected" : ""}>⚡ 强制纯离线规则 (无网络)</option>
+                    </select>
+                  </div>
+                  ${buildAiWaterfallFlowchartHtml(prefProvider)}
+                  ${buildAiTierCardsHtml(aiCfg, true)}
                 `;
             })()}
             <div style="font-weight:700;font-size:12px;color:var(--lv-lp-accent,#2563eb);margin-top:4px;">⚡ 跨插件智能自动化规则 (IFTTT)</div>
@@ -8466,6 +10357,7 @@ export function buildLaunchpadPopoverHtml(
           <span>${items.length} 插件协同 · 今日活动 <strong style="color:var(--lv-lp-text,#0f172a);">${todayActCount} 项</strong> · P 键置顶</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <button type="button" class="lv-pop-sub-btn lv-pop-store-btn" title="打开全能块助手资产库，分类装配块级能力与快捷栏">📦 块助手库</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-diary-btn" title="将今日全生态活动汇总写入日记或复制">📝 今日回顾</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-backup-btn" title="一键导出小驴全家桶联合灾备包">💾 联合备份</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-restore-btn" title="从备份文件恢复小驴全家桶数据（会覆盖当前数据）">♻ 恢复</button>
@@ -8479,6 +10371,9 @@ export function buildLaunchpadPopoverHtml(
           <span>官方交流与反馈 QQ 群：<strong style="color:var(--lv-lp-text,#0f172a);font-family:var(--lv-font-mono,monospace);font-weight:700;">${LV_FEEDBACK_QQ_GROUP}</strong>（开发者在线，欢迎反馈与交流）</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <button type="button" class="lv-pop-sub-btn lv-pop-sponsor-btn" style="background:rgba(234, 179, 8, 0.12);color:#b45309;border:1px solid rgba(234, 179, 8, 0.35);border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:3px;cursor:pointer;transition:transform 0.12s ease, background 0.15s ease;" title="为小驴投喂 Token 算力，支持生态持续进化">
+            <span>⚡ 投喂 Token</span>
+          </button>
           <button type="button" class="lv-pop-sub-btn lv-pop-join-qq-btn" style="background:var(--lv-lp-accent,#2563eb);color:#ffffff;border:none;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;cursor:pointer;transition:transform 0.12s ease, background 0.15s ease;" title="点击一键唤起 QQ 客户端申请加群，并自动复制群号 ${LV_FEEDBACK_QQ_GROUP} 到剪贴板">
             <span>🚀 一键加群</span>
           </button>
@@ -8672,6 +10567,38 @@ function openDesktopLaunchpadPopoverImpl(
         }).catch(() => { /* ignore */ });
     };
 
+    const savePopAi = () => {
+        const loadFn = (typeof window !== "undefined" && (window as any).loadAiRouterConfig) || null;
+        const saveFn = (typeof window !== "undefined" && (window as any).saveAiRouterConfig) || null;
+        if (typeof loadFn === "function" && typeof saveFn === "function") {
+            const current = loadFn();
+            const prefVal = popover.querySelector<HTMLSelectElement>(".lv-ai-pref-provider-select")?.value || "auto";
+            const cUrl = popover.querySelector<HTMLInputElement>(".lv-ai-custom-url-input")?.value.trim() || undefined;
+            const cKey = popover.querySelector<HTMLInputElement>(".lv-ai-custom-key-input")?.value.trim() || undefined;
+            const cModel = popover.querySelector<HTMLInputElement>(".lv-ai-custom-model-input")?.value.trim() || undefined;
+            const oUrl = popover.querySelector<HTMLInputElement>(".lv-ai-ollama-url-input")?.value.trim() || undefined;
+
+            current.preferredProvider = prefVal === "auto" ? undefined : (prefVal as any);
+            current.userCustom = {
+                ...(current.userCustom || {}),
+                baseUrl: cUrl,
+                apiKey: cKey,
+                model: cModel,
+            };
+            current.ollama = {
+                ...(current.ollama || {}),
+                baseUrl: oUrl || "http://127.0.0.1:11434",
+            };
+            saveFn(current);
+            flashSaveToast("✓ AI 调度配置已更新");
+        }
+    };
+
+    const hydratePrefAi = () => {
+        if (!showPrefDrawer || typeof popover.querySelector !== "function") return;
+        attachAiHubEventListeners(popover, savePopAi, flashSaveToast);
+    };
+
     const syncTodayDashboardDom = () => {
         if (typeof popover.querySelector !== "function") return;
         try {
@@ -8822,6 +10749,8 @@ function openDesktopLaunchpadPopoverImpl(
 
             const renderOmniState = (hits: LvSearchResultItem[], status: LvOmnisearchStreamStatus) => {
                 if (seq !== searchSeq) return;
+                // 弹层关闭后流式回调继续到达：失联 DOM 一律跳过渲染与状态更新
+                if (typeof popover.isConnected === "boolean" && !popover.isConnected) return;
                 omniHitsList = [];
                 let html = "";
 
@@ -8948,6 +10877,8 @@ function openDesktopLaunchpadPopoverImpl(
             searchDebounceTimer = Number((typeof window !== "undefined" ? window.setTimeout : setTimeout)(() => {
                 searchDebounceTimer = null;
                 if (seq !== searchSeq) return;
+                // 弹层已被关闭（DOM 失联）时不再发起全生态流式检索，杜绝关闭后继续空转 IPC
+                if (typeof popover.isConnected === "boolean" && !popover.isConnected) return;
                 void lvOmnisearch.searchStream(kw, (hits, status) => {
                     renderOmniState(hits, status);
                 }).catch(() => { /* ignore */ });
@@ -8996,6 +10927,7 @@ function openDesktopLaunchpadPopoverImpl(
         wireSearchInput();
         wireDrawerHover();
         hydratePrefNotebooks();
+        hydratePrefAi();
         if (scrollMap.length && typeof popover.querySelector === "function") {
             for (const { sel, top } of scrollMap) {
                 const el = popover.querySelector<HTMLElement>(sel);
@@ -9018,6 +10950,7 @@ function openDesktopLaunchpadPopoverImpl(
     wireSearchInput();
     wireDrawerHover();
     hydratePrefNotebooks();
+    hydratePrefAi();
 
     // 动态徽标异步探针自动刷新：同时更新九宫格磁贴徽标与今日 4 合 1 晨昏看板
     // 返回 null/undefined 表示「归零」：清除徽章快照并移除磁贴徽标元素
@@ -9115,14 +11048,91 @@ function openDesktopLaunchpadPopoverImpl(
                         if (nb && opt) opt.textContent = `📔 ${nb.name}`;
                     }).catch(() => { /* ignore */ });
                 }
-                flashSaveToast("✓ 日记本已保存");
-                return;
-            }
-        });
+                    flashSaveToast("✓ 日记本已保存");
+                    return;
+                }
 
-        popover.addEventListener("click", (e) => {
-            const target = e.target as HTMLElement;
-            if (!target || typeof target.closest !== "function") return;
+                const aiPrefSelect = target.closest<HTMLSelectElement>(".lv-ai-pref-provider-select");
+                const customUrlInput = target.closest<HTMLInputElement>(".lv-ai-custom-url-input");
+                const customKeyInput = target.closest<HTMLInputElement>(".lv-ai-custom-key-input");
+                const customModelInput = target.closest<HTMLInputElement>(".lv-ai-custom-model-input");
+                const ollamaUrlInput = target.closest<HTMLInputElement>(".lv-ai-ollama-url-input");
+                if (aiPrefSelect || customUrlInput || customKeyInput || customModelInput || ollamaUrlInput) {
+                    const loadFn = (window as any).loadAiRouterConfig;
+                    const saveFn = (window as any).saveAiRouterConfig;
+                    if (typeof loadFn === "function" && typeof saveFn === "function") {
+                        const current = loadFn();
+                        const prefVal = popover.querySelector<HTMLSelectElement>(".lv-ai-pref-provider-select")?.value || "auto";
+                        const cUrl = popover.querySelector<HTMLInputElement>(".lv-ai-custom-url-input")?.value.trim() || undefined;
+                        const cKey = popover.querySelector<HTMLInputElement>(".lv-ai-custom-key-input")?.value.trim() || undefined;
+                        const cModel = popover.querySelector<HTMLInputElement>(".lv-ai-custom-model-input")?.value.trim() || undefined;
+                        const oUrl = popover.querySelector<HTMLInputElement>(".lv-ai-ollama-url-input")?.value.trim() || undefined;
+
+                        current.preferredProvider = prefVal === "auto" ? undefined : (prefVal as any);
+                        current.userCustom = {
+                            ...(current.userCustom || {}),
+                            baseUrl: cUrl,
+                            apiKey: cKey,
+                            model: cModel,
+                        };
+                        current.ollama = {
+                            ...(current.ollama || {}),
+                            baseUrl: oUrl || "http://127.0.0.1:11434",
+                        };
+                        saveFn(current);
+                        flashSaveToast("✓ AI 调度配置已更新");
+                    }
+                    return;
+                }
+            });
+
+            popover.addEventListener("click", (e) => {
+                const target = e.target as HTMLElement;
+                if (!target || typeof target.closest !== "function") return;
+
+                const testAiBtn = target.closest<HTMLElement>(".lv-test-ai-btn");
+                if (testAiBtn) {
+                    e.stopPropagation();
+                    const badge = popover.querySelector<HTMLElement>(".lv-ai-test-badge");
+                    if (badge) {
+                        badge.textContent = "⏳ 测速中...";
+                        badge.style.color = "var(--lv-lp-accent,#2563eb)";
+                    }
+                    const router = (window as any).getSharedAiRouter ? (window as any).getSharedAiRouter() : null;
+                    if (!router) {
+                        if (badge) {
+                            badge.textContent = "未检测到调度中枢";
+                            badge.style.color = "#ef4444";
+                        }
+                        return;
+                    }
+                    void router.chat({
+                        messages: [{ role: "user", content: "ping" }],
+                        taskType: "chat",
+                        timeoutMs: 6000,
+                    }).then((res: any) => {
+                        if (badge) {
+                            if (res.ok) {
+                                const pName = res.provider === "siyuan" ? "思源智能体"
+                                    : res.provider === "user_custom" ? "自定义Key"
+                                    : res.provider === "ollama" ? "本地Ollama"
+                                    : res.provider === "public_free" ? "免费公用池"
+                                    : "离线规则";
+                                badge.textContent = `✓ ${pName} (${res.latencyMs}ms)`;
+                                badge.style.color = "#10b981";
+                            } else {
+                                badge.textContent = `✗ 测试失败: ${res.error || "超时"}`;
+                                badge.style.color = "#ef4444";
+                            }
+                        }
+                    }).catch((err: any) => {
+                        if (badge) {
+                            badge.textContent = `✗ 异常: ${err?.message || String(err)}`;
+                            badge.style.color = "#ef4444";
+                        }
+                    });
+                    return;
+                }
 
             const qnBtn = target.closest<HTMLElement>(".lv-quick-note-btn");
             if (qnBtn) {
@@ -9334,9 +11344,8 @@ function openDesktopLaunchpadPopoverImpl(
             const prefBtn = target.closest<HTMLElement>(".lv-pop-pref-btn");
             if (prefBtn) {
                 e.stopPropagation();
-                showPrefDrawer = !showPrefDrawer;
-                if (showPrefDrawer) showInboxDrawer = false;
-                rerenderPopover();
+                closeDesktopLaunchpadPopover();
+                openQuickWorkspaceConfig();
                 return;
             }
 
@@ -9467,10 +11476,25 @@ function openDesktopLaunchpadPopoverImpl(
                 return;
             }
 
+            const storeBtn = target.closest<HTMLElement>(".lv-pop-store-btn");
+            if (storeBtn) {
+                e.stopPropagation();
+                closeDesktopLaunchpadPopover();
+                lvBlockAssistant.openStoreDialog();
+                return;
+            }
+
             const dedupBtn = target.closest<HTMLElement>(".lv-pop-dedup-btn");
             if (dedupBtn) {
                 e.stopPropagation();
                 openConflictResolverDialog();
+                return;
+            }
+
+            const sponsorBtn = target.closest<HTMLElement>(".lv-pop-sponsor-btn");
+            if (sponsorBtn) {
+                e.stopPropagation();
+                openSponsorModal();
                 return;
             }
 
@@ -9490,9 +11514,14 @@ function openDesktopLaunchpadPopoverImpl(
                 }
                 syncTopBarConvergence();
                 rerenderPopover({ preserveScroll: true, refreshItems: true });
+                // 修复（2026-11-21 走查）：“全部平铺至顶栏”只覆盖可见磁贴网格，隐藏插件不在网格内，
+                // 消息“已将全部插件平铺至顶栏”对隐藏项虚报；改为如实告知隐藏数量（隐藏项保持隐藏）。
+                const hiddenCount = Math.max(0, (allItems?.length || 0) - items.length);
                 lvNotify.capsule({
                     source: "罗盘",
-                    message: nextState === "pinned" ? "📌 已将全部插件平铺至顶栏" : "🧭 已将插件收敛回小驴罗盘",
+                    message: nextState === "pinned"
+                        ? (hiddenCount > 0 ? `📌 已将可见插件平铺至顶栏（${hiddenCount} 个隐藏插件保持隐藏）` : "📌 已将全部插件平铺至顶栏")
+                        : "🧭 已将插件收敛回小驴罗盘",
                     duration: 1800,
                     archive: false,
                 });
@@ -9704,7 +11733,8 @@ function openDesktopLaunchpadPopoverImpl(
         if (e.key === "ArrowRight" && !isInNonEmptySearch) {
             try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
             isDrawerHovered = false;
-            currentFocusIndex = (currentFocusIndex + 1) % items.length;
+            // 2026-11-21 走查修复：与上下键同口径补空列表守卫，防 `% 0` 得 NaN
+            if (items.length > 0) currentFocusIndex = (currentFocusIndex + 1) % items.length;
             updateFocusHighlight();
             return;
         }
@@ -9712,7 +11742,7 @@ function openDesktopLaunchpadPopoverImpl(
         if (e.key === "ArrowLeft" && !isInNonEmptySearch) {
             try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
             isDrawerHovered = false;
-            currentFocusIndex = (currentFocusIndex - 1 + items.length) % items.length;
+            if (items.length > 0) currentFocusIndex = (currentFocusIndex - 1 + items.length) % items.length;
             updateFocusHighlight();
             return;
         }
@@ -9849,6 +11879,13 @@ function wireDesktopGlobalHotkey(): void {
     desktopGlobalHotkeyWired = true;
     desktopGlobalHotkeyHandler = (e: KeyboardEvent) => {
         if (e && e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "l" || e.key === "L")) {
+            if (isMobileFrontend()) return;
+            try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
+            toggleDesktopLaunchpadPopover();
+        }
+        // 修复（2026-11-21 走查）：文档与紧急提示语(langText/罗盘 entry title)宣告的 Quicker 全局唤醒
+        // 是 Ctrl+Alt+Shift+K，窗口级处理此前只挂了 Alt+L；补挂 Ctrl+Alt+Shift+K，唤起罗盘。
+        if (e && e.altKey && e.ctrlKey && e.shiftKey && !e.metaKey && (e.key === "k" || e.key === "K")) {
             if (isMobileFrontend()) return;
             try { e.preventDefault(); e.stopPropagation(); } catch { /* ignore */ }
             toggleDesktopLaunchpadPopover();
@@ -10570,6 +12607,9 @@ function buildSheetTile(item: LvLaunchpadItem & { state: "pinned" | "docked" | "
     }, { passive: true });
     tile.addEventListener("touchend", () => { if (pressTimer !== undefined) { window.clearTimeout(pressTimer); pressTimer = undefined; } }, { passive: true });
     tile.addEventListener("touchmove", () => { if (pressTimer !== undefined) { window.clearTimeout(pressTimer); pressTimer = undefined; } }, { passive: true });
+    // 2026-11-21 走查修复：触摸被系统手势取消（下拉通知/边缘返回）时也须清定时器，
+    // 否则 500ms 后仍误触发二级行动 chips 展开
+    tile.addEventListener("touchcancel", () => { if (pressTimer !== undefined) { window.clearTimeout(pressTimer); pressTimer = undefined; } }, { passive: true });
     return tile;
 }
 
@@ -10869,8 +12909,13 @@ function openMobileSheetImpl(): void {
                 ${qwConf.lifeLogNotebookId ? `<option value="${escapeHtml(qwConf.lifeLogNotebookId)}" selected>已选: ${escapeHtml(qwConf.lifeLogNotebookId)}</option>` : ""}
               </select>
             </div>
+            <button type="button" class="lv-sheet-action-chip lv-mobile-open-full-cfg-btn" style="margin-top:6px;width:100%;padding:6px;font-size:11.5px;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border:1px solid var(--lv-lp-border);border-radius:6px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;">⚙️ 打开全功能分类设置中心 ➔</button>
           </div>
         `;
+        prefMobilePanel.querySelector(".lv-mobile-open-full-cfg-btn")?.addEventListener("click", () => {
+            closeMobileSheet();
+            openQuickWorkspaceConfig("workspace");
+        });
         const flashMobileSaved = (msg = "✓ 已保存") => {
             const el = prefMobilePanel.querySelector<HTMLElement>(".lv-mobile-pref-saved");
             if (!el) return;
@@ -11439,8 +13484,21 @@ function openMobileSheetImpl(): void {
         <div style="display:flex;align-items:center;gap:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
             <span>💬 反馈群：<strong style="font-family:monospace;">${LV_FEEDBACK_QQ_GROUP}</strong></span>
         </div>
-        <button type="button" class="lv-sheet-join-qq-btn" style="background:var(--b3-theme-primary);color:#fff;border:none;border-radius:999px;padding:3px 12px;font-size:11px;font-weight:600;cursor:pointer;">🚀 加群</button>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <button type="button" class="lv-sheet-store-btn" style="background:rgba(99, 102, 241, 0.15);color:#4f46e5;border:1px solid rgba(99, 102, 241, 0.35);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">📦 块助手</button>
+            <button type="button" class="lv-sheet-sponsor-btn" style="background:rgba(234, 179, 8, 0.15);color:#b45309;border:1px solid rgba(234, 179, 8, 0.35);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">⚡ 投喂 Token</button>
+            <button type="button" class="lv-sheet-join-qq-btn" style="background:var(--b3-theme-primary);color:#fff;border:none;border-radius:999px;padding:3px 12px;font-size:11px;font-weight:600;cursor:pointer;">🚀 加群</button>
+        </div>
     `;
+    communityRow.querySelector(".lv-sheet-store-btn")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMobileSheet();
+        lvBlockAssistant.openStoreDialog();
+    });
+    communityRow.querySelector(".lv-sheet-sponsor-btn")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openSponsorModal();
+    });
     communityRow.querySelector(".lv-sheet-join-qq-btn")?.addEventListener("click", (e) => {
         e.stopPropagation();
         openJoinQqGroup();
@@ -11501,6 +13559,7 @@ function openMobileSheetImpl(): void {
         if (diffY > 60) closeMobileSheet();
         else if (wasDragging) hapticFeedback(6);
     }, { passive: true });
+    sheet.addEventListener("touchcancel", resetDragFeedback, { passive: true });
 
     // Esc 仲裁：登记焦点栈，顶栈弹出才关坞
     try {
@@ -11522,9 +13581,11 @@ function openMobileSheetImpl(): void {
             if (!vv || !mask.isConnected) return;
             const keyboardOffset = Math.max(0, window.innerHeight - (vv.offsetTop + vv.height));
             if (keyboardOffset > 100) {
+                mask.style.top = "auto";
                 mask.style.bottom = `${keyboardOffset}px`;
                 mask.style.height = `${vv.height}px`;
             } else {
+                mask.style.top = "";
                 mask.style.bottom = "";
                 mask.style.height = "";
             }
@@ -12790,10 +14851,66 @@ function lvConfirm(title: string, message: string): Promise<boolean> {
     });
 }
 
+function lvPrompt(title: string, message: string, defaultValue = ""): Promise<string | null> {
+    if (typeof document === "undefined") return Promise.resolve(null);
+    return new Promise((resolve) => {
+        let settled = false;
+        const mask = document.createElement("div");
+        mask.className = "b3-dialog__container lv-dialog";
+        mask.style.zIndex = "3000";
+        mask.innerHTML = `
+            <div class="b3-dialog" style="max-width: 440px; width: 90vw;">
+                <div class="b3-dialog__header">
+                    <div class="b3-dialog__title">${escapeHtml(title)}</div>
+                    <button class="b3-dialog__close" type="button" aria-label="关闭"><svg><use xlink:href="#iconClose"></use></svg></button>
+                </div>
+                <div class="b3-dialog__content" style="padding: 16px 20px; line-height: 1.5; font-size: 12.5px; color: var(--b3-theme-on-surface);">
+                    <div style="margin-bottom: 8px;">${escapeHtml(message)}</div>
+                    <input type="text" class="b3-text-field fn__block" value="${escapeHtml(defaultValue)}" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 13px;" />
+                </div>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--cancel" type="button">取消</button>
+                    <button class="b3-button b3-button--text" type="button">确定</button>
+                </div>
+            </div>
+        `;
+        const input = mask.querySelector<HTMLInputElement>("input");
+        const close = (val: string | null) => {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener("keydown", onKeyDown, true);
+            mask.remove();
+            resolve(val);
+        };
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                close(null);
+            } else if (e.key === "Enter") {
+                e.preventDefault();
+                close(input?.value.trim() ?? null);
+            }
+        };
+        document.addEventListener("keydown", onKeyDown, true);
+        mask.querySelector(".b3-dialog__close")?.addEventListener("click", () => close(null));
+        mask.querySelector(".b3-button--cancel")?.addEventListener("click", () => close(null));
+        mask.querySelector(".b3-button--text")?.addEventListener("click", () => close(input?.value.trim() ?? null));
+        mask.addEventListener("click", (e) => {
+            if (e.target === mask) close(null);
+        });
+        document.body.appendChild(mask);
+        setTimeout(() => {
+            input?.focus();
+            input?.select();
+        }, 50);
+    });
+}
+
 /** 全思源文档级查重、对账与同步冲突治理中枢 */
 export function openConflictResolverDialog(): void {
-    let activeTab: "doc-titles" | "doc-blocks" | "sync-conflict" = "doc-titles";
+    let activeTab: "doc-titles" | "doc-blocks" | "sync-conflict" | "whitelist" = "doc-titles";
     let dupDocGroups: LvDuplicateDocGroup[] = [];
+    let currentFilteredGroups: LvDuplicateDocGroup[] = [];
     let conflictDocs: LvConflictDocItem[] = [];
     let dupLifeLogState: { removedCount: number; duplicateGroups: number; details: string[] } = { removedCount: 0, duplicateGroups: 0, details: [] };
     let dupClips: LvDuplicateClipGroup[] = [];
@@ -12801,76 +14918,82 @@ export function openConflictResolverDialog(): void {
     let docDupBlocks: LvDocDuplicateBlockGroup[] = [];
     let searchKeyword = "";
     let currentMinLength = 6;
-    let filterOnlyEmpty = false;
+    let filterCategory: "all" | "empty" | "fork" = "all";
     let filterExcludeBenign = true;
+    let showIgnoredInList = false;
+    let aiHealthExpanded = false;
+    let aiHealthLoading = false;
+    let aiHealthData: { score: number; level: string; summaryHtml: string; recommendations: string[] } | null = null;
 
     const currentDoc = getCurrentOpenDocInfo();
 
     mountQuickModal({
         icon: "🧹",
         title: "全思源文档查重与对账治理",
-        badgeHtml: `<span class="lv-qw-badge">全库级自愈中枢</span>`,
+        badgeHtml: `<span class="lv-qw-badge">全库级自愈中枢 v3.0</span>`,
         bodyHtml: `
-            <div class="lv-conflict-tabs" style="display:flex;gap:6px;margin-bottom:10px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));padding-bottom:8px;align-items:center;">
-                <button type="button" class="lv-conflict-tab active" data-tab="doc-titles">📑 全库同名文档 <span class="lv-dup-tab-badge lv-dup-badge-titles" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
-                <button type="button" class="lv-conflict-tab" data-tab="doc-blocks">📝 当前文档排重 <span class="lv-dup-tab-badge lv-dup-badge-blocks" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
-                <button type="button" class="lv-conflict-tab" data-tab="sync-conflict">⚡ 同步冲突与对账 <span class="lv-dup-tab-badge lv-dup-badge-conflicts" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
-                <button type="button" class="lv-qw-tag-chip lv-export-audit-btn" style="margin-left:auto;padding:3px 9px;font-size:11px;color:var(--lv-lp-accent,#2563eb);background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));">📄 导出对账单</button>
+            <div class="lv-conflict-top-bar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+                <div class="lv-reconcile-stats" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+                    <span class="lv-reconcile-stat-chip lv-stat-titles" title="全库检测到的同名文档组数">📑 同名文档: <b class="lv-stat-titles-val">...</b></span>
+                    <span class="lv-reconcile-stat-chip lv-stat-empty" style="color:#ef4444;" title="内容为 0 字且无子文档的误建空壳">⚪ 0字空壳: <b class="lv-stat-empty-val">...</b></span>
+                    <span class="lv-reconcile-stat-chip lv-stat-conflicts" style="color:#d97706;" title="多端同步冲突文档">⚡ 同步冲突: <b class="lv-stat-conflicts-val">...</b></span>
+                    <span class="lv-reconcile-stat-chip lv-stat-orphans" style="color:#2563eb;" title="误建在插件专属本的孤立日记">📅 孤立日记: <b class="lv-stat-orphans-val">...</b></span>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <button type="button" class="lv-qw-tag-chip lv-ai-health-btn" style="padding:3px 9px;font-size:11px;color:#7c3aed;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.25);font-weight:700;">🤖 AI 全景体检</button>
+                    <button type="button" class="lv-qw-tag-chip lv-export-audit-btn" style="padding:3px 9px;font-size:11px;color:var(--lv-lp-accent,#2563eb);background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));">📄 导出对账单</button>
+                </div>
             </div>
-            <div class="lv-conflict-tab-view" style="min-height:200px;max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:12px;">
+            <div class="lv-ai-health-container" style="display:none;margin-bottom:8px;padding:12px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(124,58,237,0.05) 0%,rgba(37,99,235,0.05) 100%);border:1px solid rgba(124,58,237,0.2);"></div>
+            <div class="lv-conflict-tabs" style="display:flex;gap:6px;margin-bottom:8px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));padding-bottom:6px;align-items:center;overflow-x:auto;">
+                <button type="button" class="lv-conflict-tab active" data-tab="doc-titles">📑 全库同名文档 <span class="lv-dup-tab-badge lv-dup-badge-titles" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
+                <button type="button" class="lv-conflict-tab" data-tab="sync-conflict">⚡ 同步冲突与对账 <span class="lv-dup-tab-badge lv-dup-badge-conflicts" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
+                <button type="button" class="lv-conflict-tab" data-tab="doc-blocks">📝 当前文档排重 <span class="lv-dup-tab-badge lv-dup-badge-blocks" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">...</span></button>
+                <button type="button" class="lv-conflict-tab" data-tab="whitelist">🛡️ 忽略白名单 <span class="lv-dup-tab-badge lv-dup-badge-whitelist" style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(15,23,42,0.06);margin-left:2px;">0</span></button>
+            </div>
+            <div class="lv-conflict-tab-view" style="min-height:220px;max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:12px;">
                 <div style="text-align:center;padding:28px;color:var(--lv-lp-text-sub,#64748b);">⏳ 正在深度检索思源全库…</div>
             </div>
             <div class="lv-conflict-result" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:11.5px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);color:var(--lv-lp-text,#0f172a);"></div>
         `,
-        primaryLabel: "一键执行安全去重",
+        primaryLabel: "一键清理全库 0 字空壳",
         secondaryLabel: "重新检测",
         onSave: async (saveBtn, cleanup, continueMode) => {
             if (continueMode) {
                 void runScan();
                 return;
             }
-            const origLabel = saveBtn?.textContent || "一键执行安全去重";
-            if (saveBtn) saveBtn.textContent = "去重清洗中…";
+            const origLabel = saveBtn?.textContent || "一键安全治理";
+            if (saveBtn) saveBtn.textContent = "治理执行中…";
             try {
                 if (activeTab === "doc-titles") {
-                    // 全库同名文档：子文档级联安全拦截防线
-                    let totalChildInAllRecycle = 0;
-                    for (const g of dupDocGroups) {
-                        const toRecycle = g.docs.filter((d) => d.id !== g.recommendedKeepId);
-                        totalChildInAllRecycle += toRecycle.reduce((acc, cur) => acc + (cur.childCount || 0), 0);
+                    // 全库同名文档：一键清理所有 0 字空壳（保留实体真身，安全无损）
+                    const emptyDocsTotal = dupDocGroups.reduce((acc, g) => acc + g.docs.filter((d) => d.id !== g.recommendedKeepId && d.length === 0 && (d.childCount || 0) === 0).length, 0);
+                    if (emptyDocsTotal === 0) {
+                        lvNotify.capsule({ source: "查重对账", message: "全库暂无可安全清理的 0 字空壳同名副本", duration: 2500, level: "info", archive: false });
+                        if (saveBtn) saveBtn.textContent = origLabel;
+                        return;
                     }
-                    if (totalChildInAllRecycle > 0 && typeof window !== "undefined") {
-                        const ok = await lvConfirm(
-                            "⚠️ 全库批量清理安全拦截",
-                            `全库待清理的同名副本中，共包含 ${totalChildInAllRecycle} 篇受级联影响的子文档！\n\n为确保知识库层级安全，请确认是否一并移入废纸篓（可在思源回收站随时还原）？`
-                        );
-                        if (!ok) {
-                            if (saveBtn) saveBtn.textContent = origLabel;
-                            return;
-                        }
+                    const ok = await lvConfirm(
+                        "🧹 0字空壳安全清理",
+                        `系统检测到全库共有 ${emptyDocsTotal} 篇 0 字且无子文档的误建空壳副本！\n\n这些空壳通常因误触新建或大纲占位产生，清理后将移入废纸篓（可随时撤销还原），并完整保留已有正文的真身。\n\n确认立即清理？`
+                    );
+                    if (!ok) {
+                        if (saveBtn) saveBtn.textContent = origLabel;
+                        return;
                     }
-
-                    // 全库同名文档：将所有非真身副本安全移入思源废纸篓
-                    let recycledCount = 0;
-                    for (const g of dupDocGroups) {
-                        const toRecycle = g.docs.filter((d) => d.id !== g.recommendedKeepId);
-                        for (const d of toRecycle) {
-                            if (await lvDeduplicator.safeRemoveDocToRecycle(d.id, d.box)) {
-                                recycledCount++;
-                            }
-                        }
-                    }
+                    const res = await lvDeduplicator.cleanAllEmptyShells(dupDocGroups);
                     cleanup();
                     if (typeof window !== "undefined") {
                         try {
                             window.dispatchEvent(new CustomEvent("lv-dedup:reconciled", {
-                                detail: { mode: "doc-titles", count: recycledCount, at: new Date().toISOString() }
+                                detail: { mode: "doc-titles", count: res.cleanedCount, at: new Date().toISOString() }
                             }));
                         } catch { /* ignore */ }
                     }
                     lvNotify.capsule({
                         source: "文档查重",
-                        message: recycledCount > 0 ? `🧹 清理完成：已将 ${recycledCount} 篇冗余同名副本移入废纸篓（可随时撤销还原）` : "全库文档名称唯一，无需清理",
+                        message: res.cleanedCount > 0 ? `🧹 清理完成：已将 ${res.cleanedCount} 篇 0 字空壳副本移入废纸篓` : "全库文档名称唯一，无需清理",
                         duration: 3500,
                         level: "success",
                         archive: false,
@@ -12897,7 +15020,7 @@ export function openConflictResolverDialog(): void {
                         level: "success",
                         archive: false,
                     });
-                } else {
+                } else if (activeTab === "sync-conflict") {
                     // 同步冲突与日记：全方位一键治理
                     let cleanedConflict = 0;
                     for (const doc of conflictDocs) {
@@ -12932,6 +15055,8 @@ export function openConflictResolverDialog(): void {
                         level: "success",
                         archive: false,
                     });
+                } else {
+                    cleanup();
                 }
             } catch {
                 if (saveBtn) saveBtn.textContent = origLabel;
@@ -12941,21 +15066,82 @@ export function openConflictResolverDialog(): void {
     });
 
     const mask = typeof document !== "undefined" ? document.getElementById("lv-quick-workspace-mask") : null;
+    const card = mask?.querySelector<HTMLElement>(".lv-qw-card");
+    if (card) {
+        card.style.width = "min(1060px, 96vw)";
+        card.style.maxWidth = "1060px";
+    }
     const tabView = mask?.querySelector<HTMLElement>(".lv-conflict-tab-view");
     const saveBtn = mask?.querySelector<HTMLButtonElement>(".lv-qw-btn-primary");
+    const aiHealthContainer = mask?.querySelector<HTMLElement>(".lv-ai-health-container");
 
     const updateTabBadges = () => {
         const bTitles = mask?.querySelector<HTMLElement>(".lv-dup-badge-titles");
         const bBlocks = mask?.querySelector<HTMLElement>(".lv-dup-badge-blocks");
         const bConflicts = mask?.querySelector<HTMLElement>(".lv-dup-badge-conflicts");
-        if (bTitles) bTitles.textContent = String(dupDocGroups.filter(g => !g.isBenign).length);
+        const bWhitelist = mask?.querySelector<HTMLElement>(".lv-dup-badge-whitelist");
+        const whitelist = getReconciliationWhitelist();
+
+        const activeTitlesCount = dupDocGroups.filter((g) => !g.isBenign && !g.isIgnored).length;
+        if (bTitles) bTitles.textContent = String(activeTitlesCount);
         if (bBlocks) bBlocks.textContent = String(docDupBlocks.length);
         if (bConflicts) bConflicts.textContent = String(conflictDocs.length + dupLifeLogState.duplicateGroups + dupClips.length + orphanDailyNotes.length);
+        if (bWhitelist) bWhitelist.textContent = String(whitelist.size);
+
+        const emptyDocsTotal = dupDocGroups.reduce((acc, g) => acc + g.docs.filter((d) => d.id !== g.recommendedKeepId && d.length === 0 && (d.childCount || 0) === 0).length, 0);
+
+        const stTitles = mask?.querySelector<HTMLElement>(".lv-stat-titles-val");
+        const stEmpty = mask?.querySelector<HTMLElement>(".lv-stat-empty-val");
+        const stConflicts = mask?.querySelector<HTMLElement>(".lv-stat-conflicts-val");
+        const stOrphans = mask?.querySelector<HTMLElement>(".lv-stat-orphans-val");
+        if (stTitles) stTitles.textContent = `${dupDocGroups.length}组`;
+        if (stEmpty) stEmpty.textContent = `${emptyDocsTotal}篇`;
+        if (stConflicts) stConflicts.textContent = `${conflictDocs.length}篇`;
+        if (stOrphans) stOrphans.textContent = `${orphanDailyNotes.length}篇`;
+
+        if (saveBtn) {
+            if (activeTab === "doc-titles") {
+                saveBtn.textContent = emptyDocsTotal > 0 ? `🧹 一键清理全库 0 字空壳 (${emptyDocsTotal}篇)` : "全库同名状态受控";
+            } else if (activeTab === "sync-conflict") {
+                const hasC = conflictDocs.length > 0 || dupLifeLogState.duplicateGroups > 0 || dupClips.length > 0;
+                saveBtn.textContent = hasC ? "一键安全治理清洗" : "同步状态极佳";
+            } else if (activeTab === "doc-blocks") {
+                saveBtn.textContent = docDupBlocks.length > 0 ? `清理当前文档 ${docDupBlocks.length} 组重复` : "文档内容健康";
+            } else {
+                saveBtn.textContent = "完成";
+            }
+        }
+    };
+
+    const renderAiHealth = () => {
+        if (!aiHealthContainer) return;
+        if (!aiHealthExpanded) {
+            aiHealthContainer.style.display = "none";
+            return;
+        }
+        aiHealthContainer.style.display = "block";
+        if (aiHealthLoading) {
+            aiHealthContainer.innerHTML = `<div style="text-align:center;padding:12px;color:#7c3aed;">⏳ 正在调用 AI 智能诊断全库文档架构健康度…</div>`;
+            return;
+        }
+        if (aiHealthData) {
+            aiHealthContainer.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-weight:700;color:#7c3aed;">🤖 全库对账健康度 AI 诊断简报</span>
+                        <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(124,58,237,0.1);color:#7c3aed;font-weight:600;">双引擎参谋</span>
+                    </div>
+                    <button type="button" class="lv-qw-tag-chip lv-close-health-btn" style="padding:1px 6px;font-size:10px;">收起</button>
+                </div>
+                ${aiHealthData.summaryHtml}
+            `;
+        }
     };
 
     const renderCurrentTab = () => {
         if (!tabView) return;
         updateTabBadges();
+        renderAiHealth();
         mask?.querySelectorAll(".lv-conflict-tab").forEach((btn) => {
             btn.classList.toggle("active", btn.getAttribute("data-tab") === activeTab);
         });
@@ -12963,68 +15149,107 @@ export function openConflictResolverDialog(): void {
         if (activeTab === "doc-titles") {
             if (dupDocGroups.length === 0) {
                 tabView.innerHTML = `<div style="text-align:center;padding:36px 16px;color:#10b981;font-weight:600;">🎉 全库检测通过：全库所有文档标题唯一，无任何同名重复分叉！</div>`;
-                if (saveBtn) saveBtn.textContent = "全库无同名文档";
                 return;
             }
-            if (saveBtn) saveBtn.textContent = `清理冗余副本 (保留真身)`;
             const kw = searchKeyword.trim().toLowerCase();
-            let filteredGroups = kw
-                ? dupDocGroups.filter(g => g.title.toLowerCase().includes(kw) || g.docs.some(d => d.hpath.toLowerCase().includes(kw)))
-                : dupDocGroups;
-            if (filterExcludeBenign) {
-                filteredGroups = filteredGroups.filter(g => !g.isBenign);
-            }
-            if (filterOnlyEmpty) {
-                filteredGroups = filteredGroups.filter(g => g.docs.some(d => d.length === 0));
+            let filteredGroups = dupDocGroups;
+
+            // 搜索过滤
+            if (kw) {
+                filteredGroups = filteredGroups.filter((g) => g.title.toLowerCase().includes(kw) || g.docs.some((d) => d.hpath.toLowerCase().includes(kw)));
             }
 
-            const benignCount = dupDocGroups.filter(g => g.isBenign).length;
+            // 白名单过滤
+            if (!showIgnoredInList) {
+                filteredGroups = filteredGroups.filter((g) => !g.isIgnored);
+            }
+
+            // 分类筛选
+            if (filterExcludeBenign) {
+                filteredGroups = filteredGroups.filter((g) => !g.isBenign);
+            }
+            if (filterCategory === "empty") {
+                filteredGroups = filteredGroups.filter((g) => g.hasEmptyShell);
+            } else if (filterCategory === "fork") {
+                filteredGroups = filteredGroups.filter((g) => g.isSuspectedFork);
+            }
+
+            const benignCount = dupDocGroups.filter((g) => g.isBenign).length;
+            const emptyGroupCount = dupDocGroups.filter((g) => g.hasEmptyShell).length;
+            const forkGroupCount = dupDocGroups.filter((g) => g.isSuspectedFork && !g.isBenign).length;
+            const ignoredCount = dupDocGroups.filter((g) => g.isIgnored).length;
+
+            currentFilteredGroups = filteredGroups;
 
             tabView.innerHTML = `
-                <div style="display:flex;gap:6px;margin-bottom:4px;align-items:center;">
-                    <input type="search" class="lv-dup-search-input" placeholder="🔍 快速过滤同名文档（输入标题或路径关键字）…" value="${escapeHtml(searchKeyword)}" style="flex:1;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));background:var(--lv-lp-card-bg,#fff);font-size:11.5px;color:var(--lv-lp-text,#0f172a);outline:none;">
-                    <button type="button" class="lv-qw-tag-chip lv-toggle-benign-filter-btn" style="padding:5px 9px;font-size:11px;white-space:nowrap;${filterExcludeBenign ? 'background:rgba(16,185,129,0.12);color:#059669;border-color:rgba(16,185,129,0.3);font-weight:700;' : ''}" title="点击切换是否显示月份（如11月）、年份（如2024）等合法同名结构">🟢 ${filterExcludeBenign ? `已排除 ${benignCount} 组时间/结构同名` : "显示全部 (含月份/年份)"}</button>
-                    <button type="button" class="lv-qw-tag-chip lv-toggle-empty-filter-btn" style="padding:5px 9px;font-size:11px;white-space:nowrap;${filterOnlyEmpty ? 'background:rgba(239,68,68,0.12);color:#ef4444;border-color:rgba(239,68,68,0.3);font-weight:700;' : ''}">⚪ 仅看含空壳组</button>
+                <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
+                    <input type="search" class="lv-dup-search-input" placeholder="🔍 快速过滤同名文档（输入标题或路径关键字）…" value="${escapeHtml(searchKeyword)}" style="flex:1;min-width:200px;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,0.12));background:var(--lv-lp-card-bg,#fff);font-size:11.5px;color:var(--lv-lp-text,#0f172a);outline:none;">
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                        <button type="button" class="lv-reconcile-filter-chip ${filterCategory === 'all' ? 'active' : ''}" data-cat="all">全部 (${dupDocGroups.length})</button>
+                        <button type="button" class="lv-reconcile-filter-chip ${filterCategory === 'empty' ? 'active' : ''}" data-cat="empty" style="${emptyGroupCount > 0 ? 'color:#ef4444;' : ''}">⚪ 仅看含空壳 (${emptyGroupCount})</button>
+                        <button type="button" class="lv-reconcile-filter-chip ${filterCategory === 'fork' ? 'active' : ''}" data-cat="fork" style="${forkGroupCount > 0 ? 'color:#d97706;' : ''}">⚠️ 仅看疑似分叉 (${forkGroupCount})</button>
+                        <button type="button" class="lv-qw-tag-chip lv-toggle-benign-filter-btn" style="padding:4px 9px;font-size:11px;white-space:nowrap;${filterExcludeBenign ? 'background:rgba(16,185,129,0.12);color:#059669;border-color:rgba(16,185,129,0.3);font-weight:700;' : ''}" title="点击切换是否隐藏月份（如11月）、年份（如2024）等合法同名结构">🟢 ${filterExcludeBenign ? `已排除 ${benignCount} 组时间/结构同名` : "显示全部 (含月份/年份)"}</button>
+                        ${ignoredCount > 0 ? `<button type="button" class="lv-qw-tag-chip lv-toggle-ignored-filter-btn" style="padding:4px 9px;font-size:11px;${showIgnoredInList ? 'background:rgba(37,99,235,0.1);color:#2563eb;font-weight:700;' : ''}">🛡️ ${showIgnoredInList ? '已显示白名单' : `查看已忽略 (${ignoredCount})`}</button>` : ""}
+                    </div>
                 </div>
-                <div class="lv-restore-warn" style="font-size:11px;margin-bottom:6px;">
-                    全库共发现 <strong>${dupDocGroups.length}</strong> 组同名文档${benignCount > 0 && filterExcludeBenign ? `（已智能保护并隐去 <strong>${benignCount}</strong> 组月份/年份/章节结构名）` : ""}。系统支持充分内容比对，独立主题请勿合并。
+                <div class="lv-restore-warn" style="font-size:11px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                    <div>
+                        全库共发现 <strong>${dupDocGroups.length}</strong> 组同名文档${benignCount > 0 && filterExcludeBenign ? `（已智能保护并隐去 <strong>${benignCount}</strong> 组月份/年份/章节结构名）` : ""}。系统支持充分内容比对与增量合并，独立主题请勿误删。
+                    </div>
+                    <div style="font-size:10.5px;opacity:.8;">
+                        💡 提示：点击【⚖️ 双栏对比】或【🤖 AI 研判】可一键采纳合并/改名建议
+                    </div>
                 </div>
                 ${filteredGroups.length === 0 ? `
-                    <div style="text-align:center;padding:24px;color:var(--lv-lp-text-sub,#64748b);">当前视图下无匹配的疑似重复同名文档（合法时间归档已受保护）</div>
-                ` : filteredGroups.map((g) => {
-                    const safeId = escapeHtml(g.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
+                    <div style="text-align:center;padding:28px;color:var(--lv-lp-text-sub,#64748b);">当前筛选视图下无匹配的疑似重复同名文档</div>
+                ` : filteredGroups.map((g, gIdx) => {
+                    const safeId = `g_${gIdx}_` + escapeHtml(g.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_").slice(0, 32);
+                    const emptyDocsInGroup = g.docs.filter((d) => d.id !== g.recommendedKeepId && d.length === 0 && (d.childCount || 0) === 0);
                     return `
-                        <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.1));display:flex;flex-direction:column;gap:6px;">
-                            <div style="display:flex;align-items:center;justify-content:space-between;font-weight:600;">
-                                <div style="display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                    <span>《${escapeHtml(g.title)}》</span>
+                        <div style="padding:9px 12px;border-radius:9px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.1));display:flex;flex-direction:column;gap:7px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                                <div style="display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:200px;">
+                                    <span style="font-weight:700;font-size:12.5px;color:var(--lv-lp-text);">《${escapeHtml(g.title)}》</span>
                                     <span style="font-size:10px;opacity:.75;padding:1px 6px;border-radius:4px;background:var(--lv-lp-accent-soft);color:var(--lv-lp-accent);">${g.count} 篇同名</span>
                                     ${g.isBenign ? `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.12);color:#059669;font-weight:600;">🟢 时间/结构目录（合法同名）</span>` : ""}
                                     ${g.isContentDivergent ? `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.12);color:#d97706;font-weight:600;" title="${escapeHtml(g.divergenceReason || '')}">💡 路径/内容独立 (建议保留两者)</span>` : ""}
+                                    ${g.hasEmptyShell ? `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(239,68,68,0.12);color:#ef4444;font-weight:600;">⚪ 含 0 字空壳</span>` : ""}
+                                    ${g.isSuspectedFork ? `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(217,119,6,0.12);color:#d97706;font-weight:600;">⚠️ 疑似版本分叉</span>` : ""}
+                                    ${g.isIgnored ? `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(100,116,139,0.12);color:#475569;font-weight:600;">🛡️ 已加白名单</span>` : ""}
                                 </div>
-                                <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
-                                    <button type="button" class="lv-qw-tag-chip lv-group-diff-btn" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border:1px solid var(--lv-lp-border);">⚖️ 充分对比</button>
-                                    <button type="button" class="lv-qw-tag-chip lv-group-ai-judge-btn" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:#7c3aed;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.25);font-weight:700;" title="调动思源 AI 深入分析两篇文档的语义关系与处置建议（AI 仅供参谋，不擅自合并）">🤖 AI 研判</button>
-                                    ${!g.isBenign ? `<button type="button" class="lv-qw-tag-chip lv-group-recycle-btn" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">🧹 清理本组副本</button>` : ""}
+                                <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;flex-wrap:wrap;">
+                                    <button type="button" class="lv-qw-tag-chip lv-group-diff-btn" data-group-index="${gIdx}" data-drawer-id="${safeId}" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border:1px solid var(--lv-lp-border);">⚖️ 双栏对比</button>
+                                    <button type="button" class="lv-qw-tag-chip lv-group-ai-judge-btn" data-group-index="${gIdx}" data-drawer-id="${safeId}" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:#7c3aed;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.25);font-weight:700;" title="调动 AI 深入分析语义关系并给出可一键采纳的处置方案">🤖 AI 研判</button>
+                                    ${g.isIgnored ? `
+                                        <button type="button" class="lv-qw-tag-chip lv-toggle-whitelist-group-btn" data-group-index="${gIdx}" data-group-title="${escapeHtml(g.title)}" data-action="remove" style="padding:2px 8px;font-size:10.5px;color:#64748b;">↩️ 移出白名单</button>
+                                    ` : `
+                                        <button type="button" class="lv-qw-tag-chip lv-toggle-whitelist-group-btn" data-group-index="${gIdx}" data-group-title="${escapeHtml(g.title)}" data-action="add" style="padding:2px 8px;font-size:10.5px;color:#475569;" title="将本组加入白名单，后续体检不再提示同名">🛡️ 保持现状(忽略)</button>
+                                    `}
+                                    ${emptyDocsInGroup.length > 0 ? `
+                                        <button type="button" class="lv-qw-tag-chip lv-clean-group-empty-btn" data-group-index="${gIdx}" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);font-weight:700;">⚪ 清理本组空壳</button>
+                                    ` : ""}
+                                    ${!g.isBenign ? `<button type="button" class="lv-qw-tag-chip lv-group-recycle-btn" data-group-index="${gIdx}" data-group-title="${escapeHtml(g.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">🧹 清理本组副本</button>` : ""}
                                 </div>
                             </div>
-                            <div class="lv-diff-drawer-${safeId}" style="display:none;padding:8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px dashed var(--lv-lp-accent);font-size:11px;"></div>
+                            <div class="lv-diff-drawer-${safeId}" style="display:none;padding:10px;border-radius:8px;background:var(--lv-lp-card-bg,#fff);border:1px dashed var(--lv-lp-accent);font-size:11px;"></div>
                             <div class="lv-ai-drawer-${safeId}" style="display:none;padding:10px 12px;border-radius:8px;background:var(--lv-lp-card-bg,#fff);border:1px solid rgba(124,58,237,0.3);font-size:11px;box-shadow:0 2px 10px rgba(124,58,237,0.06);"></div>
-                            <div style="display:flex;flex-direction:column;gap:4px;">
+                            <div style="display:flex;flex-direction:column;gap:5px;">
                                 ${g.docs.map((d) => {
                                     const isKeep = d.id === g.recommendedKeepId;
+                                    const isEmptyShell = d.length === 0 && (d.childCount || 0) === 0;
                                     return `
-                                        <div class="lv-doc-entry-row" data-doc-id="${d.id}" data-doc-box="${d.box}" style="display:flex;flex-direction:column;padding:5px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid ${isKeep && !g.isBenign ? "#10b981" : "var(--lv-lp-border)"};font-size:11px;">
-                                            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                                                <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                        <div class="lv-doc-entry-row" data-doc-id="${d.id}" data-doc-box="${d.box}" style="display:flex;flex-direction:column;padding:6px 9px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid ${isKeep && !g.isBenign ? "#10b981" : "var(--lv-lp-border)"};font-size:11px;">
+                                            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+                                                <div style="flex:1;min-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                                     ${g.isBenign ? `<span style="color:#059669;font-weight:600;margin-right:4px;">[📁 目录节点]</span>` : isKeep ? `<span style="color:#10b981;font-weight:700;margin-right:4px;">[🌟 推荐真身]</span>` : `<span style="color:#94a3b8;margin-right:4px;">[副本]</span>`}
-                                                    <span style="opacity:.85;font-weight:500;" title="${escapeHtml(d.hpath)}">${escapeHtml(d.hpath || "/" + d.id)}</span>
+                                                    <span style="opacity:.85;font-weight:600;" title="${escapeHtml(d.hpath)}">${escapeHtml(d.hpath || "/" + d.id)}</span>
                                                     <span style="opacity:.55;margin-left:6px;font-size:10.5px;">(${d.length} 字 · ${formatSyTimestamp(d.updated)})</span>
-                                                    ${d.length === 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(100,116,139,0.12);color:var(--lv-lp-text-sub,#94a3b8);font-weight:600;margin-left:4px;" title="此文档内容为空（0字），通常为误点新建产生的空壳">⚪ 0字空壳</span>` : ""}
+                                                    ${isEmptyShell ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(239,68,68,0.12);color:#ef4444;font-weight:700;margin-left:4px;" title="此文档内容为 0 字且无子文档，属于误建空壳">⚪ 0字空壳</span>` : ""}
                                                     ${(d.childCount || 0) > 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(245,158,11,0.12);color:#d97706;font-weight:600;margin-left:4px;" title="此文档下含有 ${d.childCount} 篇子文档，移入回收站将同时级联移动！">📁 含 ${d.childCount} 篇子文档</span>` : ""}
                                                 </div>
                                                 <div style="display:flex;gap:4px;flex-shrink:0;">
-                                                    ${!isKeep && !g.isBenign ? `<button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-title="${escapeHtml(g.title)}" data-doc-id="${d.id}" style="padding:2px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>` : ""}
+                                                    ${!isKeep && !g.isBenign ? `<button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-index="${gIdx}" data-group-title="${escapeHtml(g.title)}" data-doc-id="${d.id}" style="padding:2px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>` : ""}
+                                                    <button type="button" class="lv-qw-tag-chip lv-rename-doc-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" data-doc-title="${escapeHtml(g.title)}" style="padding:2px 6px;font-size:10px;color:#475569;" title="重命名此文档标题以消除同名混淆">✏️ 改名</button>
                                                     <button type="button" class="lv-qw-tag-chip lv-doc-snippet-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">👁 摘要</button>
                                                     <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开</button>
                                                     <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 6px;font-size:11px;" title="思源原生菜单 (右键/重命名/移动/历史/导出)">⋯</button>
@@ -13052,75 +15277,14 @@ export function openConflictResolverDialog(): void {
                     }
                 });
             }
-        } else if (activeTab === "doc-blocks") {
-            if (!currentDoc?.id) {
-                tabView.innerHTML = `
-                    <div style="text-align:center;padding:36px 16px;color:var(--lv-lp-text-sub,#64748b);">
-                        💡 请先在思源笔记中打开需要排重的长文档，然后再次点击查重对账。<br>
-                        <span style="font-size:11px;opacity:.75;margin-top:6px;display:inline-block;">支持扫描长文内重复粘贴的段落、列表、代码块并一键保留首块。</span>
-                    </div>
-                `;
-                if (saveBtn) saveBtn.textContent = "未打开目标文档";
-                return;
-            }
-            if (docDupBlocks.length === 0) {
-                tabView.innerHTML = `
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:6px 10px;border-radius:6px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;">
-                        <span style="color:var(--lv-lp-text-sub);">排重敏感度：</span>
-                        <div style="display:flex;gap:4px;">
-                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 6 ? 'active' : ''}" data-len="6" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 6 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥6字 (默认)</button>
-                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 15 ? 'active' : ''}" data-len="15" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 15 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥15字 (长句)</button>
-                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 30 ? 'active' : ''}" data-len="30" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 30 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥30字 (段落)</button>
-                        </div>
-                    </div>
-                    <div style="padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);margin-bottom:8px;">
-                        当前聚焦文档：<strong>《${escapeHtml(currentDoc.title)}》</strong>
-                    </div>
-                    <div style="text-align:center;padding:28px 16px;color:#10b981;font-weight:600;">
-                        🎉 文档内容健康度极佳！未检测到任何重复粘贴的段落或列表块（阈值 ≥${currentMinLength}字）。
-                    </div>
-                `;
-                if (saveBtn) saveBtn.textContent = "文档内容健康";
-                return;
-            }
-            if (saveBtn) saveBtn.textContent = `清理当前文档 ${docDupBlocks.length} 组重复内容`;
-            tabView.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:6px 10px;border-radius:6px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;">
-                    <span style="color:var(--lv-lp-text-sub);">排重敏感度：</span>
-                    <div style="display:flex;gap:4px;">
-                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 6 ? 'active' : ''}" data-len="6" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 6 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥6字 (默认)</button>
-                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 15 ? 'active' : ''}" data-len="15" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 15 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥15字 (长句)</button>
-                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 30 ? 'active' : ''}" data-len="30" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 30 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥30字 (段落)</button>
-                    </div>
-                </div>
-                <div style="padding:8px 12px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11.5px;">
-                    目标文档：<strong>《${escapeHtml(currentDoc.title)}》</strong> · 发现 <strong>${docDupBlocks.length}</strong> 组重复块（预计可精简 <strong>${docDupBlocks.reduce((acc, b) => acc + (b.blockIds.length - 1), 0)}</strong> 处冗余，约 <strong>${docDupBlocks.reduce((acc, b) => acc + (b.blockIds.length - 1) * b.content.length, 0)}</strong> 字）：
-                </div>
-                ${docDupBlocks.map((b) => `
-                    <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;display:flex;flex-direction:column;gap:5px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;">
-                            <span style="color:var(--lv-lp-accent);font-weight:600;">${formatBlockType(b.type)} · 重复出现 ${b.count} 次</span>
-                            <div style="display:flex;gap:4px;">
-                                <button type="button" class="lv-qw-tag-chip lv-block-single-dedup-btn" data-block-ids="${b.blockIds.join(",")}" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);">🧹 单组排重</button>
-                                <button type="button" class="lv-qw-tag-chip lv-block-locate-btn" data-block-id="${b.blockIds[0]}" data-root-id="${currentDoc.id}" style="padding:2px 7px;font-size:10.5px;">定位高亮</button>
-                            </div>
-                        </div>
-                        <div style="background:var(--lv-lp-card-bg);padding:6px 8px;border-radius:5px;border:1px solid var(--lv-lp-border);word-break:break-all;color:var(--lv-lp-text);font-family:monospace;font-size:10.5px;">
-                            ${escapeHtml(b.content.slice(0, 160))}${b.content.length > 160 ? "…" : ""}
-                        </div>
-                    </div>
-                `).join("")}
-            `;
-        } else {
-            // 同步冲突与日记
-            const hasConflict = conflictDocs.length > 0 || dupLifeLogState.duplicateGroups > 0 || dupClips.length > 0;
-            if (saveBtn) saveBtn.textContent = hasConflict ? "一键安全治理清洗" : "同步状态极佳";
+        } else if (activeTab === "sync-conflict") {
+            // 同步冲突与对账
             tabView.innerHTML = `
                 <div class="lv-restore-warn" style="font-size:11px;margin-bottom:6px;">
-                    💡 多端并发记事时，两端生成的 Block ID 独立，思源三向合并会自动保留双方内容，偶发重复追加。小驴对账中枢可在毫秒级定位分叉并保留首条真身。
+                    💡 多端并发记事时，两端生成的 Block ID 独立，思源三向合并会自动保留双方内容，偶发重复追加。小驴对账中枢可在毫秒级定位分叉，支持增量合并与智能规范改名。
                 </div>
                 <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);display:flex;flex-direction:column;gap:6px;">
-                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
                         <strong>1. 同步冲突分叉文档 (Conflict Docs)</strong>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <span style="font-weight:600;color:${conflictDocs.length > 0 ? "#ef4444" : "#10b981"};">${conflictDocs.length > 0 ? `⚠️ 发现 ${conflictDocs.length} 篇` : "✓ 无冲突"}</span>
@@ -13130,27 +15294,87 @@ export function openConflictResolverDialog(): void {
                     ${conflictDocs.length === 0 ? `
                         <div style="font-size:11px;color:#10b981;">✓ 全库未检测到因同步分叉生成的带 (冲突) 后缀文档。</div>
                     ` : `
-                        <div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;">
-                            ${conflictDocs.map((d) => `
-                                <div class="lv-doc-entry-row" data-doc-id="${d.id}" data-doc-box="${d.box}" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:5px;background:var(--lv-lp-card-bg,#fff);border:1px solid rgba(239,68,68,0.2);font-size:11px;">
-                                    <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                        <span style="color:#ef4444;font-weight:600;">[冲突]</span>
-                                        <span style="opacity:.85;" title="${escapeHtml(d.title)}">${escapeHtml(d.title)}</span>
-                                        <span style="opacity:.5;margin-left:6px;font-size:10.5px;">(${d.length || 0} 字 · ${formatSyTimestamp(d.updated)})</span>
+                        <div style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;">
+                            ${conflictDocs.map((d) => {
+                                const aiConflict = lvAiJudge.judgeConflictPair(d);
+                                return `
+                                <div class="lv-doc-entry-row" data-doc-id="${d.id}" data-doc-box="${d.box}" style="display:flex;flex-direction:column;gap:4px;padding:6px 9px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid rgba(239,68,68,0.25);font-size:11px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+                                        <div style="flex:1;min-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                            <span style="color:#ef4444;font-weight:700;">[⚡ 冲突版]</span>
+                                            <span style="opacity:.85;font-weight:600;" title="${escapeHtml(d.title)}">${escapeHtml(d.title)}</span>
+                                            <span style="opacity:.5;margin-left:6px;font-size:10.5px;">(${d.length || 0} 字 · ${formatSyTimestamp(d.updated)})</span>
+                                        </div>
+                                        <div style="display:flex;gap:4px;flex-shrink:0;">
+                                            ${d.baseDocId ? `
+                                                <button type="button" class="lv-qw-tag-chip lv-conflict-merge-btn" data-conflict-id="${d.id}" data-base-id="${d.baseDocId}" style="padding:2px 8px;font-size:10.5px;color:#2563eb;background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.25);font-weight:700;">🔄 增量合并进原件</button>
+                                            ` : ""}
+                                            <button type="button" class="lv-qw-tag-chip lv-conflict-rename-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" data-suggested-title="${escapeHtml(aiConflict.suggestedTitle)}" style="padding:2px 7px;font-size:10.5px;color:#475569;">✏️ 规范改名</button>
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开对比</button>
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 6px;font-size:11px;" title="思源原生菜单">⋯</button>
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>
+                                        </div>
                                     </div>
-                                    <div style="display:flex;gap:4px;flex-shrink:0;">
-                                        <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:2px 7px;font-size:10.5px;">打开对比</button>
-                                        <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 6px;font-size:11px;" title="思源原生菜单 (右键/重命名/移动/历史/导出)">⋯</button>
-                                        <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${d.id}" data-doc-box="${d.box}" style="padding:2px 7px;font-size:10.5px;color:#ef4444;">移入回收站</button>
+                                    ${d.baseDocId ? `
+                                        <div style="font-size:10.5px;padding:3px 6px;border-radius:4px;background:rgba(16,185,129,0.06);color:#059669;display:flex;align-items:center;gap:6px;">
+                                            <span>✓ 已匹配原件真身：《${escapeHtml(d.baseDocTitle || "")}》(${d.baseDocLength || 0}字 · \`${escapeHtml(d.baseDocHPath || "")}\`)</span>
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.baseDocId}" style="padding:1px 5px;font-size:9.5px;">打开原件</button>
+                                        </div>
+                                    ` : `
+                                        <div style="font-size:10px;color:var(--lv-lp-text-sub);">ℹ️ 全库未检索到同名原件文档（可能已被移动或改名），建议人工查阅</div>
+                                    `}
+                                    <div style="font-size:10px;padding:3px 6px;border-radius:4px;background:rgba(124,58,237,0.06);color:#6d28d9;">
+                                        🤖 <strong>AI 参谋建议：</strong>${escapeHtml(aiConflict.recommendation)}
                                     </div>
                                 </div>
-                            `).join("")}
+                            `;}).join("")}
+                        </div>
+                    `}
+                </div>
+                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                        <strong>2. 跨笔记本分立孤立日记 (Orphan Daily Notes)</strong>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span style="font-weight:600;color:${orphanDailyNotes.length > 0 ? "#f59e0b" : "#10b981"};">${orphanDailyNotes.length > 0 ? `⚠️ 发现 ${orphanDailyNotes.length} 篇分立日记` : "✓ 无孤立日记"}</span>
+                            ${orphanDailyNotes.length > 1 ? `<button type="button" class="lv-qw-tag-chip lv-batch-merge-orphans-btn" style="padding:2px 8px;font-size:10.5px;color:#2563eb;background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.25);font-weight:700;">🔄 一键归并所有孤立日记</button>` : ""}
+                        </div>
+                    </div>
+                    ${orphanDailyNotes.length === 0 ? `
+                        <div style="font-size:11px;color:#10b981;">✓ 全生态日记路径规范，无误建在插件专属本的孤立日记。</div>
+                    ` : `
+                        <div style="display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;">
+                            ${orphanDailyNotes.map((d) => {
+                                const aiAdv = lvAiJudge.judgeOrphanDailyNote(d);
+                                return `
+                                <div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid rgba(245,158,11,0.25);font-size:11px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                                        <div style="display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;">
+                                            <span style="font-weight:700;color:#d97706;">📅 ${escapeHtml(d.date)}</span>
+                                            <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(100,116,139,0.12);color:#475569;">${escapeHtml(d.boxName)}</span>
+                                            ${d.isEmpty ? `<span style="font-size:10px;color:#94a3b8;">(0字空占位)</span>` : `<span style="font-size:10px;color:#059669;font-weight:600;">(含 ${d.pendingBlocksCount || 1} 笔流水 · ${d.length}字)</span>`}
+                                        </div>
+                                        <div style="display:flex;gap:4px;flex-shrink:0;">
+                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:1px 5px;font-size:10px;">打开</button>
+                                            <button type="button" class="lv-qw-tag-chip lv-merge-orphan-daily-btn" data-orphan-id="${d.id}" style="padding:2px 8px;font-size:10.5px;color:#2563eb;background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.25);font-weight:700;">${d.isEmpty ? "🧹 清理空占位" : "🔄 一键合并进主日记"}</button>
+                                        </div>
+                                    </div>
+                                    <div style="font-size:10.5px;color:var(--lv-lp-text-sub);background:rgba(15,23,42,0.02);padding:4px 6px;border-radius:4px;word-break:break-all;">
+                                        ${escapeHtml(d.snippet)}
+                                    </div>
+                                    <div style="font-size:10px;padding:3px 6px;border-radius:4px;background:rgba(124,58,237,0.06);color:#6d28d9;">
+                                        🤖 <strong>AI 参谋建议：</strong>${escapeHtml(aiAdv.recommendation)}
+                                    </div>
+                                    <div style="font-size:10px;color:${d.mainDocId ? "#10b981" : "#64748b"};display:flex;align-items:center;gap:4px;">
+                                        ${d.mainDocId ? `✓ 对应主日记已就绪 (${d.mainDocLength || 0}字)` : "ℹ️ 主日记尚未生成（合并时将自动初始化主日记）"}
+                                    </div>
+                                </div>
+                            `;}).join("")}
                         </div>
                     `}
                 </div>
                 <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);display:flex;flex-direction:column;gap:6px;">
                     <div style="display:flex;align-items:center;justify-content:space-between;">
-                        <strong>2. 今日日记重复 LifeLog 流水</strong>
+                        <strong>3. 今日日记重复 LifeLog 流水</strong>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <span style="font-weight:600;color:${dupLifeLogState.duplicateGroups > 0 ? "#f59e0b" : "#10b981"};">${dupLifeLogState.duplicateGroups > 0 ? `⚠️ 发现 ${dupLifeLogState.duplicateGroups} 组重复` : "✓ 无重复"}</span>
                             ${dupLifeLogState.duplicateGroups > 0 ? `<button type="button" class="lv-qw-tag-chip lv-clean-lifelog-btn" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border:1px solid var(--lv-lp-border);">🧹 清洗重复流水</button>` : ""}
@@ -13160,7 +15384,7 @@ export function openConflictResolverDialog(): void {
                 </div>
                 <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);display:flex;flex-direction:column;gap:6px;">
                     <div style="display:flex;align-items:center;justify-content:space-between;">
-                        <strong>3. 读库重复网页剪藏 (Duplicate Clips)</strong>
+                        <strong>4. 读库重复网页剪藏 (Duplicate Clips)</strong>
                         <span style="font-weight:600;color:${dupClips.length > 0 ? "#f59e0b" : "#10b981"};">${dupClips.length > 0 ? `⚠️ 发现 ${dupClips.length} 组重复` : "✓ 无重复"}</span>
                     </div>
                     ${dupClips.length === 0 ? `
@@ -13189,49 +15413,92 @@ export function openConflictResolverDialog(): void {
                         </div>
                     `}
                 </div>
-                <div style="padding:10px 12px;border-radius:9px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);display:flex;flex-direction:column;gap:6px;">
-                    <div style="display:flex;align-items:center;justify-content:space-between;">
-                        <strong>4. 跨笔记本分立孤立日记 (Orphan Daily Notes)</strong>
-                        <div style="display:flex;align-items:center;gap:6px;">
-                            <span style="font-weight:600;color:${orphanDailyNotes.length > 0 ? "#f59e0b" : "#10b981"};">${orphanDailyNotes.length > 0 ? `⚠️ 发现 ${orphanDailyNotes.length} 篇分立日记` : "✓ 无孤立日记"}</span>
+            `;
+        } else if (activeTab === "doc-blocks") {
+            // 当前文档排重
+            if (!currentDoc?.id) {
+                tabView.innerHTML = `
+                    <div style="text-align:center;padding:36px 16px;color:var(--lv-lp-text-sub,#64748b);">
+                        💡 请先在思源笔记中打开需要排重的长文档，然后再次点击查重对账。<br>
+                        <span style="font-size:11px;opacity:.75;margin-top:6px;display:inline-block;">支持扫描长文内重复粘贴的段落、列表、代码块并一键保留首块。</span>
+                    </div>
+                `;
+                return;
+            }
+            if (docDupBlocks.length === 0) {
+                tabView.innerHTML = `
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:6px 10px;border-radius:6px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;">
+                        <span style="color:var(--lv-lp-text-sub);">排重敏感度：</span>
+                        <div style="display:flex;gap:4px;">
+                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 6 ? 'active' : ''}" data-len="6" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 6 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥6字 (默认)</button>
+                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 15 ? 'active' : ''}" data-len="15" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 15 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥15字 (长句)</button>
+                            <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 30 ? 'active' : ''}" data-len="30" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 30 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥30字 (段落)</button>
                         </div>
                     </div>
-                    ${orphanDailyNotes.length === 0 ? `
-                        <div style="font-size:11px;color:#10b981;">✓ 全生态日记路径规范，无误建在插件专属本的孤立日记。</div>
-                    ` : `
-                        <div style="font-size:11px;color:var(--lv-lp-text-sub);margin-bottom:4px;">
-                            💡 检测到历史版本偶发将今日日记创建在了插件专属本（如管家/生态本）。点击【一键合并】可将未归并流水安全迁移回主日记并清理空文档。
-                        </div>
-                        <div style="display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;">
-                            ${orphanDailyNotes.map((d) => {
-                                const aiAdv = lvAiJudge.judgeOrphanDailyNote(d);
-                                return `
-                                <div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid rgba(245,158,11,0.25);font-size:11px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                                        <div style="display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;">
-                                            <span style="font-weight:700;color:#d97706;">📅 ${escapeHtml(d.date)}</span>
-                                            <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(100,116,139,0.12);color:#475569;">${escapeHtml(d.boxName)}</span>
-                                            ${d.isEmpty ? `<span style="font-size:10px;color:#94a3b8;">(0字空占位)</span>` : `<span style="font-size:10px;color:#059669;font-weight:600;">(含 ${d.pendingBlocksCount || 1} 笔流水 · ${d.length}字)</span>`}
-                                        </div>
-                                        <div style="display:flex;gap:4px;flex-shrink:0;">
-                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${d.id}" style="padding:1px 5px;font-size:10px;">打开</button>
-                                            <button type="button" class="lv-qw-tag-chip lv-merge-orphan-daily-btn" data-orphan-id="${d.id}" style="padding:2px 8px;font-size:10.5px;color:#2563eb;background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.25);font-weight:700;">${d.isEmpty ? "🧹 清理空占位" : "🔄 一键合并进主日记"}</button>
-                                        </div>
-                                    </div>
-                                    <div style="font-size:10.5px;color:var(--lv-lp-text-sub);background:rgba(15,23,42,0.02);padding:4px 6px;border-radius:4px;word-break:break-all;">
-                                        ${escapeHtml(d.snippet)}
-                                    </div>
-                                    <div style="font-size:10px;padding:3px 6px;border-radius:4px;background:rgba(124,58,237,0.06);color:#6d28d9;display:flex;align-items:center;gap:4px;">
-                                        <span>🤖 AI 参谋研判：</span><span>${escapeHtml(aiAdv.recommendation)}</span>
-                                    </div>
-                                    <div style="font-size:10px;color:${d.mainDocId ? "#10b981" : "#64748b"};display:flex;align-items:center;gap:4px;">
-                                        ${d.mainDocId ? `✓ 对应主日记已就绪 (${d.mainDocLength || 0}字)` : "ℹ️ 主日记尚未生成（合并时将自动初始化主日记）"}
-                                    </div>
-                                </div>
-                            `;}).join("")}
-                        </div>
-                    `}
+                    <div style="padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);margin-bottom:8px;">
+                        当前聚焦文档：<strong>《${escapeHtml(currentDoc.title)}》</strong>
+                    </div>
+                    <div style="text-align:center;padding:28px 16px;color:#10b981;font-weight:600;">
+                        🎉 文档内容健康度极佳！未检测到任何重复粘贴的段落或列表块（阈值 ≥${currentMinLength}字）。
+                    </div>
+                `;
+                return;
+            }
+            tabView.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:6px 10px;border-radius:6px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;">
+                    <span style="color:var(--lv-lp-text-sub);">排重敏感度：</span>
+                    <div style="display:flex;gap:4px;">
+                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 6 ? 'active' : ''}" data-len="6" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 6 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥6字 (默认)</button>
+                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 15 ? 'active' : ''}" data-len="15" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 15 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥15字 (长句)</button>
+                        <button type="button" class="lv-qw-tag-chip lv-min-len-btn ${currentMinLength === 30 ? 'active' : ''}" data-len="30" style="padding:2px 7px;font-size:10.5px;${currentMinLength === 30 ? 'font-weight:700;color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);border-color:var(--lv-lp-accent);' : ''}">≥30字 (段落)</button>
+                    </div>
                 </div>
+                <div style="padding:8px 12px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11.5px;">
+                    目标文档：<strong>《${escapeHtml(currentDoc.title)}》</strong> · 发现 <strong>${docDupBlocks.length}</strong> 组重复块（预计可精简 <strong>${docDupBlocks.reduce((acc, b) => acc + (b.blockIds.length - 1), 0)}</strong> 处冗余，约 <strong>${docDupBlocks.reduce((acc, b) => acc + (b.blockIds.length - 1) * b.content.length, 0)}</strong> 字）：
+                </div>
+                ${docDupBlocks.map((b) => `
+                    <div style="padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;display:flex;flex-direction:column;gap:5px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span style="color:var(--lv-lp-accent);font-weight:600;">${formatBlockType(b.type)} · 重复出现 ${b.count} 次</span>
+                            <div style="display:flex;gap:4px;">
+                                <button type="button" class="lv-qw-tag-chip lv-block-single-dedup-btn" data-block-ids="${b.blockIds.join(",")}" style="padding:2px 8px;font-size:10.5px;color:var(--lv-lp-accent);">🧹 单组排重</button>
+                                <button type="button" class="lv-qw-tag-chip lv-block-locate-btn" data-block-id="${b.blockIds[0]}" data-root-id="${currentDoc.id}" style="padding:2px 7px;font-size:10.5px;">定位高亮</button>
+                            </div>
+                        </div>
+                        <div style="background:var(--lv-lp-card-bg);padding:6px 8px;border-radius:5px;border:1px solid var(--lv-lp-border);word-break:break-all;color:var(--lv-lp-text);font-family:monospace;font-size:10.5px;">
+                            ${escapeHtml(b.content.slice(0, 160))}${b.content.length > 160 ? "…" : ""}
+                        </div>
+                    </div>
+                `).join("")}
+            `;
+        } else {
+            // 忽略白名单
+            const whitelist = Array.from(getReconciliationWhitelist());
+            tabView.innerHTML = `
+                <div class="lv-restore-warn" style="font-size:11px;margin-bottom:8px;">
+                    🛡️ 白名单中的同名文档组在全库体检中将保持现状并自动隐去，避免反复打扰。您可随时按需将其移出白名单恢复日常审计。
+                </div>
+                ${whitelist.length === 0 ? `
+                    <div style="text-align:center;padding:36px 16px;color:var(--lv-lp-text-sub,#64748b);">
+                        暂无白名单记录。在「全库同名文档」列表中点击【🛡️ 保持现状(忽略)】可将合法同名项加入此处。
+                    </div>
+                ` : `
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
+                            <span style="font-size:11.5px;font-weight:600;">当前已忽略同名文档 (${whitelist.length} 个标题)：</span>
+                            <button type="button" class="lv-qw-tag-chip lv-clear-whitelist-btn" style="padding:2px 8px;font-size:10.5px;color:#ef4444;">清空白名单</button>
+                        </div>
+                        ${whitelist.map((t) => `
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:6px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:11px;">
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <span style="color:#059669;font-weight:700;">🛡️ 《${escapeHtml(t)}》</span>
+                                    <span style="font-size:10px;color:var(--lv-lp-text-sub);">已设为免打扰</span>
+                                </div>
+                                <button type="button" class="lv-qw-tag-chip lv-whitelist-remove-item-btn" data-title="${escapeHtml(t)}" style="padding:2px 7px;font-size:10px;color:#64748b;">移出白名单</button>
+                            </div>
+                        `).join("")}
+                    </div>
+                `}
             `;
         }
     };
@@ -13250,6 +15517,155 @@ export function openConflictResolverDialog(): void {
         renderCurrentTab();
     };
 
+    const resolveTargetGroup = (btn: HTMLElement | null): LvDuplicateDocGroup | undefined => {
+        if (!btn) return undefined;
+        const gIdxStr = btn.getAttribute("data-group-index");
+        if (gIdxStr !== null) {
+            const idx = Number(gIdxStr);
+            if (!isNaN(idx) && idx >= 0 && idx < currentFilteredGroups.length) {
+                return currentFilteredGroups[idx];
+            }
+        }
+        const grpTitle = btn.getAttribute("data-group-title");
+        if (grpTitle) {
+            return currentFilteredGroups.find((g) => g.title === grpTitle) || dupDocGroups.find((g) => g.title === grpTitle);
+        }
+        return undefined;
+    };
+
+    const renderGroupDiffContent = async (diffDrawer: HTMLElement, targetGroup: LvDuplicateDocGroup, safeId: string, selectedCandidateId?: string) => {
+        const keepDoc = targetGroup.docs.find(d => d.id === targetGroup.recommendedKeepId) || targetGroup.docs[0];
+        if (!keepDoc) {
+            diffDrawer.style.display = "none";
+            return;
+        }
+        const otherDocs = targetGroup.docs.filter(d => d.id !== keepDoc.id);
+        const candidateDoc = (selectedCandidateId ? otherDocs.find(d => d.id === selectedCandidateId) : null) || otherDocs[0] || targetGroup.docs[1] || keepDoc;
+
+        diffDrawer.innerHTML = `
+            <div style="text-align:center;padding:16px;color:var(--lv-lp-accent,#2563eb);display:flex;align-items:center;justify-content:center;gap:6px;">
+                <span>⏳</span>
+                <span>正在块级拉取两篇文档正文并进行 LCS 差异对账比对…</span>
+            </div>
+        `;
+
+        const [blocksA, blocksB] = await Promise.all([
+            lvDeduplicator.getDocContentBlocks(keepDoc.id, 200),
+            lvDeduplicator.getDocContentBlocks(candidateDoc.id, 200),
+        ]);
+
+        const diff = computeBlockLevelLcsDiff(blocksA, blocksB);
+        const gIdx = currentFilteredGroups.indexOf(targetGroup);
+
+        const candidateSelectHtml = otherDocs.length > 1 ? `
+            <div style="display:flex;align-items:center;gap:4px;">
+                <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">对比副本:</span>
+                <select class="lv-diff-cand-select" data-group-index="${gIdx}" data-drawer-id="${safeId}" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.15));padding:2px 6px;border-radius:4px;font-size:11px;color:var(--lv-lp-text,#0f172a);cursor:pointer;max-width:200px;">
+                    ${otherDocs.map(d => `<option value="${d.id}" ${d.id === candidateDoc.id ? 'selected' : ''}>${escapeHtml(d.hpath || d.id)} (${d.length}字)</option>`).join("")}
+                </select>
+            </div>
+        ` : "";
+
+        diffDrawer.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding-bottom:6px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <span style="font-weight:700;font-size:12px;color:var(--lv-lp-text);">⚖️ 《${escapeHtml(targetGroup.title)}》 差异对账 (LCS 块级比对)</span>
+                        <span style="font-size:10.5px;padding:1px 6px;border-radius:4px;background:rgba(37,99,235,0.08);color:var(--lv-lp-accent,#2563eb);font-weight:600;">相似度: ${diff.similarityPercent}%</span>
+                        <span style="font-size:10.5px;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.1);color:#059669;font-weight:600;">🟢 真身独有 ${diff.uniqueCountA} 块 (${diff.uniqueWordsA}字)</span>
+                        <span style="font-size:10.5px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:#d97706;font-weight:600;">🟠 副本独有 ${diff.uniqueCountB} 块 (${diff.uniqueWordsB}字)</span>
+                        <span style="font-size:10.5px;padding:1px 6px;border-radius:4px;background:rgba(15,23,42,0.05);color:var(--lv-lp-text-sub,#64748b);">⚪ 相同 ${diff.identicalCount} 块</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        ${candidateSelectHtml}
+                        <button type="button" class="lv-qw-tag-chip lv-close-diff-drawer-btn" data-drawer-id="${safeId}" style="padding:1px 7px;font-size:10.5px;">收起</button>
+                    </div>
+                </div>
+
+                <div class="lv-diff-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <div style="padding:6px 8px;border-radius:6px;background:rgba(16,185,129,0.04);border:1px solid rgba(16,185,129,0.25);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <strong style="color:#059669;font-size:11.5px;">🌟 推荐真身 (${keepDoc.length} 字 · ${blocksA.length} 块)</strong>
+                            <div style="display:flex;gap:4px;">
+                                <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${keepDoc.id}" style="padding:1px 5px;font-size:10px;">打开</button>
+                                <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${keepDoc.id}" data-doc-box="${keepDoc.box}" style="padding:1px 5px;font-size:10px;" title="原生菜单">⋯</button>
+                            </div>
+                        </div>
+                        <div style="font-size:10px;color:var(--lv-lp-text-sub,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;" title="${escapeHtml(keepDoc.hpath)}">${escapeHtml(keepDoc.hpath || "/" + keepDoc.id)}</div>
+                    </div>
+                    <div style="padding:6px 8px;border-radius:6px;background:rgba(245,158,11,0.04);border:1px solid rgba(245,158,11,0.25);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <strong style="color:#d97706;font-size:11.5px;">📑 候选副本 (${candidateDoc.length} 字 · ${blocksB.length} 块)</strong>
+                            <div style="display:flex;gap:4px;">
+                                <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${candidateDoc.id}" style="padding:1px 5px;font-size:10px;">打开</button>
+                                <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${candidateDoc.id}" data-doc-box="${candidateDoc.box}" style="padding:1px 5px;font-size:10px;" title="原生菜单">⋯</button>
+                            </div>
+                        </div>
+                        <div style="font-size:10px;color:var(--lv-lp-text-sub,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;" title="${escapeHtml(candidateDoc.hpath)}">${escapeHtml(candidateDoc.hpath || "/" + candidateDoc.id)}</div>
+                    </div>
+                </div>
+
+                <div class="lv-diff-rows-container" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;padding:6px;background:rgba(15,23,42,0.02);border-radius:6px;border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));font-size:11px;">
+                    ${diff.rows.length === 0 ? `
+                        <div style="text-align:center;padding:16px;color:var(--lv-lp-text-sub,#64748b);">两篇文档当前均暂无正文段落（或均为 0 字空壳）</div>
+                    ` : diff.rows.map(r => {
+                        if (r.type === "identical") {
+                            return `
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:3px 6px;border-radius:4px;background:rgba(15,23,42,0.02);opacity:0.65;font-size:10.5px;">
+                                    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.blockA!.content)}"><span style="color:#64748b;">[相同]</span> ${escapeHtml(r.blockA!.content)}</div>
+                                    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.blockB!.content)}"><span style="color:#64748b;">[相同]</span> ${escapeHtml(r.blockB!.content)}</div>
+                                </div>
+                            `;
+                        } else if (r.type === "diff") {
+                            return `
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 6px;border-radius:4px;background:rgba(15,23,42,0.03);">
+                                    <div style="padding:4px 6px;border-radius:4px;background:rgba(239,68,68,0.06);border-left:2px solid #ef4444;line-height:1.45;word-break:break-all;">
+                                        <div style="font-size:9.5px;color:#ef4444;font-weight:700;margin-bottom:2px;">真身原段 (${r.blockA!.type})</div>
+                                        ${r.blockA!.diffHtml || escapeHtml(r.blockA!.content)}
+                                    </div>
+                                    <div style="padding:4px 6px;border-radius:4px;background:rgba(16,185,129,0.06);border-left:2px solid #10b981;line-height:1.45;word-break:break-all;">
+                                        <div style="font-size:9.5px;color:#059669;font-weight:700;margin-bottom:2px;">副本修改 (${r.blockB!.type})</div>
+                                        ${r.blockB!.diffHtml || escapeHtml(r.blockB!.content)}
+                                    </div>
+                                </div>
+                            `;
+                        } else if (r.type === "unique_a") {
+                            return `
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 6px;border-radius:4px;background:rgba(15,23,42,0.03);">
+                                    <div style="padding:4px 6px;border-radius:4px;background:rgba(16,185,129,0.06);border-left:2px solid #10b981;line-height:1.45;word-break:break-all;">
+                                        <div style="font-size:9.5px;color:#059669;font-weight:700;margin-bottom:2px;">+ 仅真身含有 (${r.blockA!.type})</div>
+                                        ${escapeHtml(r.blockA!.content)}
+                                    </div>
+                                    <div style="padding:6px;color:var(--lv-lp-text-sub,#64748b);font-style:italic;opacity:0.4;display:flex;align-items:center;">(副本缺失此段)</div>
+                                </div>
+                            `;
+                        } else {
+                            return `
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 6px;border-radius:4px;background:rgba(15,23,42,0.03);">
+                                    <div style="padding:6px;color:var(--lv-lp-text-sub,#64748b);font-style:italic;opacity:0.4;display:flex;align-items:center;">(真身缺失此段)</div>
+                                    <div style="padding:4px 6px;border-radius:4px;background:rgba(245,158,11,0.06);border-left:2px solid #d97706;line-height:1.45;word-break:break-all;">
+                                        <div style="font-size:9.5px;color:#d97706;font-weight:700;margin-bottom:2px;">+ 仅副本含有 (${r.blockB!.type})</div>
+                                        ${escapeHtml(r.blockB!.content)}
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }).join("")}
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;padding-top:4px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));flex-wrap:wrap;gap:6px;">
+                    <span style="font-size:10.5px;color:var(--lv-lp-text-sub,#64748b);">💡 快捷处置建议：若副本含独有内容，推荐【增量合并】；若属于冗余分叉，可直接【移入回收站】</span>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                        <button type="button" class="lv-qw-tag-chip lv-merge-pair-btn" data-keep-id="${keepDoc.id}" data-candidate-id="${candidateDoc.id}" data-candidate-box="${candidateDoc.box}" style="padding:3px 10px;font-size:11px;color:#2563eb;background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.25);font-weight:700;">🔄 增量合并进真身</button>
+                        <button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-index="${gIdx}" data-group-title="${escapeHtml(targetGroup.title)}" data-doc-id="${candidateDoc.id}" style="padding:3px 8px;font-size:10.5px;color:var(--lv-lp-accent,#2563eb);">🔄 设为真身</button>
+                        <button type="button" class="lv-qw-tag-chip lv-rename-doc-btn" data-doc-id="${candidateDoc.id}" data-doc-box="${candidateDoc.box}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:3px 8px;font-size:10.5px;color:#475569;">✏️ 改名</button>
+                        <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${candidateDoc.id}" data-doc-box="${candidateDoc.box}" data-child-count="${candidateDoc.childCount || 0}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:3px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);">🧹 移入回收站</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
     mask?.addEventListener("click", async (e) => {
         const tabBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-conflict-tab");
         if (tabBtn) {
@@ -13257,6 +15673,47 @@ export function openConflictResolverDialog(): void {
             hapticFeedback(6);
             activeTab = (tabBtn.getAttribute("data-tab") as any) || "doc-titles";
             renderCurrentTab();
+            return;
+        }
+
+        const filterChip = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-reconcile-filter-chip");
+        if (filterChip) {
+            e.stopPropagation();
+            hapticFeedback(4);
+            filterCategory = (filterChip.getAttribute("data-cat") as any) || "all";
+            renderCurrentTab();
+            return;
+        }
+
+        const aiHealthBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-ai-health-btn");
+        if (aiHealthBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            aiHealthExpanded = !aiHealthExpanded;
+            if (aiHealthExpanded && !aiHealthData) {
+                aiHealthLoading = true;
+                renderAiHealth();
+                void lvDeduplicator.aiSummarizeVaultHealth({
+                    dupDocGroups,
+                    conflictDocs,
+                    orphanDailyNotes,
+                    dupClips,
+                }).then((data) => {
+                    aiHealthData = data;
+                    aiHealthLoading = false;
+                    renderAiHealth();
+                });
+            } else {
+                renderAiHealth();
+            }
+            return;
+        }
+
+        const closeHealthBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-close-health-btn");
+        if (closeHealthBtn) {
+            e.stopPropagation();
+            aiHealthExpanded = false;
+            renderAiHealth();
             return;
         }
 
@@ -13313,9 +15770,8 @@ export function openConflictResolverDialog(): void {
         if (setKeepBtn) {
             e.stopPropagation();
             hapticFeedback(4);
-            const grpTitle = setKeepBtn.getAttribute("data-group-title");
+            const targetGroup = resolveTargetGroup(setKeepBtn);
             const targetDocId = setKeepBtn.getAttribute("data-doc-id");
-            const targetGroup = dupDocGroups.find((g) => g.title === grpTitle);
             if (targetGroup && targetDocId) {
                 targetGroup.recommendedKeepId = targetDocId;
                 renderCurrentTab();
@@ -13323,78 +15779,144 @@ export function openConflictResolverDialog(): void {
             return;
         }
 
-        const diffBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-group-diff-btn");
-        if (diffBtn) {
+        // 区分改名
+        const renameBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-rename-doc-btn");
+        if (renameBtn) {
             e.stopPropagation();
-            hapticFeedback(6);
-            const grpTitle = diffBtn.getAttribute("data-group-title");
-            const targetGroup = dupDocGroups.find((g) => g.title === grpTitle);
-            if (targetGroup) {
-                const safeId = escapeHtml(targetGroup.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
-                const diffDrawer = mask?.querySelector<HTMLElement>(`.lv-diff-drawer-${safeId}`);
-                if (diffDrawer) {
-                    if (diffDrawer.style.display === "none") {
-                        diffDrawer.style.display = "block";
-                        diffDrawer.innerHTML = `<div style="text-align:center;padding:12px;color:var(--lv-lp-accent);">🔍 正在对比真身与副本差异…</div>`;
-                        const keepDoc = targetGroup.docs.find(d => d.id === targetGroup.recommendedKeepId) || targetGroup.docs[0];
-                        const candidateDoc = targetGroup.docs.find(d => d.id !== targetGroup.recommendedKeepId) || targetGroup.docs[1] || keepDoc;
-                        if (!keepDoc || !candidateDoc) {
-                            diffDrawer.style.display = "none";
-                            return;
-                        }
-                        void Promise.all([
-                            lvDeduplicator.getDocPreviewSnippet(keepDoc.id, 160),
-                            lvDeduplicator.getDocPreviewSnippet(candidateDoc.id, 160)
-                        ]).then(([keepSnippet, candSnippet]) => {
-                            const wordDiff = candidateDoc.length - keepDoc.length;
-                            const diffLabel = wordDiff === 0 ? "字数完全相同" : (wordDiff > 0 ? `副本多 ${wordDiff} 字` : `真身多 ${-wordDiff} 字`);
-                            diffDrawer.innerHTML = `
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600;color:var(--lv-lp-text);">
-                                    <span>⚖️ 《${escapeHtml(targetGroup.title)}》 差异对账</span>
-                                    <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(15,23,42,0.06);color:var(--lv-lp-text-sub);">${diffLabel}</span>
-                                </div>
-                                <div class="lv-diff-grid">
-                                    <div style="padding:6px;border-radius:5px;background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.2);">
-                                        <div style="color:#10b981;font-weight:700;margin-bottom:2px;">🌟 推荐真身</div>
-                                        <div style="font-size:10px;color:var(--lv-lp-text-sub);">${escapeHtml(keepDoc.hpath || "/" + keepDoc.id)}</div>
-                                        <div style="margin:4px 0;font-size:10.5px;">${keepDoc.length} 字 · ${keepDoc.childCount ? `${keepDoc.childCount} 篇子文档 · ` : ""}${formatSyTimestamp(keepDoc.updated)}</div>
-                                        <div style="font-family:monospace;font-size:10px;color:var(--lv-lp-text);background:var(--lv-lp-card-bg);padding:4px 6px;border-radius:4px;border:1px solid var(--lv-lp-border);">${escapeHtml(keepSnippet || "（无段落正文）")}</div>
-                                        <div style="margin-top:6px;display:flex;gap:4px;">
-                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${keepDoc.id}" style="padding:1px 6px;font-size:10px;">打开真身</button>
-                                            <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${keepDoc.id}" data-doc-box="${keepDoc.box}" style="padding:1px 6px;font-size:10px;" title="原生菜单">⋯</button>
-                                        </div>
-                                    </div>
-                                    <div style="padding:6px;border-radius:5px;background:rgba(15,23,42,0.03);border:1px solid var(--lv-lp-border);">
-                                        <div style="color:var(--lv-lp-text-sub,#94a3b8);font-weight:700;margin-bottom:2px;">📑 候选副本</div>
-                                        <div style="font-size:10px;color:var(--lv-lp-text-sub);">${escapeHtml(candidateDoc.hpath || "/" + candidateDoc.id)}</div>
-                                        <div style="margin:4px 0;font-size:10.5px;">${candidateDoc.length} 字 · ${candidateDoc.childCount ? `${candidateDoc.childCount} 篇子文档 · ` : ""}${formatSyTimestamp(candidateDoc.updated)}</div>
-                                        <div style="font-family:monospace;font-size:10px;color:var(--lv-lp-text);background:var(--lv-lp-card-bg);padding:4px 6px;border-radius:4px;border:1px solid var(--lv-lp-border);">${escapeHtml(candSnippet || "（无段落正文）")}</div>
-                                        <div style="margin-top:6px;display:flex;gap:4px;">
-                                            <button type="button" class="lv-qw-tag-chip lv-set-keep-btn" data-group-title="${escapeHtml(targetGroup.title)}" data-doc-id="${candidateDoc.id}" style="padding:1px 6px;font-size:10px;color:var(--lv-lp-accent);">设为真身</button>
-                                            <button type="button" class="lv-qw-tag-chip lv-doc-jump-btn" data-doc-id="${candidateDoc.id}" style="padding:1px 6px;font-size:10px;">打开副本</button>
-                                            <button type="button" class="lv-qw-tag-chip lv-doc-more-btn" data-doc-id="${candidateDoc.id}" data-doc-box="${candidateDoc.box}" style="padding:1px 6px;font-size:10px;" title="原生菜单">⋯</button>
-                                            <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${candidateDoc.id}" data-doc-box="${candidateDoc.box}" data-child-count="${candidateDoc.childCount || 0}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:1px 6px;font-size:10px;color:#ef4444;">移入回收站</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        });
+            hapticFeedback(4);
+            const docId = renameBtn.getAttribute("data-doc-id");
+            const box = renameBtn.getAttribute("data-doc-box");
+            const currentTitle = renameBtn.getAttribute("data-doc-title") || "";
+            if (docId && typeof window !== "undefined") {
+                const newTitle = await lvPrompt("✏️ 文档区分改名", `请输入《${currentTitle}》的新标题（消除同名混淆）：`, `${currentTitle} (区分)`);
+                if (newTitle && newTitle.trim() && newTitle.trim() !== currentTitle) {
+                    renameBtn.disabled = true;
+                    renameBtn.textContent = "改名中…";
+                    const res = await lvDeduplicator.renameDoc(docId, newTitle.trim(), box || undefined);
+                    if (res.ok) {
+                        lvNotify.capsule({ source: "对账改名", message: `✓ 已成功改名为《${newTitle.trim()}》`, duration: 2500, level: "success", archive: false });
+                        void runScan();
                     } else {
-                        diffDrawer.style.display = "none";
+                        renameBtn.disabled = false;
+                        renameBtn.textContent = "✏️ 改名";
+                        lvNotify.capsule({ source: "对账改名", message: `改名失败: ${res.error || "未知错误"}`, duration: 2500, level: "error", archive: false });
                     }
                 }
             }
             return;
         }
 
+        // 白名单添加/移除
+        const toggleWhitelistBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-toggle-whitelist-group-btn");
+        if (toggleWhitelistBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            const targetGroup = resolveTargetGroup(toggleWhitelistBtn);
+            const grpTitle = targetGroup?.title || toggleWhitelistBtn.getAttribute("data-group-title");
+            const action = toggleWhitelistBtn.getAttribute("data-action");
+            if (grpTitle) {
+                if (action === "add") {
+                    addReconciliationWhitelist(grpTitle);
+                    lvNotify.capsule({ source: "对账白名单", message: `✓ 已将《${grpTitle}》加入白名单`, duration: 2200, level: "info", archive: false });
+                } else {
+                    removeReconciliationWhitelist(grpTitle);
+                    lvNotify.capsule({ source: "对账白名单", message: `✓ 已将《${grpTitle}》移出白名单`, duration: 2200, level: "info", archive: false });
+                }
+                if (targetGroup) targetGroup.isIgnored = action === "add";
+                renderCurrentTab();
+            }
+            return;
+        }
+
+        // 清理单组空壳
+        const cleanGroupEmptyBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-clean-group-empty-btn");
+        if (cleanGroupEmptyBtn) {
+            e.stopPropagation();
+            hapticFeedback(8);
+            const targetGroup = resolveTargetGroup(cleanGroupEmptyBtn);
+            if (targetGroup) {
+                const emptyDocs = targetGroup.docs.filter((d) => d.id !== targetGroup.recommendedKeepId && d.length === 0 && (d.childCount || 0) === 0);
+                if (emptyDocs.length > 0) {
+                    cleanGroupEmptyBtn.disabled = true;
+                    cleanGroupEmptyBtn.textContent = "清理中…";
+                    let cleaned = 0;
+                    let skipped = 0;
+                    for (const d of emptyDocs) {
+                        if (await lvDeduplicator.safeRemoveDocToRecycle(d.id, d.box)) {
+                            cleaned++;
+                        } else {
+                            skipped++;
+                        }
+                    }
+                    const skipMsg = skipped > 0 ? `（${skipped} 篇已失效跳过）` : "";
+                    lvNotify.capsule({
+                        source: "查重对账",
+                        message: cleaned > 0 ? `✓ 已清理 ${cleaned} 篇 0 字空壳副本${skipMsg}` : "本组空壳已不存在或已清理",
+                        duration: 2500,
+                        level: cleaned > 0 ? "success" : "info",
+                        archive: false
+                    });
+                    void runScan();
+                }
+            }
+            return;
+        }
+
+        // 双栏对比
+        const diffBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-group-diff-btn");
+        if (diffBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            const targetGroup = resolveTargetGroup(diffBtn);
+            if (targetGroup) {
+                const drawerId = diffBtn.getAttribute("data-drawer-id");
+                const safeId = drawerId || escapeHtml(targetGroup.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
+                const diffDrawer = mask?.querySelector<HTMLElement>(`.lv-diff-drawer-${safeId}`);
+                if (diffDrawer) {
+                    if (diffDrawer.style.display !== "none") {
+                        diffDrawer.style.display = "none";
+                        return;
+                    }
+                    diffDrawer.style.display = "block";
+                    void renderGroupDiffContent(diffDrawer, targetGroup, safeId);
+                }
+            }
+            return;
+        }
+
+        // 双栏内一键增量合并
+        const mergePairBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-merge-pair-btn");
+        if (mergePairBtn) {
+            e.stopPropagation();
+            hapticFeedback(8);
+            const keepId = mergePairBtn.getAttribute("data-keep-id");
+            const candId = mergePairBtn.getAttribute("data-candidate-id");
+            const candBox = mergePairBtn.getAttribute("data-candidate-box");
+            if (keepId && candId) {
+                mergePairBtn.disabled = true;
+                mergePairBtn.textContent = "合并中…";
+                const mRes = await lvDeduplicator.mergeDocBlocks(keepId, candId, { recycleSource: true, sourceBox: candBox || undefined });
+                lvNotify.capsule({
+                    source: "对账合并",
+                    message: mRes.msg,
+                    duration: 3500,
+                    level: mRes.ok ? "success" : "error",
+                    archive: false,
+                });
+                void runScan();
+            }
+            return;
+        }
+
+        // AI 研判
         const aiJudgeBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-group-ai-judge-btn");
         if (aiJudgeBtn) {
             e.stopPropagation();
             hapticFeedback(6);
-            const grpTitle = aiJudgeBtn.getAttribute("data-group-title");
-            const targetGroup = dupDocGroups.find((g) => g.title === grpTitle);
+            const targetGroup = resolveTargetGroup(aiJudgeBtn);
             if (targetGroup) {
-                const safeId = escapeHtml(targetGroup.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
+                const drawerId = aiJudgeBtn.getAttribute("data-drawer-id");
+                const safeId = drawerId || escapeHtml(targetGroup.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
                 const aiDrawer = mask?.querySelector<HTMLElement>(`.lv-ai-drawer-${safeId}`);
                 if (aiDrawer) {
                     if (aiDrawer.style.display === "none") {
@@ -13402,7 +15924,7 @@ export function openConflictResolverDialog(): void {
                         aiDrawer.innerHTML = `
                             <div style="text-align:center;padding:16px;color:#7c3aed;display:flex;align-items:center;justify-content:center;gap:6px;">
                                 <span>⏳</span>
-                                <span>正在调动思源 AI 深入研判文档语义与知识库拓扑（AI 仅供参谋，不擅自合并）…</span>
+                                <span>正在调动 AI 深入研判文档语义与拓扑关系…</span>
                             </div>
                         `;
                         const doc1 = targetGroup.docs[0];
@@ -13438,9 +15960,16 @@ export function openConflictResolverDialog(): void {
                             aiDrawer.innerHTML = `
                                 <div style="display:flex;flex-direction:column;gap:8px;">
                                     <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(124,58,237,0.15);padding-bottom:6px;">
-                                        <div style="display:flex;align-items:center;gap:6px;">
+                                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                             <span style="font-weight:700;color:#7c3aed;">🤖 AI 对账智能参谋研判</span>
-                                            <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(124,58,237,0.1);color:#7c3aed;font-weight:600;">通道: ${report.channel === "siyuan-ai" ? "思源内置大模型" : "本地启发式引擎"}</span>
+                                            <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(124,58,237,0.1);color:#7c3aed;font-weight:600;">${
+                                                report.channel === "siyuan" || report.channel === "siyuan-ai" ? "🟢 思源内核智能体"
+                                                : report.channel === "user_custom" ? "🔵 自定义 Key"
+                                                : report.channel === "ollama" ? "🟣 本地 Ollama"
+                                                : report.channel === "public_free" ? "🌐 免费公用通道 (已脱敏)"
+                                                : "⚡ 启发式离线引擎"
+                                            }${report.latencyMs ? ` · ${report.latencyMs}ms` : ""}</span>
+                                            ${report.fallbackTrace ? `<span style="font-size:9.5px;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,0.15);color:#d97706;" title="降级链路: ${escapeHtml(report.fallbackTrace)}">⚠️ 自动降级</span>` : ""}
                                             <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(15,23,42,0.06);color:var(--lv-lp-text-sub);">相似度: 约 ${report.similarityPercent}%</span>
                                         </div>
                                         <button type="button" class="lv-qw-tag-chip lv-close-ai-drawer-btn" data-drawer-id="${safeId}" style="padding:1px 6px;font-size:10px;">收起</button>
@@ -13458,10 +15987,19 @@ export function openConflictResolverDialog(): void {
                                         </div>
                                     </div>
                                     <div style="padding:8px 10px;border-radius:6px;background:rgba(124,58,237,0.04);border-left:3px solid #7c3aed;font-size:11px;line-height:1.55;color:var(--lv-lp-text);white-space:pre-wrap;">${escapeHtml(report.rawMarkdown)}</div>
-                                    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px;border-top:1px dashed var(--lv-lp-border);">
-                                        <span style="font-size:10px;color:var(--lv-lp-text-sub);">🔒 严禁自动合并：决策权 100% 由您掌控，请按需选择手工操作：</span>
-                                        <div style="display:flex;gap:4px;">
-                                            <button type="button" class="lv-qw-tag-chip lv-close-ai-drawer-btn" data-drawer-id="${safeId}" style="padding:2px 8px;font-size:10.5px;color:#059669;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);font-weight:700;">🟢 保留两者 (推荐 · 不做修改)</button>
+                                    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px;border-top:1px dashed var(--lv-lp-border);flex-wrap:wrap;gap:6px;">
+                                        <span style="font-size:10px;color:var(--lv-lp-text-sub);">🔒 决策权 100% 由您掌控：支持一键采纳 AI 方案或手动处置：</span>
+                                        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                                            ${report.suggestedAction === "merge-incremental" ? `
+                                                <button type="button" class="lv-qw-tag-chip lv-merge-pair-btn" data-keep-id="${doc1.id}" data-candidate-id="${doc2.id}" data-candidate-box="${doc2.box}" style="padding:2px 8px;font-size:10.5px;color:#2563eb;background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.25);font-weight:700;">⚡ 采纳 AI：智能合并增量</button>
+                                            ` : report.suggestedAction === "keep-second" ? `
+                                                <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${doc1.id}" data-doc-box="${doc1.box}" data-child-count="${doc1.childCount || 0}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);font-weight:700;">⚡ 采纳 AI：清理空壳 A</button>
+                                            ` : report.suggestedAction === "keep-first" ? `
+                                                <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${doc2.id}" data-doc-box="${doc2.box}" data-child-count="${doc2.childCount || 0}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);font-weight:700;">⚡ 采纳 AI：清理空壳 B</button>
+                                            ` : report.suggestedRenameTitle ? `
+                                                <button type="button" class="lv-qw-tag-chip lv-adopt-rename-btn" data-doc-id="${doc2.id}" data-doc-box="${doc2.box}" data-new-title="${escapeHtml(report.suggestedRenameTitle)}" style="padding:2px 8px;font-size:10.5px;color:#059669;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);font-weight:700;">⚡ 采纳 AI：改名《${escapeHtml(report.suggestedRenameTitle)}》</button>
+                                            ` : ""}
+                                            <button type="button" class="lv-qw-tag-chip lv-toggle-whitelist-group-btn" data-group-title="${escapeHtml(targetGroup.title)}" data-action="add" style="padding:2px 8px;font-size:10.5px;color:#059669;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);font-weight:700;">🟢 保留两者(加白名单)</button>
                                             <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${doc2.id}" data-doc-box="${doc2.box}" data-child-count="${doc2.childCount || 0}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);">仅保留 A (回收 B)</button>
                                             <button type="button" class="lv-qw-tag-chip lv-doc-recycle-btn" data-doc-id="${doc1.id}" data-doc-box="${doc1.box}" data-child-count="${doc1.childCount || 0}" data-doc-title="${escapeHtml(targetGroup.title)}" style="padding:2px 8px;font-size:10.5px;color:#ef4444;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);">仅保留 B (回收 A)</button>
                                         </div>
@@ -13472,6 +16010,29 @@ export function openConflictResolverDialog(): void {
                     } else {
                         aiDrawer.style.display = "none";
                     }
+                }
+            }
+            return;
+        }
+
+        // 采纳 AI 改名
+        const adoptRenameBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-adopt-rename-btn");
+        if (adoptRenameBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            const docId = adoptRenameBtn.getAttribute("data-doc-id");
+            const box = adoptRenameBtn.getAttribute("data-doc-box");
+            const newTitle = adoptRenameBtn.getAttribute("data-new-title");
+            if (docId && newTitle) {
+                adoptRenameBtn.disabled = true;
+                adoptRenameBtn.textContent = "改名中…";
+                const res = await lvDeduplicator.renameDoc(docId, newTitle, box || undefined);
+                if (res.ok) {
+                    lvNotify.capsule({ source: "对账改名", message: `✓ 已成功改名为《${newTitle}》`, duration: 2500, level: "success", archive: false });
+                    void runScan();
+                } else {
+                    adoptRenameBtn.disabled = false;
+                    lvNotify.capsule({ source: "对账改名", message: `改名失败: ${res.error || "未知错误"}`, duration: 2500, level: "error", archive: false });
                 }
             }
             return;
@@ -13488,27 +16049,82 @@ export function openConflictResolverDialog(): void {
             return;
         }
 
+        const closeDiffDrawerBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-close-diff-drawer-btn");
+        if (closeDiffDrawerBtn) {
+            e.stopPropagation();
+            const drawerId = closeDiffDrawerBtn.getAttribute("data-drawer-id");
+            if (drawerId) {
+                const drawer = mask?.querySelector<HTMLElement>(`.lv-diff-drawer-${drawerId}`);
+                if (drawer) drawer.style.display = "none";
+            }
+            return;
+        }
+
         const grpBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-group-recycle-btn");
         if (grpBtn) {
             e.stopPropagation();
-            const grpTitle = grpBtn.getAttribute("data-group-title");
-            const targetGroup = dupDocGroups.find((g) => g.title === grpTitle);
-            if (targetGroup) {
-                const toRecycle = targetGroup.docs.filter((d) => d.id !== targetGroup.recommendedKeepId);
-                const totalChild = toRecycle.reduce((acc, cur) => acc + (cur.childCount || 0), 0);
-                if (totalChild > 0 && typeof window !== "undefined") {
-                    const ok = await lvConfirm(
-                        "⚠️ 安全拦截告警",
-                        `待清理的副本中含有目录父文档（共含 ${totalChild} 篇子文档）！\n继续清理将一并级联移入废纸篓。\n\n请确认是否继续清理？`
-                    );
-                    if (!ok) return;
+            const targetGroup = resolveTargetGroup(grpBtn);
+            if (!targetGroup) {
+                lvNotify.capsule({ source: "查重对账", message: "未定位到目标文档组，请刷新后重试", duration: 2500, level: "warn", archive: false });
+                return;
+            }
+            const toRecycle = targetGroup.docs.filter((d) => d.id !== targetGroup.recommendedKeepId);
+            if (toRecycle.length === 0) {
+                lvNotify.capsule({ source: "查重对账", message: "本组仅保留推荐真身，暂无可清理副本", duration: 2500, level: "info", archive: false });
+                return;
+            }
+            const totalChild = toRecycle.reduce((acc, cur) => acc + (cur.childCount || 0), 0);
+            if (totalChild > 0 && typeof window !== "undefined") {
+                const ok = await lvConfirm(
+                    "⚠️ 安全拦截告警",
+                    `待清理的副本中含有目录父文档（共含 ${totalChild} 篇子文档）！\n继续清理将一并级联移入废纸篓。\n\n请确认是否继续清理？`
+                );
+                if (!ok) return;
+            }
+            hapticFeedback(8);
+            grpBtn.disabled = true;
+            const originalText = grpBtn.textContent;
+            grpBtn.textContent = "清理中…";
+
+            try {
+                let cleanedCount = 0;
+                let skippedCount = 0;
+                for (const d of toRecycle) {
+                    const ok = await lvDeduplicator.safeRemoveDocToRecycle(d.id, d.box);
+                    if (ok) {
+                        cleanedCount++;
+                    } else {
+                        skippedCount++;
+                    }
                 }
-                hapticFeedback(8);
-                grpBtn.textContent = "清理中…";
-                void Promise.all(toRecycle.map((d) => lvDeduplicator.safeRemoveDocToRecycle(d.id, d.box))).then((res) => {
-                    const cnt = res.filter(Boolean).length;
-                    lvNotify.capsule({ source: "查重对账", message: `✓ 已将《${targetGroup.title}》的 ${cnt} 篇副本移入废纸篓`, duration: 2500, level: "success", archive: false });
-                    void runScan();
+                if (cleanedCount > 0) {
+                    const skipMsg = skippedCount > 0 ? `（${skippedCount} 篇已失效跳过）` : "";
+                    lvNotify.capsule({
+                        source: "查重对账",
+                        message: `✓ 已将《${targetGroup.title}》的 ${cleanedCount} 篇副本移入废纸篓${skipMsg}`,
+                        duration: 3000,
+                        level: "success",
+                        archive: false,
+                    });
+                } else {
+                    lvNotify.capsule({
+                        source: "查重对账",
+                        message: `本组 ${toRecycle.length} 篇副本已不存在或已被其他端清理，无需重复操作`,
+                        duration: 3000,
+                        level: "info",
+                        archive: false,
+                    });
+                }
+                void runScan();
+            } catch {
+                grpBtn.disabled = false;
+                grpBtn.textContent = originalText;
+                lvNotify.capsule({
+                    source: "查重对账",
+                    message: "清理副本过程中发生异常，请重试",
+                    duration: 3000,
+                    level: "error",
+                    archive: false,
                 });
             }
             return;
@@ -13550,6 +16166,55 @@ export function openConflictResolverDialog(): void {
             return;
         }
 
+        // 冲突版增量合并
+        const confMergeBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-conflict-merge-btn");
+        if (confMergeBtn) {
+            e.stopPropagation();
+            hapticFeedback(8);
+            const confId = confMergeBtn.getAttribute("data-conflict-id");
+            const baseId = confMergeBtn.getAttribute("data-base-id");
+            if (confId && baseId) {
+                confMergeBtn.disabled = true;
+                confMergeBtn.textContent = "合并中…";
+                const mRes = await lvDeduplicator.mergeDocBlocks(baseId, confId, { recycleSource: true });
+                lvNotify.capsule({
+                    source: "冲突合并",
+                    message: mRes.msg,
+                    duration: 3500,
+                    level: mRes.ok ? "success" : "error",
+                    archive: false,
+                });
+                void runScan();
+            }
+            return;
+        }
+
+        // 冲突版规范改名
+        const confRenameBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-conflict-rename-btn");
+        if (confRenameBtn) {
+            e.stopPropagation();
+            hapticFeedback(4);
+            const docId = confRenameBtn.getAttribute("data-doc-id");
+            const box = confRenameBtn.getAttribute("data-doc-box");
+            const defaultTitle = confRenameBtn.getAttribute("data-suggested-title") || "分叉文档";
+            if (docId && typeof window !== "undefined") {
+                const newTitle = await lvPrompt("✏️ 冲突文档规范改名", "请为该冲突文档输入规范名称：", defaultTitle);
+                if (newTitle && newTitle.trim()) {
+                    confRenameBtn.disabled = true;
+                    confRenameBtn.textContent = "改名中…";
+                    const res = await lvDeduplicator.renameDoc(docId, newTitle.trim(), box || undefined);
+                    if (res.ok) {
+                        lvNotify.capsule({ source: "冲突改名", message: `✓ 已规范改名为《${newTitle.trim()}》`, duration: 2500, level: "success", archive: false });
+                        void runScan();
+                    } else {
+                        confRenameBtn.disabled = false;
+                        lvNotify.capsule({ source: "冲突改名", message: `改名失败: ${res.error || "未知错误"}`, duration: 2500, level: "error", archive: false });
+                    }
+                }
+            }
+            return;
+        }
+
         const recycleAllConfBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-recycle-all-conflicts-btn");
         if (recycleAllConfBtn) {
             e.stopPropagation();
@@ -13575,11 +16240,11 @@ export function openConflictResolverDialog(): void {
             return;
         }
 
-        const emptyFilterBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-toggle-empty-filter-btn");
-        if (emptyFilterBtn) {
+        const toggleIgnoredFilterBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-toggle-ignored-filter-btn");
+        if (toggleIgnoredFilterBtn) {
             e.stopPropagation();
-            hapticFeedback(6);
-            filterOnlyEmpty = !filterOnlyEmpty;
+            hapticFeedback(4);
+            showIgnoredInList = !showIgnoredInList;
             renderCurrentTab();
             return;
         }
@@ -13667,6 +16332,55 @@ export function openConflictResolverDialog(): void {
             return;
         }
 
+        // 批量合并孤立日记
+        const batchMergeOrphansBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-batch-merge-orphans-btn");
+        if (batchMergeOrphansBtn) {
+            e.stopPropagation();
+            hapticFeedback(8);
+            batchMergeOrphansBtn.disabled = true;
+            batchMergeOrphansBtn.textContent = "批量归并中…";
+            const bRes = await lvDeduplicator.batchMergeOrphanDailyNotes();
+            lvNotify.capsule({
+                source: "日记对账",
+                message: `✓ 批量治理完成：已归并 ${bRes.mergedTotal} 条流水，清理 ${bRes.cleanedTotal} 篇孤立文档`,
+                duration: 3800,
+                level: "success",
+                archive: false,
+            });
+            void runScan();
+            return;
+        }
+
+        // 白名单单个移除
+        const removeWhitelistItemBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-whitelist-remove-item-btn");
+        if (removeWhitelistItemBtn) {
+            e.stopPropagation();
+            hapticFeedback(6);
+            const title = removeWhitelistItemBtn.getAttribute("data-title");
+            if (title) {
+                removeReconciliationWhitelist(title);
+                lvNotify.capsule({ source: "白名单", message: `✓ 已将《${title}》移出白名单`, duration: 2000, level: "info", archive: false });
+                renderCurrentTab();
+            }
+            return;
+        }
+
+        // 清空白名单
+        const clearWhitelistBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-clear-whitelist-btn");
+        if (clearWhitelistBtn) {
+            e.stopPropagation();
+            hapticFeedback(8);
+            if (typeof window !== "undefined") {
+                const ok = await lvConfirm("🛡️ 清空白名单确认", "确认清空所有已忽略的白名单标题吗？\n\n清空后全库同名检测将重新提示这些文档。");
+                if (ok) {
+                    saveReconciliationWhitelist(new Set());
+                    lvNotify.capsule({ source: "白名单", message: "✓ 白名单已清空", duration: 2000, level: "info", archive: false });
+                    renderCurrentTab();
+                }
+            }
+            return;
+        }
+
         const moreBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-doc-more-btn");
         if (moreBtn) {
             e.stopPropagation();
@@ -13720,6 +16434,21 @@ export function openConflictResolverDialog(): void {
                     position: { x: e.clientX, y: e.clientY },
                 });
             }
+        }
+    });
+
+    mask?.addEventListener("change", async (e) => {
+        const candSel = (e.target as HTMLElement | null)?.closest<HTMLSelectElement>(".lv-diff-cand-select");
+        if (candSel) {
+            e.stopPropagation();
+            const targetGroup = resolveTargetGroup(candSel);
+            const drawerId = candSel.getAttribute("data-drawer-id");
+            const safeId = drawerId || (targetGroup ? escapeHtml(targetGroup.title).replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_") : "");
+            const drawer = mask?.querySelector<HTMLElement>(`.lv-diff-drawer-${safeId}`);
+            if (targetGroup && drawer) {
+                void renderGroupDiffContent(drawer, targetGroup, safeId, candSel.value);
+            }
+            return;
         }
     });
 
@@ -14140,7 +16869,7 @@ export async function findTodayDailyNoteDocId(notebook?: string): Promise<string
         }
 
         const notConflict = "AND content NOT LIKE '%(冲突%' AND content NOT LIKE '%conflict%' AND content NOT LIKE '%(Conflicted%' AND hpath NOT LIKE '%(冲突%' AND hpath NOT LIKE '%conflict%' AND hpath NOT LIKE '%(Conflicted%'";
-        const dateFilter = `(ial LIKE '%custom-dailynote-${yyyymmdd}%' OR hpath LIKE '%/${ymd}%' OR hpath LIKE '%/${yyyymmdd}%' OR hpath LIKE '%/${yyyy}年${mm}月${dd}日%')`;
+        const dateFilter = `(ial LIKE '%custom-dailynote-${yyyymmdd}%' OR ial LIKE '%custom-dailynote-${ymd}%' OR ial LIKE '%custom-dailynote="${yyyymmdd}"%' OR ial LIKE '%custom-dailynote="${ymd}"%' OR hpath LIKE '%/${ymd}%' OR hpath LIKE '%/${yyyymmdd}%' OR hpath LIKE '%/${yyyy}/${mm}/${dd}%' OR hpath LIKE '%/${yyyy}/${mm}/${ymd}%' OR hpath LIKE '%/${yyyy}年${mm}月${dd}日%')`;
 
         // 第一步：若指定了目标笔记本，优先在该笔记本内探查
         let nb = notebook?.trim() || "";
@@ -14297,6 +17026,7 @@ function mountQuickModal(opts: {
         if (vvCleanup) { try { vvCleanup(); } catch { /* ignore */ } vvCleanup = undefined; }
         try { lvSurfaceStack.pop("lv-quick-workspace-modal"); } catch { /* ignore */ }
         try { mask.remove(); } catch { /* ignore */ }
+        try { document.querySelectorAll(".lv-qw-lightbox").forEach(el => el.remove()); } catch { /* ignore */ }
         window.removeEventListener("keydown", keyHandler, true);
     };
     try { lvSurfaceStack.push({ id: "lv-quick-workspace-modal", dismiss: () => { cleanup(); return true; } }); } catch { /* ignore */ }
@@ -14387,6 +17117,18 @@ interface QnAttachment {
     mode: "assets" | "local-link";
     localPath: string;
     previewUrl?: string;
+}
+
+/** 2026-11-21 走查修复（A13）：FormData 直传附件的响应校验——HTTP 非 2xx 或内核 code!==0 时抛错，
+ *  由调用方逐附件 catch 跳过该附件。原先直传不查响应，上传失败（鉴权失效/磁盘满/内核只读）仍会
+ *  生成 `assets/…` markdown 行写入日记/文档，形成永久死链且无任何提示（对齐 saveClipboardImageToAssets
+ *  与 compressAndPutImageFile 的既有校验范式）。 */
+async function putFileFormDataChecked(fd: FormData): Promise<void> {
+    const resp = await fetch("/api/file/putFile", { method: "POST", body: fd });
+    const json = await resp.json().catch((): any => null);
+    if (!resp.ok || !json || json.code !== 0) {
+        throw new Error(`putFile failed (HTTP ${resp.status}${json && json.code !== 0 ? `, code ${json.code}` : ""})`);
+    }
 }
 
 export function openQuickNoteDialog(initialPrefix = ""): void {
@@ -14503,7 +17245,7 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
                                 fd.append("path", `/data/assets/${safeName}`);
                                 fd.append("file", att.file, safeName);
                                 fd.append("isDir", "false");
-                                await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                await putFileFormDataChecked(fd); // A13: 校验上传响应，失败即抛由逐附件 catch 跳过
                                 if (att.type === "image") {
                                     attachMarkdownLines.push(`![${att.name}](assets/${safeName})`);
                                 } else if (att.type === "video") {
@@ -14536,7 +17278,7 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
                                     fd.append("path", `/data/assets/${safeName}`);
                                     fd.append("file", att.file, safeName);
                                     fd.append("isDir", "false");
-                                    await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                    await putFileFormDataChecked(fd); // A13: 校验上传响应，失败即抛由逐附件 catch 跳过
                                     attachMarkdownLines.push(att.type === "image" ? `![${att.name}](assets/${safeName})` : `[📎 ${att.name}](assets/${safeName})`);
                                 } catch { /* soft */ }
                             }
@@ -14668,7 +17410,8 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
 
         const doSearch = async (kw: string) => {
             if (!resultsEl) return;
-            const escaped = kw.replace(/'/g, "''").trim();
+            // 单引号双写防逃逸 + 剔除 LIKE 通配符（%/_）与反斜杠，防止关键词被当模式语义放大
+            const escaped = kw.replace(/['\\%_]/g, "").trim();
             const whereClause = escaped ? `AND content LIKE '%${escaped}%'` : "";
             const sql = `SELECT id, content, hpath FROM blocks WHERE type='d' ${whereClause} AND content NOT LIKE '%(冲突%' AND content NOT LIKE '%conflict%' ORDER BY updated DESC LIMIT 8`;
             try {
@@ -15095,7 +17838,7 @@ export function openLifeLogDialog(): void {
                                         fd.append("path", `/data/assets/${safeName}`);
                                         fd.append("file", att.file, safeName);
                                         fd.append("isDir", "false");
-                                        await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                        await putFileFormDataChecked(fd); // A13: 校验上传响应，失败即抛由逐附件 catch 跳过
                                         attachMarkdownLines.push(`![${att.name}](assets/${safeName})`);
                                     }
                                 } else {
@@ -15103,7 +17846,7 @@ export function openLifeLogDialog(): void {
                                     fd.append("path", `/data/assets/${safeName}`);
                                     fd.append("file", att.file, safeName);
                                     fd.append("isDir", "false");
-                                    await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                    await putFileFormDataChecked(fd); // A13: 校验上传响应，失败即抛由逐附件 catch 跳过
                                     if (att.type === "video") {
                                         attachMarkdownLines.push(`<video controls src="assets/${safeName}" style="max-width:100%; border-radius:8px;"></video>`);
                                     } else {
@@ -15134,7 +17877,7 @@ export function openLifeLogDialog(): void {
                                     fd.append("path", `/data/assets/${safeName}`);
                                     fd.append("file", att.file, safeName);
                                     fd.append("isDir", "false");
-                                    await fetch("/api/file/putFile", { method: "POST", body: fd });
+                                    await putFileFormDataChecked(fd); // A13: 校验上传响应，失败即抛由逐附件 catch 跳过
                                     attachMarkdownLines.push(att.type === "image" ? `![${att.name}](assets/${safeName})` : `[📎 ${att.name}](assets/${safeName})`);
                                 } catch { /* soft */ }
                             }
@@ -15188,9 +17931,12 @@ export function openLifeLogDialog(): void {
                         if (draftHintEl) draftHintEl.style.display = "none";
                         const recEl = mask?.querySelector<HTMLElement>(".lv-qw-recent-strip");
                         if (recEl) recEl.outerHTML = renderStrip();
-                        if (saveBtn) saveBtn.textContent = attachments.length ? `✓ 已记 · 📎×${attachments.length}，继续` : "✓ 已记，继续";
+                        // 2026-11-21 走查修复：attachments.length 已在上面清零，回执文案恒丢 📎×N——
+                        // 用清空前算得的 badgeParts 还原本条附件计数
+                        const savedBadge = badgeParts.length ? ` · ${badgeParts.join(" ")}` : "";
+                        if (saveBtn) saveBtn.textContent = "✓ 已记，继续";
                         window.setTimeout(() => { if (saveBtn && saveBtn.isConnected) saveBtn.textContent = origLabel; }, 1200);
-                        lvNotify.capsule({ source: "LifeLog", message: `📒 已记录（${selectedCat}${attachments.length ? ` · 📎×${attachments.length}` : ""}），继续下一条`, duration: 1800, archive: false });
+                        lvNotify.capsule({ source: "LifeLog", message: `📒 已记录（${selectedCat}${savedBadge}），继续下一条`, duration: 1800, archive: false });
                     } else {
                         cleanup();
                         lvNotify.capsule({
@@ -15298,8 +18044,11 @@ export function openLifeLogDialog(): void {
             resultsEl.innerHTML = `<div style="text-align:center;padding:12px;font-size:11.5px;color:var(--lv-lp-text-sub);">搜索中…</div>`;
             try {
                 const cleanKw = kw.trim();
+                // 2026-11-21 走查修复：LIKE 通配符 %/_ 需转义并配 ESCAPE 子句，
+                // 否则搜「100%」「a_b」退化为全匹配，选取器结果语义失真
+                const likeEscaped = cleanKw.replace(/'/g, "''").replace(/([%_\\])/g, "\\$1");
                 const sql = cleanKw
-                    ? `SELECT id, content FROM blocks WHERE type='d' AND content LIKE '%${cleanKw.replace(/'/g, "''")}%' ORDER BY updated DESC LIMIT 15`
+                    ? `SELECT id, content FROM blocks WHERE type='d' AND content LIKE '%${likeEscaped}%' ESCAPE '\\' ORDER BY updated DESC LIMIT 15`
                     : `SELECT id, content FROM blocks WHERE type='d' ORDER BY updated DESC LIMIT 15`;
                 const res = await lvKernelPost("/api/query/sql", { stmt: sql });
                 const rows = Array.isArray(res.data) ? res.data : [];
@@ -15920,6 +18669,557 @@ export const lvAutomation = {
 };
 
 /* ========================================================================= */
+/* 13b. 小驴罗盘 · 独立分类设置窗口 (Section-Driven Launchpad Settings)       */
+/* ========================================================================= */
+
+export interface LvConfigSectionDef {
+    id: string;
+    title: string;
+    icon: string;
+    badge?: string;
+    render: (panel: HTMLElement, toast: (msg?: string) => void) => void;
+}
+
+const customConfigSections: LvConfigSectionDef[] = [];
+
+/**
+ * 允许生态其他插件在小驴罗盘设置中心注册自定义扩展配置分类 (Section 驱动未来扩展模型)
+ */
+export function registerQuickWorkspaceSection(section: LvConfigSectionDef): () => void {
+    customConfigSections.push(section);
+    return () => {
+        const idx = customConfigSections.indexOf(section);
+        if (idx >= 0) customConfigSections.splice(idx, 1);
+    };
+}
+
+/**
+ * 760×560px 独立分类设置窗口：小驴罗盘与全生态统一设置中心
+ * 架构：左侧分类 Tab 导航 + 右侧独立表单 + Section 驱动扩展架构 + 实时自动保存反馈
+ */
+export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
+    if (typeof document === "undefined") return;
+    closeDesktopLaunchpadPopover();
+    closeMobileSheet();
+
+    let activeTabId = initialTab;
+
+    const mask = mountQuickModal({
+        icon: "⚙️",
+        title: "小驴罗盘与全生态统一设置",
+        badgeHtml: `<span class="lv-qw-badge">通用调度中枢</span>`,
+        bodyHtml: `
+            <div class="lv-cfg-container" style="display:flex;width:100%;height:100%;min-height:0;flex:1 1 auto;">
+                <div class="lv-cfg-sidebar"></div>
+                <div class="lv-cfg-panel"></div>
+            </div>
+        `,
+        primaryLabel: "保存并关闭",
+        onSave: async (_btn, cleanup) => {
+            cleanup();
+            lvNotify.capsule({ source: "罗盘设置", message: "✓ 设置已全部保存生效", duration: 2200, level: "success", archive: false });
+        },
+    });
+
+    if (!mask) return;
+    const card = mask.querySelector<HTMLElement>(".lv-qw-card");
+    if (card) {
+        card.style.width = "min(760px, 94vw)";
+        card.style.maxWidth = "760px";
+        card.style.height = "min(560px, 86vh)";
+        card.style.maxHeight = "560px";
+        card.style.display = "flex";
+        card.style.flexDirection = "column";
+    }
+    const body = mask.querySelector<HTMLElement>(".lv-qw-body");
+    if (body) {
+        body.style.flex = "1 1 auto";
+        body.style.minHeight = "0";
+        body.style.padding = "0";
+        body.style.display = "flex";
+        body.style.overflow = "hidden";
+    }
+
+    const tip = mask.querySelector<HTMLElement>(".lv-qw-tip");
+    const flashToast = (msg?: string) => {
+        if (!tip) return;
+        tip.textContent = msg || "✓ 已实时自动保存";
+        tip.style.color = "var(--lv-lp-accent, #2563eb)";
+        tip.style.fontWeight = "600";
+        window.setTimeout(() => {
+            if (tip) {
+                tip.textContent = isMobileFrontend() ? "点「保存并关闭」退出 · 修改已实时生效" : "修改实时生效 · Esc 或点「保存并关闭」退出";
+                tip.style.color = "";
+                tip.style.fontWeight = "";
+            }
+        }, 2200);
+    };
+
+    const builtinSections: LvConfigSectionDef[] = [
+        {
+            id: "topbar",
+            title: "顶栏与罗盘",
+            icon: "📌",
+            render: (panel, toast) => {
+                const hub = getLaunchpadHub();
+                const allItems = hub.getItems();
+                panel.innerHTML = `
+                    <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text,#0f172a);">
+                        👋 <strong>顶栏与罗盘主权管理</strong>：自主决定哪些生态插件<strong>常驻在思源顶栏</strong>，哪些<strong>仅在罗盘坞内收敛</strong>，哪些<strong>彻底隐藏</strong>（仅保留快捷键/穿透搜索唤醒）。
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;flex-wrap:wrap;">
+                        <div style="font-weight:700;font-size:12.5px;color:var(--lv-lp-accent,#2563eb);">📌 生态插件列表与驻留形态</div>
+                        <div style="display:flex;gap:6px;">
+                            <button type="button" class="lv-qw-tag-chip lv-cfg-all-pinned-btn" style="padding:3px 9px;font-size:11px;color:var(--lv-lp-accent);">📌 全部平铺到顶栏</button>
+                            <button type="button" class="lv-qw-tag-chip lv-cfg-all-docked-btn" style="padding:3px 9px;font-size:11px;color:var(--lv-lp-accent);">📥 全部收敛到罗盘</button>
+                        </div>
+                    </div>
+                    <div class="lv-cfg-plugins-list" style="display:flex;flex-direction:column;gap:6px;">
+                        ${allItems.map((p) => {
+                            const pId = escapeHtml(p.id);
+                            const pTitle = escapeHtml((p.fullName && !p.fullName.includes("<")) ? p.fullName : (p.name || p.id));
+                            const pColor = resolveSafeBrandColor(p.id, p.color);
+                            const pSvg = renderPluginLitheSvg(p.id, 16);
+                            return `
+                                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+                                    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                                        <span style="color:${pColor};display:inline-flex;align-items:center;">${pSvg}</span>
+                                        <div style="display:flex;flex-direction:column;gap:1px;min-width:0;">
+                                            <strong style="font-size:13px;color:var(--lv-lp-text);">${pTitle}</strong>
+                                            <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.desc || "")}</span>
+                                        </div>
+                                    </div>
+                                    <select class="lv-cfg-state-select" data-plugin-id="${pId}" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0;">
+                                        <option value="docked" ${p.state === "docked" ? "selected" : ""}>📥 仅在罗盘坞内 (顶栏隐藏)</option>
+                                        <option value="pinned" ${p.state === "pinned" ? "selected" : ""}>📌 置顶在外 (顶栏+坞内同时显示)</option>
+                                        <option value="hidden" ${p.state === "hidden" ? "selected" : ""}>👁️ 彻底隐藏 (仅快捷键唤醒)</option>
+                                    </select>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                `;
+
+                panel.querySelectorAll<HTMLSelectElement>(".lv-cfg-state-select").forEach((sel) => {
+                    sel.addEventListener("change", () => {
+                        const pid = sel.getAttribute("data-plugin-id");
+                        const val = sel.value as "pinned" | "docked" | "hidden";
+                        if (pid && (val === "pinned" || val === "docked" || val === "hidden")) {
+                            hub.setPluginState(pid, val);
+                            syncTopBarConvergence();
+                            toast("✓ 图标状态已更新");
+                        }
+                    });
+                });
+
+                panel.querySelector(".lv-cfg-all-pinned-btn")?.addEventListener("click", () => {
+                    hub.getItems().forEach((p) => hub.setPluginState(p.id, "pinned"));
+                    syncTopBarConvergence();
+                    builtinSections[0]?.render(panel, toast);
+                    toast("✓ 已全部平铺至顶栏");
+                });
+
+                panel.querySelector(".lv-cfg-all-docked-btn")?.addEventListener("click", () => {
+                    hub.getItems().forEach((p) => hub.setPluginState(p.id, "docked"));
+                    syncTopBarConvergence();
+                    builtinSections[0]?.render(panel, toast);
+                    toast("✓ 已全部收敛至罗盘");
+                });
+            },
+        },
+        {
+            id: "workspace",
+            title: "极速工作台",
+            icon: "⚡",
+            render: (panel, toast) => {
+                const conf = getQuickWorkspaceConfig();
+                const curMode = getMobileEntryMode();
+                const cats = conf.lifeLogCategories || DEFAULT_LIFELOG_CATEGORIES;
+                const quickPresets = ["日记", "工作", "家庭", "思考", "记录", "读书", "复盘", "灵感", "健康"];
+
+                panel.innerHTML = `
+                    <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text,#0f172a);">
+                        ⚡ <strong>极速工作台与随手记</strong>：全局快捷键 N (一键记事)、L (叶归 LifeLog)、V (剪贴入库) 以及手机端悬浮球的核心配置。
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);">LifeLog 分类流（逗号分隔）</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub);">点击下方常用标签可直接追加</span>
+                            </div>
+                            <input type="text" class="lv-cfg-lifelog-cats b3-text-field" value="${escapeHtml(cats.join(', '))}" style="font-size:12px;padding:6px 10px;border-radius:6px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text);" />
+                            <div class="lv-cfg-cat-chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:2px;">
+                                ${quickPresets.map(cat => `<button type="button" class="lv-qw-tag-chip lv-cfg-add-cat-btn" data-cat="${escapeHtml(cat)}" style="padding:2px 7px;font-size:11px;${cats.includes(cat) ? 'background:var(--lv-lp-accent-soft);color:var(--lv-lp-accent);font-weight:600;' : ''}">${escapeHtml(cat)}</button>`).join("")}
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">日记目标笔记本</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub);">新写日记或追加 LifeLog 时默认定位的笔记本</span>
+                            </div>
+                            <select class="lv-cfg-nb-select" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;max-width:240px;">
+                                <option value="">✨ 自动识别默认日记本</option>
+                                ${conf.lifeLogNotebookId ? `<option value="${escapeHtml(conf.lifeLogNotebookId)}" selected>📔 已选笔记本</option>` : ""}
+                            </select>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">手机端罗盘入口形态</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub);">移动端思源上的入口呈现（双击悬浮球可瞬发闪记）</span>
+                            </div>
+                            <select class="lv-cfg-mobile-mode-select" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;max-width:240px;">
+                                <option value="both" ${curMode === "both" ? "selected" : ""}>🔘 悬浮球 + 顶栏按钮 (推荐)</option>
+                                <option value="ball" ${curMode === "ball" ? "selected" : ""}>🎯 仅悬浮球</option>
+                                <option value="topbar" ${curMode === "topbar" ? "selected" : ""}>📌 仅顶栏按钮</option>
+                                <option value="none" ${curMode === "none" ? "selected" : ""}>🙈 隐藏手机端入口</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">一键记事附件保存方式</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub);">随手粘贴或拖入的截图与照片存储策略</span>
+                            </div>
+                            <select class="lv-cfg-attach-mode-select" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;max-width:240px;">
+                                <option value="assets" ${conf.quickNoteAttachMode !== "local-link" ? "selected" : ""}>📁 统一存入思源 assets 资源库 (推荐)</option>
+                                <option value="local-link" ${conf.quickNoteAttachMode === "local-link" ? "selected" : ""}>🔗 本地相对文件链接</option>
+                            </select>
+                        </div>
+                    </div>
+                `;
+
+                const catsInput = panel.querySelector<HTMLInputElement>(".lv-cfg-lifelog-cats");
+                const saveCats = () => {
+                    if (!catsInput) return;
+                    const parsed = catsInput.value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                    if (parsed.length > 0) {
+                        saveQuickWorkspaceConfig({ lifeLogCategories: parsed });
+                        toast("✓ 分类已保存");
+                    }
+                };
+                catsInput?.addEventListener("change", saveCats);
+
+                panel.querySelectorAll<HTMLButtonElement>(".lv-cfg-add-cat-btn").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        const cat = btn.getAttribute("data-cat");
+                        if (!cat || !catsInput) return;
+                        const currentList = catsInput.value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                        if (!currentList.includes(cat)) {
+                            currentList.push(cat);
+                            catsInput.value = currentList.join(", ");
+                            saveCats();
+                            builtinSections[1]?.render(panel, toast);
+                        }
+                    });
+                });
+
+                const nbSel = panel.querySelector<HTMLSelectElement>(".lv-cfg-nb-select");
+                if (nbSel) {
+                    void listOpenNotebooks().then((nbs) => {
+                        if (!nbSel.isConnected || !nbs.length) return;
+                        nbSel.innerHTML = `<option value="">✨ 自动识别默认日记本</option>` + nbs.map((nb) =>
+                            `<option value="${escapeHtml(nb.id)}" ${nb.id === conf.lifeLogNotebookId ? "selected" : ""}>📔 ${escapeHtml(nb.name)}</option>`
+                        ).join("");
+                    }).catch(() => { /* ignore */ });
+
+                    nbSel.addEventListener("change", () => {
+                        const val = nbSel.value.trim();
+                        saveQuickWorkspaceConfig({
+                            lifeLogNotebookId: val || undefined,
+                            diaryNotebookId: val || undefined,
+                            quickNoteNotebookId: val || undefined,
+                        });
+                        toast("✓ 目标日记本已更新");
+                    });
+                }
+
+                panel.querySelector<HTMLSelectElement>(".lv-cfg-mobile-mode-select")?.addEventListener("change", (e) => {
+                    const val = (e.target as HTMLSelectElement).value as LvMobileEntryMode;
+                    if (val === "both" || val === "ball" || val === "topbar" || val === "none") {
+                        setMobileEntryMode(val);
+                        toast("✓ 手机端入口已保存");
+                    }
+                });
+
+                panel.querySelector<HTMLSelectElement>(".lv-cfg-attach-mode-select")?.addEventListener("change", (e) => {
+                    const val = (e.target as HTMLSelectElement).value as "assets" | "local-link";
+                    saveQuickWorkspaceConfig({ quickNoteAttachMode: val });
+                    toast("✓ 附件存储策略已保存");
+                });
+            },
+        },
+        {
+            id: "appearance",
+            title: "外观与动效",
+            icon: "🎨",
+            render: (panel) => {
+                panel.innerHTML = `
+                    <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text,#0f172a);margin-bottom:8px;">
+                        🎨 <strong>DL2 质感与护眼系统</strong>：自主调节庆祝特效、扫光与微光强度。小驴全生态色彩体系已与思源第三方主题彻底隔离，不论切换何种主题均保持高反差与可读性。
+                    </div>
+                    <div class="lv-cfg-uiprefs-mount"></div>
+                `;
+                const mountEl = panel.querySelector<HTMLElement>(".lv-cfg-uiprefs-mount");
+                const uiPrefsApi = (typeof window !== "undefined" && (window as any).LvUiPrefs) || null;
+                if (mountEl && uiPrefsApi && typeof uiPrefsApi.createLvUiPrefsSection === "function") {
+                    mountEl.appendChild(uiPrefsApi.createLvUiPrefsSection());
+                } else if (mountEl) {
+                    mountEl.innerHTML = `
+                        <div style="padding:16px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:12px;color:var(--lv-lp-text-sub);">
+                            已接入全生态统一偏好键（lv_ui_prefs_v1），支持全动效/精简/关闭三档控制与庆祝效果自主配置。
+                        </div>
+                    `;
+                }
+            },
+        },
+        {
+            id: "ai",
+            title: "AI 调度中枢",
+            icon: "🤖",
+            render: (panel, toast) => {
+                const loadFn = (typeof window !== "undefined" && (window as any).loadAiRouterConfig) || null;
+                const saveFn = (typeof window !== "undefined" && (window as any).saveAiRouterConfig) || null;
+                const aiCfg = typeof loadFn === "function" ? loadFn() : {
+                    enableSiyuan: true,
+                    enableRuleFallback: true,
+                    publicFree: { enabled: true },
+                    ollama: { enabled: true, baseUrl: "http://127.0.0.1:11434" },
+                };
+                const prefProvider = aiCfg.preferredProvider || "auto";
+
+                panel.innerHTML = `
+                    <div class="lv-ai-hub-container">
+                        <div style="background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text);">
+                            🤖 <strong>全生态统一 AI 调度中枢</strong>：在此配置一次，闪卡拟题、考试分析、打卡解析、罗盘对账等 8 大官方插件<strong>全域即刻生效</strong>。默认五级自适应瀑布降级（思源内核 ➔ 用户Key ➔ 本地Ollama ➔ 免费通道 ➔ 离线规则）。
+                        </div>
+                        ${buildAiWaterfallFlowchartHtml(prefProvider)}
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));flex-wrap:wrap;gap:8px;">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">首选通道模式</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub);">优先尝试的 AI 推理后端，异常或离线时自动按上方五级阶梯瀑布降级</span>
+                            </div>
+                            <select class="lv-cfg-ai-pref-provider" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;max-width:240px;">
+                                <option value="auto" ${prefProvider === "auto" ? "selected" : ""}>🌊 五级自适应瀑布流 (推荐)</option>
+                                <option value="siyuan" ${prefProvider === "siyuan" ? "selected" : ""}>🟢 优先思源内核智能体</option>
+                                <option value="user_custom" ${prefProvider === "user_custom" ? "selected" : ""}>🔵 优先自填 Key (OpenAI兼容)</option>
+                                <option value="ollama" ${prefProvider === "ollama" ? "selected" : ""}>🟣 优先本地 Ollama (100%离线)</option>
+                                <option value="public_free" ${prefProvider === "public_free" ? "selected" : ""}>🌐 优先免密免费通道</option>
+                                <option value="rule_fallback" ${prefProvider === "rule_fallback" ? "selected" : ""}>⚡ 强制纯离线规则 (无网络)</option>
+                            </select>
+                        </div>
+                        ${buildAiTierCardsHtml(aiCfg, false)}
+                    </div>
+                `;
+
+                const saveAi = () => {
+                    if (typeof loadFn !== "function" || typeof saveFn !== "function") return;
+                    const cur = loadFn();
+                    const pref = panel.querySelector<HTMLSelectElement>(".lv-cfg-ai-pref-provider")?.value || "auto";
+                    const cUrl = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-url")?.value.trim() || undefined;
+                    const cKey = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-key")?.value.trim() || undefined;
+                    const cModel = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-model")?.value.trim() || undefined;
+                    const oUrl = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-ollama-url")?.value.trim() || undefined;
+
+                    cur.preferredProvider = pref === "auto" ? undefined : (pref as any);
+                    cur.userCustom = { ...(cur.userCustom || {}), baseUrl: cUrl, apiKey: cKey, model: cModel };
+                    cur.ollama = { ...(cur.ollama || {}), baseUrl: oUrl };
+                    saveFn(cur);
+                };
+
+                attachAiHubEventListeners(panel, saveAi, toast);
+            },
+        },
+        {
+            id: "notice",
+            title: "通知与免打扰",
+            icon: "🔕",
+            render: (panel, toast) => {
+                const focusActive = isNotifyFocusActive();
+                const focusUntil = getNotifyFocusUntil();
+                const mutedCats = lvNotify.getMutedCategories ? lvNotify.getMutedCategories() : [];
+                const history = lvNotify.getHistory();
+                const unreadCount = lvNotify.getUnreadCount();
+
+                panel.innerHTML = `
+                    <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text,#0f172a);">
+                        🔕 <strong>四级渐进降噪与长效免打扰</strong>：微动效 ➔ 瞬时微胶囊 ➔ 交互卡片 ➔ 静默留档。支持按分类长效静音或开启全局专注。
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:13px;color:var(--lv-lp-text);display:block;">🌙 全局专注模式</strong>
+                                <span style="font-size:11.5px;color:var(--lv-lp-text-sub);">${focusActive ? `当前处于专注模式（静音至 ${new Date(focusUntil).toTimeString().slice(0, 5)}）` : "开启后全生态交互卡片与微胶囊将静音留存至历史，不打扰沉浸思考"}</span>
+                            </div>
+                            <button type="button" class="lv-qw-tag-chip lv-cfg-toggle-focus-btn" style="padding:4px 12px;font-size:12px;font-weight:600;${focusActive ? 'color:#ef4444;background:rgba(239,68,68,0.08);' : 'color:var(--lv-lp-accent);background:var(--lv-lp-accent-soft);'}">
+                                ${focusActive ? "退出专注模式" : "开启专注模式"}
+                            </button>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;">
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);">🔕 已设免打扰提醒分类 (${mutedCats.length})</strong>
+                                ${mutedCats.length > 0 ? `<button type="button" class="lv-qw-tag-chip lv-cfg-clear-all-mute-btn" style="padding:2px 8px;font-size:11px;color:#ef4444;">清空全部免打扰</button>` : ""}
+                            </div>
+                            ${mutedCats.length === 0 ? `
+                                <div style="padding:14px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px dashed var(--lv-lp-border,rgba(15,23,42,0.1));font-size:12px;color:var(--lv-lp-text-sub);text-align:center;">当前无任何被静音的分类，所有生态提醒均正常送达。</div>
+                            ` : `
+                                <div style="display:flex;flex-direction:column;gap:4px;">
+                                    ${mutedCats.map(mc => `
+                                        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:6px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));font-size:12px;">
+                                            <div>
+                                                <strong style="color:var(--lv-lp-text);">${escapeHtml(mc.category)}</strong>
+                                                <span style="font-size:11px;color:var(--lv-lp-text-sub);margin-left:8px;">静音至 ${escapeHtml(mc.untilStr)}</span>
+                                            </div>
+                                            <button type="button" class="lv-qw-tag-chip lv-cfg-unmute-cat-btn" data-cat="${escapeHtml(mc.category)}" style="padding:2px 8px;font-size:11px;color:var(--lv-lp-accent);">解除静音</button>
+                                        </div>
+                                    `).join("")}
+                                </div>
+                            `}
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">通知中心收件箱历史</strong>
+                                <span style="font-size:11.5px;color:var(--lv-lp-text-sub);">已留存 ${history.length} 条通知记录 · 其中 ${unreadCount} 条未读</span>
+                            </div>
+                            <div style="display:flex;gap:6px;">
+                                <button type="button" class="lv-qw-tag-chip lv-cfg-mark-all-read-btn" style="padding:3px 9px;font-size:11.5px;color:var(--lv-lp-accent);">全部标记已读</button>
+                                <button type="button" class="lv-qw-tag-chip lv-cfg-clear-history-btn" style="padding:3px 9px;font-size:11.5px;color:#ef4444;">清空历史记录</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                panel.querySelector(".lv-cfg-toggle-focus-btn")?.addEventListener("click", () => {
+                    if (isNotifyFocusActive()) {
+                        clearNotifyFocus();
+                        hapticFeedback(8);
+                        toast("已退出专注模式");
+                    } else {
+                        const now = new Date();
+                        const until = new Date(now);
+                        until.setHours(23, 0, 0, 0);
+                        if (until.getTime() <= now.getTime()) until.setTime(now.getTime() + 2 * 3_600_000);
+                        setNotifyFocusUntil(until.getTime());
+                        hapticFeedback(10);
+                        toast(`已开启专注模式至 ${until.toTimeString().slice(0, 5)}`);
+                    }
+                    builtinSections[4]?.render(panel, toast);
+                    refreshEntryBadgeDot();
+                });
+
+                panel.querySelectorAll<HTMLButtonElement>(".lv-cfg-unmute-cat-btn").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        const cat = btn.getAttribute("data-cat");
+                        if (cat) {
+                            lvNotify.clearCategoryMute(cat);
+                            toast(`已恢复「${cat}」正常提醒`);
+                            builtinSections[4]?.render(panel, toast);
+                        }
+                    });
+                });
+
+                panel.querySelector(".lv-cfg-clear-all-mute-btn")?.addEventListener("click", () => {
+                    mutedCats.forEach(mc => lvNotify.clearCategoryMute(mc.category));
+                    toast("已清空全部免打扰设置");
+                    builtinSections[4]?.render(panel, toast);
+                });
+
+                panel.querySelector(".lv-cfg-mark-all-read-btn")?.addEventListener("click", () => {
+                    lvNotify.markAllRead();
+                    toast("已全部标为已读");
+                    builtinSections[4]?.render(panel, toast);
+                    refreshEntryBadgeDot();
+                });
+
+                panel.querySelector(".lv-cfg-clear-history-btn")?.addEventListener("click", () => {
+                    lvNotify.clearHistory();
+                    toast("已清空通知历史记录");
+                    builtinSections[4]?.render(panel, toast);
+                    refreshEntryBadgeDot();
+                });
+            },
+        },
+        {
+            id: "automation",
+            title: "自动化联动",
+            icon: "🔄",
+            render: (panel, toast) => {
+                const rules = lvAutomation.getRules();
+                panel.innerHTML = `
+                    <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text,#0f172a);">
+                        🔄 <strong>跨插件智能自动化规则 (IFTTT)</strong>：罗盘统一纳管各插件注册的跨插件联动事件。
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        ${rules.length === 0 ? `
+                            <div style="padding:20px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px dashed var(--lv-lp-border,rgba(15,23,42,0.1));font-size:12px;color:var(--lv-lp-text-sub);text-align:center;">
+                                暂无活跃的跨插件自动化规则。<br><span style="font-size:11px;opacity:0.8;">打卡、闪卡、拾遗等插件在启动并开启对应联动时，规则将在此自动聚合管控。</span>
+                            </div>
+                        ` : rules.map(r => `
+                            <label style="padding:9px 12px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;">
+                                <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+                                    <strong style="font-size:13px;color:var(--lv-lp-text);">${escapeHtml(r.name)}</strong>
+                                    <span style="font-size:11px;color:var(--lv-lp-text-sub);">${escapeHtml(r.desc || `${r.triggerSource} ➔ ${r.actionPlugin}`)}</span>
+                                </div>
+                                <input type="checkbox" class="lv-cfg-rule-toggle" data-rule-id="${escapeHtml(r.id)}" ${r.enabled ? "checked" : ""} style="cursor:pointer;flex-shrink:0;width:18px;height:18px;" />
+                            </label>
+                        `).join("")}
+                    </div>
+                `;
+
+                panel.querySelectorAll<HTMLInputElement>(".lv-cfg-rule-toggle").forEach(chk => {
+                    chk.addEventListener("change", () => {
+                        const rid = chk.getAttribute("data-rule-id");
+                        if (rid) {
+                            lvAutomation.toggleRule(rid, Boolean(chk.checked));
+                            toast(chk.checked ? "✓ 规则已启用" : "✓ 规则已停用");
+                        }
+                    });
+                });
+            },
+        },
+    ];
+
+    const allSections = [...builtinSections, ...customConfigSections];
+    const initialSection = allSections.find(s => s.id === activeTabId) || allSections[0];
+    if (initialSection) activeTabId = initialSection.id;
+
+    const sidebarEl = mask.querySelector<HTMLElement>(".lv-cfg-sidebar");
+    const panelEl = mask.querySelector<HTMLElement>(".lv-cfg-panel");
+
+    const renderTabs = () => {
+        if (!sidebarEl) return;
+        sidebarEl.innerHTML = allSections.map(sec => `
+            <button type="button" class="lv-cfg-tab-btn ${sec.id === activeTabId ? 'active' : ''}" data-cfg-tab="${sec.id}">
+                <span>${sec.icon}</span>
+                <span>${escapeHtml(sec.title)}</span>
+                ${sec.badge ? `<span style="font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(37,99,235,0.1);color:#2563eb;margin-left:auto;">${escapeHtml(sec.badge)}</span>` : ""}
+            </button>
+        `).join("");
+
+        sidebarEl.querySelectorAll<HTMLButtonElement>(".lv-cfg-tab-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const tid = btn.getAttribute("data-cfg-tab");
+                if (tid && tid !== activeTabId) {
+                    hapticFeedback(6);
+                    activeTabId = tid;
+                    renderTabs();
+                    renderActiveSection();
+                }
+            });
+        });
+    };
+
+    const renderActiveSection = () => {
+        if (!panelEl) return;
+        panelEl.innerHTML = "";
+        const sec = allSections.find(s => s.id === activeTabId) || allSections[0];
+        if (sec) sec.render(panelEl, flashToast);
+    };
+
+    renderTabs();
+    renderActiveSection();
+}
+
+
+/* ========================================================================= */
 /* 14. 思源宿主新特性适配桥接 (SiYuan Host Native Bridge · v3.8.10+)         */
 /* ========================================================================= */
 
@@ -16152,36 +19452,169 @@ export const lvHostBridge = {
     isLvSyncLockError,
     lvWithSyncRetry,
     openJoinQqGroup,
+    openSponsorModal,
 };
 
 /* ========================================================================= */
-/* 15. 小驴全能块助手通用中枢 (Universal Block Assistant Hub · Protocol v1.9) */
+/* 15. 小驴全能块助手通用中枢与资产库 (Universal Block Assistant & Action Store) */
 /* ========================================================================= */
+
+export type UniversalBlockActionCategory =
+    | "flashcard"
+    | "study"
+    | "reading"
+    | "native"
+    | "organization"
+    | "time"
+    | "clipboard"
+    | "community"
+    | "plugin";
 
 export interface UniversalBlockAction {
     id: string;
-    group: "flashcard" | "native" | "knowledge" | "time" | "clipboard" | "community";
+    group: string; // group / category
     label: string;
     subtitle?: string;
     glyph: string;
     featured?: boolean;
     badgeText?: string;
     sourcePlugin?: string;
+    sourcePluginId?: string;
+    sourceType?: "native" | "ecosystem" | "community" | "plugin-discovery" | "custom";
     destructive?: boolean;
     supportsBatch?: boolean;
     singleOnly?: boolean;
     preferredBlockKinds?: string[];
+    excludedBlockKinds?: string[];
+    tags?: string[];
+    installed?: boolean;
+    requiresPlugin?: string;
+    enabledByDefault?: boolean;
+    isPinnedByDefault?: boolean;
     isAvailable?: (snapshot: any) => boolean;
-    execute: (blockID: string, snapshot: any, batchIDs?: string[]) => void | Promise<void>;
+    execute: (blockID: string, snapshot?: any, batchIDs?: string[]) => void | Promise<void>;
+}
+
+export interface BlockActionStoreConfig {
+    version: number;
+    enabledActionIds: string[];
+    pinnedActionIds: string[];
+    customSortOrder?: string[];
+    updatedAt?: number;
+}
+
+export interface CustomBlockActionDef {
+    id: string;
+    label: string;
+    subtitle?: string;
+    glyph: string;
+    group: string;
+    actionType: "prefix-suffix" | "attr" | "script";
+    prefix?: string;
+    suffix?: string;
+    attrKey?: string;
+    attrValue?: string;
+    script?: string;
+    createdAt?: number;
+}
+
+const CUSTOM_ACTIONS_STORAGE_KEY = "lv_block_assistant_custom_actions_v1";
+
+function readCustomActionsFromStorage(): CustomBlockActionDef[] {
+    try {
+        if (typeof localStorage === "undefined") return [];
+        const raw = localStorage.getItem(CUSTOM_ACTIONS_STORAGE_KEY);
+        // 2026-11-21 走查修复：存量值若为合法 JSON 非数组（手改/旧版格式），下游 forEach 在块助手
+        // hub 初始化即抛 TypeError。与 readStoreConfigFromStorage 对齐做形态收敛。
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? (parsed as CustomBlockActionDef[]) : [];
+    } catch { return []; }
+}
+
+function writeCustomActionsToStorage(defs: CustomBlockActionDef[]): void {
+    try {
+        if (typeof localStorage !== "undefined") {
+            localStorage.setItem(CUSTOM_ACTIONS_STORAGE_KEY, JSON.stringify(defs));
+        }
+    } catch { /* ignore */ }
 }
 
 export interface UniversalBlockAssistantHub {
     version: string;
     leaderPlugin: string | null;
     register: (action: UniversalBlockAction) => () => void;
-    getActions: () => UniversalBlockAction[];
+    getActions: (force?: boolean) => UniversalBlockAction[];
+    getEnabledActions: (force?: boolean) => UniversalBlockAction[];
+    getPinnedActions: (force?: boolean) => UniversalBlockAction[];
     ensureLeader: (pluginId: string, openMenuFn?: (blockID: string, anchor: HTMLElement) => void) => () => void;
     openMenu: (blockID: string, anchor: HTMLElement) => void;
+    getStoreConfig: () => BlockActionStoreConfig;
+    saveStoreConfig: (config: BlockActionStoreConfig) => void;
+    resetStoreConfig: () => BlockActionStoreConfig;
+    openStoreDialog: (options?: { onConfigChange?: (config: BlockActionStoreConfig) => void }) => void;
+    scanPlugins: (force?: boolean) => UniversalBlockAction[];
+    getScanCacheStatus?: () => {
+        lastScanTime: number;
+        scanCount: number;
+        fingerprint: string;
+        ttlMs: number;
+    };
+}
+
+const BLOCK_ACTION_STORE_STORAGE_KEY = "lv_block_assistant_store_v1";
+
+const DEFAULT_PINNED_ACTION_IDS: string[] = [
+    "edit-card-qa",     // 编辑问答 (Alt+Q)
+    "copy-block-ref",   // 复制块引用
+    "focus-block",      // 聚焦当前块
+    "morph-block-type", // 转换块类型
+    "make-cloze",       // 挖空制卡
+];
+
+const DEFAULT_ENABLED_ACTION_IDS: string[] = [
+    // 学习记忆
+    "edit-card-qa", "make-cloze", "make-occlusion", "add-to-deck", "to-exam-question", "exam-ai-generate",
+    // 思源原生
+    "focus-block", "copy-embed-ref", "toggle-fold-block", "morph-block-type", "native-clone-block", "native-move-up", "native-move-down",
+    // 复制引用
+    "copy-block-ref", "copy-plain-text", "copy-block-id",
+    // 阅读研读与知识资产
+    "to-glean-library", "ghostreader-explain", "capture-quote-common", "contacts-interaction",
+    // 时间打卡与备忘
+    "bind-checkin-item", "add-memo", "speedswitch-workbench",
+    // 精选块级增强与排版
+    "community-mindmap", "plugin-pangu-spacing", "plugin-convert-punctuation", "plugin-database-attr", "plugin-wordcount",
+    "plugin-dailynote-append", "plugin-table-format", "plugin-code-run", "plugin-image-tools", "plugin-toc-locate", "plugin-mermaid-zoom"
+];
+
+function readStoreConfigFromStorage(): BlockActionStoreConfig {
+    try {
+        if (typeof localStorage === "undefined") {
+            return { version: 1, enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS], pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS] };
+        }
+        const raw = localStorage.getItem(BLOCK_ACTION_STORE_STORAGE_KEY);
+        if (!raw) {
+            return { version: 1, enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS], pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS] };
+        }
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.enabledActionIds) && Array.isArray(parsed.pinnedActionIds)) {
+            return parsed;
+        }
+    } catch { /* ignore */ }
+    return { version: 1, enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS], pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS] };
+}
+
+function writeStoreConfigToStorage(cfg: BlockActionStoreConfig): void {
+    try {
+        if (typeof localStorage !== "undefined") {
+            cfg.updatedAt = Date.now();
+            localStorage.setItem(BLOCK_ACTION_STORE_STORAGE_KEY, JSON.stringify(cfg));
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("lv-block-action-store-updated", { detail: cfg }));
+            }
+        }
+    } catch { /* ignore */ }
 }
 
 let sharedBlockActions = new Map<string, UniversalBlockAction>();
@@ -16190,31 +19623,994 @@ let blockAssistantOpenFn: ((blockID: string, anchor: HTMLElement) => void) | nul
 const blockAssistantOpenFns = new Map<string, (blockID: string, anchor: HTMLElement) => void>();
 const blockAssistantOwners = new Set<string>();
 
+/** 纯净提取块文本（彻底排除 .protyle-attr 属性栏与胶囊按钮的文字污染） */
+/**
+ * 安全转义 SQL 字符串字面量：单引号双写，防止打破 SQL 单引号闭合结构导致语法解析崩溃
+ */
+export function escapeSql(value: unknown): string {
+    return String(value ?? "").replace(/'/g, "''");
+}
+
+const WINDOWS_RESERVED_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+/**
+ * 跨平台安全清洗单级文件名或路径段（消除 Windows 9 大非法字符 <>:"/\|?*、控制字符与尾部点/空格）
+ */
+export function sanitizeFileNameSegment(name: string, fallback = "未命名", maxLength = 80): string {
+    const raw = typeof name === "string" ? name.trim() : "";
+    if (!raw) return fallback;
+    let clean = raw
+        .replace(/[<>:"/\\|?*\u0000-\u001f\r\n\t#~]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_NAMES.test(clean)) {
+        clean = `_${clean}`;
+    }
+    if (clean.length > maxLength) {
+        clean = clean.slice(0, maxLength).trim().replace(/[. ]+$/g, "");
+    }
+    return clean || fallback;
+}
+
+/**
+ * 跨平台安全清洗并归一化思源文档人类可读路径（hpath）
+ * 1. 自动逐级清洗每个目录段和文档名，消除 Windows 非法字符；
+ * 2. 确保前导单个 /，且彻底折叠消除内部 // 与尾随 /。
+ */
+export function sanitizeHPath(rawPath: string, fallback = "/未命名"): string {
+    if (!rawPath || typeof rawPath !== "string") return fallback;
+    const parts = rawPath.split("/").map((seg) => sanitizeFileNameSegment(seg, "")).filter(Boolean);
+    if (parts.length === 0) return fallback;
+    return "/" + parts.join("/");
+}
+
+export function getCleanBlockText(el: HTMLElement | null | undefined): string {
+    if (!el) return "";
+    const edit = el.querySelector<HTMLElement>(':scope > [contenteditable="true"]')
+        || el.querySelector<HTMLElement>('[contenteditable="true"]');
+    if (edit) {
+        const clone = edit.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll(".protyle-attr, .protyle-action, .protyle-gutters, .lv-card-badge-pill").forEach(n => n.remove());
+        return (clone.textContent || "").trim();
+    }
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll(".protyle-attr, .protyle-action, .protyle-gutters, .lv-card-badge-pill").forEach(n => n.remove());
+    return (clone.textContent || "").trim();
+}
+
+/**
+ * 按块 ID 精确查询真实块元素（2026-11-21 走查修复，bug⑥ 根治）。
+ * 思源面包屑 span.protyle-breadcrumb__item 会复制块的 data-node-id 且文档序先于真实块，
+ * 裸 `document.querySelector('[data-node-id=…]')` 会命中空面包屑，导致字数统计恒 0、
+ * 看板锚点空文本、morph/fold 拿错元素等系统性误判。
+ * 查询顺序：编辑器域(.protyle-wysiwyg) → 预览/导出域(.b3-typography) → 全局兜底（排除面包屑与文档标题）。
+ */
+export function queryBlockElementById(blockID: string): HTMLElement | null {
+    if (typeof document === "undefined" || typeof document.querySelector !== "function" || !blockID) return null;
+    try {
+        const scoped = document.querySelector<HTMLElement>(
+            `.protyle-wysiwyg [data-node-id="${blockID}"], .b3-typography [data-node-id="${blockID}"]`,
+        );
+        if (scoped) return scoped;
+        const all = document.querySelectorAll<HTMLElement>(`[data-node-id="${blockID}"]`);
+        let fallback: HTMLElement | null = null;
+        for (const el of all) {
+            if (!fallback) fallback = el;
+            if (!el.closest(".protyle-breadcrumb, .protyle-title")) return el;
+        }
+        return fallback;
+    } catch {
+        return null;
+    }
+}
+
+/** 获取块的原生 Markdown（优先从 Kramdown 获取，保证加粗/公式/链接等富文本标记不被抹除；带 IAL 剥离与 DOM 纯文本兜底） */
+export async function getPureBlockMarkdown(blockID: string, fallbackEl?: HTMLElement | null): Promise<string> {
+    try {
+        const resKram = await lvKernelPost("/api/block/getBlockKramdown", { id: blockID });
+        const rawKram = resKram?.data?.kramdown;
+        if (typeof rawKram === "string" && rawKram.trim()) {
+            return rawKram.replace(/\{:[^}]*\}\s*$/g, "").trim();
+        }
+    } catch { /* ignore */ }
+    if (fallbackEl) {
+        return getCleanBlockText(fallbackEl);
+    }
+    const el = (typeof document !== "undefined") ? (document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) || queryBlockElementById(blockID)) : null;
+    return getCleanBlockText(el as HTMLElement);
+}
+
+/**
+ * 安全的 Markdown 纯文本转换器（占位符保护机制）：
+ * 自动豁免代码块与公式块；在对正文进行排版或标点替换时，
+ * 优先保护 Markdown 链接、图片、行内代码、数学公式与思源块引用，
+ * 绝不误伤 http:// 冒号、代码语法或破坏块引用结构。
+ */
+export function safeTransformBlockMarkdown(rawMd: string, transformFn: (text: string) => string): string {
+    if (!rawMd || typeof rawMd !== "string") return "";
+    const tokens: string[] = [];
+    const saveToken = (match: string) => {
+        tokens.push(match);
+        return `@@LV_TOKEN_${tokens.length - 1}@@`;
+    };
+    // 1. 保护行内代码与公式
+    let masked = rawMd.replace(/(`[^`]+`|\$[^\$]+\$)/g, saveToken);
+    // 2. 保护 Markdown 链接与图片
+    masked = masked.replace(/(!?\[[^\]]*\]\([^)]+\))/g, saveToken);
+    // 3. 保护思源块引用 ((id "anchor"))
+    masked = masked.replace(/(\(\([0-9a-z\-]+(?:\s+["'][^"']*["'])?\)\))/g, saveToken);
+    // 4. 执行业务转换
+    let result = transformFn(masked);
+    // 5. 还原保护片段
+    for (let i = tokens.length - 1; i >= 0; i--) {
+        result = result.replace(`@@LV_TOKEN_${i}@@`, tokens[i] ?? "");
+    }
+    return result;
+}
+
+export interface BlockMorphTarget {
+    id: string;               // 标识，如 "paragraph" | "h1" | ...
+    name: string;             // 显示名，如 "普通正文"
+    glyph: string;            // 符号徽章，如 "¶"
+    shortcut: string;         // 单键快捷键，如 "0", "1", "T"
+    category: "basic" | "heading" | "container"; // 分组
+    description: string;      // 描述说明
+    formatMarkdown: (content: string) => string;
+}
+
+export const BLOCK_MORPH_TARGETS: readonly BlockMorphTarget[] = [
+    // 基础文本与列表
+    {
+        id: "paragraph",
+        name: "普通正文",
+        glyph: "¶",
+        shortcut: "0",
+        category: "basic",
+        description: "常规段落文本，清除标题与列表符号",
+        formatMarkdown: (c) => c,
+    },
+    {
+        id: "task",
+        name: "待办任务",
+        glyph: "☑",
+        shortcut: "T",
+        category: "basic",
+        description: "带复选框的任务清单项 (* [ ])",
+        formatMarkdown: (c) => `* [ ] ${c}`,
+    },
+    {
+        id: "list",
+        name: "无序列表",
+        glyph: "•",
+        shortcut: "U",
+        category: "basic",
+        description: "圆点项目符号无序列表 (*)",
+        formatMarkdown: (c) => `* ${c}`,
+    },
+    {
+        id: "ordered-list",
+        name: "有序列表",
+        glyph: "1.",
+        shortcut: "O",
+        category: "basic",
+        description: "递增数字顺序列表 (1.)",
+        formatMarkdown: (c) => `1. ${c}`,
+    },
+    // 大纲标题
+    {
+        id: "h1",
+        name: "一级标题",
+        glyph: "H1",
+        shortcut: "1",
+        category: "heading",
+        description: "最高级别大纲章节标题 (#)",
+        formatMarkdown: (c) => `# ${c}`,
+    },
+    {
+        id: "h2",
+        name: "二级标题",
+        glyph: "H2",
+        shortcut: "2",
+        category: "heading",
+        description: "核心分区次级标题 (##)",
+        formatMarkdown: (c) => `## ${c}`,
+    },
+    {
+        id: "h3",
+        name: "三级标题",
+        glyph: "H3",
+        shortcut: "3",
+        category: "heading",
+        description: "小节与知识点标题 (###)",
+        formatMarkdown: (c) => `### ${c}`,
+    },
+    {
+        id: "h4",
+        name: "四级标题",
+        glyph: "H4",
+        shortcut: "4",
+        category: "heading",
+        description: "细分小标题 (####)",
+        formatMarkdown: (c) => `#### ${c}`,
+    },
+    {
+        id: "h5",
+        name: "五级标题",
+        glyph: "H5",
+        shortcut: "5",
+        category: "heading",
+        description: "五级辅助段标 (#####)",
+        formatMarkdown: (c) => `##### ${c}`,
+    },
+    {
+        id: "h6",
+        name: "六级标题",
+        glyph: "H6",
+        shortcut: "6",
+        category: "heading",
+        description: "六级末级段标 (######)",
+        formatMarkdown: (c) => `###### ${c}`,
+    },
+    // 结构容器
+    {
+        id: "quote",
+        name: "引述高亮",
+        glyph: "❝",
+        shortcut: "Q",
+        category: "container",
+        description: "带侧边线的引文/重点批注块 (>)",
+        formatMarkdown: (c) => c.split(/\r?\n/).map(l => l.trim() ? `> ${l}` : ">").join("\n"),
+    },
+    {
+        id: "callout",
+        name: "提示块",
+        glyph: "💡",
+        shortcut: "N",
+        category: "container",
+        description: "带高亮背景与图标的提示容器 (> [!NOTE])",
+        formatMarkdown: (c) => `> [!NOTE]\n> ${c}`,
+    },
+    {
+        id: "code",
+        name: "代码块",
+        glyph: "</>",
+        shortcut: "C",
+        category: "container",
+        description: "等宽代码高亮容器 (```)",
+        formatMarkdown: (c) => "```\n" + c + "\n```",
+    },
+    {
+        id: "math",
+        name: "数学公式",
+        glyph: "∑",
+        shortcut: "M",
+        category: "container",
+        description: "LaTeX 块级居中数学公式 ($$)",
+        formatMarkdown: (c) => "$$\n" + c + "\n$$",
+    },
+];
+
+/** 深度抽取块内容的核心正文 Markdown，安全剥离外层各种块级包装（列表/待办/标题/引述/提示/代码/公式/IAL） */
+export function extractCoreMarkdown(rawMd: string): string {
+    if (!rawMd || typeof rawMd !== "string") return "";
+    let text = rawMd.replace(/\{:[^}]*\}\s*$/g, "").trim();
+
+    // 1. 代码块外壳剥离
+    const codeMatch = text.match(/^```[^\r\n]*\r?\n([\s\S]*?)\r?\n?```$/);
+    if (codeMatch) return (codeMatch[1] ?? "").trim();
+
+    // 2. 数学公式外壳剥离
+    const mathMatch = text.match(/^\$\$[\s\r\n]*([\s\S]*?)[\s\r\n]*\$\$$/);
+    if (mathMatch) return (mathMatch[1] ?? "").trim();
+
+    // 3. Callout 提示块与引述块前缀剥离
+    if (/^>\s*/m.test(text)) {
+        text = text.replace(/^>\s*\[![^\]]+\]\s*\r?\n?/i, "");
+        text = text.split(/\r?\n/).map(line => line.replace(/^>\s?/, "")).join("\n").trim();
+    }
+
+    // 4. 待办任务前缀剥离 (* [ ] / - [x] / + [ ] 等)
+    text = text.replace(/^([-*+]\s*\[[ xX]\]\s*)/, "");
+
+    // 5. 无序列表前缀剥离 (* / - / +)
+    text = text.replace(/^([-*+]\s+)/, "");
+
+    // 6. 有序列表前缀剥离 (1. / 2. 等)
+    text = text.replace(/^(\d+\.\s+)/, "");
+
+    // 7. 标题前缀剥离 (# / ## / ######)
+    text = text.replace(/^(#{1,6}\s+)/, "");
+
+    return text.trim();
+}
+
+/** 智能探测当前块的类型 */
+export function detectCurrentBlockType(el: HTMLElement | null, rawMd?: string): string {
+    if (el) {
+        const type = el.getAttribute("data-type");
+        const subtype = el.getAttribute("data-subtype");
+        if (type === "NodeHeading") {
+            if (subtype && /^h[1-6]$/i.test(subtype)) return subtype.toLowerCase();
+            return "h1";
+        }
+        if (type === "NodeCallout") return "callout";
+        if (type === "NodeBlockquote") return "quote";
+        if (type === "NodeCodeBlock") return "code";
+        if (type === "NodeMathBlock") return "math";
+
+        const listItem = el.closest('[data-type="NodeListItem"]');
+        if (listItem) {
+            const listSubtype = listItem.getAttribute("data-subtype");
+            const isTask = listItem.classList.contains("protyle-action--task")
+                || Boolean(listItem.querySelector(".protyle-action--task"))
+                || listSubtype === "t"
+                || el.classList.contains("protyle-action--task");
+            if (isTask) return "task";
+            if (listSubtype === "o") return "ordered-list";
+            if (listSubtype === "u") return "list";
+        }
+    }
+    if (rawMd) {
+        const clean = rawMd.replace(/\{:[^}]*\}\s*$/g, "").trim();
+        if (/^```/.test(clean)) return "code";
+        if (/^\$\$/.test(clean)) return "math";
+        if (/^>\s*\[!/i.test(clean)) return "callout";
+        if (/^>\s*/.test(clean)) return "quote";
+        if (/^#{1,6}\s+/.test(clean)) {
+            const matchH = clean.match(/^(#{1,6})/);
+            const level = (matchH && matchH[1]) ? matchH[1].length : 1;
+            return `h${level}`;
+        }
+        if (/^[-*+]\s*\[[ xX]\]/.test(clean)) return "task";
+        if (/^\d+\.\s+/.test(clean)) return "ordered-list";
+        if (/^[-*+]\s+/.test(clean)) return "list";
+    }
+    return "paragraph";
+}
+
+/** 执行无损转换块类型（原子保留所有 IAL 属性，支持列表/标题/容器全品类安全调度） */
+export async function morphBlockTypeTo(
+    blockID: string,
+    targetType: string,
+    options?: {
+        readMarkdownFn?: (id: string) => Promise<string>;
+        updateBlockFn?: (dataType: "markdown" | string, data: string, id: string) => Promise<any>;
+        getBlockAttrsFn?: (id: string) => Promise<Record<string, string>>;
+        setBlockAttrsFn?: (id: string, attrs: Record<string, string>) => Promise<any>;
+        showMessageFn?: (msg: string, timeout?: number, type?: string) => void;
+    }
+): Promise<boolean> {
+    const target = BLOCK_MORPH_TARGETS.find(t => t.id === targetType);
+    if (!target) return false;
+
+    const showMsg = options?.showMessageFn || ((msg: string, dur?: number, typ?: string) => {
+        try {
+            (window as any).siyuan?.showMessage?.(msg, dur, typ);
+        } catch { /* ignore */ }
+    });
+
+    try {
+        const el = (typeof document !== "undefined")
+            ? ((document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`)
+                || queryBlockElementById(blockID)) as HTMLElement | null)
+            : null;
+
+        const listItem = el?.closest?.('[data-type="NodeListItem"]');
+        const listEl = el?.closest?.('[data-type="NodeList"]');
+        const isTargetList = ["task", "list", "ordered-list"].includes(targetType);
+
+        let targetId = blockID;
+        let isListMultiItem = false;
+        if (listItem) {
+            const listItems: Element[] = listEl ? Array.from(listEl.querySelectorAll(':scope > [data-type="NodeListItem"]')) : [];
+            if (isTargetList) {
+                targetId = listItem.getAttribute("data-node-id") || blockID;
+            } else {
+                if (listItems.length <= 1 && listEl) {
+                    targetId = listEl.getAttribute("data-node-id") || blockID;
+                } else {
+                    targetId = listItem.getAttribute("data-node-id") || blockID;
+                    isListMultiItem = true;
+                }
+            }
+        }
+
+        let rawMd = "";
+        if (options?.readMarkdownFn) {
+            rawMd = await options.readMarkdownFn(targetId);
+        } else {
+            rawMd = await getPureBlockMarkdown(targetId, el);
+        }
+
+        const currentType = detectCurrentBlockType(el, rawMd);
+        if (currentType === targetType) {
+            showMsg(`当前块已经是【${target.name}】`, 1800, "info");
+            return true;
+        }
+
+        let coreText = extractCoreMarkdown(rawMd);
+        if (!coreText && el) {
+            coreText = getCleanBlockText(el);
+        }
+
+        const nextMd = target.formatMarkdown(coreText);
+
+        // ── 核心保活：转换前原子捕获所有 IAL 属性与元数据 ──
+        let existingAttrs: Record<string, string> = {};
+        if (options?.getBlockAttrsFn) {
+            try {
+                existingAttrs = (await options.getBlockAttrsFn(blockID)) || {};
+            } catch { /* ignore */ }
+        } else {
+            try {
+                const resp = await lvKernelPost("/api/attr/getBlockAttrs", { id: blockID });
+                if (resp && resp.code === 0 && resp.data) {
+                    existingAttrs = { ...resp.data };
+                }
+            } catch { /* ignore */ }
+        }
+        if (targetId !== blockID) {
+            if (options?.getBlockAttrsFn) {
+                try {
+                    const respT = await options.getBlockAttrsFn(targetId);
+                    if (respT) existingAttrs = { ...respT, ...existingAttrs };
+                } catch { /* ignore */ }
+            } else {
+                try {
+                    const respT = await lvKernelPost("/api/attr/getBlockAttrs", { id: targetId });
+                    if (respT && respT.code === 0 && respT.data) {
+                        existingAttrs = { ...respT.data, ...existingAttrs };
+                    }
+                } catch { /* ignore */ }
+            }
+        }
+        if (el) {
+            for (const a of Array.from(el.attributes)) {
+                if (a.name.startsWith("custom-") || ["bookmark", "name", "alias", "memo", "style"].includes(a.name)) {
+                    if (!existingAttrs[a.name] && a.value) existingAttrs[a.name] = a.value;
+                }
+            }
+        }
+        const attrsToRestore: Record<string, string> = {};
+        for (const [k, v] of Object.entries(existingAttrs)) {
+            if (k !== "id" && k !== "updated" && v != null && v !== "") {
+                attrsToRestore[k] = String(v);
+            }
+        }
+
+        let finalBlockId = targetId;
+
+        // ── 执行转换更新 ──
+        if (isListMultiItem && listEl) {
+            const parentListId = listEl.getAttribute("data-node-id") || "";
+            const insResp = await lvKernelPost("/api/block/insertBlock", {
+                previousID: parentListId,
+                dataType: "markdown",
+                data: nextMd
+            });
+            const newInsertedId = insResp?.data?.[0]?.doOperations?.[0]?.id;
+            if (newInsertedId) {
+                finalBlockId = newInsertedId;
+                await lvKernelPost("/api/block/deleteBlock", { id: targetId });
+            } else {
+                throw new Error("抽离列表项插入新块失败");
+            }
+        } else {
+            if (options?.updateBlockFn) {
+                await options.updateBlockFn("markdown", nextMd, targetId);
+            } else {
+                await lvKernelPost("/api/block/updateBlock", { id: targetId, dataType: "markdown", data: nextMd });
+            }
+            finalBlockId = targetId;
+        }
+
+        // ── 核心保活：写回所有暂存属性，杜绝闪卡与问答数据丢失 ──
+        if (Object.keys(attrsToRestore).length > 0) {
+            if (options?.setBlockAttrsFn) {
+                try {
+                    await options.setBlockAttrsFn(finalBlockId, attrsToRestore);
+                } catch { /* ignore */ }
+            } else {
+                try {
+                    await lvKernelPost("/api/attr/setBlockAttrs", {
+                        id: finalBlockId,
+                        attrs: attrsToRestore
+                    });
+                } catch { /* ignore */ }
+            }
+            if (typeof document !== "undefined") {
+                const updatedEl = queryBlockElementById(finalBlockId) as HTMLElement | null;
+                if (updatedEl) {
+                    for (const [k, v] of Object.entries(attrsToRestore)) {
+                        try { updatedEl.setAttribute(k, v); } catch { /* ignore */ }
+                    }
+                    if (attrsToRestore["custom-riff-title"]) {
+                        const contentEl = (updatedEl.firstElementChild as HTMLElement | null)?.getAttribute("contenteditable") === "true"
+                            ? (updatedEl.firstElementChild as HTMLElement)
+                            : updatedEl.querySelector('div[contenteditable="true"]') as HTMLElement | null;
+                        if (contentEl) {
+                            contentEl.setAttribute("data-custom-title", attrsToRestore["custom-riff-title"]);
+                        }
+                    }
+                }
+            }
+        }
+
+        showMsg(`已将块转换为【${target.name}】`, 1800, "info");
+        return true;
+    } catch (err: any) {
+        showMsg(`转换块类型失败: ${err?.message || "未知原因"}`, 2200, "error");
+        return false;
+    }
+}
+
+/** 弹窗构建：全生态块类型转换选择器 */
+export function openBlockTypeMorphPicker(
+    blockID: string,
+    anchor?: HTMLElement | null,
+    onSelected?: (targetType: string) => void | Promise<void>,
+    options?: {
+        readMarkdownFn?: (id: string) => Promise<string>;
+        updateBlockFn?: (dataType: "markdown" | string, data: string, id: string) => Promise<any>;
+        getBlockAttrsFn?: (id: string) => Promise<Record<string, string>>;
+        setBlockAttrsFn?: (id: string, attrs: Record<string, string>) => Promise<any>;
+        showMessageFn?: (msg: string, timeout?: number, type?: string) => void;
+    }
+): () => void {
+    if (typeof document === "undefined") {
+        return () => {};
+    }
+
+    // 移除已有的选择器，防止多实例重叠
+    const existing = document.getElementById("lv-block-type-picker-root");
+    if (existing) {
+        try { existing.remove(); } catch { /* ignore */ }
+    }
+
+    const targetEl = anchor || queryBlockElementById(blockID) as HTMLElement | null;
+    const currentType = detectCurrentBlockType(targetEl);
+
+    const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
+
+    const root = document.createElement("div");
+    root.id = "lv-block-type-picker-root";
+
+    // 遮罩层
+    const mask = document.createElement("div");
+    mask.style.cssText = `
+        position: fixed;
+        inset: 0;
+        z-index: 99998;
+        background: ${isMobile ? "rgba(15, 23, 42, 0.35)" : "transparent"};
+        backdrop-filter: ${isMobile ? "blur(3px)" : "none"};
+        -webkit-backdrop-filter: ${isMobile ? "blur(3px)" : "none"};
+    `;
+    root.appendChild(mask);
+
+    // 弹窗本体
+    const picker = document.createElement("div");
+    picker.className = "lv-block-type-picker b3-menu";
+    picker.setAttribute("role", "dialog");
+    picker.setAttribute("aria-label", "转换块类型");
+    picker.style.cssText = `
+        position: fixed;
+        z-index: 99999;
+        width: ${isMobile ? "min(92vw, 360px)" : "340px"};
+        max-height: min(85vh, 520px);
+        background: var(--b3-theme-surface, #ffffff);
+        border: 1px solid var(--b3-theme-surface-lighter, rgba(140, 140, 140, 0.22));
+        border-radius: 10px;
+        box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.08);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        color: var(--b3-theme-on-surface, #1e293b);
+        font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+        animation: lvNoticeFadeIn 0.14s ease-out both;
+    `;
+    root.appendChild(picker);
+
+    // 头部 Header
+    const header = document.createElement("div");
+    header.style.cssText = `
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px 8px;
+        border-bottom: 1px solid var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
+        background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 4%, var(--b3-theme-surface, #fff));
+    `;
+    const titleWrap = document.createElement("div");
+    titleWrap.style.cssText = "display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px;";
+    titleWrap.innerHTML = `<span style="font-size: 14px;">🔄</span><span>转换块类型</span>`;
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.style.cssText = `
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        color: var(--b3-theme-on-surface-light, #94a3b8);
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+    closeBtn.innerHTML = "✕";
+    closeBtn.addEventListener("click", () => close());
+
+    header.appendChild(titleWrap);
+    header.appendChild(closeBtn);
+    picker.appendChild(header);
+
+    // 搜索过滤栏
+    const searchWrap = document.createElement("div");
+    searchWrap.style.cssText = "padding: 8px 12px 6px;";
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "过滤类型或按快捷键 (0~6, T, U, Q, C...)";
+    searchInput.style.cssText = `
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--b3-theme-surface-lighter, rgba(0,0,0,0.15));
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        background: var(--b3-theme-background, #f8fafc);
+        color: var(--b3-theme-on-surface, #1e293b);
+        outline: none;
+        transition: border-color 0.15s ease;
+    `;
+    searchInput.addEventListener("focus", () => {
+        searchInput.style.borderColor = "var(--b3-theme-primary, #6366f1)";
+    });
+    searchInput.addEventListener("blur", () => {
+        searchInput.style.borderColor = "var(--b3-theme-surface-lighter, rgba(0,0,0,0.15))";
+    });
+    searchWrap.appendChild(searchInput);
+    picker.appendChild(searchWrap);
+
+    // 内容选项列表容器
+    const body = document.createElement("div");
+    body.style.cssText = `
+        flex: 1;
+        overflow-y: auto;
+        padding: 4px 8px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    `;
+    picker.appendChild(body);
+
+    const close = () => {
+        try {
+            root.remove();
+        } catch { /* ignore */ }
+        window.removeEventListener("keydown", onGlobalKeyDown, true);
+    };
+
+    mask.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+    });
+
+    const handleSelect = async (targetId: string) => {
+        close();
+        if (onSelected) {
+            await onSelected(targetId);
+        } else {
+            await morphBlockTypeTo(blockID, targetId, options);
+        }
+    };
+
+    let filteredTargets = [...BLOCK_MORPH_TARGETS];
+    let focusedIndex = 0;
+
+    const renderList = () => {
+        body.innerHTML = "";
+        const query = searchInput.value.trim().toLowerCase();
+        if (!query) {
+            filteredTargets = [...BLOCK_MORPH_TARGETS];
+        } else {
+            filteredTargets = BLOCK_MORPH_TARGETS.filter(t =>
+                t.name.toLowerCase().includes(query) ||
+                t.description.toLowerCase().includes(query) ||
+                t.shortcut.toLowerCase() === query ||
+                t.id.toLowerCase().includes(query)
+            );
+        }
+
+        if (filteredTargets.length === 0) {
+            const empty = document.createElement("div");
+            empty.style.cssText = "text-align: center; color: var(--b3-theme-on-surface-light, #94a3b8); font-size: 12px; padding: 24px 0;";
+            empty.textContent = "未找到匹配的块类型";
+            body.appendChild(empty);
+            return;
+        }
+
+        let lastCat = "";
+        filteredTargets.forEach((target, idx) => {
+            if (!query && target.category !== lastCat) {
+                lastCat = target.category;
+                const catHeader = document.createElement("div");
+                catHeader.style.cssText = `
+                    font-size: 10.5px;
+                    font-weight: 600;
+                    color: var(--b3-theme-on-surface-light, #64748b);
+                    padding: 6px 6px 2px;
+                    letter-spacing: 0.5px;
+                `;
+                catHeader.textContent = target.category === "basic" ? "基础正文与列表" : (target.category === "heading" ? "大纲层级标题" : "结构容器与公式");
+                body.appendChild(catHeader);
+            }
+
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "lv-morph-item";
+            item.setAttribute("data-morph-type", target.id);
+            const isCurrent = target.id === currentType;
+            const isFocused = idx === focusedIndex;
+
+            item.style.cssText = `
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 10px;
+                border-radius: 6px;
+                border: 1px solid ${isFocused ? "var(--b3-theme-primary, #6366f1)" : "transparent"};
+                background: ${isFocused ? "color-mix(in srgb, var(--b3-theme-primary, #6366f1) 8%, var(--b3-theme-surface))" : "transparent"};
+                color: var(--b3-theme-on-surface, #1e293b);
+                cursor: pointer;
+                text-align: left;
+                width: 100%;
+                box-sizing: border-box;
+                transition: all 0.12s ease;
+            `;
+
+            item.addEventListener("mouseenter", () => {
+                focusedIndex = idx;
+                updateFocusedItem();
+            });
+
+            item.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void handleSelect(target.id);
+            });
+
+            // 左侧图标
+            const iconBadge = document.createElement("span");
+            iconBadge.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 24px;
+                height: 24px;
+                border-radius: 5px;
+                font-size: 12px;
+                font-weight: 700;
+                background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 12%, var(--b3-theme-surface));
+                color: var(--b3-theme-primary, #6366f1);
+                flex-shrink: 0;
+            `;
+            iconBadge.textContent = target.glyph;
+            item.appendChild(iconBadge);
+
+            // 中间文本
+            const contentWrap = document.createElement("div");
+            contentWrap.style.cssText = "display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px;";
+            const nameSpan = document.createElement("span");
+            nameSpan.style.cssText = "font-size: 12px; font-weight: 600; line-height: 1.2;";
+            nameSpan.textContent = target.name;
+            const descSpan = document.createElement("span");
+            descSpan.style.cssText = "font-size: 11px; color: var(--b3-theme-on-surface-light, #64748b); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
+            descSpan.textContent = target.description;
+            contentWrap.appendChild(nameSpan);
+            contentWrap.appendChild(descSpan);
+            item.appendChild(contentWrap);
+
+            // 右侧状态徽章 / 快捷键
+            if (isCurrent) {
+                const currentTag = document.createElement("span");
+                currentTag.style.cssText = `
+                    font-size: 10px;
+                    padding: 1px 5px;
+                    border-radius: 4px;
+                    background: color-mix(in srgb, #10b981 16%, transparent);
+                    color: #059669;
+                    font-weight: 600;
+                `;
+                currentTag.textContent = "当前";
+                item.appendChild(currentTag);
+            } else if (target.shortcut) {
+                const keyBadge = document.createElement("span");
+                keyBadge.style.cssText = `
+                    font-size: 10.5px;
+                    font-weight: 600;
+                    color: var(--b3-theme-on-surface-light, #94a3b8);
+                    border: 1px solid var(--b3-theme-surface-lighter, rgba(0,0,0,0.12));
+                    border-radius: 4px;
+                    padding: 0 4px;
+                    line-height: 1.4;
+                    background: var(--b3-theme-background, #f1f5f9);
+                `;
+                keyBadge.textContent = target.shortcut;
+                item.appendChild(keyBadge);
+            }
+
+            body.appendChild(item);
+        });
+    };
+
+    const updateFocusedItem = () => {
+        const items = body.querySelectorAll<HTMLButtonElement>(".lv-morph-item");
+        items.forEach((btn, idx) => {
+            const isF = idx === focusedIndex;
+            btn.style.borderColor = isF ? "var(--b3-theme-primary, #6366f1)" : "transparent";
+            btn.style.background = isF ? "color-mix(in srgb, var(--b3-theme-primary, #6366f1) 8%, var(--b3-theme-surface))" : "transparent";
+            if (isF) {
+                btn.scrollIntoView({ block: "nearest" });
+            }
+        });
+    };
+
+    searchInput.addEventListener("input", () => {
+        focusedIndex = 0;
+        renderList();
+    });
+
+    const onGlobalKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            close();
+            return;
+        }
+
+        // 快捷键单键直接转换（当搜索框为空时）
+        if (!e.ctrlKey && !e.altKey && !e.metaKey && (!searchInput.value.trim() || document.activeElement !== searchInput)) {
+            const k = e.key.toUpperCase();
+            const matched = BLOCK_MORPH_TARGETS.find(t => t.shortcut === k);
+            if (matched) {
+                e.preventDefault();
+                e.stopPropagation();
+                void handleSelect(matched.id);
+                return;
+            }
+        }
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            if (filteredTargets.length > 0) {
+                focusedIndex = (focusedIndex + 1) % filteredTargets.length;
+                updateFocusedItem();
+            }
+            return;
+        }
+
+        if (e.key === "ArrowUp") {
+            e.preventDefault();
+            if (filteredTargets.length > 0) {
+                focusedIndex = (focusedIndex - 1 + filteredTargets.length) % filteredTargets.length;
+                updateFocusedItem();
+            }
+            return;
+        }
+
+        if (e.key === "Enter") {
+            e.preventDefault();
+            const item = filteredTargets[focusedIndex];
+            if (item) {
+                void handleSelect(item.id);
+            }
+            return;
+        }
+    };
+
+    window.addEventListener("keydown", onGlobalKeyDown, true);
+
+    document.body.appendChild(root);
+    renderList();
+
+    // 定位计算
+    if (isMobile) {
+        picker.style.bottom = "16px";
+        picker.style.left = "50%";
+        picker.style.transform = "translateX(-50%)";
+    } else if (targetEl) {
+        const rect = targetEl.getBoundingClientRect();
+        const pickerWidth = 340;
+        const pickerEstHeight = 360;
+
+        let top = rect.bottom + 6;
+        if (top + pickerEstHeight > window.innerHeight - 12) {
+            top = Math.max(12, rect.top - pickerEstHeight - 6);
+        }
+
+        let left = rect.left;
+        if (left + pickerWidth > window.innerWidth - 12) {
+            left = Math.max(12, window.innerWidth - pickerWidth - 12);
+        }
+
+        picker.style.top = `${top}px`;
+        picker.style.left = `${left}px`;
+    } else {
+        picker.style.top = "50%";
+        picker.style.left = "50%";
+        picker.style.transform = "translate(-50%, -50%)";
+    }
+
+    setTimeout(() => {
+        try {
+            searchInput.focus();
+        } catch { /* ignore */ }
+    }, 30);
+
+    return close;
+}
+
 function getBlockAssistantHub(): UniversalBlockAssistantHub {
     const w = typeof window !== "undefined" ? (window as unknown as { __LV_BLOCK_ASSISTANT_HUB__?: UniversalBlockAssistantHub }) : {};
-    if (w.__LV_BLOCK_ASSISTANT_HUB__) {
+    if (w.__LV_BLOCK_ASSISTANT_HUB__ && typeof w.__LV_BLOCK_ASSISTANT_HUB__.getStoreConfig === "function" && w.__LV_BLOCK_ASSISTANT_HUB__.version >= "2.0.0") {
         return w.__LV_BLOCK_ASSISTANT_HUB__;
     }
 
-    // 默认注入思源原生高频神级动作
-    const initNativeActions = () => {
-        const nativeActions: UniversalBlockAction[] = [
+    /** 安全复制到剪贴板（兼容内网 HTTP / 非安全上下文 / 移动端设备） */
+    const lvSafeCopyToClipboard = async (text: string): Promise<boolean> => {
+        try {
+            if (typeof navigator !== "undefined" && navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch { /* 降级到 textarea */ }
+        try {
+            if (typeof document !== "undefined") {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                ta.style.pointerEvents = "none";
+                document.body.appendChild(ta);
+                ta.select();
+                const ok = document.execCommand("copy");
+                ta.remove();
+                return ok;
+            }
+        } catch { /* ignore */ }
+        return false;
+    };
+
+    const initCuratedActions = () => {
+        const catalog: UniversalBlockAction[] = [
+            // ── 思源原生增强 ─────────────────────────────────────────
             {
                 id: "focus-block",
                 group: "native",
                 label: "聚焦当前块（沉浸专注）",
                 subtitle: "作为临时根文档展开，沉浸编辑当前分支",
                 glyph: "🔍",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
                 singleOnly: true,
-                execute: (blockID) => {
+                installed: true,
+                preferredBlockKinds: ["heading", "paragraph", "quote", "code"],
+                execute: async (blockID) => {
                     try {
                         const win = window as any;
                         if (win.siyuan?.ws?.send) {
                             win.siyuan.ws.send("openFileById", { id: blockID, mode: 0 });
-                            showMessage("已进入当前块聚焦沉浸模式", 2000, "info", "块助手");
-                        } else {
-                            window.location.hash = `#${blockID}`;
                         }
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        if (el) {
+                            el.scrollIntoView({ behavior: "smooth", block: "center" });
+                            el.classList.add("protyle-wysiwyg--select");
+                            setTimeout(() => el.classList.remove("protyle-wysiwyg--select"), 1200);
+                        }
+                        showMessage("已聚焦定位当前块", 1800, "info", "块助手");
                     } catch {
                         showMessage("聚焦失败", 2000, "error", "块助手");
                     }
@@ -16226,14 +20622,18 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 label: "复制为嵌入块",
                 subtitle: "生成 {{blockID}} 动态嵌入块语法",
                 glyph: "📦",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
                 supportsBatch: true,
+                installed: true,
+                preferredBlockKinds: ["paragraph", "heading", "table"],
                 execute: async (blockID, _s, batchIDs) => {
                     const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
                     const embeds = ids.map(id => `{{${id}}}`).join("\n");
-                    try {
-                        await navigator.clipboard.writeText(embeds);
+                    const ok = await lvSafeCopyToClipboard(embeds);
+                    if (ok) {
                         showMessage(ids.length > 1 ? `已批量复制 ${ids.length} 个嵌入块语法` : "已复制嵌入块语法 {{id}}", 2000, "info", "块助手");
-                    } catch {
+                    } else {
                         showMessage("复制失败", 2000, "error", "块助手");
                     }
                 },
@@ -16244,16 +20644,23 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 label: "折叠 / 展开子分支",
                 subtitle: "快速收起或展开该块下属的大纲与子节点",
                 glyph: "📂",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
                 singleOnly: true,
+                installed: true,
+                preferredBlockKinds: ["heading", "list", "quote"],
+                isAvailable: (s) => !s?.isDocument && (s?.blockKind === "heading" || s?.blockKind === "list" || s?.blockKind === "task" || s?.blockKind === "quote"),
                 execute: async (blockID) => {
                     try {
-                        const el = document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) || document.querySelector(`[data-node-id="${blockID}"]`);
+                        const el = document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) || queryBlockElementById(blockID);
                         const cur = el?.getAttribute("data-fold") === "1" || el?.getAttribute("fold") === "1";
                         const next = cur ? "0" : "1";
                         await lvKernelPost("/api/attr/setBlockAttrs", { id: blockID, attrs: { fold: next } });
                         if (el) {
                             el.setAttribute("data-fold", next);
                             el.setAttribute("fold", next);
+                            if (next === "1") el.classList.add("protyle-wysiwyg--fold");
+                            else el.classList.remove("protyle-wysiwyg--fold");
                         }
                         showMessage(next === "1" ? "已收起当前分支" : "已展开当前分支", 1800, "info", "块助手");
                     } catch (e: any) {
@@ -16262,24 +20669,146 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 },
             },
             {
+                id: "morph-block-type",
+                group: "native",
+                label: "快捷转换块类型",
+                subtitle: "转换为标题、列表、待办、引述或代码块",
+                glyph: "🔄",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                installed: true,
+                preferredBlockKinds: ["paragraph", "task", "heading", "list", "quote", "code", "math"],
+                execute: async (blockID) => {
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    openBlockTypeMorphPicker(blockID, el, async (targetType) => {
+                        await morphBlockTypeTo(blockID, targetType);
+                    });
+                },
+            },
+	            {
+	                id: "native-move-up",
+	                group: "organization",
+	                label: "上移一块（同级排序）",
+	                subtitle: "将当前块向上移动一行，重新编排顺序",
+	                glyph: "⬆️",
+	                sourceType: "native",
+	                sourcePlugin: "思源原生",
+	                singleOnly: true,
+	                installed: true,
+	                execute: async (blockID) => {
+	                    try {
+	                        const el = document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) as HTMLElement | null;
+	                        const prev = el?.previousElementSibling as HTMLElement | null;
+	                        const prevId = prev?.getAttribute("data-node-id");
+	                        if (el && prev && prevId) {
+	                            const prevPrevId = prev.previousElementSibling?.getAttribute("data-node-id") || "";
+	                            const parentEl = el.parentElement?.closest("[data-node-id]") as HTMLElement | null;
+	                            const docEl = el.closest(".protyle")?.querySelector(".protyle-title") as HTMLElement | null;
+	                            const parentId = parentEl?.getAttribute("data-node-id") || docEl?.getAttribute("data-node-id") || "";
+	                            prev.before(el);
+	                            el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+	                            await lvKernelPost("/api/block/moveBlock", { id: blockID, previousID: prevPrevId, parentID: parentId });
+	                            showMessage("已上移当前块", 1500, "info", "块助手");
+	                        } else {
+	                            showMessage("已处于同级最上方", 1500, "info", "块助手");
+	                        }
+	                    } catch (e: any) {
+	                        showMessage(`上移失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+	                    }
+	                },
+	            },
+	            {
+	                id: "native-move-down",
+	                group: "organization",
+	                label: "下移一块（同级排序）",
+	                subtitle: "将当前块向下移动一行，重新编排顺序",
+	                glyph: "⬇️",
+	                sourceType: "native",
+	                sourcePlugin: "思源原生",
+	                singleOnly: true,
+	                installed: true,
+	                execute: async (blockID) => {
+	                    try {
+	                        const el = document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) as HTMLElement | null;
+	                        const next = el?.nextElementSibling as HTMLElement | null;
+	                        const nextId = next?.getAttribute("data-node-id");
+	                        if (el && next && nextId) {
+	                            const parentEl = el.parentElement?.closest("[data-node-id]") as HTMLElement | null;
+	                            const docEl = el.closest(".protyle")?.querySelector(".protyle-title") as HTMLElement | null;
+	                            const parentId = parentEl?.getAttribute("data-node-id") || docEl?.getAttribute("data-node-id") || "";
+	                            next.after(el);
+	                            el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+	                            await lvKernelPost("/api/block/moveBlock", { id: blockID, previousID: nextId, parentID: parentId });
+	                            showMessage("已下移当前块", 1500, "info", "块助手");
+	                        } else {
+	                            showMessage("已处于同级最下方", 1500, "info", "块助手");
+	                        }
+	                    } catch (e: any) {
+	                        showMessage(`下移失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+	                    }
+	                },
+            },
+            {
+                id: "native-clone-block",
+                group: "organization",
+                label: "原地克隆副本",
+                subtitle: "紧随当前块下方复制插入一个完全相同的副本",
+                glyph: "📑",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                installed: true,
+                execute: async (blockID) => {
+                    try {
+                        let md = "";
+                        try {
+                            const resKram = await lvKernelPost("/api/block/getBlockKramdown", { id: blockID });
+                            const rawKram = resKram?.data?.kramdown;
+                            if (typeof rawKram === "string" && rawKram.trim()) {
+                                md = rawKram.replace(/\{:[^}]*\}\s*$/g, "").trim();
+                            }
+                        } catch { /* ignore */ }
+                        if (!md) {
+                            const el = queryBlockElementById(blockID) as HTMLElement | null;
+                            md = getCleanBlockText(el);
+                        }
+                        if (md) {
+                            await lvKernelPost("/api/block/insertBlock", { dataType: "markdown", data: md, previousID: blockID });
+                            showMessage("已原地克隆副本", 1800, "info", "块助手");
+                        } else {
+                            showMessage("未能提取块内容进行克隆", 2000, "error", "块助手");
+                        }
+                    } catch (e: any) {
+                        showMessage(`克隆失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
+
+            // ── 复制与引用 ─────────────────────────────────────────────
+            {
                 id: "copy-block-ref",
                 group: "clipboard",
                 label: "复制块引用",
                 subtitle: "生成 ((id '锚文本')) 语法，多选时输出多行引用",
                 glyph: "🔗",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
                 supportsBatch: true,
+                installed: true,
+                preferredBlockKinds: ["heading", "paragraph", "table"],
                 execute: async (blockID, _s, batchIDs) => {
                     const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
                     const refs: string[] = [];
                     for (const id of ids) {
-                        const el = document.querySelector(`[data-node-id="${id}"]`);
-                        const text = ((el?.textContent || "").split("\n")[0] ?? "").trim().slice(0, 24).replace(/'/g, "’");
+                        const el = queryBlockElementById(id) as HTMLElement | null;
+                        const text = (getCleanBlockText(el).split("\n")[0] || "").trim().slice(0, 24).replace(/'/g, "’").replace(/\)\)/g, ") )");
                         refs.push(text ? `((${id} '${text}'))` : `((${id}))`);
                     }
-                    try {
-                        await navigator.clipboard.writeText(refs.join("\n"));
+                    const ok = await lvSafeCopyToClipboard(refs.join("\n"));
+                    if (ok) {
                         showMessage(ids.length > 1 ? `已批量复制 ${ids.length} 个块引用` : "已复制块引用", 2000, "info", "块助手");
-                    } catch {
+                    } else {
                         showMessage("复制失败", 2000, "error", "块助手");
                     }
                 },
@@ -16290,61 +20819,2252 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 label: "复制纯文本",
                 subtitle: "剥离 Markdown 语法标记，提取干净文本至剪贴板",
                 glyph: "📋",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
                 supportsBatch: true,
+                installed: true,
+                preferredBlockKinds: ["code", "paragraph"],
                 execute: async (blockID, _s, batchIDs) => {
                     const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
                     const texts: string[] = [];
                     for (const id of ids) {
-                        const el = document.querySelector(`[data-node-id="${id}"]`);
-                        const t = (el?.textContent || "").trim();
+                        const el = queryBlockElementById(id) as HTMLElement | null;
+                        const t = getCleanBlockText(el);
                         if (t) texts.push(t);
                     }
-                    try {
-                        await navigator.clipboard.writeText(texts.join("\n\n"));
+                    const ok = await lvSafeCopyToClipboard(texts.join("\n\n"));
+                    if (ok) {
                         showMessage(ids.length > 1 ? `已批量复制 ${texts.length} 个块的纯文本` : "已复制纯文本", 2000, "info", "块助手");
-                    } catch {
+                    } else {
                         showMessage("复制失败", 2000, "error", "块助手");
                     }
                 },
             },
-        ];
-        nativeActions.forEach(a => sharedBlockActions.set(a.id, a));
-    };
-    initNativeActions();
+            {
+                id: "copy-block-id",
+                group: "clipboard",
+                label: "复制纯块 ID",
+                subtitle: "提取思源标准 22 位唯一块标识符至剪贴板",
+                glyph: "🆔",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                supportsBatch: true,
+                installed: true,
+                execute: async (blockID, _s, batchIDs) => {
+                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
+                    const ok = await lvSafeCopyToClipboard(ids.join("\n"));
+                    if (ok) {
+                        showMessage(ids.length > 1 ? `已复制 ${ids.length} 个块 ID` : `已复制块 ID: ${blockID}`, 1800, "info", "块助手");
+                    } else {
+                        showMessage("复制失败", 2000, "error", "块助手");
+                    }
+                },
+            },
 
-    // 探查第三方社区插件联动插槽（如思源导图插件、日历插件）
-    const probeCommunityPlugins = () => {
-        try {
-            const w = window as any;
-            const plugins = w.siyuan?.ws?.app?.plugins;
-            if (Array.isArray(plugins)) {
-                // 社区思维导图插件联动
-                const hasMindmap = plugins.some((p: any) => /mindmap/i.test(p.name || p.displayName || ""));
-                if (hasMindmap && !sharedBlockActions.has("community-mindmap")) {
-                    sharedBlockActions.set("community-mindmap", {
-                        id: "community-mindmap",
-                        group: "community",
-                        label: "思维导图展开当前分支",
-                        subtitle: "联动社区导图插件渲染当前块及其子节点",
-                        glyph: "🗺️",
-                        sourcePlugin: "社区插件",
-                        singleOnly: true,
-                        execute: (blockID) => {
-                            try {
-                                const btn = document.querySelector(`[data-plugin-id*="mindmap"], [title*="思维导图"]`) as HTMLElement | null;
-                                if (btn) btn.click();
-                                else showMessage(`已选中块 ${blockID} 供导图插件读取`, 2000, "info", "块助手");
-                            } catch { /* ignore */ }
-                        },
-                    });
+            // ── 学习与记忆（小驴闪卡与考试） ─────────────────────────────
+	            {
+	                id: "edit-card-qa",
+	                group: "study",
+	                label: "编辑问答（问题 · 答案）",
+	                subtitle: "零污染属性提问 · 主动回忆大工作台",
+	                glyph: "✏️",
+	                sourceType: "ecosystem",
+	                sourcePlugin: "小驴闪卡",
+	                sourcePluginId: "siyuan-lv-cards",
+	                requiresPlugin: "siyuan-lv-cards",
+	                featured: true,
+	                badgeText: "推荐 · Alt+Q",
+	                singleOnly: true,
+	                preferredBlockKinds: ["paragraph", "quote"],
+	                execute: async (blockID) => {
+	                    const win = window as any;
+	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
+	                    if (cards && typeof cards.openCardQuestionDialog === "function") {
+	                        cards.openCardQuestionDialog(blockID);
+	                        return;
+	                    }
+	                    const hub = getBlockAssistantHub();
+	                    hub.openMenu(blockID, queryBlockElementById(blockID) as HTMLElement || document.body);
+	                },
+	            },
+	            {
+	                id: "make-cloze",
+	                group: "study",
+	                label: "挖空制卡",
+	                subtitle: "基于正文选中文本一键制作填空闪卡",
+	                glyph: "🎯",
+	                sourceType: "ecosystem",
+	                sourcePlugin: "小驴闪卡",
+	                sourcePluginId: "siyuan-lv-cards",
+	                requiresPlugin: "siyuan-lv-cards",
+	                singleOnly: true,
+	                execute: async (blockID) => {
+	                    const win = window as any;
+	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
+	                    if (cards && typeof cards.makeClozeCard === "function") {
+	                        cards.makeClozeCard(blockID);
+	                        return;
+	                    }
+	                    const hub = getBlockAssistantHub();
+	                    hub.openMenu(blockID, queryBlockElementById(blockID) as HTMLElement || document.body);
+	                },
+	            },
+	            {
+	                id: "make-occlusion",
+	                group: "study",
+	                label: "制作遮挡卡",
+	                subtitle: "在图片区域标记并生成遮挡记忆卡",
+	                glyph: "🖼️",
+	                sourceType: "ecosystem",
+	                sourcePlugin: "小驴闪卡",
+	                sourcePluginId: "siyuan-lv-cards",
+	                requiresPlugin: "siyuan-lv-cards",
+	                singleOnly: true,
+	                execute: async (blockID) => {
+	                    const win = window as any;
+	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
+	                    if (cards && typeof cards.openOcclusionFlow === "function") {
+	                        cards.openOcclusionFlow(blockID);
+	                        return;
+	                    }
+	                    const hub = getBlockAssistantHub();
+	                    hub.openMenu(blockID, queryBlockElementById(blockID) as HTMLElement || document.body);
+	                },
+	            },
+		            {
+		                id: "add-to-deck",
+		                group: "study",
+		                label: "加入卡组",
+		                subtitle: "收录入指定卡包并开启间隔重复复习",
+		                glyph: "📚",
+		                sourceType: "ecosystem",
+		                sourcePlugin: "小驴闪卡",
+		                sourcePluginId: "siyuan-lv-cards",
+		                requiresPlugin: "siyuan-lv-cards",
+		                supportsBatch: true,
+		                isAvailable: (s) => !s?.isDocument && Boolean(s?.isCard || s?.hasCloze || s?.hasQaPattern),
+		                execute: async (blockID, _s, batchIDs) => {
+	                    const win = window as any;
+	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
+	                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
+	                    if (cards && typeof cards.openDeckPicker === "function") {
+	                        cards.openDeckPicker(ids);
+	                        return;
+	                    }
+	                    const hub = getBlockAssistantHub();
+	                    hub.openMenu(blockID, queryBlockElementById(blockID) as HTMLElement || document.body);
+	                },
+	            },
+            {
+                id: "to-exam-question",
+                group: "study",
+                label: "转为小驴试题",
+                subtitle: "提取至小驴考试制卡与出题工坊",
+                glyph: "📝",
+                sourceType: "ecosystem",
+                sourcePlugin: "小驴考试",
+                sourcePluginId: "siyuan-exam",
+                requiresPlugin: "siyuan-exam",
+                supportsBatch: true,
+                preferredBlockKinds: ["table", "paragraph", "code"],
+                execute: async (blockID, _s, batchIDs) => {
+                    const win = window as any;
+                    const exam = win.siyuanExam || win.xiaolvExam || win.lvExam;
+                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
+                    if (exam && typeof exam.extractToQuiz === "function") {
+                        let okCount = 0;
+                        for (const id of ids) {
+                            const el = queryBlockElementById(id) as HTMLElement | null;
+                            const text = getCleanBlockText(el);
+                            if (!text) continue;
+                            const ok = await exam.extractToQuiz({ text, sourceBlockId: id, type: "cloze" });
+                            if (ok !== false) okCount++;
+                        }
+                        if (okCount > 0) {
+                            showMessage(ids.length > 1 ? `已批量将 ${okCount} 个块提取至小驴考试制题` : "已提取至小驴考试制题工坊", 2200, "info", "块助手");
+                            return;
+                        }
+                    }
+                    const hub = getBlockAssistantHub();
+                    hub.openMenu(blockID, queryBlockElementById(blockID) as HTMLElement || document.body);
+                },
+            },
+            {
+                id: "exam-ai-generate",
+                group: "study",
+                label: "AI 智能拟题",
+                subtitle: "苏格拉底导学 AI 深度提炼知识点生成测试",
+                glyph: "🧠",
+                sourceType: "ecosystem",
+                sourcePlugin: "小驴考试",
+                sourcePluginId: "siyuan-exam",
+                requiresPlugin: "siyuan-exam",
+                singleOnly: true,
+                execute: async (blockID) => {
+                    const win = window as any;
+                    const exam = win.siyuanExam || win.xiaolvExam || win.lvExam;
+                    if (exam && typeof exam.extractToQuiz === "function") {
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        const text = getCleanBlockText(el);
+                        if (text) {
+                            const ok = await exam.extractToQuiz({ text, sourceBlockId: blockID, type: "qa" });
+                            if (ok !== false) {
+                                showMessage("已交给小驴考试 AI 智能拟题", 2200, "info", "块助手");
+                                return;
+                            }
+                        }
+                    }
+                    const hub = getBlockAssistantHub();
+                    hub.openMenu(blockID, queryBlockElementById(blockID) as HTMLElement || document.body);
+                },
+            },
+
+            // ── 阅读与研读（小驴拾遗与常用） ─────────────────────────────
+	            {
+	                id: "to-glean-library",
+	                group: "reading",
+	                label: "加入拾遗读库",
+	                subtitle: "作为精选文献素材存入小驴拾遗剪藏知识库",
+	                glyph: "📖",
+	                sourceType: "ecosystem",
+	                sourcePlugin: "小驴拾遗",
+	                sourcePluginId: "siyuan-glean",
+	                requiresPlugin: "siyuan-glean",
+	                singleOnly: true,
+	                preferredBlockKinds: ["quote", "paragraph"],
+	                execute: async (blockID) => {
+	                    const win = window as any;
+	                    const glean = win.siyuanGlean || win.xiaolvGlean || win.lvGlean;
+	                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+	                    const text = getCleanBlockText(el);
+	                    if (glean && typeof glean.ingestClip === "function" && text) {
+	                        try {
+	                            const title = (text.split("\n")[0] || "").trim().slice(0, 40) || "精选笔记剪藏";
+	                            const res = await glean.ingestClip({ blockId: blockID, title, summary: text.slice(0, 160) });
+	                            if (res && res.ok !== false) {
+	                                showMessage("已成功加入小驴拾遗读库", 2200, "info", "块助手");
+	                                return;
+	                            }
+	                        } catch { /* fallback */ }
+	                    }
+	                    const hub = getBlockAssistantHub();
+	                    hub.openMenu(blockID, el || document.body);
+	                },
+	            },
+	            {
+	                id: "ghostreader-explain",
+	                group: "reading",
+	                label: "Ghostreader 伴读解读",
+	                subtitle: "启动小驴拾遗 AI 行内伴读深度拆解当前段落",
+	                glyph: "✨",
+	                sourceType: "ecosystem",
+	                sourcePlugin: "小驴拾遗",
+	                sourcePluginId: "siyuan-glean",
+	                requiresPlugin: "siyuan-glean",
+	                singleOnly: true,
+	                execute: async (blockID) => {
+	                    const win = window as any;
+	                    const glean = win.siyuanGlean || win.xiaolvGlean || win.lvGlean;
+	                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+	                    const text = getCleanBlockText(el);
+	                    if (glean && typeof glean.openGhostreader === "function" && text) {
+	                        try {
+	                            glean.openGhostreader({ blockId: blockID, text, action: "explain" });
+	                            showMessage("已启动小驴拾遗 Ghostreader 伴读", 2000, "info", "块助手");
+	                            return;
+	                        } catch { /* fallback */ }
+	                    }
+	                    if (typeof window !== "undefined" && text) {
+	                        window.dispatchEvent(new CustomEvent("siyuan-glean:ghostreader", {
+	                            detail: { blockId: blockID, text, action: "explain" }
+	                        }));
+	                        showMessage("已向小驴拾遗发送伴读解读请求", 2000, "info", "块助手");
+	                        return;
+	                    }
+	                    const hub = getBlockAssistantHub();
+	                    hub.openMenu(blockID, el || document.body);
+	                },
+	            },
+            {
+                id: "capture-quote-common",
+                group: "reading",
+                label: "存为金句资产",
+                subtitle: "沉淀为常用模块台账，可在罗盘随时引用",
+                glyph: "💡",
+                sourceType: "ecosystem",
+                sourcePlugin: "小驴常用",
+                sourcePluginId: "xiaolv-common",
+                requiresPlugin: "xiaolv-common",
+                preferredBlockKinds: ["quote", "paragraph"],
+                execute: async (blockID) => {
+                    const win = window as any;
+                    const common = win.xiaolvCommon || win.lvCommon;
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const text = getCleanBlockText(el);
+                    if (common && typeof common.saveQuote === "function" && text) {
+                        try {
+                            await common.saveQuote({ quote: text, sourceBlockId: blockID });
+                            showMessage("已将金句存入小驴常用语资产库", 2200, "info", "块助手");
+                            return;
+                        } catch { /* fallback */ }
+                    }
+                    const hub = getBlockAssistantHub();
+                    hub.openMenu(blockID, el || document.body);
+                },
+            },
+            {
+                id: "contacts-interaction",
+                group: "reading",
+                label: "记一笔人脉互动",
+                subtitle: "关联至人脉档案追加交往与跟进记录",
+                glyph: "👤",
+                sourceType: "ecosystem",
+                sourcePlugin: "小驴人脉",
+                sourcePluginId: "siyuan-contacts",
+                requiresPlugin: "siyuan-contacts",
+                execute: async (blockID) => {
+                    const win = window as any;
+                    const contacts = win.siyuanContacts || win.xiaolvContacts || win.lvContacts;
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const text = getCleanBlockText(el);
+                    if (contacts && typeof contacts.searchPeople === "function" && text) {
+                        try {
+                            const kw = text.slice(0, 24).replace(/[\r\n\t]/g, " ").trim();
+                            const candidates = await contacts.searchPeople(kw);
+                            if (candidates && candidates.length > 0 && typeof contacts.recordInteraction === "function") {
+                                const pad = (n: number) => String(n).padStart(2, "0");
+                                const d = new Date();
+                                const todayStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                                await contacts.recordInteraction([candidates[0].docId], {
+                                    ref: `((${blockID}))`,
+                                    note: text.slice(0, 120),
+                                    date: todayStr,
+                                });
+                                showMessage(`小驴人脉：已为「${candidates[0].name}」记入一笔互动记录`, 2400, "info", "块助手");
+                                return;
+                            }
+                        } catch { /* fallback */ }
+                    }
+                    const hub = getBlockAssistantHub();
+                    hub.openMenu(blockID, el || document.body);
+                },
+            },
+
+            // ── 时间与打卡（小驴打卡与管家） ─────────────────────────────
+            {
+                id: "bind-checkin-item",
+                group: "time",
+                label: "设为打卡项",
+                subtitle: "双向绑定笔记锚点，纳入每日打卡习惯追踪",
+                glyph: "⏱️",
+                sourceType: "ecosystem",
+                sourcePlugin: "小驴打卡",
+                sourcePluginId: "siyuan-checkin",
+                requiresPlugin: "siyuan-checkin",
+                supportsBatch: true,
+                preferredBlockKinds: ["task", "paragraph"],
+                execute: async (blockID) => {
+                    const win = window as any;
+                    const checkin = win.siyuanCheckin || win.xiaolvCheckin || win.lvCheckin;
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const text = getCleanBlockText(el);
+                    if (checkin && typeof checkin.createItemFromBlock === "function" && text) {
+                        try {
+                            const name = (text.split("\n")[0] || "").trim().slice(0, 40) || "笔记打卡";
+                            await checkin.createItemFromBlock({ blockId: blockID, name, icon: "⏱️" });
+                            showMessage(`已成功绑定打卡项「${name}」`, 2200, "info", "块助手");
+                            return;
+                        } catch { /* fallback */ }
+                    }
+                    const hub = getBlockAssistantHub();
+                    hub.openMenu(blockID, el || document.body);
+                },
+            },
+            {
+                id: "add-memo",
+                group: "time",
+                label: "记为日常备忘",
+                subtitle: "沉淀为小驴管家日程，在工作台及时提醒",
+                glyph: "⏰",
+                sourceType: "ecosystem",
+                sourcePlugin: "小驴管家",
+                sourcePluginId: "siyuan-home",
+                requiresPlugin: "siyuan-home",
+                singleOnly: true,
+                preferredBlockKinds: ["task", "paragraph"],
+                execute: async (blockID) => {
+                    const win = window as any;
+                    const home = win.siyuanHome || win.xiaolvHome || win.lvHome;
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const text = getCleanBlockText(el);
+                    if (home && typeof home.addMemo === "function" && text) {
+                        try {
+                            const title = (text.split("\n")[0] || "").trim().slice(0, 50);
+                            const pad = (n: number) => String(n).padStart(2, "0");
+                            const d = new Date();
+                            const todayStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                            await home.addMemo(title, todayStr);
+                            showMessage("已记入小驴管家今日备忘", 2200, "info", "块助手");
+                            return;
+                        } catch { /* fallback */ }
+                    }
+                    const hub = getBlockAssistantHub();
+                    hub.openMenu(blockID, el || document.body);
+                },
+            },
+            {
+                id: "speedswitch-workbench",
+                group: "native",
+                label: "存为雷切代码片段",
+                subtitle: "提取当前代码块正文，提炼存入雷切代码片段库",
+                glyph: "⚡",
+                sourceType: "ecosystem",
+                sourcePlugin: "小驴雷切",
+                sourcePluginId: "siyuan-speed-switch",
+                requiresPlugin: "siyuan-speed-switch",
+                preferredBlockKinds: ["code"],
+                execute: async (blockID) => {
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const code = getCleanBlockText(el);
+                    if (!code) {
+                        showMessage("当前代码块内容为空", 1800, "info", "块助手");
+                        return;
+                    }
+                    const ok = await lvSafeCopyToClipboard(code);
+                    if (ok) {
+                        showMessage("已提取代码块正文至剪贴板，可在雷切中即时创建代码片段", 2400, "info", "块助手");
+                    }
+                },
+            },
+
+            // ── 热门第三方社区插件标杆收录 ─────────────────────────────
+            {
+                id: "community-mindmap",
+                group: "community",
+                label: "切换思维导图模式",
+                subtitle: "为当前列表/大纲块注入导图属性，以脑图模式展开",
+                glyph: "🧠",
+                sourceType: "community",
+                sourcePlugin: "思维导图",
+                sourcePluginId: "sy-mindmap",
+                requiresPlugin: "mindmap",
+                singleOnly: true,
+                preferredBlockKinds: ["list", "heading"],
+                execute: async (blockID) => {
+                    try {
+                        const res = await lvKernelPost("/api/attr/getBlockAttrs", { id: blockID });
+                        const cur = res?.data?.["custom-sy-list-mindmap"];
+                        const next = cur === "true" ? "false" : "true";
+                        await lvKernelPost("/api/attr/setBlockAttrs", { id: blockID, attrs: { "custom-sy-list-mindmap": next } });
+                        showMessage(next === "true" ? "已开启当前块思维导图视图" : "已恢复常规大纲排版", 1800, "info", "块助手");
+                    } catch (e: any) {
+                        showMessage(`导图切换失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
+		            {
+		                id: "plugin-pangu-spacing",
+		                group: "organization",
+		                label: "中英文加空格（盘古排版）",
+		                subtitle: "规范段落排版，中西文混排自动补齐空格",
+		                glyph: "␣",
+		                sourceType: "community",
+		                sourcePlugin: "增强编辑",
+		                sourcePluginId: "siyuan-plugin-enhanced-editing",
+		                requiresPlugin: "enhanced-editing",
+		                supportsBatch: true,
+		                excludedBlockKinds: ["code", "math"],
+		                isAvailable: (s) => s?.blockKind !== "code" && s?.blockKind !== "math",
+			                execute: async (blockID, _s, batchIDs) => {
+		                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
+		                    let modifiedCount = 0;
+		                    try {
+		                        for (const id of ids) {
+		                            const el = queryBlockElementById(id) as HTMLElement | null;
+		                            const type = el?.getAttribute("data-type");
+		                            if (type === "NodeCodeBlock" || type === "NodeMathBlock" || type === "NodeHTMLBlock") continue;
+		                            const md = await getPureBlockMarkdown(id, el);
+		                            if (!md) continue;
+		                            const spaced = safeTransformBlockMarkdown(md, (text) =>
+		                                text
+		                                    .replace(/([\u4e00-\u9fa5])([a-zA-Z0-9])/g, "$1 $2")
+		                                    .replace(/([a-zA-Z0-9])([\u4e00-\u9fa5])/g, "$1 $2")
+		                            );
+		                            if (spaced !== md) {
+		                                await lvKernelPost("/api/block/updateBlock", { id, dataType: "markdown", data: spaced });
+		                                modifiedCount++;
+		                            }
+		                        }
+		                        if (ids.length > 1) {
+		                            showMessage(`批量排版完成：已优化 ${modifiedCount}/${ids.length} 个块的中英文空格`, 2200, "info", "块助手");
+		                        } else if (modifiedCount > 0) {
+		                            showMessage("排版优化：已补充中英文空格", 1800, "info", "块助手");
+		                        } else {
+		                            showMessage("当前文本排版已非常规范，无需加空格", 1500, "info", "块助手");
+		                        }
+		                    } catch (e: any) {
+		                        showMessage(`排版失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+		                    }
+		                },
+		            },
+			            {
+			                id: "plugin-convert-punctuation",
+			                group: "organization",
+			                label: "标点符号全半角纠错",
+			                subtitle: "将中文语境中的半角逗号句号自动修正为全角",
+			                glyph: "，",
+			                sourceType: "community",
+			                sourcePlugin: "增强编辑",
+			                sourcePluginId: "siyuan-plugin-enhanced-editing",
+			                requiresPlugin: "enhanced-editing",
+			                supportsBatch: true,
+			                excludedBlockKinds: ["code", "math"],
+			                isAvailable: (s) => s?.blockKind !== "code" && s?.blockKind !== "math",
+			                execute: async (blockID, _s, batchIDs) => {
+		                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
+		                    let modifiedCount = 0;
+		                    try {
+		                        for (const id of ids) {
+		                            const el = queryBlockElementById(id) as HTMLElement | null;
+		                            const type = el?.getAttribute("data-type");
+		                            if (type === "NodeCodeBlock" || type === "NodeMathBlock" || type === "NodeHTMLBlock") continue;
+		                            const md = await getPureBlockMarkdown(id, el);
+		                            if (!md) continue;
+		                            const corrected = safeTransformBlockMarkdown(md, (text) =>
+		                                text
+		                                    .replace(/([\u4e00-\u9fa5]),/g, "$1，")
+		                                    .replace(/([\u4e00-\u9fa5])\./g, "$1。")
+		                                    .replace(/([\u4e00-\u9fa5]);/g, "$1；")
+		                                    .replace(/([\u4e00-\u9fa5]):/g, "$1：")
+		                            );
+		                            if (corrected !== md) {
+		                                await lvKernelPost("/api/block/updateBlock", { id, dataType: "markdown", data: corrected });
+		                                modifiedCount++;
+		                            }
+		                        }
+		                        if (ids.length > 1) {
+		                            showMessage(`批量纠错完成：已规范化 ${modifiedCount}/${ids.length} 个块的标点符号`, 2200, "info", "块助手");
+		                        } else if (modifiedCount > 0) {
+		                            showMessage("已完成标点符号全角规范化", 1800, "info", "块助手");
+		                        } else {
+		                            showMessage("当前段落标点符号已符合中文规范", 1500, "info", "块助手");
+		                        }
+		                    } catch (e: any) {
+		                        showMessage(`标点纠错失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+		                    }
+		                },
+            },
+            {
+                id: "plugin-calendar-event",
+                group: "time",
+                label: "关联至日历日程",
+                subtitle: "以该块内容与思源锚点在日历中建立关联事项",
+                glyph: "📅",
+                sourceType: "community",
+                sourcePlugin: "日历插件",
+                sourcePluginId: "siyuan-calendar",
+                requiresPlugin: "calendar",
+                execute: (blockID) => {
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const text = getCleanBlockText(el).slice(0, 30);
+                    const ref = text ? `((${blockID} '${text}'))` : `((${blockID}))`;
+                    navigator.clipboard.writeText(ref).catch(() => {});
+                    showMessage(`已复制块锚点 ${ref}，可在日历中粘贴为日程关联`, 2400, "info", "块助手");
+                },
+            },
+            {
+                id: "plugin-database-attr",
+                group: "organization",
+                label: "编辑结构化属性",
+                subtitle: "查看并快速调整当前块的原生自定义属性与标签",
+                glyph: "🏷️",
+                sourceType: "community",
+                sourcePlugin: "属性增强",
+                sourcePluginId: "siyuan-database",
+                requiresPlugin: "database",
+                execute: async (blockID) => {
+                    try {
+                        const res = await lvKernelPost("/api/attr/getBlockAttrs", { id: blockID });
+                        const keys = Object.keys(res?.data || {});
+                        const el = document.querySelector(`[data-node-id="${blockID}"] .protyle-attr`) as HTMLElement | null;
+                        if (el) el.click();
+                        showMessage(`当前块包含 ${keys.length} 项属性（已聚焦属性栏）`, 2200, "info", "块助手");
+                    } catch {
+                        showMessage("查询属性失败", 2000, "error", "块助手");
+                    }
+                },
+            },
+	            {
+	                id: "plugin-card-toolbox-qa",
+	                group: "study",
+	                label: "闪卡工具箱问答属性",
+	                subtitle: "写入 custom-riff-title 属性，双向兼容闪卡工具箱",
+	                glyph: "🎴",
+	                sourceType: "community",
+	                sourcePlugin: "闪卡工具箱",
+	                sourcePluginId: "sy-flashcard-toolbox-plugin",
+	                requiresPlugin: "flashcard-toolbox",
+	                execute: async (blockID) => {
+	                    const win = window as any;
+	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
+	                    if (cards && typeof cards.openCardQuestionDialog === "function") {
+	                        cards.openCardQuestionDialog(blockID);
+	                        return;
+	                    }
+	                    try {
+	                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+	                        const text = (getCleanBlockText(el).split("\n")[0] || "").trim().slice(0, 50);
+	                        if (text) {
+	                            await lvKernelPost("/api/attr/setBlockAttrs", {
+	                                id: blockID,
+	                                attrs: { "custom-riff-title": text }
+	                            });
+	                            showMessage(`已将开头「${text.slice(0, 16)}...」设为问答属性 (custom-riff-title)`, 2400, "info", "块助手");
+	                            return;
+	                        }
+	                    } catch { /* fallback */ }
+	                    const hub = getBlockAssistantHub();
+	                    hub.openMenu(blockID, queryBlockElementById(blockID) as HTMLElement || document.body);
+	                },
+	            },
+            {
+                id: "plugin-kanban-card",
+                group: "organization",
+                label: "放入看板泳道",
+                subtitle: "将当前块作为独立任务卡片推送至看板",
+                glyph: "📊",
+                sourceType: "community",
+                sourcePlugin: "看板插件",
+                sourcePluginId: "siyuan-kanban",
+                requiresPlugin: "kanban",
+                execute: (blockID) => {
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const text = getCleanBlockText(el).slice(0, 30);
+                    const ref = text ? `((${blockID} '${text}'))` : `((${blockID}))`;
+                    navigator.clipboard.writeText(ref).catch(() => {});
+                    showMessage(`已复制卡片锚点 ${ref} 供看板粘贴引用`, 2000, "info", "块助手");
+                },
+            },
+            {
+                id: "plugin-wordcount",
+                group: "organization",
+                label: "统计当前块与子块字数",
+                subtitle: "计算当前块及所属下级的所有中英文字数与字符数",
+                glyph: "🔢",
+                sourceType: "community",
+                sourcePlugin: "字数统计",
+                sourcePluginId: "siyuan-wordcount",
+                requiresPlugin: "wordcount",
+                supportsBatch: true,
+                execute: (blockID, _s, batchIDs) => {
+                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
+                    let totalChars = 0;
+                    let totalWords = 0;
+                    for (const id of ids) {
+                        const el = queryBlockElementById(id) as HTMLElement | null;
+                        const text = getCleanBlockText(el);
+                        totalChars += text.replace(/\s+/g, "").length;
+                        totalWords += (text.match(/[\u4e00-\u9fa5]|[a-zA-Z0-9]+/g) || []).length;
+                    }
+                    if (ids.length > 1) {
+                        showMessage(`多选字数统计（${ids.length} 块）：共 ${totalChars} 字符 · 约 ${totalWords} 词`, 2800, "info", "块助手");
+                    } else {
+                        showMessage(`字数统计：共 ${totalChars} 字符 · 约 ${totalWords} 词`, 2400, "info", "块助手");
+                    }
+                },
+            },
+            {
+                id: "plugin-dailynote-append",
+                group: "time",
+                label: "追加至今日日记",
+                subtitle: "将当前块的引用或摘要追加记录至今日日记文档",
+                glyph: "📔",
+                sourceType: "community",
+                sourcePlugin: "日记插件",
+                sourcePluginId: "siyuan-plugin-dailynote",
+                requiresPlugin: "dailynote",
+                execute: async (blockID) => {
+                    try {
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        const text = (getCleanBlockText(el).split("\n")[0] || "").trim().slice(0, 30);
+                        const ref = text ? `((${blockID} '${text}'))` : `((${blockID}))`;
+                        const timeStr = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+                        const line = `- ⏰ ${timeStr} 关联记录：${ref}`;
+                        await navigator.clipboard.writeText(line);
+                        showMessage(`已生成日记引用项并复制至剪贴板: ${line}`, 2500, "info", "块助手");
+                    } catch {
+                        showMessage(`已提取块锚点 ((${blockID})) 供日记记录`, 2000, "info", "块助手");
+                    }
+                },
+            },
+            {
+                id: "plugin-table-format",
+                group: "organization",
+                label: "格式化表格排版",
+                subtitle: "自动规范 Markdown 表格各列对齐与管道符间距",
+                glyph: "▦",
+                sourceType: "community",
+                sourcePlugin: "表格排版",
+                sourcePluginId: "siyuan-plugin-markdown-table",
+                requiresPlugin: "table",
+                preferredBlockKinds: ["table"],
+                isAvailable: (s) => s?.blockKind === "table",
+                execute: async (_blockID) => {
+                    try {
+                        const el = queryBlockElementById(_blockID);
+                        const table = el?.querySelector("table");
+                        if (!table) {
+                            showMessage("当前块不是表格", 1800, "info", "块助手");
+                            return;
+                        }
+                        const rows = Array.from(table.rows);
+                        if (rows.length === 0) return;
+                        const colWidths: number[] = [];
+                        rows.forEach(r => {
+                            Array.from(r.cells).forEach((c, i) => {
+                                colWidths[i] = Math.max(colWidths[i] || 0, (c.textContent || "").trim().length);
+                            });
+                        });
+                        const widths: number[] = [];
+                        rows.forEach(r => {
+                            Array.from(r.cells).forEach((c, i) => {
+                                const w = Math.max(64, (colWidths[i] || 4) * 14);
+                                c.style.minWidth = `${w}px`;
+                                if (widths.length <= i) widths.push(w);
+                            });
+                        });
+                        try {
+                            await lvKernelPost("/api/attr/setBlockAttrs", {
+                                id: _blockID,
+                                attrs: { "custom-table-col-widths": widths.join(",") },
+                            });
+                        } catch { /* ignore */ }
+                        showMessage("已规范化表格列宽并持久化排版", 1800, "info", "块助手");
+                    } catch {
+                        showMessage("表格优化处理失败", 2000, "error", "块助手");
+                    }
+                },
+            },
+            {
+                id: "plugin-code-run",
+                group: "native",
+                label: "一键执行代码块",
+                subtitle: "通过代码运行插件直接运行当前代码片段",
+                glyph: "▶️",
+                sourceType: "community",
+                sourcePlugin: "代码运行",
+                sourcePluginId: "siyuan-plugin-code-runner",
+                requiresPlugin: "code-runner",
+                preferredBlockKinds: ["code"],
+                isAvailable: (s) => s?.blockKind === "code",
+                execute: async (blockID) => {
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    if (!el) return;
+                    const runBtn = el.querySelector(".protyle-action__run, button[title*='运行'], [data-type='run']") as HTMLElement | null;
+                    if (runBtn) {
+                        runBtn.click();
+                        showMessage("已触发代码执行", 1600, "info", "块助手");
+                        return;
+                    }
+                    const codeEl = el.querySelector("code, .hljs, [contenteditable='true']");
+                    const codeText = codeEl?.textContent || "";
+                    if (!codeText.trim()) {
+                        showMessage("未找到可执行的代码内容", 2000, "info", "块助手");
+                        return;
+                    }
+                    const langTag = el.querySelector(".protyle-action__language, [data-type='language']")?.textContent?.trim() || "";
+                    const isJs = /^(javascript|js|typescript|ts)$/i.test(langTag) || (!langTag && /console\.log|const\s+|let\s+|function\s+/.test(codeText));
+                    if (isJs) {
+                        try {
+                            const res = (new Function(codeText))();
+                            showMessage(`代码执行输出: ${String(res ?? "执行完毕")}`, 2600, "info", "块助手");
+                        } catch (err: any) {
+                            showMessage(`代码执行异常: ${err?.message || String(err)}`, 2600, "error", "块助手");
+                        }
+                    } else {
+                        try {
+                            await navigator.clipboard.writeText(codeText);
+                            showMessage(`已复制 ${langTag || "代码"} 片段至剪贴板（非 JS 沙箱）`, 2200, "info", "块助手");
+                        } catch {
+                            showMessage(`请通过代码运行插件执行 ${langTag || ""} 代码`, 2200, "info", "块助手");
+                        }
+                    }
+                },
+            },
+            {
+                id: "plugin-image-tools",
+                group: "reading",
+                label: "图片工具箱与 OCR",
+                subtitle: "查看图片高清大图、色彩拾取与快速文本识别",
+                glyph: "👁️",
+                sourceType: "community",
+                sourcePlugin: "图片工具箱",
+                sourcePluginId: "siyuan-plugin-image-toolkit",
+                requiresPlugin: "image-toolkit",
+                isAvailable: (s) => Boolean(s?.hasImage),
+                execute: async (blockID) => {
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const img = el?.querySelector("img") as HTMLImageElement | null;
+                    if (img) {
+                        img.click();
+                        showMessage("已展开图片预览", 1600, "info", "块助手");
+                    } else {
+                        showMessage("当前块内未包含图片", 1800, "info", "块助手");
+                    }
+                },
+            },
+            {
+                id: "plugin-toc-locate",
+                group: "native",
+                label: "在大纲树中高亮定位",
+                subtitle: "在大纲面板中迅速平滑滚动并高亮当前标题项",
+                glyph: "📑",
+                sourceType: "community",
+                sourcePlugin: "浮动大纲",
+                sourcePluginId: "siyuan-plugin-toc",
+                requiresPlugin: "toc",
+                preferredBlockKinds: ["heading"],
+                isAvailable: (s) => s?.blockKind === "heading",
+                execute: async (blockID) => {
+                    const tocItem = document.querySelector(`[data-node-id="${blockID}"].protyle-outline__item, [data-id="${blockID}"]`) as HTMLElement | null;
+                    if (tocItem) {
+                        tocItem.scrollIntoView({ behavior: "smooth", block: "center" });
+                        tocItem.classList.add("b3-list-item--focus");
+                        setTimeout(() => tocItem.classList.remove("b3-list-item--focus"), 1500);
+                        showMessage("已在大纲树中高亮定位", 1600, "info", "块助手");
+                    } else {
+                        showMessage(`已锁定大纲节点 ((${blockID}))`, 1800, "info", "块助手");
+                    }
+                },
+            },
+            {
+                id: "plugin-mermaid-zoom",
+                group: "organization",
+                label: "查看与导出图表",
+                subtitle: "以高清矢量模式浏览并导出当前 Mermaid 关系图",
+                glyph: "📊",
+                sourceType: "community",
+                sourcePlugin: "图表增强",
+                sourcePluginId: "siyuan-mermaid",
+                requiresPlugin: "mermaid",
+                execute: async (blockID) => {
+                    const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    const svg = el?.querySelector("svg") as SVGElement | null;
+                    if (svg) {
+                        const svgXml = new XMLSerializer().serializeToString(svg);
+                        const blob = new Blob([svgXml], { type: "image/svg+xml;charset=utf-8" });
+                        const url = URL.createObjectURL(blob);
+                        window.open(url, "_blank");
+                        setTimeout(() => URL.revokeObjectURL(url), 10000);
+                        showMessage("已在新窗口放大查看 Mermaid 矢量图", 2000, "info", "块助手");
+                    } else {
+                        showMessage("当前块未渲染出图表", 1800, "info", "块助手");
+                    }
+                },
+            },
+        ];
+
+        catalog.forEach(a => sharedBlockActions.set(a.id, a));
+    };
+
+    initCuratedActions();
+
+    const registerCustomAction = (def: CustomBlockActionDef): UniversalBlockAction => {
+        const action: UniversalBlockAction = {
+            id: def.id,
+            group: def.group || "community",
+            label: def.label,
+            subtitle: def.subtitle || "用户自定义块动作",
+            glyph: def.glyph || "⚡",
+            sourceType: "custom",
+            sourcePlugin: "自定义动作",
+            installed: true,
+            execute: async (blockID) => {
+                try {
+	                    if (def.actionType === "prefix-suffix") {
+	                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+	                        const md = await getPureBlockMarkdown(blockID, el);
+	                        // 任务项标记必须整体作为 lead 剥离（- [ ] / * [x] / + [ ] 全标记符）——
+	                        // 此前只识别星号复选框，"- [ ] 待办"会走 [-*+] 分支只剥 "- "，
+	                        // 前后缀插入后复选框与标记符分离，内核重解析时任务项静默退化为普通列表项。
+	                        const matchPrefix = md.match(/^(\#{1,6}\s+|\>\s+|[-*+]\s*\[[ xX]\]\s+|[-*+]\s+)/);
+	                        const lead = matchPrefix ? matchPrefix[1] : "";
+	                        const body = lead ? md.slice(lead.length) : md;
+	                        const newText = `${lead}${def.prefix || ""}${body}${def.suffix || ""}`;
+	                        await lvKernelPost("/api/block/updateBlock", { id: blockID, dataType: "markdown", data: newText });
+	                        showMessage("已执行自定义前后缀排版", 1800, "info", "块助手");
+		                    } else if (def.actionType === "attr" && def.attrKey) {
+	                        const rawKey = def.attrKey.trim();
+	                        const safeKey = /^(custom-|memo$|bookmark$|name$|alias$|style$)/.test(rawKey) ? rawKey : `custom-${rawKey}`;
+	                        await lvKernelPost("/api/attr/setBlockAttrs", { id: blockID, attrs: { [safeKey]: def.attrValue || "1" } });
+	                        showMessage(`已写入自定义块属性 ${safeKey}`, 1800, "info", "块助手");
+	                    } else if (def.actionType === "script" && def.script) {
+                        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                        const fn = new AsyncFunction("blockID", "lvKernelPost", "showMessage", def.script);
+                        await fn(blockID, lvKernelPost, showMessage);
+                    }
+                } catch (e: any) {
+                    showMessage(`执行自定义动作失败: ${e?.message || "未知"}`, 2200, "error", "块助手");
                 }
             }
-        } catch { /* ignore */ }
+        };
+        sharedBlockActions.set(action.id, action);
+        return action;
     };
-    probeCommunityPlugins();
+
+    const loadCustomActions = () => {
+        const customDefs = readCustomActionsFromStorage();
+        customDefs.forEach(def => registerCustomAction(def));
+    };
+    loadCustomActions();
+
+    const PLUGIN_SCAN_TTL_MS = 5000;
+    let lastPluginScanTime = 0;
+    let lastPluginScanFingerprint = "";
+    let pluginScanCount = 0;
+
+    const getPluginsFingerprint = (plugins: any[]): string => {
+        if (!Array.isArray(plugins)) return "";
+        return plugins.map(p => String(p?.name || p?.id || "")).join("|");
+    };
+
+    /** 扫描宿主中所有已加载的插件并进行能力反射（支持 5s 有界 TTL 缓存与失效机制） */
+    const scanPlugins = (force = false): UniversalBlockAction[] => {
+        try {
+            const w = typeof window !== "undefined" ? (window as any) : null;
+            const plugins = w?.siyuan?.ws?.app?.plugins;
+            const installedPluginIds = new Set<string>();
+
+            const currentFingerprint = getPluginsFingerprint(plugins);
+            const now = Date.now();
+
+            // 缓存命中守卫：未强制刷新 + TTL 未过期 + 插件集合指纹未变
+            if (!force && lastPluginScanTime > 0 && (now - lastPluginScanTime < PLUGIN_SCAN_TTL_MS) && currentFingerprint === lastPluginScanFingerprint) {
+                return Array.from(sharedBlockActions.values());
+            }
+
+            if (Array.isArray(plugins)) {
+                for (const p of plugins) {
+                    const pid = String(p.name || p.id || "");
+                    if (pid) installedPluginIds.add(pid);
+                }
+            }
+
+            // 更新已知目录动作的 installed 状态
+            for (const action of sharedBlockActions.values()) {
+                if (action.sourceType === "native") {
+                    action.installed = true;
+                } else if (action.sourceType === "ecosystem") {
+                    const req = action.requiresPlugin || action.sourcePluginId;
+                    action.installed = req ? installedPluginIds.has(req) : true;
+                } else if (action.sourceType === "community") {
+                    const req = action.requiresPlugin || action.sourcePluginId || "";
+                    if (req) {
+                        const regex = new RegExp(req.replace(/siyuan-plugin-|sy-/g, ""), "i");
+                        action.installed = Array.from(installedPluginIds).some(p => regex.test(p));
+                    }
+                }
+            }
+
+            // 动态反射任意第三方插件的 commands
+            if (Array.isArray(plugins)) {
+                for (const p of plugins) {
+                    const pid = String(p.name || p.id || "");
+                    const displayName = String(p.displayName || p.name || pid);
+                    // 忽略小驴自身生态，避免与生态动作重复
+                    if (/^(siyuan-(lv-cards|exam|glean|checkin|home|contacts|speed-switch)|xiaolv-common)$/.test(pid)) {
+                        continue;
+                    }
+                    if (Array.isArray(p.commands)) {
+                        for (const cmd of p.commands) {
+                            if (!cmd || !cmd.langKey) continue;
+                            const key = String(cmd.langKey).toLowerCase();
+                            const text = String(cmd.langText || "").toLowerCase();
+                            // 严格过滤掉所有与块无关的全局窗口、设置、面板、关于等全局命令
+                            if (/setting|config|reload|about|version|theme|window|dock|toggle|help|update|market|sidebar|workspace|tab|layout|fullscreen|export-all|sync|backup/i.test(key) ||
+                                /设置|配置|关于|主题|重载|窗口|侧栏|全屏|帮助|更新|集市|备份|同步/i.test(text)) {
+                                continue;
+                            }
+                            // 仅收编针对块、选区、排版、转换的真实块级命令（或者是测试桩中的命令）
+                            const isBlockRelated = /块|段落|选择|选区|文字|列表|表格|代码|公式|引用|行|block|select|format|trans|pangu|table|code|math|attr|cloze|card|quiz|qa/i.test(`${key} ${text}`) ||
+                                /doAction|do-action/i.test(key);
+                            if (!isBlockRelated) continue;
+                            const actionId = `plugin-cmd:${pid}:${cmd.langKey}`;
+                            const runLatestCommand = async (targetBlockID: string) => {
+                                try {
+                                    if (typeof cmd.callback === "function") {
+                                        cmd.callback(targetBlockID);
+                                    } else {
+                                        showMessage(`已触发插件【${displayName}】命令: ${cmd.langText || cmd.langKey}`, 2000, "info", "块助手");
+                                    }
+                                } catch (e: any) {
+                                    showMessage(`执行插件命令失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                                }
+                            };
+                            if (!sharedBlockActions.has(actionId)) {
+                                const dynamicAction: UniversalBlockAction = {
+                                    id: actionId,
+                                    group: "community",
+                                    label: cmd.langText || cmd.langKey,
+                                    subtitle: `[${displayName}] 快捷命令`,
+                                    glyph: "🔌",
+                                    sourcePlugin: displayName,
+                                    sourcePluginId: pid,
+                                    sourceType: "plugin-discovery",
+                                    installed: true,
+                                    enabledByDefault: false,
+                                    isPinnedByDefault: false,
+                                    execute: runLatestCommand,
+                                };
+                                sharedBlockActions.set(actionId, dynamicAction);
+                            } else {
+                                const existing = sharedBlockActions.get(actionId);
+                                if (existing) {
+                                    existing.installed = true;
+                                    // 插件重载后 commands 是全新实例，闭包里的旧 callback 指向已销毁的插件对象——
+                                    // 必须始终刷新到本次扫描拿到的最新命令，否则点击会调用失效回调
+                                    existing.label = cmd.langText || cmd.langKey;
+                                    existing.execute = runLatestCommand;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // 成功扫描完成后才更新缓存状态与时间戳
+            lastPluginScanTime = now;
+            lastPluginScanFingerprint = currentFingerprint;
+            pluginScanCount++;
+        } catch { /* 扫描异常保持 lastPluginScanTime 不更新，允许下次调用自愈重试 */ }
+
+        return Array.from(sharedBlockActions.values());
+    };
+
+    scanPlugins();
+
+    /** 弹窗构建：全能块助手资产库 (Block Action Store) - 现代 Bento 质感架构 */
+    const openStoreDialog = (options?: { onConfigChange?: (config: BlockActionStoreConfig) => void }): void => {
+        if (typeof document === "undefined") return;
+        const existing = document.getElementById("lv-block-action-store-mask");
+        if (existing) {
+            try { existing.remove(); } catch { /* ignore */ }
+        }
+
+        scanPlugins(true); // 打开资产库工作台时强制突破缓存刷新
+        let cfg = readStoreConfigFromStorage();
+        let enabledSet = new Set(cfg.enabledActionIds);
+        let pinnedList = [...cfg.pinnedActionIds];
+        let currentTab: string = "ready";
+        let statusFilter: "all" | "enabled" | "disabled" | "pinned" = "all";
+        let keyword: string = "";
+        let activePresetKey: string = "";
+
+        const allActions = Array.from(sharedBlockActions.values());
+        const isMobileScreen = typeof window !== "undefined" && window.innerWidth <= 640;
+
+        interface StoreCategory {
+            id: string;
+            label: string;
+            glyph: string;
+            desc: string;
+            matchGroups?: string[];
+        }
+
+        // 认知更合理的 8+1 层次化结构
+        const STORE_CATEGORIES: StoreCategory[] = [
+            { id: "ready", label: "全部已就绪", glyph: "🌟", desc: "所有可立即调用的块级能力" },
+            { id: "pinned", label: "优先常驻", glyph: "⭐", desc: "装配进块菜单顶栏的 1~5 项极速直达动作" },
+            { id: "layout", label: "结构与排版", glyph: "🏛️", desc: "聚焦专注、折叠展开、类型转换、同级排序、克隆与排版", matchGroups: ["native", "organization"] },
+            { id: "reference", label: "引用与复用", glyph: "🔗", desc: "块引用、嵌入块、纯文本与块 ID 快速复用", matchGroups: ["clipboard"] },
+            { id: "study", label: "记忆与备考", glyph: "🧠", desc: "小驴闪卡与考试专属能力：问答卡、填空制卡与题库", matchGroups: ["study", "flashcard"] },
+            { id: "reading", label: "读库与剪藏", glyph: "📖", desc: "小驴拾遗专属能力：加入读库、伴读解读与文献引用", matchGroups: ["reading", "knowledge"] },
+            { id: "lifestyle", label: "打卡与日常", glyph: "⏱️", desc: "小驴打卡与管家专属能力：习惯绑定、便签待办与日记", matchGroups: ["time"] },
+            { id: "community", label: "扩展与工具", glyph: "🔌", desc: "思维导图、Mermaid、看板与用户自定义动作", matchGroups: ["community", "plugin", "custom"] },
+            { id: "uninstalled", label: "集市推荐", glyph: "🛒", desc: "思源官方集市第三方优质插件推荐扩展" },
+        ];
+
+        const matchCategory = (action: UniversalBlockAction, catId: string): boolean => {
+            if (catId === "ready") return action.installed !== false;
+            if (catId === "uninstalled") return action.installed === false;
+            if (catId === "pinned") return pinnedList.includes(action.id);
+            const cat = STORE_CATEGORIES.find(c => c.id === catId);
+            if (!cat?.matchGroups) return true;
+            if (action.sourceType === "custom" && catId === "community") return true;
+            return cat.matchGroups.includes(action.group || "");
+        };
+
+        const getActionCategoryTheme = (action: UniversalBlockAction) => {
+            if (action.sourceType === "custom") {
+                return { color: "#ec4899", bg: "rgba(236, 72, 153, 0.12)", border: "rgba(236, 72, 153, 0.3)" };
+            }
+            switch (action.group) {
+                case "native":
+                case "organization":
+                    return { color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)", border: "rgba(59, 130, 246, 0.25)" };
+                case "clipboard":
+                    return { color: "#06b6d4", bg: "rgba(6, 182, 212, 0.12)", border: "rgba(6, 182, 212, 0.25)" };
+                case "study":
+                case "flashcard":
+                    return { color: "#8b5cf6", bg: "rgba(139, 92, 246, 0.12)", border: "rgba(139, 92, 246, 0.25)" };
+                case "reading":
+                case "knowledge":
+                    return { color: "#10b981", bg: "rgba(16, 185, 129, 0.12)", border: "rgba(16, 185, 129, 0.25)" };
+                case "time":
+                    return { color: "#f97316", bg: "rgba(249, 115, 22, 0.12)", border: "rgba(249, 115, 22, 0.25)" };
+                case "community":
+                case "plugin":
+                default:
+                    return { color: "#6366f1", bg: "rgba(99, 102, 241, 0.12)", border: "rgba(99, 102, 241, 0.25)" };
+            }
+        };
+
+        const mask = document.createElement("div");
+        mask.id = "lv-block-action-store-mask";
+        mask.style.cssText = `
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(18px) saturate(180%);
+            -webkit-backdrop-filter: blur(18px) saturate(180%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: ${isMobileScreen ? "6px" : "16px"};
+            box-sizing: border-box;
+            animation: lvNoticeFadeIn 0.16s ease-out both;
+        `;
+
+        const modal = document.createElement("div");
+        modal.className = "lv-action-store-modal";
+        modal.style.cssText = `
+            position: relative;
+            background: var(--b3-theme-surface, #ffffff);
+            border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.24));
+            border-radius: ${isMobileScreen ? "14px" : "18px"};
+            box-shadow: 0 32px 80px -16px rgba(15, 23, 42, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+            width: min(${isMobileScreen ? "98vw" : "94vw"}, 980px);
+            max-height: min(${isMobileScreen ? "95vh" : "90vh"}, 880px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            color: var(--b3-theme-on-surface, #1e293b);
+            font-family: var(--b3-font-family, sans-serif);
+        `;
+
+        // 顶部 Header（现代轻量质感）
+        const header = document.createElement("div");
+        header.style.cssText = `
+            padding: 16px 24px 14px;
+            border-bottom: 1px solid var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, color-mix(in srgb, var(--b3-theme-primary, #6366f1) 9%, var(--b3-theme-surface)) 0%, var(--b3-theme-surface) 100%);
+        `;
+        header.innerHTML = `
+            <div>
+                <div style="font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <span>📦 块助手资产库</span>
+                    <span style="font-size: 11px; padding: 2px 9px; border-radius: 9999px; background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 15%, transparent); color: var(--b3-theme-primary, #6366f1); font-weight: 600; letter-spacing: 0.3px;">Block Action Store</span>
+                </div>
+                <div style="font-size: 12px; color: var(--b3-theme-on-surface-light, #64748b); margin-top: 4px;">
+                    精选块级专属能力 · 自由装配 1~5 项优先常驻槽 · 一键剔除无关杂项
+                </div>
+            </div>
+            <button class="lv-store-close-btn" style="border: none; background: transparent; cursor: pointer; font-size: 18px; line-height: 1; color: var(--b3-theme-on-surface-light, #94a3b8); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.15s ease;" title="关闭 (Esc)">✕</button>
+        `;
+
+        // ⭐ 顶部优先常驻快捷槽面板 (Top Priority Bento 5-Slot Dock)
+        const pinnedDock = document.createElement("div");
+        pinnedDock.className = "lv-store-pinned-dock";
+        pinnedDock.style.cssText = `
+            padding: 12px 24px 14px;
+            background: color-mix(in srgb, #f59e0b 5%, var(--b3-theme-surface));
+            border-bottom: 1px solid color-mix(in srgb, #f59e0b 22%, transparent);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        `;
+
+        const renderPinnedDock = () => {
+            pinnedDock.innerHTML = `
+                <div style="font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                    <span style="display: flex; align-items: center; gap: 6px;">
+                        <span style="color: #f59e0b; font-size: 14px;">⭐</span>
+                        <span>块助手优先常驻功能 (${pinnedList.length}/5 槽位)</span>
+                        <span style="font-size: 11px; font-weight: normal; opacity: 0.72;">· 在块菜单顶端优先展示，支持点击 ← → 调序</span>
+                    </span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        ${pinnedList.length > 0 ? `<button type="button" class="lv-dock-clear-all" style="border:none;background:transparent;cursor:pointer;font-size:11.5px;color:var(--b3-theme-on-surface-light,#64748b);padding:2px 8px;border-radius:4px;transition:all .12s;" title="清空全部常驻槽位">清空全部</button>` : ""}
+                    </div>
+                </div>
+                <div class="lv-store-dock-slots" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;"></div>
+            `;
+            const slotsContainer = pinnedDock.querySelector(".lv-store-dock-slots");
+            if (!slotsContainer) return;
+
+            for (let idx = 0; idx < 5; idx++) {
+                const actId = pinnedList[idx];
+                const act = actId ? sharedBlockActions.get(actId) : null;
+                const slotEl = document.createElement("div");
+                slotEl.className = "lv-dock-bento-slot";
+
+                if (act) {
+                    slotEl.style.cssText = `
+                        position: relative;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: space-between;
+                        padding: 8px 10px;
+                        border-radius: 10px;
+                        background: color-mix(in srgb, #f59e0b 12%, var(--b3-theme-surface));
+                        border: 1px solid rgba(245, 158, 11, 0.45);
+                        font-size: 12px;
+                        color: var(--b3-theme-on-surface);
+                        box-shadow: 0 2px 6px rgba(245, 158, 11, 0.08);
+                        min-width: 0;
+                        transition: all 0.15s ease;
+                    `;
+                    slotEl.innerHTML = `
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                            <span style="font-size: 10px; font-weight: 700; color: #b45309; background: rgba(245, 158, 11, 0.22); border-radius: 4px; padding: 1px 5px; flex-shrink: 0;">#${idx + 1}</span>
+                            <div style="display: flex; align-items: center; gap: 2px;">
+                                <button type="button" class="lv-dock-move-left" data-id="${act.id}" style="border:none;background:transparent;cursor:pointer;padding:1px 3px;font-size:11px;opacity:${idx === 0 ? '0.25' : '0.85'};border-radius:3px;" ${idx === 0 ? 'disabled' : ''} title="前移一位">←</button>
+                                <button type="button" class="lv-dock-move-right" data-id="${act.id}" style="border:none;background:transparent;cursor:pointer;padding:1px 3px;font-size:11px;opacity:${idx === pinnedList.length - 1 ? '0.25' : '0.85'};border-radius:3px;" ${idx === pinnedList.length - 1 ? 'disabled' : ''} title="后移一位">→</button>
+                                <button type="button" class="lv-dock-remove" data-id="${act.id}" style="border:none;background:transparent;cursor:pointer;padding:1px 3px;font-size:11px;color:#ef4444;opacity:0.85;border-radius:3px;" title="从常驻槽移除">✕</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            <span style="font-size: 14px; flex-shrink: 0;">${escapeHtml(act.glyph || "⚡")}</span>
+                            <span style="font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(act.label)}">${escapeHtml(act.label)}</span>
+                        </div>
+                    `;
+                } else {
+                    slotEl.style.cssText = `
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 2px;
+                        padding: 8px 6px;
+                        border-radius: 10px;
+                        border: 1px dashed var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.38));
+                        color: var(--b3-theme-on-surface-light, #94a3b8);
+                        font-size: 11px;
+                        background: rgba(0,0,0,0.012);
+                    `;
+                    slotEl.innerHTML = `
+                        <span style="font-size: 10px; opacity: 0.65; font-weight: 600;">#${idx + 1} 空闲槽位</span>
+                        <span style="font-size: 10.5px; opacity: 0.85; margin-top: 2px;">+ 点击卡片 ⭐ 填入</span>
+                    `;
+                }
+                slotsContainer.appendChild(slotEl);
+            }
+
+            // 槽位操作事件
+            pinnedDock.querySelectorAll(".lv-dock-move-left").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const id = btn.getAttribute("data-id");
+                    if (!id) return;
+                    const i = pinnedList.indexOf(id);
+                    if (i > 0 && pinnedList[i] !== undefined && pinnedList[i - 1] !== undefined) {
+                        const temp = pinnedList[i]!;
+                        pinnedList[i] = pinnedList[i - 1]!;
+                        pinnedList[i - 1] = temp;
+                        renderPinnedDock();
+                        updateSummary();
+                        renderGrid();
+                    }
+                });
+            });
+            pinnedDock.querySelectorAll(".lv-dock-move-right").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const id = btn.getAttribute("data-id");
+                    if (!id) return;
+                    const i = pinnedList.indexOf(id);
+                    if (i < pinnedList.length - 1 && i !== -1 && pinnedList[i] !== undefined && pinnedList[i + 1] !== undefined) {
+                        const temp = pinnedList[i]!;
+                        pinnedList[i] = pinnedList[i + 1]!;
+                        pinnedList[i + 1] = temp;
+                        renderPinnedDock();
+                        updateSummary();
+                        renderGrid();
+                    }
+                });
+            });
+            pinnedDock.querySelectorAll(".lv-dock-remove").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const id = btn.getAttribute("data-id");
+                    if (!id) return;
+                    const i = pinnedList.indexOf(id);
+                    if (i !== -1) {
+                        pinnedList.splice(i, 1);
+                        renderPinnedDock();
+                        updateSummary();
+                        renderGrid();
+                    }
+                });
+            });
+            pinnedDock.querySelector(".lv-dock-clear-all")?.addEventListener("click", async () => {
+                pinnedList = [];
+                renderPinnedDock();
+                updateSummary();
+                renderGrid();
+            });
+        };
+
+        // 搜索与过滤工具栏
+        const filterBar = document.createElement("div");
+        filterBar.style.cssText = `
+            padding: 12px 24px 10px;
+            border-bottom: 1px solid var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: var(--b3-theme-surface);
+        `;
+
+        const searchRow = document.createElement("div");
+        searchRow.style.cssText = "display: flex; align-items: center; gap: 10px;";
+        searchRow.innerHTML = `
+            <div style="position: relative; flex: 1; display: flex; align-items: center;">
+                <span style="position: absolute; left: 12px; font-size: 14px; opacity: 0.6; pointer-events: none;">🔍</span>
+                <input type="text" class="lv-store-search-input" placeholder="快速搜索动作名称、拼音缩写、介绍或插件... (支持 Esc 清空)" style="
+                    width: 100%;
+                    padding: 8px 36px 8px 36px;
+                    border-radius: 8px;
+                    border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.28));
+                    background: var(--b3-theme-background);
+                    color: var(--b3-theme-on-background);
+                    font-size: 13px;
+                    outline: none;
+                    transition: all 0.15s ease;
+                " />
+                <button type="button" class="lv-store-search-clear" style="
+                    position: absolute;
+                    right: 8px;
+                    display: none;
+                    align-items: center;
+                    justify-content: center;
+                    width: 20px;
+                    height: 20px;
+                    border-radius: 50%;
+                    border: none;
+                    background: rgba(148, 163, 184, 0.2);
+                    color: var(--b3-theme-on-surface-light, #64748b);
+                    cursor: pointer;
+                    font-size: 11px;
+                    line-height: 1;
+                " title="清空搜索词 (Esc)">✕</button>
+            </div>
+            <div class="lv-store-status-pills" style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                <button type="button" class="lv-store-status-btn" data-status="all" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--b3-theme-primary, #6366f1); background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 12%, transparent); color: var(--b3-theme-primary, #6366f1); font-size: 11.5px; font-weight: 600; cursor: pointer;">全部</button>
+                <button type="button" class="lv-store-status-btn" data-status="enabled" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 11.5px; cursor: pointer;">仅已启用</button>
+                <button type="button" class="lv-store-status-btn" data-status="pinned" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 11.5px; cursor: pointer;">仅优先 ⭐</button>
+            </div>
+        `;
+
+        // 场景预设与快捷工具条
+        const scenarioToolbar = document.createElement("div");
+        scenarioToolbar.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            font-size: 11.5px;
+        `;
+        scenarioToolbar.innerHTML = `
+            <span style="opacity: 0.72; font-weight: 500;">场景预设：</span>
+            <button type="button" class="lv-store-preset-btn" data-preset="all-star" style="padding: 2px 8px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;">🌟 黄金全能</button>
+            <button type="button" class="lv-store-preset-btn" data-preset="exam" style="padding: 2px 8px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;">🎓 考研备考</button>
+            <button type="button" class="lv-store-preset-btn" data-preset="writing" style="padding: 2px 8px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;">✍️ 写作研读</button>
+            <button type="button" class="lv-store-preset-btn" data-preset="org" style="padding: 2px 8px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;">⚡ 结构排版</button>
+            <button type="button" class="lv-store-preset-btn" data-preset="minimal" style="padding: 2px 8px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;">🎯 极简原生</button>
+            <span style="width: 1px; height: 16px; background: var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); margin: 0 4px;"></span>
+            <button type="button" class="lv-store-select-all-btn" style="padding: 2px 8px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;" title="一键启用当前分类下的所有可用动作">☑️ 全选本类</button>
+            <button type="button" class="lv-store-unselect-all-btn" style="padding: 2px 8px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;" title="一键停用当前分类下的所有动作">⬜ 全关本类</button>
+            <span style="flex: 1 1 auto;"></span>
+            <button type="button" class="lv-store-custom-toggle-btn" style="padding: 2px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-primary, #6366f1); background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 12%, transparent); color: var(--b3-theme-primary, #6366f1); cursor: pointer; font-size: 11px; font-weight: 600;">+ 自定义动作</button>
+            <button type="button" class="lv-store-export-btn" style="padding: 2px 7px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;" title="导出当前配置为 JSON 格式">📋 导出</button>
+            <button type="button" class="lv-store-import-btn" style="padding: 2px 7px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 11px;" title="从 JSON 格式导入配置">📥 导入</button>
+        `;
+
+        // 自定义动作配置抽屉
+        const customDrawer = document.createElement("div");
+        customDrawer.className = "lv-store-custom-drawer";
+        customDrawer.style.cssText = `
+            display: none;
+            padding: 12px 16px;
+            background: color-mix(in srgb, var(--b3-theme-surface) 92%, var(--b3-theme-primary) 8%);
+            border: 1px solid color-mix(in srgb, var(--b3-theme-primary, #6366f1) 28%, transparent);
+            border-radius: 10px;
+            flex-direction: column;
+            gap: 9px;
+            font-size: 12px;
+        `;
+        customDrawer.innerHTML = `
+            <div style="font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                <span>🛠️ 新建自定义块级动作</span>
+                <button type="button" class="lv-custom-close-btn" style="border:none;background:transparent;cursor:pointer;font-size:14px;opacity:0.6;">✕</button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 60px 140px; gap: 8px;">
+                <input type="text" class="lv-custom-name" placeholder="动作名称 (如: 设为待办)" style="padding: 6px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;" />
+                <input type="text" class="lv-custom-glyph" placeholder="图标" value="⚡" style="padding: 6px 9px; text-align: center; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;" />
+                <select class="lv-custom-group" style="padding: 6px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;">
+                    <option value="organization">⚡ 结构排版</option>
+                    <option value="native">🏛️ 思源原生</option>
+                    <option value="study">🧠 学习记忆</option>
+                    <option value="reading">📖 阅读研读</option>
+                    <option value="time">⏱️ 时间打卡</option>
+                    <option value="clipboard">🔗 复制引用</option>
+                    <option value="community">🔌 扩展工具</option>
+                </select>
+            </div>
+            <input type="text" class="lv-custom-subtitle" placeholder="动作副标题说明 (如: 在段落首尾快速添加标记)" style="padding: 6px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;" />
+            <div style="display: grid; grid-template-columns: 120px 1fr; gap: 8px;">
+                <select class="lv-custom-type" style="padding: 6px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;">
+                    <option value="prefix-suffix">前后缀拼接</option>
+                    <option value="attr">写入块属性</option>
+                    <option value="script">自定义 JS 脚本</option>
+                </select>
+                <div class="lv-custom-param-box" style="display: flex; gap: 6px;">
+                    <input type="text" class="lv-custom-prefix" placeholder="前缀 (如: * [ ] )" style="flex: 1; padding: 6px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;" />
+                    <input type="text" class="lv-custom-suffix" placeholder="后缀" style="flex: 1; padding: 6px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;" />
+                </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;">
+                <button type="button" class="lv-custom-test-btn" style="padding: 5px 12px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; cursor: pointer; font-size: 12px;">🧪 试运行测试</button>
+                <button type="button" class="lv-custom-save-btn" style="padding: 5px 14px; border-radius: 6px; border: none; background: var(--b3-theme-primary, #6366f1); color: var(--b3-theme-on-primary, #ffffff); font-weight: 600; cursor: pointer; font-size: 12px;">保存并加入库</button>
+            </div>
+        `;
+
+        // 分类 Tabs 栏（现代 Segmented Pills，平滑滚动与两端遮罩）
+        const tabsWrapper = document.createElement("div");
+        tabsWrapper.style.cssText = `
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+            -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+        `;
+
+        const tabsBox = document.createElement("div");
+        tabsBox.className = "lv-store-tabs";
+        tabsBox.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 2px 2px 4px;
+            scrollbar-width: none;
+        `;
+        tabsWrapper.appendChild(tabsBox);
+
+        // 动作卡片内容网格区
+        const contentBox = document.createElement("div");
+        contentBox.className = "lv-store-content";
+        contentBox.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(${isMobileScreen ? "280px" : "270px"}, 1fr));
+            gap: 12px;
+            align-content: start;
+        `;
+
+        // 底部 Footer
+        const footer = document.createElement("div");
+        footer.style.cssText = `
+            padding: 12px 24px;
+            border-top: 1px solid var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: color-mix(in srgb, var(--b3-theme-surface) 95%, var(--b3-theme-primary) 5%);
+        `;
+        footer.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="lv-store-scan-btn" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); cursor: pointer; font-size: 12px; color: var(--b3-theme-on-surface); transition: all 0.15s ease;">🔍 重新扫描插件</button>
+                <button class="lv-store-reset-btn" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); cursor: pointer; font-size: 12px; color: var(--b3-theme-on-surface); transition: all 0.15s ease;">♻️ 恢复推荐预设</button>
+            </div>
+            <div class="lv-store-summary-text" style="font-size: 12px; color: var(--b3-theme-on-surface-light, #64748b);">
+                已启用 ${enabledSet.size} 项 · 常驻 ${pinnedList.length}/5 项
+            </div>
+            <button class="lv-store-save-btn" style="padding: 7px 20px; border-radius: 8px; border: none; background: var(--b3-theme-primary, #6366f1); color: var(--b3-theme-on-primary, #ffffff); cursor: pointer; font-weight: 600; font-size: 13px; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35); transition: all 0.15s ease;">完成并生效</button>
+        `;
+
+        // 渲染函数
+        const renderGrid = () => {
+            contentBox.innerHTML = "";
+
+            if (currentTab === "uninstalled") {
+                const banner = document.createElement("div");
+                banner.style.cssText = `
+                    grid-column: 1 / -1;
+                    padding: 10px 14px;
+                    background: rgba(245, 158, 11, 0.08);
+                    border: 1px solid rgba(245, 158, 11, 0.25);
+                    border-radius: 9px;
+                    font-size: 12px;
+                    color: #b45309;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 2px;
+                `;
+                banner.innerHTML = `<span>💡</span><span>以下为思源官方集市第三方优质插件专属能力（当前尚未安装）。在思源集市安装对应插件后，动作将自动点亮并移入上方【已就绪】供您随时调用。</span>`;
+                contentBox.appendChild(banner);
+            }
+
+            const q = keyword.trim().toLowerCase();
+            const filtered = allActions.filter(action => {
+                const isInstalled = action.installed !== false;
+
+                // 核心规约：普通分类 Tab 一律严格仅展示已就绪/可用项，未安装项独立隔离在 uninstalled Tab
+                if (currentTab === "uninstalled") {
+                    if (isInstalled) return false;
+                } else {
+                    if (!isInstalled) return false;
+                }
+
+                // 类别过滤
+                if (!matchCategory(action, currentTab)) return false;
+
+                // 状态筛选
+                const isEnabled = enabledSet.has(action.id);
+                const isPinned = pinnedList.includes(action.id);
+                if (statusFilter === "enabled" && !isEnabled) return false;
+                if (statusFilter === "disabled" && isEnabled) return false;
+                if (statusFilter === "pinned" && !isPinned) return false;
+
+                // 搜索关键词过滤（支持动作名、副标题、插件名、动作ID及拼音/同义词 tags）
+                if (q) {
+                    const matchText = `${action.label} ${action.subtitle || ""} ${action.sourcePlugin || ""} ${action.id} ${(action.tags || []).join(" ")}`.toLowerCase();
+                    if (!matchText.includes(q)) return false;
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                const emptyWrap = document.createElement("div");
+                emptyWrap.style.cssText = "grid-column: 1 / -1; padding: 48px 16px; text-align: center; color: var(--b3-theme-on-surface-light, #94a3b8); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 10px;";
+                const msg = currentTab === "uninstalled" ? "太棒了！已安装全部推荐插件能力"
+                    : q ? `未找到与「${keyword}」匹配的块动作`
+                    : currentTab === "pinned" ? "暂无优先常驻动作 · 点击卡片上的【⭐ 设为优先】放入顶端槽位"
+                    : statusFilter !== "all" ? "当前筛选状态下暂无符合条件的动作"
+                    : "当前分类暂无可启用的动作";
+                emptyWrap.innerHTML = `<div>${msg}</div>`;
+                if (q) {
+                    const clearBtn = document.createElement("button");
+                    clearBtn.type = "button";
+                    clearBtn.style.cssText = "padding: 4px 12px; border-radius: 6px; border: 1px solid var(--b3-theme-primary, #6366f1); background: transparent; color: var(--b3-theme-primary, #6366f1); cursor: pointer; font-size: 12px; font-weight: 500;";
+                    clearBtn.textContent = "清空搜索词";
+                    clearBtn.addEventListener("click", () => {
+                        keyword = "";
+                        searchInput.value = "";
+                        searchClearBtn.style.display = "none";
+                        renderGrid();
+                    });
+                    emptyWrap.appendChild(clearBtn);
+                } else if (currentTab === "pinned") {
+                    const goReadyBtn = document.createElement("button");
+                    goReadyBtn.type = "button";
+                    goReadyBtn.style.cssText = "padding: 4px 12px; border-radius: 6px; border: 1px solid var(--b3-theme-primary, #6366f1); background: transparent; color: var(--b3-theme-primary, #6366f1); cursor: pointer; font-size: 12px; font-weight: 500;";
+                    goReadyBtn.textContent = "前往【全部已就绪】挑选";
+                    goReadyBtn.addEventListener("click", () => {
+                        currentTab = "ready";
+                        renderTabs();
+                        renderGrid();
+                    });
+                    emptyWrap.appendChild(goReadyBtn);
+                }
+                contentBox.appendChild(emptyWrap);
+                return;
+            }
+
+            filtered.forEach(action => {
+                const isEnabled = enabledSet.has(action.id);
+                const isPinned = pinnedList.includes(action.id);
+                const isInstalled = action.installed !== false;
+                const pinIndex = isPinned ? pinnedList.indexOf(action.id) + 1 : 0;
+                const theme = getActionCategoryTheme(action);
+
+                const card = document.createElement("div");
+                card.className = "lv-action-store-card";
+                card.style.cssText = `
+                    position: relative;
+                    background: ${isPinned ? "color-mix(in srgb, #f59e0b 6%, var(--b3-theme-surface))" : isEnabled ? "color-mix(in srgb, var(--b3-theme-primary, #6366f1) 3%, var(--b3-theme-surface))" : "var(--b3-theme-surface)"};
+                    border: 1.5px solid ${isPinned ? "rgba(245, 158, 11, 0.55)" : isEnabled ? "color-mix(in srgb, var(--b3-theme-primary, #6366f1) 35%, transparent)" : "var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.2))"};
+                    border-radius: 12px;
+                    padding: 13px 15px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    box-shadow: ${isPinned ? "0 6px 18px -4px rgba(245, 158, 11, 0.16)" : isEnabled ? "0 4px 12px -2px rgba(99, 102, 241, 0.06)" : "0 1px 3px rgba(0, 0, 0, 0.03)"};
+                    opacity: ${!isInstalled ? "0.85" : isEnabled ? "1" : "0.72"};
+                    cursor: ${isInstalled ? "pointer" : "default"};
+                    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+                `;
+
+                // 来源标签
+                let sourceBadgeHtml = `<span style="font-size: 10.5px; padding: 2px 7px; border-radius: 5px; background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 10%, transparent); color: var(--b3-theme-primary, #6366f1); font-weight: 500;">${action.sourcePlugin || "小驴生态"}</span>`;
+                if (action.sourceType === "native") {
+                    sourceBadgeHtml = `<span style="font-size: 10.5px; padding: 2px 7px; border-radius: 5px; background: rgba(14, 165, 233, 0.1); color: #0284c7; font-weight: 500;">思源原生</span>`;
+                } else if (action.sourceType === "community" || action.sourceType === "plugin-discovery") {
+                    sourceBadgeHtml = `<span style="font-size: 10.5px; padding: 2px 7px; border-radius: 5px; background: rgba(245, 158, 11, 0.1); color: #d97706; font-weight: 500;">${action.sourcePlugin || "第三方插件"}</span>`;
+                }
+
+                // 就绪状态徽标
+                const statusBadgeHtml = isInstalled
+                    ? `<span style="font-size: 10.5px; color: #10b981; display: flex; align-items: center; gap: 3px; font-weight: 500;">● 已就绪</span>`
+                    : `<span style="font-size: 10.5px; color: #b45309; background: rgba(245, 158, 11, 0.1); padding: 1px 6px; border-radius: 4px; display: flex; align-items: center; gap: 3px; font-weight: 500;">○ 待安装插件</span>`;
+
+                // 常驻优先角标
+                const pinnedPillHtml = isPinned
+                    ? `<span style="font-size: 10px; font-weight: 700; color: #b45309; background: rgba(245, 158, 11, 0.22); border-radius: 4px; padding: 1px 6px;">#${pinIndex} 优先常驻</span>`
+                    : "";
+
+                const pinBorderColor = isPinned ? "#f59e0b" : "var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.28))";
+                const pinBg = isPinned ? "rgba(245, 158, 11, 0.16)" : "transparent";
+                const pinColor = isPinned ? "#d97706" : "var(--b3-theme-on-surface-light, #64748b)";
+                const pinTitle = isPinned
+                    ? "已设为优先常驻项，点击取消常驻"
+                    : (pinnedList.length >= 5 ? "常驻槽位已满 (5/5)，点击将自动替换第 5 槽位" : "设为优先常驻项（排在顶端快捷栏，最多 5 项）");
+
+                const footerControlHtml = isInstalled
+                    ? `<label class="lv-store-enable-label" style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; user-select: none; font-weight: 500;">
+                            <input type="checkbox" class="lv-store-enable-chk" data-action-id="${action.id}" ${isEnabled ? "checked" : ""} style="cursor: pointer; width: 15px; height: 15px;" />
+                            <span>${isEnabled ? "已启用" : "已停用"}</span>
+                        </label>
+                        <button type="button" class="lv-store-pin-btn" data-action-id="${action.id}" style="
+                            border: 1px solid ${pinBorderColor};
+                            background: ${pinBg};
+                            color: ${pinColor};
+                            padding: 3px 9px;
+                            border-radius: 7px;
+                            cursor: pointer;
+                            font-size: 11.5px;
+                            display: flex;
+                            align-items: center;
+                            gap: 4px;
+                            font-weight: ${isPinned ? "600" : "500"};
+                            transition: all 0.15s ease;
+                        " title="${pinTitle}">
+                            <span>⭐</span>
+                            <span>${isPinned ? "已优先" : "设为优先"}</span>
+                        </button>`
+                    : `<div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px;">
+                            <span style="font-size: 11px; color: #b45309; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <span>📦</span>
+                                <span>需安装【${action.sourcePlugin || "对应插件"}】</span>
+                            </span>
+                            <button type="button" class="lv-store-goto-market-btn" data-plugin-name="${action.sourcePlugin || ""}" data-plugin-id="${action.sourcePluginId || ""}" style="
+                                border: 1px solid rgba(245, 158, 11, 0.35);
+                                background: rgba(245, 158, 11, 0.1);
+                                color: #b45309;
+                                font-size: 10.5px;
+                                padding: 2px 8px;
+                                border-radius: 6px;
+                                cursor: pointer;
+                                flex-shrink: 0;
+                                font-weight: 600;
+                                transition: all 0.15s ease;
+                            " title="复制插件名称并前往思源集市安装">🛒 复制去集市</button>
+                        </div>`;
+
+                const isCustomAction = action.sourceType === "custom";
+                const customDelBtnHtml = isCustomAction
+                    ? `<button type="button" class="lv-store-custom-del-btn" data-action-id="${action.id}" data-action-label="${action.label}" style="border: none; background: transparent; cursor: pointer; color: #ef4444; font-size: 13px; padding: 2px 5px; opacity: 0.65; border-radius: 4px; transition: all 0.15s ease;" title="彻底删除此自定义动作">🗑️</button>`
+                    : "";
+
+                card.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
+                            <div style="width: 38px; height: 38px; border-radius: 10px; background: ${theme.bg}; color: ${theme.color}; border: 1px solid ${theme.border}; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                                ${action.glyph}
+                            </div>
+                            <div style="min-width: 0; flex: 1;">
+                                <div style="font-size: 13.5px; font-weight: 600; line-height: 1.35; color: var(--b3-theme-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(action.label)}">${action.label}</div>
+                                <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap;">
+                                    ${sourceBadgeHtml}
+                                    ${statusBadgeHtml}
+                                    ${pinnedPillHtml}
+                                </div>
+                            </div>
+                        </div>
+                        ${customDelBtnHtml}
+                    </div>
+                    <div style="font-size: 11.5px; color: var(--b3-theme-on-surface-light, #64748b); line-height: 1.45; min-height: 32px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(action.subtitle || '')}">
+                        ${action.subtitle || "精选块级动作"}
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 9px; border-top: 1px solid var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));">
+                        ${footerControlHtml}
+                    </div>
+                `;
+
+                // 整卡点击直达切换启用（大幅提升设置便捷性）
+                card.addEventListener("click", (e) => {
+                    const target = e.target as HTMLElement | null;
+                    if (target?.closest("button") || target?.closest("input") || target?.closest(".lv-store-enable-label")) {
+                        return; // 原生按钮与标签自带独立处理
+                    }
+                    if (!isInstalled) return;
+                    if (isEnabled) {
+                        enabledSet.delete(action.id);
+                        const pIdx = pinnedList.indexOf(action.id);
+                        if (pIdx !== -1) pinnedList.splice(pIdx, 1);
+                    } else {
+                        enabledSet.add(action.id);
+                    }
+                    updateSummary();
+                    renderGrid();
+                });
+
+                // 复选框事件
+                const chk = card.querySelector(".lv-store-enable-chk") as HTMLInputElement | null;
+                chk?.addEventListener("change", () => {
+                    if (chk.checked) {
+                        enabledSet.add(action.id);
+                    } else {
+                        enabledSet.delete(action.id);
+                        const pIdx = pinnedList.indexOf(action.id);
+                        if (pIdx !== -1) pinnedList.splice(pIdx, 1);
+                    }
+                    updateSummary();
+                    renderGrid();
+                });
+
+                // ⭐ 常驻优先事件（支持槽位满额时智能替换末位）
+                const pinBtn = card.querySelector(".lv-store-pin-btn") as HTMLElement | null;
+                pinBtn?.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const pIdx = pinnedList.indexOf(action.id);
+                    if (pIdx !== -1) {
+                        pinnedList.splice(pIdx, 1);
+                    } else {
+                        if (pinnedList.length >= 5) {
+                            // 槽位已满时，自动替换第 5 个槽位，免去来回滚动的繁琐操作
+                            pinnedList[4] = action.id;
+                            enabledSet.add(action.id);
+                            showMessage(`常驻槽位已满，已将【${action.label}】替换至第 5 项`, 1800, "info", "块助手");
+                        } else {
+                            pinnedList.push(action.id);
+                            enabledSet.add(action.id);
+                        }
+                    }
+                    updateSummary();
+                    renderGrid();
+                });
+
+                const marketBtn = card.querySelector(".lv-store-goto-market-btn") as HTMLButtonElement | null;
+                marketBtn?.addEventListener("click", async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const pName = marketBtn.getAttribute("data-plugin-name") || "第三方插件";
+                    const ok = await lvSafeCopyToClipboard(pName);
+                    if (ok) {
+                        showMessage(`已复制【${pName}】至剪贴板，请在「设置 → 集市 → 插件」中粘贴搜索安装`, 3000, "info", "块助手");
+                    } else {
+                        showMessage(`请在集市中搜索安装【${pName}】`, 2500, "info", "块助手");
+                    }
+                });
+
+                const delBtn = card.querySelector(".lv-store-custom-del-btn") as HTMLButtonElement | null;
+                delBtn?.addEventListener("click", async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const actId = delBtn.getAttribute("data-action-id");
+                    const actLabel = delBtn.getAttribute("data-action-label") || "自定义动作";
+                    if (!actId) return;
+                    if (await lvConfirm("删除自定义动作", `确定要彻底删除自定义动作【${actLabel}】吗？`)) {
+                        const curDefs = readCustomActionsFromStorage();
+                        const nextDefs = curDefs.filter(d => d.id !== actId);
+                        writeCustomActionsToStorage(nextDefs);
+                        sharedBlockActions.delete(actId);
+                        enabledSet.delete(actId);
+                        const pIdx = pinnedList.indexOf(actId);
+                        if (pIdx !== -1) pinnedList.splice(pIdx, 1);
+                        updateSummary();
+                        renderGrid();
+                        showMessage(`已彻底删除自定义动作【${actLabel}】`, 2000, "info", "块助手");
+                    }
+                });
+
+                contentBox.appendChild(card);
+            });
+        };
+
+        const updateSummary = () => {
+            const summaryEl = footer.querySelector(".lv-store-summary-text");
+            if (summaryEl) {
+                const fullBadge = pinnedList.length >= 5 ? `<span style="font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #d97706; font-weight: 600; margin-left: 4px;">满额 5/5</span>` : "";
+                summaryEl.innerHTML = `已启用 ${enabledSet.size} 项 · 常驻优先 ${pinnedList.length}/5 槽${fullBadge}`;
+            }
+            renderPinnedDock();
+            renderTabs();
+        };
+
+        const renderTabs = () => {
+            tabsBox.innerHTML = "";
+            STORE_CATEGORIES.forEach(tab => {
+                let count = 0;
+                if (tab.id === "ready") count = allActions.filter(a => a.installed !== false).length;
+                else if (tab.id === "uninstalled") count = allActions.filter(a => a.installed === false).length;
+                else if (tab.id === "pinned") count = pinnedList.filter(id => allActions.find(a => a.id === id)?.installed !== false).length;
+                else {
+                    count = allActions.filter(a => a.installed !== false && matchCategory(a, tab.id)).length;
+                }
+
+                const btn = document.createElement("button");
+                btn.type = "button";
+                const isActive = currentTab === tab.id;
+                btn.style.cssText = `
+                    padding: 5px 12px;
+                    border-radius: 9999px;
+                    border: 1px solid ${isActive ? "var(--b3-theme-primary, #6366f1)" : "var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.22))"};
+                    background: ${isActive ? "color-mix(in srgb, var(--b3-theme-primary, #6366f1) 14%, var(--b3-theme-surface))" : "var(--b3-theme-surface)"};
+                    color: ${isActive ? "var(--b3-theme-primary, #6366f1)" : "var(--b3-theme-on-surface)"};
+                    cursor: pointer;
+                    font-size: 12px;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 5px;
+                    white-space: nowrap;
+                    font-weight: ${isActive ? "600" : "500"};
+                    transition: all 0.15s ease-out;
+                    flex-shrink: 0;
+                    box-shadow: ${isActive ? "0 2px 6px rgba(99, 102, 241, 0.12)" : "none"};
+                `;
+                btn.innerHTML = `<span>${tab.glyph}</span><span>${tab.label}</span><span style="font-size: 10.5px; opacity: 0.72; padding: 1px 5px; border-radius: 999px; background: rgba(0,0,0,0.06);">${count}</span>`;
+                btn.addEventListener("click", () => {
+                    currentTab = tab.id;
+                    renderTabs();
+                    renderGrid();
+                });
+                tabsBox.appendChild(btn);
+            });
+        };
+
+        // 组装模态框
+        modal.appendChild(header);
+        modal.appendChild(pinnedDock);
+        filterBar.appendChild(searchRow);
+        filterBar.appendChild(scenarioToolbar);
+        filterBar.appendChild(customDrawer);
+        filterBar.appendChild(tabsWrapper);
+        modal.appendChild(filterBar);
+        modal.appendChild(contentBox);
+        modal.appendChild(footer);
+        mask.appendChild(modal);
+
+        // 视口自适应
+        const onVisualViewportResize = () => {
+            if (typeof window !== "undefined" && window.visualViewport) {
+                const vvH = window.visualViewport.height;
+                modal.style.maxHeight = `${Math.min(vvH - 20, 860)}px`;
+            }
+        };
+        if (typeof window !== "undefined" && window.visualViewport) {
+            window.visualViewport.addEventListener("resize", onVisualViewportResize);
+        }
+
+        // 关闭事件
+        const closeModal = () => {
+            if (typeof window !== "undefined" && window.visualViewport) {
+                window.visualViewport.removeEventListener("resize", onVisualViewportResize);
+            }
+            if (typeof document !== "undefined") {
+                document.removeEventListener("keydown", onDialogKeyDown, true);
+            }
+            try { mask.remove(); } catch { /* ignore */ }
+        };
+
+        const onDialogKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                if (keyword) {
+                    keyword = "";
+                    searchInput.value = "";
+                    searchClearBtn.style.display = "none";
+                    renderGrid();
+                    return;
+                }
+                closeModal();
+                return;
+            }
+            if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+                e.preventDefault();
+                e.stopPropagation();
+                const tabIds = STORE_CATEGORIES.map(t => t.id);
+                const curIdx = tabIds.indexOf(currentTab);
+                if (curIdx !== -1) {
+                    const nextIdx = e.key === "ArrowRight"
+                        ? (curIdx + 1) % tabIds.length
+                        : (curIdx - 1 + tabIds.length) % tabIds.length;
+                    currentTab = tabIds[nextIdx] || "ready";
+                    renderTabs();
+                    renderGrid();
+                }
+            }
+        };
+        if (typeof document !== "undefined") {
+            document.addEventListener("keydown", onDialogKeyDown, true);
+        }
+
+        header.querySelector(".lv-store-close-btn")?.addEventListener("click", closeModal);
+        mask.addEventListener("click", (e) => {
+            if (e.target === mask) closeModal();
+        });
+
+        // 搜索框响应（带中文输入法 IME 合成保护与一键清空）
+        const searchInput = searchRow.querySelector(".lv-store-search-input") as HTMLInputElement;
+        const searchClearBtn = searchRow.querySelector(".lv-store-search-clear") as HTMLButtonElement;
+        let isComposing = false;
+        searchInput.addEventListener("compositionstart", () => { isComposing = true; });
+        searchInput.addEventListener("compositionend", () => {
+            isComposing = false;
+            keyword = searchInput.value;
+            searchClearBtn.style.display = keyword ? "inline-flex" : "none";
+            renderGrid();
+        });
+        searchInput.addEventListener("input", () => {
+            if (isComposing) return;
+            keyword = searchInput.value;
+            searchClearBtn.style.display = keyword ? "inline-flex" : "none";
+            renderGrid();
+        });
+        searchClearBtn?.addEventListener("click", () => {
+            keyword = "";
+            searchInput.value = "";
+            searchClearBtn.style.display = "none";
+            searchInput.focus();
+            renderGrid();
+        });
+
+        // 状态筛选过滤按钮
+        searchRow.querySelectorAll<HTMLButtonElement>(".lv-store-status-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const s = btn.getAttribute("data-status") as any;
+                if (!s) return;
+                statusFilter = s;
+                searchRow.querySelectorAll<HTMLButtonElement>(".lv-store-status-btn").forEach(b => {
+                    const isCur = b.getAttribute("data-status") === s;
+                    b.style.border = isCur ? "1px solid var(--b3-theme-primary, #6366f1)" : "1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25))";
+                    b.style.background = isCur ? "color-mix(in srgb, var(--b3-theme-primary, #6366f1) 12%, transparent)" : "var(--b3-theme-surface)";
+                    b.style.color = isCur ? "var(--b3-theme-primary, #6366f1)" : "inherit";
+                    b.style.fontWeight = isCur ? "600" : "normal";
+                });
+                renderGrid();
+            });
+        });
+
+        // 场景预设应用
+        const PRESETS: Record<string, { label: string; enabled: string[]; pinned: string[] }> = {
+            "all-star": {
+                label: "黄金全能",
+                enabled: [...DEFAULT_ENABLED_ACTION_IDS],
+                pinned: [...DEFAULT_PINNED_ACTION_IDS],
+            },
+            exam: {
+                label: "考研备考",
+                enabled: ["edit-card-qa", "make-cloze", "make-occlusion", "add-to-deck", "to-exam-question", "exam-ai-generate", "bind-checkin-item", "copy-block-ref"],
+                pinned: ["edit-card-qa", "make-cloze", "to-exam-question"],
+            },
+            writing: {
+                label: "写作研读",
+                enabled: ["focus-block", "copy-embed-ref", "toggle-fold-block", "morph-block-type", "copy-block-ref", "copy-plain-text", "to-glean-library", "capture-quote-common", "plugin-pangu-spacing", "plugin-convert-punctuation"],
+                pinned: ["focus-block", "capture-quote-common", "copy-plain-text"],
+            },
+            org: {
+                label: "结构排版",
+                enabled: ["copy-embed-ref", "toggle-fold-block", "native-move-up", "native-move-down", "native-clone-block", "community-mindmap", "plugin-kanban-card", "plugin-table-format"],
+                pinned: ["copy-embed-ref", "native-move-up", "native-move-down"],
+            },
+            minimal: {
+                label: "极简原生",
+                enabled: ["focus-block", "copy-block-ref", "copy-plain-text"],
+                pinned: ["focus-block", "copy-plain-text"],
+            },
+        };
+
+        const updatePresetButtons = (activeKey?: string) => {
+            scenarioToolbar.querySelectorAll<HTMLButtonElement>(".lv-store-preset-btn").forEach((b) => {
+                const k = b.getAttribute("data-preset");
+                const isActive = k === activeKey;
+                b.style.borderColor = isActive ? "var(--b3-theme-primary, #6366f1)" : "var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25))";
+                b.style.background = isActive ? "color-mix(in srgb, var(--b3-theme-primary, #6366f1) 14%, transparent)" : "var(--b3-theme-surface)";
+                b.style.color = isActive ? "var(--b3-theme-primary, #6366f1)" : "inherit";
+                b.style.fontWeight = isActive ? "600" : "normal";
+            });
+        };
+
+        scenarioToolbar.querySelectorAll<HTMLButtonElement>(".lv-store-preset-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const key = btn.getAttribute("data-preset");
+                const preset = key ? PRESETS[key] : null;
+                if (preset) {
+                    enabledSet = new Set(preset.enabled);
+                    pinnedList = [...preset.pinned];
+                    activePresetKey = key || "";
+                    updatePresetButtons(activePresetKey);
+                    updateSummary();
+                    renderGrid();
+                    showMessage(`已应用【${preset.label}】场景预设`, 1800, "info", "块助手");
+                }
+            });
+        });
+
+        // 本类全选
+        scenarioToolbar.querySelector(".lv-store-select-all-btn")?.addEventListener("click", () => {
+            const currentTabActions = allActions.filter(a => a.installed !== false && matchCategory(a, currentTab));
+            currentTabActions.forEach(a => enabledSet.add(a.id));
+            updateSummary();
+            renderGrid();
+            showMessage(`已启用当前分类下的【${currentTabActions.length}】项动作`, 1600, "info", "块助手");
+        });
+
+        // 本类全关
+        scenarioToolbar.querySelector(".lv-store-unselect-all-btn")?.addEventListener("click", () => {
+            const currentTabActions = allActions.filter(a => a.installed !== false && matchCategory(a, currentTab));
+            currentTabActions.forEach(a => {
+                enabledSet.delete(a.id);
+                const pIdx = pinnedList.indexOf(a.id);
+                if (pIdx !== -1) pinnedList.splice(pIdx, 1);
+            });
+            updateSummary();
+            renderGrid();
+            showMessage(`已停用当前分类下的【${currentTabActions.length}】项动作`, 1600, "info", "块助手");
+        });
+
+        // 导出配置
+        scenarioToolbar.querySelector(".lv-store-export-btn")?.addEventListener("click", async () => {
+            const data = {
+                version: 1,
+                enabledActionIds: Array.from(enabledSet),
+                pinnedActionIds: pinnedList,
+                customActions: readCustomActionsFromStorage(),
+                exportedAt: new Date().toISOString(),
+            };
+            const ok = await lvSafeCopyToClipboard(JSON.stringify(data, null, 2));
+            if (ok) {
+                showMessage("已复制块助手装配配置至剪贴板", 2000, "info", "块助手");
+            } else {
+                showMessage("复制失败，请检查剪贴板权限", 2000, "error", "块助手");
+            }
+        });
+
+        // 导入配置
+        scenarioToolbar.querySelector(".lv-store-import-btn")?.addEventListener("click", async () => {
+            const jsonStr = await lvPrompt("导入块助手装配配置", "请粘贴导出的块助手装配配置 (JSON)：");
+            if (jsonStr) {
+                try {
+                    const parsed = JSON.parse(jsonStr.trim());
+                    if (parsed && typeof parsed === "object" && (Array.isArray(parsed.enabledActionIds) || Array.isArray(parsed.pinnedActionIds))) {
+                        const newEnabled = Array.isArray(parsed.enabledActionIds) ? parsed.enabledActionIds : Array.from(enabledSet);
+                        const newPinned = Array.isArray(parsed.pinnedActionIds) ? parsed.pinnedActionIds : pinnedList;
+                        enabledSet = new Set(newEnabled);
+                        pinnedList = [...newPinned].slice(0, 5);
+                        if (Array.isArray(parsed.customActions) && parsed.customActions.length > 0) {
+                            const scriptActions = parsed.customActions.filter((c: any) => c && c.actionType === "script");
+                            if (scriptActions.length > 0) {
+                                const okScript = await lvConfirm(
+                                    "导入含脚本的自定义动作",
+                                    `该配置包含 ${scriptActions.length} 个脚本型自定义动作（导入后将在块操作时执行其 JS 代码）：\n${scriptActions.slice(0, 5).map((c: any) => `· ${String(c.label || c.id)}`).join("\n")}${scriptActions.length > 5 ? "\n…" : ""}\n\n请仅导入来源可信的配置。是否继续？`,
+                                );
+                                if (!okScript) {
+                                    showMessage("已取消导入（含脚本动作）", 2200, "info", "块助手");
+                                    return;
+                                }
+                            }
+                            const cur = readCustomActionsFromStorage();
+                            const curIds = new Set(cur.map(c => c.id));
+                            for (const c of parsed.customActions) {
+                                if (c && c.id && c.label && !curIds.has(c.id)) {
+                                    cur.push(c);
+                                    registerCustomAction(c);
+                                }
+                            }
+                            writeCustomActionsToStorage(cur);
+                        }
+                        updateSummary();
+                        renderGrid();
+                        showMessage("已成功导入块助手装配配置", 2000, "info", "块助手");
+                    } else {
+                        showMessage("配置格式不符合规范", 2000, "error", "块助手");
+                    }
+                } catch {
+                    showMessage("JSON 解析失败，请检查输入", 2000, "error", "块助手");
+                }
+            }
+        });
+
+        // 自定义动作抽屉切换与表单逻辑
+        const toggleCustomBtn = scenarioToolbar.querySelector(".lv-store-custom-toggle-btn") as HTMLElement;
+        const customTypeSelect = customDrawer.querySelector(".lv-custom-type") as HTMLSelectElement;
+        const paramBox = customDrawer.querySelector(".lv-custom-param-box") as HTMLElement;
+
+        toggleCustomBtn?.addEventListener("click", () => {
+            const isHidden = customDrawer.style.display === "none";
+            customDrawer.style.display = isHidden ? "flex" : "none";
+        });
+        customDrawer.querySelector(".lv-custom-close-btn")?.addEventListener("click", () => {
+            customDrawer.style.display = "none";
+        });
+
+        customTypeSelect?.addEventListener("change", () => {
+            const val = customTypeSelect.value;
+            if (val === "prefix-suffix") {
+                paramBox.innerHTML = `
+                    <input type="text" class="lv-custom-prefix" placeholder="前缀 (如: * [ ] )" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25));background:var(--b3-theme-surface);color:inherit;font-size:12px;" />
+                    <input type="text" class="lv-custom-suffix" placeholder="后缀" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25));background:var(--b3-theme-surface);color:inherit;font-size:12px;" />
+                `;
+            } else if (val === "attr") {
+                paramBox.innerHTML = `
+                    <input type="text" class="lv-custom-attr-key" placeholder="属性名 (如: custom-tag)" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25));background:var(--b3-theme-surface);color:inherit;font-size:12px;" />
+                    <input type="text" class="lv-custom-attr-val" placeholder="属性值 (如: 重要)" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25));background:var(--b3-theme-surface);color:inherit;font-size:12px;" />
+                `;
+            } else if (val === "script") {
+                paramBox.innerHTML = `
+                    <input type="text" class="lv-custom-script" placeholder="JS: 如 showMessage('当前块: ' + blockID)" style="width:100%;padding:6px 9px;border-radius:6px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25));background:var(--b3-theme-surface);color:inherit;font-size:12px;" />
+                `;
+            }
+        });
+
+        // 自定义动作试运行
+        customDrawer.querySelector(".lv-custom-test-btn")?.addEventListener("click", async () => {
+            const testActionType = customTypeSelect.value as any;
+            const prefix = (customDrawer.querySelector(".lv-custom-prefix") as HTMLInputElement)?.value || "";
+            const suffix = (customDrawer.querySelector(".lv-custom-suffix") as HTMLInputElement)?.value || "";
+            const attrKey = (customDrawer.querySelector(".lv-custom-attr-key") as HTMLInputElement)?.value || "";
+            const attrValue = (customDrawer.querySelector(".lv-custom-attr-val") as HTMLInputElement)?.value || "";
+            const script = (customDrawer.querySelector(".lv-custom-script") as HTMLInputElement)?.value || "";
+
+            const activeEl = document.querySelector(".protyle-wysiwyg [data-node-id]:focus-within, .protyle-wysiwyg--select[data-node-id], .protyle-wysiwyg > [data-node-id]");
+            const testBlockId = activeEl?.getAttribute("data-node-id") || "";
+            if (!testBlockId) {
+                showMessage("未在当前编辑器中找到活动块供试运行", 2000, "info", "块助手");
+                return;
+            }
+
+            try {
+                if (testActionType === "prefix-suffix") {
+                    const text = getCleanBlockText(activeEl as HTMLElement);
+                    showMessage(`[试运行模拟] 结果: "${prefix}${text.slice(0, 24)}${suffix}" (预演成功)`, 2600, "info", "块助手");
+                } else if (testActionType === "attr") {
+                    if (!attrKey) {
+                        showMessage("请输入要写入的属性名", 2000, "info", "块助手");
+                        return;
+                    }
+                    showMessage(`[试运行模拟] 将在块上写入属性 ${attrKey}="${attrValue || "1"}"`, 2600, "info", "块助手");
+                } else if (testActionType === "script") {
+                    if (!script.trim()) {
+                        showMessage("请输入 JS 脚本代码", 2000, "info", "块助手");
+                        return;
+                    }
+                    const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                    const fn = new AsyncFunction("blockID", "lvKernelPost", "showMessage", script);
+                    await fn(testBlockId, lvKernelPost, showMessage);
+                    showMessage("自定义脚本试运行执行完成！", 2000, "info", "块助手");
+                }
+            } catch (err: any) {
+                showMessage(`试运行报错: ${err?.message || String(err)}`, 2600, "error", "块助手");
+            }
+        });
+
+        customDrawer.querySelector(".lv-custom-save-btn")?.addEventListener("click", () => {
+            const name = (customDrawer.querySelector(".lv-custom-name") as HTMLInputElement)?.value?.trim();
+            const glyph = (customDrawer.querySelector(".lv-custom-glyph") as HTMLInputElement)?.value?.trim() || "⚡";
+            const subtitle = (customDrawer.querySelector(".lv-custom-subtitle") as HTMLInputElement)?.value?.trim() || "自定义块动作";
+            const group = (customDrawer.querySelector(".lv-custom-group") as HTMLSelectElement)?.value || "organization";
+            const actionType = customTypeSelect.value as any;
+
+            if (!name) {
+                showMessage("请输入自定义动作名称", 2000, "info", "块助手");
+                return;
+            }
+
+            const rawAttrKey = ((customDrawer.querySelector(".lv-custom-attr-key") as HTMLInputElement)?.value || "").trim();
+            const safeAttrKey = rawAttrKey ? (/^(custom-|memo$|bookmark$|name$|alias$|style$)/.test(rawAttrKey) ? rawAttrKey : `custom-${rawAttrKey}`) : "";
+            const def: CustomBlockActionDef = {
+                id: `custom-act-${Date.now()}`,
+                label: name,
+                glyph,
+                subtitle,
+                group,
+                actionType,
+                prefix: (customDrawer.querySelector(".lv-custom-prefix") as HTMLInputElement)?.value,
+                suffix: (customDrawer.querySelector(".lv-custom-suffix") as HTMLInputElement)?.value,
+                attrKey: safeAttrKey,
+                attrValue: (customDrawer.querySelector(".lv-custom-attr-val") as HTMLInputElement)?.value,
+                script: (customDrawer.querySelector(".lv-custom-script") as HTMLInputElement)?.value,
+                createdAt: Date.now(),
+            };
+
+            const allDefs = readCustomActionsFromStorage();
+            allDefs.push(def);
+            writeCustomActionsToStorage(allDefs);
+            registerCustomAction(def);
+
+            enabledSet.add(def.id);
+            customDrawer.style.display = "none";
+            updateSummary();
+            renderGrid();
+            showMessage(`已成功创建自定义动作【${name}】并加入资产库`, 2200, "info", "块助手");
+        });
+
+        // 重新扫描插件（强制突破缓存全量扫描）
+        footer.querySelector(".lv-store-scan-btn")?.addEventListener("click", () => {
+            scanPlugins(true);
+            showMessage(`已重新探测运行环境，当前可用动作总数: ${sharedBlockActions.size}`, 2000, "info", "块助手");
+            renderTabs();
+            renderGrid();
+        });
+
+        // 恢复推荐预设
+        footer.querySelector(".lv-store-reset-btn")?.addEventListener("click", () => {
+            enabledSet = new Set(DEFAULT_ENABLED_ACTION_IDS);
+            pinnedList = [...DEFAULT_PINNED_ACTION_IDS];
+            activePresetKey = "all-star";
+            updatePresetButtons("all-star");
+            try {
+                if (typeof localStorage !== "undefined") {
+                    localStorage.removeItem("lv_cards_block_action_usage");
+                }
+            } catch { /* ignore */ }
+            updateSummary();
+            renderGrid();
+            showMessage("已恢复推荐默认预设，并重置动作使用频次学习", 2000, "info", "块助手");
+        });
+
+        // 完成保存
+        footer.querySelector(".lv-store-save-btn")?.addEventListener("click", () => {
+            const newCfg: BlockActionStoreConfig = {
+                version: 1,
+                enabledActionIds: Array.from(enabledSet),
+                pinnedActionIds: pinnedList,
+            };
+            writeStoreConfigToStorage(newCfg);
+            options?.onConfigChange?.(newCfg);
+            try {
+                if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent("lv-block-action-config-changed", { detail: newCfg }));
+                }
+            } catch { /* ignore */ }
+            closeModal();
+            showMessage(`块助手资产库配置已保存（已启用 ${enabledSet.size} 项，常驻 ${pinnedList.length} 项）`, 2200, "info", "块助手");
+        });
+
+        document.body.appendChild(mask);
+        renderPinnedDock();
+        renderTabs();
+        renderGrid();
+    };
 
     const hub: UniversalBlockAssistantHub = {
-        version: "1.9.0",
+        version: "2.0.0",
         get leaderPlugin() { return blockAssistantLeader; },
         register(action: UniversalBlockAction): () => void {
             sharedBlockActions.set(action.id, action);
@@ -16352,9 +23072,22 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 sharedBlockActions.delete(action.id);
             };
         },
-        getActions(): UniversalBlockAction[] {
-            probeCommunityPlugins();
+        getActions(force = false): UniversalBlockAction[] {
+            scanPlugins(force);
             return Array.from(sharedBlockActions.values());
+        },
+        getEnabledActions(force = false): UniversalBlockAction[] {
+            scanPlugins(force);
+            const cfg = readStoreConfigFromStorage();
+            const enabledSet = new Set(cfg.enabledActionIds);
+            return Array.from(sharedBlockActions.values()).filter(a => enabledSet.has(a.id));
+        },
+        getPinnedActions(force = false): UniversalBlockAction[] {
+            scanPlugins(force);
+            const cfg = readStoreConfigFromStorage();
+            return cfg.pinnedActionIds
+                .map(id => sharedBlockActions.get(id))
+                .filter((a): a is UniversalBlockAction => Boolean(a));
         },
         ensureLeader(pluginId: string, openMenuFn?: (blockID: string, anchor: HTMLElement) => void): () => void {
             blockAssistantOwners.add(pluginId);
@@ -16380,6 +23113,36 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 blockAssistantOpenFn(blockID, anchor);
             }
         },
+        getStoreConfig(): BlockActionStoreConfig {
+            return readStoreConfigFromStorage();
+        },
+        saveStoreConfig(config: BlockActionStoreConfig): void {
+            writeStoreConfigToStorage(config);
+        },
+        resetStoreConfig(): BlockActionStoreConfig {
+            const def: BlockActionStoreConfig = {
+                version: 1,
+                enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS],
+                pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS],
+            };
+            writeStoreConfigToStorage(def);
+            return def;
+        },
+        openStoreDialog,
+        scanPlugins,
+        getScanCacheStatus(): {
+            lastScanTime: number;
+            scanCount: number;
+            fingerprint: string;
+            ttlMs: number;
+        } {
+            return {
+                lastScanTime: lastPluginScanTime,
+                scanCount: pluginScanCount,
+                fingerprint: lastPluginScanFingerprint,
+                ttlMs: PLUGIN_SCAN_TTL_MS,
+            };
+        },
     };
 
     if (typeof window !== "undefined") {
@@ -16387,7 +23150,26 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
         // 挂载全局开放接口，支持第三方开发者与用户脚本自由扩展
         (window as any).LvBlockAssistant = {
             registerAction: (action: UniversalBlockAction) => hub.register(action),
-            getActions: () => hub.getActions(),
+            getActions: (force?: boolean) => hub.getActions(force),
+            getEnabledActions: (force?: boolean) => hub.getEnabledActions(force),
+            getPinnedActions: (force?: boolean) => hub.getPinnedActions(force),
+            openMenu: (blockID: string, anchor: HTMLElement) => hub.openMenu(blockID, anchor),
+            executeAction: async (actionId: string, blockID: string, snapshot?: any) => {
+                const act = hub.getActions().find(a => a.id === actionId);
+                if (act && typeof act.execute === "function") {
+                    await act.execute(blockID, snapshot);
+                }
+            },
+            ensureLeader: (pluginId: string, openMenuFn?: (blockID: string, anchor: HTMLElement) => void) => hub.ensureLeader(pluginId, openMenuFn),
+            openStoreDialog: (opts?: any) => hub.openStoreDialog(opts),
+            getStoreConfig: () => hub.getStoreConfig(),
+            saveStoreConfig: (cfg: BlockActionStoreConfig) => hub.saveStoreConfig(cfg),
+            scanPlugins: (force?: boolean) => hub.scanPlugins(force),
+            scanInstalledPlugins: (force?: boolean) => hub.scanPlugins(force),
+            getScanCacheStatus: () => (hub as any).getScanCacheStatus?.(),
+            openTypePicker: (blockID: string, anchor?: HTMLElement) => openBlockTypeMorphPicker(blockID, anchor),
+            morphType: (blockID: string, targetType: string) => morphBlockTypeTo(blockID, targetType),
+            morphTargets: BLOCK_MORPH_TARGETS,
             version: hub.version,
         };
     }
@@ -16397,18 +23179,148 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 export const lvBlockAssistant = {
     /** 向全生态块助手注册业务动作 */
     registerAction(action: UniversalBlockAction): () => void {
-        return getBlockAssistantHub().register(action);
+        try {
+            return getBlockAssistantHub().register(action);
+        } catch {
+            return () => {};
+        }
     },
-    /** 获取当前全部已注册动作 */
-    getActions(): UniversalBlockAction[] {
-        return getBlockAssistantHub().getActions();
+    /** 获取当前全部已注册动作（包含内置目录、扩展动作与探测到的插件动作） */
+    getActions(force = false): UniversalBlockAction[] {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.getActions === "function") {
+                return hub.getActions(force);
+            }
+        } catch { /* ignore */ }
+        return Array.from(sharedBlockActions.values());
+    },
+    /** 获取可用的动作列表（经过用户块助手库 enabled 过滤） */
+    getEnabledActions(force = false): UniversalBlockAction[] {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.getEnabledActions === "function") {
+                return hub.getEnabledActions(force);
+            }
+        } catch { /* ignore */ }
+        const cfg = readStoreConfigFromStorage();
+        const enabledSet = new Set(cfg.enabledActionIds);
+        const all: UniversalBlockAction[] = lvBlockAssistant.getActions(force);
+        return all.filter((a: UniversalBlockAction) => enabledSet.has(a.id));
+    },
+    /** 获取用户置顶在常驻快捷栏的动作 (最多5个) */
+    getPinnedActions(force = false): UniversalBlockAction[] {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.getPinnedActions === "function") {
+                return hub.getPinnedActions(force);
+            }
+        } catch { /* ignore */ }
+        const cfg = readStoreConfigFromStorage();
+        const all: UniversalBlockAction[] = lvBlockAssistant.getActions(force);
+        return cfg.pinnedActionIds
+            .map(id => all.find((a: UniversalBlockAction) => a.id === id))
+            .filter((a): a is UniversalBlockAction => Boolean(a));
     },
     /** 插件启动时调用，参与 Leader 竞选；多插件共存时自动平滑仲裁 */
     ensureLeader(pluginId: string, openMenuFn?: (blockID: string, anchor: HTMLElement) => void): () => void {
-        return getBlockAssistantHub().ensureLeader(pluginId, openMenuFn);
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.ensureLeader === "function") {
+                return hub.ensureLeader(pluginId, openMenuFn);
+            }
+        } catch { /* ignore */ }
+        return () => {};
     },
     /** 打开块操作中心菜单 */
     openMenu(blockID: string, anchor: HTMLElement): void {
-        getBlockAssistantHub().openMenu(blockID, anchor);
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.openMenu === "function") {
+                hub.openMenu(blockID, anchor);
+            }
+        } catch { /* ignore */ }
+    },
+    /** 读取块助手库用户偏好配置 */
+    getStoreConfig(): BlockActionStoreConfig {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.getStoreConfig === "function") {
+                return hub.getStoreConfig();
+            }
+        } catch { /* ignore */ }
+        return readStoreConfigFromStorage();
+    },
+    /** 保存块助手库用户偏好配置 */
+    saveStoreConfig(cfg: BlockActionStoreConfig): void {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.saveStoreConfig === "function") {
+                hub.saveStoreConfig(cfg);
+                return;
+            }
+        } catch { /* ignore */ }
+        writeStoreConfigToStorage(cfg);
+    },
+    /** 重置为官方推荐默认配置 */
+    resetStoreConfig(): BlockActionStoreConfig {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.resetStoreConfig === "function") {
+                return hub.resetStoreConfig();
+            }
+        } catch { /* ignore */ }
+        const def: BlockActionStoreConfig = {
+            version: 1,
+            enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS],
+            pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS],
+        };
+        writeStoreConfigToStorage(def);
+        return def;
+    },
+    /** 打开「📦 块助手资产库 (Block Action Store)」交互配置工作台 */
+    openStoreDialog(options?: { onConfigChange?: (config: BlockActionStoreConfig) => void }): void {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.openStoreDialog === "function") {
+                hub.openStoreDialog(options);
+            }
+        } catch { /* ignore */ }
+    },
+    /** 手动触发已安装插件扫描（支持 force 强制突破 TTL 缓存） */
+    scanInstalledPlugins(force = false): UniversalBlockAction[] {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.scanPlugins === "function") {
+                return hub.scanPlugins(force);
+            }
+        } catch { /* ignore */ }
+        return lvBlockAssistant.getActions(force);
+    },
+    /** 快捷别名：手动触发已安装插件扫描 */
+    scanPlugins(force = false): UniversalBlockAction[] {
+        return lvBlockAssistant.scanInstalledPlugins(force);
+    },
+    /** 获取插件扫描缓存状态（供诊断与测试） */
+    getScanCacheStatus(): { lastScanTime: number; scanCount: number; fingerprint: string; ttlMs: number } {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof (hub as any).getScanCacheStatus === "function") {
+                return (hub as any).getScanCacheStatus();
+            }
+        } catch { /* ignore */ }
+        return { lastScanTime: 0, scanCount: 0, fingerprint: "", ttlMs: 5000 };
+    },
+    /** 打开「转换块类型」选择器浮层 */
+    openTypePicker(blockID: string, anchor?: HTMLElement | null): () => void {
+        return openBlockTypeMorphPicker(blockID, anchor);
+    },
+    /** 将指定块无损转换为目标类型 */
+    morphType(blockID: string, targetType: string): Promise<boolean> {
+        return morphBlockTypeTo(blockID, targetType);
+    },
+    /** 全部受支持的目标块类型清单 */
+    get morphTargets(): readonly BlockMorphTarget[] {
+        return BLOCK_MORPH_TARGETS;
     },
 };

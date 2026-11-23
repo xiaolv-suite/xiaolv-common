@@ -24,8 +24,8 @@ export interface ClipboardCleanResult {
     changeDetails: string[];
 }
 
-/** 常见不可见零宽与控制字符正则 */
-const INVISIBLE_CHARS_REGEX = /[\u200B-\u200D\uFEFF\u200E\u200F\u00AD]/g;
+/** 常见不可见零宽、控制字符与双向嵌入控制字符正则 */
+const INVISIBLE_CHARS_REGEX = /[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u2060\u00AD]/g;
 
 /**
  * 盘古之白中英文智能排版规范化 (formatPanguSpacing)
@@ -129,7 +129,8 @@ export function tsvToMarkdownTable(text: string): {result: string; rowCount: num
     if (tabLines.length / lines.length < 0.6) return null;
 
     const rows = lines.map((l) => l.split("\t").map((c) => c.trim().replace(/\|/g, "\\|")));
-    const maxCols = Math.max(...rows.map((r) => r.length));
+    // 规避大表格行数超过 65536 时 Function.prototype.apply 实参展开栈溢出
+    const maxCols = rows.reduce((max, r) => Math.max(max, r.length), 0);
     if (maxCols < 2) return null;
 
     const normalizedRows = rows.map((r) => {
@@ -418,6 +419,7 @@ export function compactJsonText(text: string): {result: string; compacted: boole
     }
 }
 export function stripInvisibleCharacters(text: string): {result: string; count: number} {
+    if (!text) return {result: text ?? "", count: 0};
     let count = 0;
     const result = text.replace(INVISIBLE_CHARS_REGEX, () => {
         count++;
@@ -432,7 +434,7 @@ export function stripInvisibleCharacters(text: string): {result: string; count: 
  * - 仅 1 个换行：若两端为中文字符直接连结；若包含英文/数字则保留一个空格
  */
 export function mergeSoftLinebreaks(text: string): {result: string; mergedCount: number} {
-    if (!text || !text.includes("\n")) return {result: text, mergedCount: 0};
+    if (!text || !text.includes("\n")) return {result: text ?? "", mergedCount: 0};
 
     // 标准化为 LF
     const normalized = text.replace(/\r\n?/g, "\n");
@@ -444,25 +446,31 @@ export function mergeSoftLinebreaks(text: string): {result: string; mergedCount:
         const lines = para.split("\n");
         if (lines.length <= 1) return para;
 
-        let merged = lines[0] ?? "";
+        let merged = (lines[0] ?? "").trim();
         for (let i = 1; i < lines.length; i++) {
             const nextLine = lines[i] ?? "";
-            if (!nextLine.trim()) continue;
+            const trimmedNext = nextLine.trim();
+            if (!trimmedNext) continue;
+            if (!merged) {
+                merged = trimmedNext;
+                continue;
+            }
             totalMerged++;
 
-            const lastChar = merged.slice(-1);
-            const firstChar = nextLine.charAt(0);
+            const trimmedMerged = merged.trimEnd();
+            const lastChar = trimmedMerged.slice(-1);
+            const firstChar = trimmedNext.charAt(0);
 
             // 中日韩字符正则
             const isCjkLast = /[\u4e00-\u9fa5\u3040-\u30ff\uff00-\uffef]/.test(lastChar);
             const isCjkFirst = /[\u4e00-\u9fa5\u3040-\u30ff\uff00-\uffef]/.test(firstChar);
 
             if (isCjkLast && isCjkFirst) {
-                // 两端都是中文字符：直接拼接，不留空格
-                merged += nextLine.trim();
+                // 两端都是中文字符：直接无缝拼接，不留空格
+                merged = trimmedMerged + trimmedNext;
             } else {
                 // 包含英文或符号：补一个空格分隔
-                merged += " " + nextLine.trim();
+                merged = trimmedMerged + " " + trimmedNext;
             }
         }
         return merged;
@@ -475,6 +483,7 @@ export function mergeSoftLinebreaks(text: string): {result: string; mergedCount:
  * 清除每行行尾空格，压缩连续空行为单个空行
  */
 export function compactWhitespaceAndLines(text: string, trimLeading = false): {result: string; trimmedLines: number} {
+    if (!text) return {result: text ?? "", trimmedLines: 0};
     const lines = text.replace(/\r\n?/g, "\n").split("\n");
     let trimmedCount = 0;
 
@@ -498,6 +507,14 @@ export function compactWhitespaceAndLines(text: string, trimLeading = false): {r
  * 综合剪贴板清洗入口
  */
 export function cleanClipboardText(text: string, options: ClipboardCleanOptions = {}): ClipboardCleanResult {
+    if (!text) {
+        return {
+            originalText: text ?? "",
+            cleanedText: text ?? "",
+            hasChanges: false,
+            changeDetails: [],
+        };
+    }
     const opts: Required<ClipboardCleanOptions> = {
         stripInvisible: options.stripInvisible !== false,
         mergeSoftBreaks: options.mergeSoftBreaks === true,
