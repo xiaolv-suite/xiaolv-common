@@ -107,13 +107,13 @@ export async function applyOverwriteImport(library: LibraryService, incoming: Ex
         return false;
     }
     const updated = await library.updateItem(logicalId, {
-        title: incoming.title || undefined,
-        alias: incoming.alias || undefined,
+        title: incoming.title ?? "",
+        alias: incoming.alias ?? "",
         shortcode: incoming.shortcode ?? "",
         tags: incoming.tags,
-        category: incoming.category || undefined,
-        url: incoming.url || undefined,
-        targetBlockId: incoming.targetBlockId || undefined,
+        category: incoming.category ?? "",
+        url: incoming.url ?? "",
+        targetBlockId: incoming.targetBlockId ?? "",
         markdown: incoming.kramdown,
     });
     return updated.ok;

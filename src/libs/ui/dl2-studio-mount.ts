@@ -2022,7 +2022,6 @@ export const DL2_SPECIMENS: Dl2Specimen[] = [
         { id: "cards", name: "小驴闪卡", icon: K.lvIcon("cards", { size: 20 }), desc: "间隔复习 · 记忆曲线", badge: "31 待复习", badgeTone: "brand", pinned: true },
         { id: "contacts", name: "小驴人脉", icon: K.lvIcon("contacts", { size: 20 }), desc: "关系图谱 · 联络提醒", badge: "2 待联络", badgeTone: "energy" },
         { id: "common", name: "小驴常用", icon: K.lvIcon("common", { size: 20 }), desc: "常用片段 · 宏模版", badge: "已就绪", badgeTone: "success" },
-        { id: "exoskeleton", name: "思源外骨骼", icon: K.lvIcon("exoskeleton", { size: 20 }), desc: "桌面穿透 · 全局速记", badge: "桌面端", badgeTone: "neutral" },
       ];
       const host = document.createElement("div");
       const mount = (mode) => {

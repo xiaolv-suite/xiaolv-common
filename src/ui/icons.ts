@@ -18,12 +18,6 @@ export const ICONS = `
   <path d="m14 10 2 2-2 2" fill="none"/>
   <path d="M9 17h6" fill="none"/>
 </symbol>
-<symbol id="iconLvExoskeleton" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" fill="none"/>
-  <path d="m3.3 7 8.7 5 8.7-5" fill="none"/>
-  <path d="M12 22V12" fill="none"/>
-  <path d="M12 12 8 9.7" fill="none"/>
-</symbol>
 <symbol id="iconXlcPin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
   <path d="M12 17v5" fill="none"/>
   <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" fill="none"/>

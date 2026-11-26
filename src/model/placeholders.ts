@@ -30,6 +30,7 @@
 //   兼容冒号子命令形态：{{xlc:regex:extract|\d+|TEXT}} {{xlc:regex:replace|旧|新|TEXT}}
 
 import {evaluateMathExpression} from "./calculator";
+import {LiteralVault, registerMacroPreviewPlaceholders} from "./variables";
 import {encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, escapeHtmlEntities, unescapeHtmlEntities, generateTextHash, numberLines, truncateText, maskSensitiveText, formatChineseCurrency, formatByteSize, reverseText, explainCronExpression, formatRelativeTime, extractExecutiveSummary, getChineseZodiacAndStemBranch, pickWeightedOption, numberToEnglishWords, convertColorFormat, calculateStats, convertRadix, extractKvValue, formatByRegexGroups, validateFormat, DataFormatType, parsePathParts, generateNanoId, renderSimpleTemplate, obfuscateText, ObfuscateMode, regexReplaceMultiline, scrambleText, formatNumberGrouping, calculateChecksum, padOrTruncate, generateNumericSequence, generateShortHash, generateRandomColor, ColorTone, truncateByBytes, extractChinesePinyinInitials, pluralizeText, escapeMacroPipe, repeatText, centerText, escapeBackslash, reverseWords, generateRandomName, evaluateTernaryCondition, maskTextRange, censorText, shuffleList, formatTaskProgressBar, queryJsonPath} from "./clipboard-cleaner";
 import {extractUrlComponent, prefixLines, suffixLines, csvToList, buildUrlQuery} from "../service/text-formatting";
 // 随机选择（R160）：{{xlc:random|a,b,c}} —— 每次替换随机取一项（每选项前后空白忽略）。
@@ -45,7 +46,63 @@ export type PlaceholderKind = "date" | "time" | "datetime" | "weekday" | "year" 
 
 // 带参形态只接受 | 分隔：: 分隔会撞 Lute emoji 短代码（:date:→📅，R161 真机实证），永不支持。
 // 参数段匹配直到连续双右花括号 }} 为止，允许正则或表达式中包含单个花括号量词（如 {\d+}）。
-export const PLACEHOLDER_PATTERN = /\{\{xlc:(date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|achievement|home_board|review_card|exam_scorecard|reading_digest|meeting_brief|checkin(?::[a-zA-Z0-9_-]+)?|home(?::[a-zA-Z0-9_-]+)?|cards(?::[a-zA-Z0-9_-]+)?|exam(?::[a-zA-Z0-9_-]+)?|glean(?::[a-zA-Z0-9_-]+)?|contacts(?::[a-zA-Z0-9_-]+)?|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?)(?:\|([\s\S]*?))?\}\}/g;
+const PLACEHOLDER_KIND_SOURCE = "date|time|datetime|weekday|year|quarter|month|day|hour|minute|title|path(?::[a-zA-Z0-9_-]+)?|doc|random|uuid|nanoid(?::[a-zA-Z0-9_-]+)?|id|password|calc|selection|timestamp|week|greeting|achievement|home_board|review_card|exam_scorecard|reading_digest|meeting_brief|checkin(?::[a-zA-Z0-9_-]+)?|home(?::[a-zA-Z0-9_-]+)?|cards(?::[a-zA-Z0-9_-]+)?|exam(?::[a-zA-Z0-9_-]+)?|glean(?::[a-zA-Z0-9_-]+)?|contacts(?::[a-zA-Z0-9_-]+)?|json(?::[a-zA-Z0-9_-]+)?|line(?::[a-zA-Z0-9_-]+)?|csv(?::[a-zA-Z0-9_-]+)?|progress(?::[a-zA-Z0-9_-]+)?|shuffle(?::[a-zA-Z0-9_-]+)?|censor(?::[a-zA-Z0-9_-]+)?|smask(?::[a-zA-Z0-9_-]+)?|if(?::[a-zA-Z0-9_-]+)?|randomname(?::[a-zA-Z0-9_-]+)?|revwords(?::[a-zA-Z0-9_-]+)?|slash(?::[a-zA-Z0-9_-]+)?|center(?::[a-zA-Z0-9_-]+)?|repeat(?::[a-zA-Z0-9_-]+)?|escape(?::[a-zA-Z0-9_-]+)?|plural(?::[a-zA-Z0-9_-]+)?|initials(?::[a-zA-Z0-9_-]+)?|btruncate(?::[a-zA-Z0-9_-]+)?|randomcolor(?::[a-zA-Z0-9_-]+)?|fingerprint(?::[a-zA-Z0-9_-]+)?|seq(?::[a-zA-Z0-9_-]+)?|pad(?::[a-zA-Z0-9_-]+)?|checksum(?::[a-zA-Z0-9_-]+)?|thousands(?::[a-zA-Z0-9_-]+)?|scramble(?::[a-zA-Z0-9_-]+)?|obfuscate(?::[a-zA-Z0-9_-]+)?|template(?::[a-zA-Z0-9_-]+)?|valid(?::[a-zA-Z0-9_-]+)?|match(?::[a-zA-Z0-9_-]+)?|kv(?::[a-zA-Z0-9_-]+)?|radix(?::[a-zA-Z0-9_-]+)?|stats(?::[a-zA-Z0-9_-]+)?|color(?::[a-zA-Z0-9_-]+)?|words(?::[a-zA-Z0-9_-]+)?|choose(?::[a-zA-Z0-9_-]+)?|lunar(?::[a-zA-Z0-9_-]+)?|summary(?::[a-zA-Z0-9_-]+)?|timeago(?::[a-zA-Z0-9_-]+)?|cron(?::[a-zA-Z0-9_-]+)?|reverse(?::[a-zA-Z0-9_-]+)?|filesize(?::[a-zA-Z0-9_-]+)?|currency(?::[a-zA-Z0-9_-]+)?|number(?::[a-zA-Z0-9_-]+)?|truncate(?::[a-zA-Z0-9_-]+)?|mask(?::[a-zA-Z0-9_-]+)?|hash(?::[a-zA-Z0-9_-]+)?|url(?::[a-zA-Z0-9_-]+)?|base64(?::[a-zA-Z0-9_-]+)?|html(?::[a-zA-Z0-9_-]+)?|count(?::[a-zA-Z0-9_-]+)?|case(?::[a-zA-Z0-9_-]+)?|regex(?::[a-zA-Z0-9_-]+)?";
+export const PLACEHOLDER_PATTERN = new RegExp(`\\{\\{xlc:(${PLACEHOLDER_KIND_SOURCE})(?:\\|([\\s\\S]*?))?\\}\\}`, "g");
+const KNOWN_KIND_PATTERN = new RegExp(`^(?:${PLACEHOLDER_KIND_SOURCE})$`);
+
+export interface BalancedPlaceholderMatch {
+    start: number;
+    end: number;
+    full: string;
+    rawKind: string;
+    arg: string | undefined;
+}
+
+/** 括号深度配对扫描 {{xlc:...}} 占位符，正确处理嵌套占位符并允许参数内含单个 { / }。 */
+export function scanBalancedPlaceholders(text: string): BalancedPlaceholderMatch[] {
+    const matches: BalancedPlaceholderMatch[] = [];
+    if (!text || !text.includes("{{xlc:")) return matches;
+    let i = 0;
+    while (i < text.length) {
+        const start = text.indexOf("{{xlc:", i);
+        if (start === -1) break;
+        let pos = start + 2;
+        let depth = 1;
+        while (pos < text.length && depth > 0) {
+            if (text[pos] === "{" && text[pos + 1] === "{") {
+                depth++;
+                pos += 2;
+            } else if (text[pos] === "}" && text[pos + 1] === "}") {
+                depth--;
+                pos += 2;
+            } else {
+                pos++;
+            }
+        }
+        if (depth !== 0) {
+            i = start + 6;
+            continue;
+        }
+        const end = pos;
+        const inner = text.slice(start + 6, end - 2);
+        const pipeIdx = inner.indexOf("|");
+        const rawKind = pipeIdx === -1 ? inner : inner.slice(0, pipeIdx);
+        const arg = pipeIdx === -1 ? undefined : inner.slice(pipeIdx + 1);
+        if (KNOWN_KIND_PATTERN.test(rawKind)) {
+            matches.push({
+                start,
+                end,
+                full: text.slice(start, end),
+                rawKind,
+                arg,
+            });
+            i = end;
+        } else {
+            i = start + 6;
+        }
+    }
+    return matches;
+}
 
 export type PlaceholderResolver = (kind: PlaceholderKind) => string;
 
@@ -90,9 +147,8 @@ function pad(n: number): string {
     return String(n).padStart(2, "0");
 }
 
-export function formatLocalDate(now: Date = new Date()): string {
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
+import {formatLocalDate} from "./date-utils";
+export {formatLocalDate};
 
 function renderDate(now: Date): string {
     return formatLocalDate(now);
@@ -2393,7 +2449,9 @@ export function resolvePlaceholder(
         rawKind.startsWith("butler:") ||
         rawKind.startsWith("task:") ||
         rawKind.startsWith("glean:") ||
-        rawKind.startsWith("contacts:")
+        rawKind.startsWith("contacts:") ||
+        rawKind.startsWith("cards:") ||
+        rawKind.startsWith("exam:")
     ) {
         return null; // 留给 variables.ts 预览层与 commands.ts 生态桥接特化渲染
     }
@@ -2572,70 +2630,103 @@ export function resolvePlaceholder(
 }
 
 /** 应用占位符替换（resolver 返回各 kind 的值）。enabled=false 时原文返回（一字不改）。 */
-export function applyPlaceholders(text: string, now: Date, enabled: boolean, doc?: {title: string; path: string; selection?: string} | null): string {
+export function applyPlaceholders(
+    text: string,
+    now: Date,
+    enabled: boolean,
+    doc?: {title: string; path: string; selection?: string} | null,
+    onLiteral?: (value: string) => string,
+    unsealLiteral?: (text: string) => string,
+): string {
     if (!enabled || !text) return text;
-    // 1. 标准 {{xlc:...}} 动态占位符替换
-    let result = text.replace(PLACEHOLDER_PATTERN, (match, kind: string, arg?: string) => {
-        return resolvePlaceholder(kind, arg, now, doc) ?? match;
-    });
+    const localVault = onLiteral ? null : new LiteralVault(text);
+    const seal = onLiteral ?? ((v: string) => localVault!.seal(v));
+    const unseal = unsealLiteral ?? (localVault ? (v: string) => localVault.unseal(v) : (v: string) => v);
 
-    // 2. 扩展 Templater / Espanso 相对日期偏移：{{date+Nd}} / {{date-Nd}} / {{date+1w}} / {{date+1m}} / {{date+1y}}
-    result = result.replace(/\{\{date([+-]\d{1,4}[dwmy])\}\}/g, (_match, offset: string) => {
-        return resolveDateArg(now, offset) ?? _match;
-    });
+    const evaluate = (input: string, depth: number): string => {
+        if (!input) return input;
+        // 1. 标准 {{xlc:...}} 动态占位符替换（括号深度配对扫描，支持嵌套占位符）
+        const matches = scanBalancedPlaceholders(input);
+        let result = "";
+        if (matches.length === 0) {
+            result = input;
+        } else {
+            let cursor = 0;
+            for (const m of matches) {
+                result += input.slice(cursor, m.start);
+                let effectiveArg = m.arg;
+                if (effectiveArg !== undefined && depth < 8 && effectiveArg.includes("{{")) {
+                    effectiveArg = evaluate(effectiveArg, depth + 1);
+                }
+                // 在送入变换/计算/脱敏等处理器前解封哨兵文本，防止转换破坏 LiteralVault 哨兵并泄出 PUA 字符；
+                // 求值完毕后再统一由 seal 封装。
+                const unsealedArg = effectiveArg !== undefined ? unseal(effectiveArg) : undefined;
+                const resolved = resolvePlaceholder(m.rawKind, unsealedArg, now, doc);
+                result += resolved === null ? m.full : seal(resolved);
+                cursor = m.end;
+            }
+            result += input.slice(cursor);
+        }
 
-    // 3. 扩展自定义日期格式化：{{date:FORMAT}}
-    result = result.replace(/\{\{date:([^}]+)\}\}/g, (_match, formatPattern: string) => {
-        const trimmed = formatPattern.trim();
-        return resolveDateArg(now, trimmed) || formatDateTime(now, trimmed) || _match;
-    });
+        // 2. 扩展 Templater / Espanso 相对日期偏移：{{date+Nd}} / {{date-Nd}} / {{date+1w}} / {{date+1m}} / {{date+1y}}
+        result = result.replace(/\{\{date([+-]\d{1,4}[dwmy])\}\}/g, (_match, offset: string) => {
+            const resolved = resolveDateArg(now, offset);
+            return resolved === null ? _match : seal(resolved);
+        });
 
-    // 4. 扩展当前文档上下文：{{doc.title}} 与 {{doc.path}}（裸 {{date}} 留给思源原生模板，避免误伤，见 R6 契约）
-    result = result.replace(/\{\{doc\.title\}\}/g, () => doc?.title ?? "");
-    result = result.replace(/\{\{doc\.path\}\}/g, () => doc?.path ?? "");
+        // 3. 扩展自定义日期格式化：{{date:FORMAT}}
+        result = result.replace(/\{\{date:([^}]+)\}\}/g, (_match, formatPattern: string) => {
+            const trimmed = formatPattern.trim();
+            const resolved = resolveDateArg(now, trimmed) || formatDateTime(now, trimmed);
+            return resolved ? seal(resolved) : _match;
+        });
 
-    return result;
+        // 4. 扩展当前文档上下文：{{doc.title}} 与 {{doc.path}}（裸 {{date}} 留给思源原生模板，避免误伤，见 R6 契约）
+        result = result.replace(/\{\{doc\.title\}\}/g, () => seal(doc?.title ?? ""));
+        result = result.replace(/\{\{doc\.path\}\}/g, () => seal(doc?.path ?? ""));
+
+        return result;
+    };
+
+    const evaluated = evaluate(text, 0);
+    return localVault ? localVault.unseal(evaluated) : evaluated;
 }
 
-/** 诊断：列出文本中出现的占位符种类（回执/提示/预取判定用） */
-export function listPlaceholders(text: string): PlaceholderKind[] {
-    const kinds: PlaceholderKind[] = [];
-    for (const match of text.matchAll(PLACEHOLDER_PATTERN)) {
-        const rawKind = match[1]!;
-        const kind = (rawKind.startsWith("case")
-            ? "case"
-            : rawKind.startsWith("regex")
-                ? "regex"
-                : rawKind.startsWith("url")
-                    ? "url"
-                    : rawKind.startsWith("base64")
-                        ? "base64"
-                        : rawKind.startsWith("html")
-                            ? "html"
-                            : rawKind.startsWith("count")
-                                ? "count"
-                                : rawKind.startsWith("kv")
-                                    ? "kv"
-                                    : rawKind.startsWith("match")
-                                        ? "match"
-                                        : rawKind.startsWith("valid")
-                                            ? "valid"
-                                            : rawKind.startsWith("path")
-                                                ? "path"
-                                                : rawKind.startsWith("nanoid")
-                                                    ? "nanoid"
-                                                    : rawKind.startsWith("template")
-                                                        ? "template"
-                                                        : rawKind.startsWith("obfuscate")
-                                                            ? "obfuscate"
-                                                            : rawKind.startsWith("scramble")
-                                                                ? "scramble"
-                                                                : rawKind.startsWith("thousands")
-                                                                    ? "thousands"
-                                                                    : rawKind.startsWith("checksum")
-                                                                        ? "checksum"
-                                                                        : rawKind.startsWith("pad")
-                                                                            ? "pad"
+function normalizePlaceholderKind(rawKind: string): PlaceholderKind {
+    return (rawKind.startsWith("case")
+        ? "case"
+        : rawKind.startsWith("regex")
+            ? "regex"
+            : rawKind.startsWith("url")
+                ? "url"
+                : rawKind.startsWith("base64")
+                    ? "base64"
+                    : rawKind.startsWith("html")
+                        ? "html"
+                        : rawKind.startsWith("count")
+                            ? "count"
+                            : rawKind.startsWith("kv")
+                                ? "kv"
+                                : rawKind.startsWith("match")
+                                    ? "match"
+                                    : rawKind.startsWith("valid")
+                                        ? "valid"
+                                        : rawKind.startsWith("path")
+                                            ? "path"
+                                            : rawKind.startsWith("nanoid")
+                                                ? "nanoid"
+                                                : rawKind.startsWith("template")
+                                                    ? "template"
+                                                    : rawKind.startsWith("obfuscate")
+                                                        ? "obfuscate"
+                                                        : rawKind.startsWith("scramble")
+                                                            ? "scramble"
+                                                            : rawKind.startsWith("thousands")
+                                                                ? "thousands"
+                                                                : rawKind.startsWith("checksum")
+                                                                    ? "checksum"
+                                                                    : rawKind.startsWith("pad")
+                                                                        ? "pad"
                                                                         : rawKind.startsWith("seq")
                                                                             ? "seq"
                                                                             : rawKind.startsWith("fingerprint")
@@ -2646,39 +2737,52 @@ export function listPlaceholders(text: string): PlaceholderKind[] {
                                                                                         ? "btruncate"
                                                                                         : rawKind.startsWith("initials")
                                                                                             ? "initials"
-                                                                                                : rawKind.startsWith("plural")
-                                                                                                    ? "plural"
-                                                                                                    : rawKind.startsWith("escape")
-                                                                                                        ? "escape"
-                                                                                                        : rawKind.startsWith("repeat")
-                                                                                                            ? "repeat"
-                                                                                                            : rawKind.startsWith("center")
-                                                                                                                ? "center"
-                                                                                                                : rawKind.startsWith("slash")
-                                                                                                                    ? "slash"
-                                                                                                                    : rawKind.startsWith("revwords")
-                                                                                                                        ? "revwords"
-                                                                                                                        : rawKind.startsWith("randomname")
-                                                                                                                            ? "randomname"
-                                                                                                                            : rawKind.startsWith("if")
-                                                                                                                                ? "if"
-                                                                                                                                : rawKind.startsWith("smask")
-                                                                                                                                    ? "smask"
-                                                                                                                                        : rawKind.startsWith("censor")
-                                                                                                                                        ? "censor"
-                                                                                                                                        : rawKind.startsWith("shuffle")
-                                                                                                                                            ? "shuffle"
-                                                                                                                                            : rawKind.startsWith("progress")
-                                                                                                                                                ? "progress"
-                                                                                                                                                : rawKind.startsWith("json")
-                                                                                                                                                    ? "json"
-                                                                                                                                                    : rawKind.startsWith("line")
-                                                                                                                                                        ? "line"
-                                                                                                                                                        : rawKind.startsWith("csv")
-                                                                                                                                                            ? "csv"
-                                                                                                                                                            : rawKind) as PlaceholderKind;
-        if (!kinds.includes(kind)) kinds.push(kind);
-    }
+                                                                                            : rawKind.startsWith("plural")
+                                                                                                ? "plural"
+                                                                                                : rawKind.startsWith("escape")
+                                                                                                    ? "escape"
+                                                                                                    : rawKind.startsWith("repeat")
+                                                                                                        ? "repeat"
+                                                                                                        : rawKind.startsWith("center")
+                                                                                                            ? "center"
+                                                                                                            : rawKind.startsWith("slash")
+                                                                                                                ? "slash"
+                                                                                                                : rawKind.startsWith("revwords")
+                                                                                                                    ? "revwords"
+                                                                                                                    : rawKind.startsWith("randomname")
+                                                                                                                        ? "randomname"
+                                                                                                                        : rawKind.startsWith("if")
+                                                                                                                            ? "if"
+                                                                                                                            : rawKind.startsWith("smask")
+                                                                                                                                ? "smask"
+                                                                                                                                : rawKind.startsWith("censor")
+                                                                                                                                    ? "censor"
+                                                                                                                                    : rawKind.startsWith("shuffle")
+                                                                                                                                        ? "shuffle"
+                                                                                                                                        : rawKind.startsWith("progress")
+                                                                                                                                            ? "progress"
+                                                                                                                                            : rawKind.startsWith("json")
+                                                                                                                                                ? "json"
+                                                                                                                                                : rawKind.startsWith("line")
+                                                                                                                                                    ? "line"
+                                                                                                                                                    : rawKind.startsWith("csv")
+                                                                                                                                                        ? "csv"
+                                                                                                                                                        : rawKind) as PlaceholderKind;
+}
+
+/** 诊断：列出文本中出现的占位符种类（回执/提示/预取判定用） */
+export function listPlaceholders(text: string): PlaceholderKind[] {
+    const kinds: PlaceholderKind[] = [];
+    const collect = (input: string, depth: number): void => {
+        for (const match of scanBalancedPlaceholders(input)) {
+            const kind = normalizePlaceholderKind(match.rawKind);
+            if (!kinds.includes(kind)) kinds.push(kind);
+            if (match.arg && depth < 8 && match.arg.includes("{{xlc:")) {
+                collect(match.arg, depth + 1);
+            }
+        }
+    };
+    collect(text, 0);
     if (text && text.includes("{{")) {
         if (/\{\{date(?:[+-]\d{1,4}[dwmy]|:[^}]+)\}\}/.test(text) && !kinds.includes("date")) kinds.push("date");
         if (/\{\{doc\.title\}\}/.test(text) && !kinds.includes("title")) kinds.push("title");
@@ -2686,3 +2790,5 @@ export function listPlaceholders(text: string): PlaceholderKind[] {
     }
     return kinds;
 }
+
+registerMacroPreviewPlaceholders(applyPlaceholders);

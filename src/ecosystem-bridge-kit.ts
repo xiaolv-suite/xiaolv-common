@@ -1,22 +1,21 @@
 /**
  * 小驴全生态跨插件联邦 SDK（零外部依赖，直接复制到各插件工程内使用）
- * Lv Ecosystem Federation SDK · Epoch 7 Standard
+ * Lv Ecosystem Federation SDK · Epoch 7 / Wave 1A-1B Standard
  *
- * 适用插件：
- * 1. siyuan-exoskeleton (思源外骨骼 · 桌面宿主)
- * 2. siyuan-checkin   (小驴打卡)
- * 3. siyuan-contacts  (小驴人脉)
- * 4. siyuan-home      (小驴管家)
- * 5. siyuan-speed-switch (小驴雷切)
- * 6. siyuan-glean     (小驴拾遗)
- * 7. siyuan-exam      (小驴考试)
- * 8. siyuan-lv-cards  (小驴闪卡)
- * 9. xiaolv-common    (小驴常用)
+ * 适用 8 大核心业务插件（已废除旧第 9 格 siyuan-exoskeleton 外骨骼）：
+ * 1. siyuan-checkin      (小驴打卡)
+ * 2. siyuan-speed-switch (小驴雷切)
+ * 3. siyuan-home         (小驴管家)
+ * 4. siyuan-glean        (小驴拾遗)
+ * 5. siyuan-exam         (小驴考试)
+ * 6. siyuan-lv-cards     (小驴闪卡)
+ * 7. siyuan-contacts     (小驴人脉)
+ * 8. xiaolv-common       (小驴常用)
  *
  * 铁律保障：
  * - 零强依赖：兄弟插件未安装时自动触发 fallback，绝不抛出未捕获异常
  * - 进程内零私有存储穿透：只走公开桥方法与 DOM CustomEvent
- * - 类型完备：涵盖全生态 9 大插件标准公开接口
+ * - 类型完备：涵盖全生态 8 大业务插件标准公开接口与 Wave 1A/1B 冻结契约
  */
 
 /* ========================================================================= */
@@ -369,7 +368,7 @@ export interface CommonBridgeApi {
     }): Promise<ActionResult<{ id?: string }>>;
 }
 
-// --- ⑨ 思源雷切命令画板 / 思源外骨骼 ---
+// --- ⑨ 思源雷切命令画板（已撤除外骨骼入口） ---
 export interface SpeedSwitchCommandBridgeApi {
     readonly protocol: number;
     readonly capabilities?: readonly string[];
@@ -381,8 +380,6 @@ export interface SpeedSwitchCommandBridgeApi {
     openCommandPalette?(focusSearch?: boolean): void;
     getEditorContext?(): ActionResult<{ blockId: string; docId: string; selectedText: string }>;
 }
-/** @deprecated 已退役，兼容旧类型别名 */
-export type QuickGateBridgeApi = SpeedSwitchCommandBridgeApi;
 
 // --- ⑩ Task Horizon 任务视界 (siyuan-plugin-task-horizon) ---
 export interface TaskHorizonItem {
@@ -1155,4 +1152,66 @@ export async function getCommonSnippetsSafely(): Promise<CommonSnippet[]> {
     }
     return [];
 }
+
+/* ========================================================================= */
+/* 8. Wave 1A / Wave 1B 冻结共享契约导出（向后兼容扩展）                       */
+/* ========================================================================= */
+
+export const CANONICAL_EIGHT_PLUGIN_IDS = Object.freeze([
+    "siyuan-checkin",
+    "siyuan-speed-switch",
+    "siyuan-home",
+    "siyuan-glean",
+    "siyuan-exam",
+    "siyuan-lv-cards",
+    "siyuan-contacts",
+    "xiaolv-common",
+] as const);
+
+export type BridgeTodayKind = "todo" | "habit" | "review" | "expiry";
+
+export interface BridgeTodayItem {
+    readonly id: string;
+    readonly title: string;
+    readonly sourceId:
+        | "native"
+        | "siyuan-home"
+        | "siyuan-checkin"
+        | "siyuan-lv-cards"
+        | "siyuan-contacts"
+        | "siyuan-glean"
+        | "siyuan-exam";
+    readonly priority?: 0 | 1 | 2;
+    readonly status: "todo" | "done" | "expired";
+    readonly updatedAt: number;
+    readonly meta: {
+        readonly kind: BridgeTodayKind;
+        readonly due?: string;
+        readonly count?: number;
+        readonly sensitivity?: "normal" | "private";
+    };
+    open(): void;
+}
+
+export interface BridgeLvLaunchpadRuntimeApi {
+    readonly protocol: 200;
+    readonly abiMajor: 2;
+    readonly semver: string;
+    readonly epoch: number;
+    readonly leaseToken: string;
+    invalidate(id: string, patch?: Record<string, unknown>): void;
+    open(mode: "popover" | "sheet" | "radial", focusId?: string): void;
+    retire(expectedEpoch: number): Promise<void>;
+}
+
+export function getCompassRuntimeApiSafely(): BridgeLvLaunchpadRuntimeApi | undefined {
+    if (typeof window === "undefined") return undefined;
+    const w = window as unknown as Record<string, unknown>;
+    const candidate = w.__LV_COMPASS_RUNTIME_V2__ || w.__LV_LAUNCHPAD__;
+    if (candidate && typeof candidate === "object" && (candidate as any).protocol === 200) {
+        return candidate as BridgeLvLaunchpadRuntimeApi;
+    }
+    return undefined;
+}
+
 

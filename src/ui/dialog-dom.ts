@@ -1,5 +1,5 @@
 import * as siyuan from "siyuan";
-import {Dialog} from "siyuan";
+import {Dialog, confirm} from "siyuan";
 import {PLUGIN_DISPLAY_VERSION} from "../constants";
 import {isMobileFrontend} from "../libs/lv-notice-kit";
 
@@ -41,6 +41,24 @@ export function isMobileDialogViewport(): boolean {
 }
 
 /**
+ * 为小驴常用弹窗外壳与内层 .b3-dialog 显式挂载主权标识类，避免 SCSS 使用代价高昂的 :has() 全树回溯。
+ */
+export function markSovereignDialog(dialogElement: HTMLElement | null | undefined): void {
+    if (!dialogElement) return;
+    dialogElement.classList?.add?.("xlc-sovereign-dialog");
+    try {
+        const inner = typeof dialogElement.querySelector === "function"
+            ? dialogElement.querySelector<HTMLElement>(".b3-dialog")
+            : null;
+        if (inner && inner !== dialogElement) {
+            inner.classList?.add?.("xlc-sovereign-dialog");
+        }
+    } catch {
+        // ignore in minimal stubs
+    }
+}
+
+/**
  * 为次级弹窗（设置、捕获、提示、向导等）适配手机端视口约束与顶栏 44x44px 可见 ✕ 关闭按钮。
  */
 export function adaptSecondaryDialogForMobile(
@@ -50,6 +68,7 @@ export function adaptSecondaryDialogForMobile(
 ): void {
     const dialogEl = dialog?.element as HTMLElement | undefined;
     if (!dialogEl || typeof dialogEl.querySelector !== "function") return;
+    markSovereignDialog(dialogEl);
     const container = dialogEl.querySelector(".b3-dialog__container") as HTMLElement | null;
     const isMobile = isMobileDialogViewport();
     if (container && isMobile) {
@@ -63,6 +82,7 @@ export function adaptSecondaryDialogForMobile(
     if (!header || typeof header.appendChild !== "function" || typeof document === "undefined" || typeof document.createElement !== "function") {
         return;
     }
+    header.classList?.add?.("xlc-dialog-header--has-close");
     const existingClose = typeof header.querySelector === "function"
         ? header.querySelector(".xlc-dialog-close-btn")
         : null;
@@ -109,6 +129,7 @@ export function mountPlatformDialogTitleWrap(
     iconName = "iconXlcCommon",
 ): HTMLElement | null {
     if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
+    markSovereignDialog(dialogElement);
     const header = dialogElement.querySelector(".b3-dialog__header");
     const titleEl = header?.querySelector(".b3-dialog__title");
     if (!header || !titleEl) return null;
@@ -281,4 +302,16 @@ export function openInfoDialog(title: string, lines: string[], closeText = "关�
     body.appendChild(wrap);
     setTimeout(() => closeBtn.focus(), 0);
     return dialog;
+}
+
+/** 统一确认删除弹窗 */
+export function confirmDelete(t: (key: string, ...args: string[]) => string, title: string, onConfirm: () => void): void {
+    confirm(
+        "⚠️ " + t("delete"),
+        t("deleteConfirm", title),
+        () => {
+            onConfirm();
+        },
+        undefined
+    );
 }

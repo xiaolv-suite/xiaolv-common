@@ -4,7 +4,7 @@ import {CAPABILITIES, ActionResult, CapabilityDescriptor, CommonItemRef, Provide
 import {SearchQuery, SearchContext, SearchEntry, searchEntries, listByScope} from "../model/search";
 import {InsertMode} from "../model/actions";
 import {CommonItem, cleanShortcode, isItemType} from "../model/item";
-import {formatLocalDate} from "../model/placeholders";
+import {formatLocalDate} from "../model/date-utils";
 import {toErrorMessage} from "../model/errors";
 import {PluginState} from "../model/storage";
 import {EVENTS, PROTOCOL_VERSION} from "../constants";

@@ -2,7 +2,7 @@
 import {EXPORT_SCHEMA_VERSION, LIMITS, PROTOCOL_NAME} from "../constants";
 import {CommonItem, isItemType, isLogicalId, isSafeHttpUrl, isSourceType, newLogicalId} from "./item";
 import {SanitizerOptions, sanitizeTextForExport} from "./export-sanitizer";
-import {calculateChecksum} from "./clipboard-cleaner";
+import {calculateChecksum} from "./checksum";
 
 export interface ExportBundle {
     protocol: typeof PROTOCOL_NAME;
@@ -224,6 +224,7 @@ export function validateImport(jsonText: string): ImportValidation {
         const computed = computeBundleChecksum(items);
         if (computed !== record.checksum) {
             issues.push({index: -1, reason: "checksum-mismatch"});
+            return {ok: false, reason: "checksum-mismatch", issues};
         }
     }
 

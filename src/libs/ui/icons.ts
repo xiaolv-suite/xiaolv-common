@@ -10,7 +10,7 @@
  * 2. 免疫思源宿主全局 `svg { fill: currentColor }` 污染（svg 与 path 双重 fill="none"）；
  * 3. 修复 CSS `.lv-icon { width:1em }` 覆盖 SVG width/height 属性导致图标被压扁至 11~14px 的缺陷，
  *    通过内联 `--lv-icon-sz` + 显式像素尺寸驱动，支持 xs(14)/sm(16)/md(20)/lg(24)/xl(28) 五档与任意数值；
- * 4. 完整收录 72 枚图标：27 枚核心基础图标 + 10 枚小驴生态插件品牌图标 + 35 枚思源原生高频 #icon* 同源图标。
+ * 4. 完整收录 71 枚图标：27 枚核心基础图标 + 9 枚小驴生态罗盘与业务插件品牌图标 + 35 枚思源原生高频 #icon* 同源图标。
  */
 
 export const LV_ICON_PATHS = {
@@ -46,7 +46,7 @@ export const LV_ICON_PATHS = {
     trend: "m22 7-8.5 8.5-5-5L2 17M16 7h6v6",
 
     /* ===================================================================== */
-    /* B. 小驴全生态 9 联结与罗盘品牌专属图标（10 枚 · 与 8 仓 addIcons 同源） */
+    /* B. 小驴全生态 8 业务插件与罗盘品牌专属图标（9 枚 · 与 8 仓 addIcons 同源） */
     /* ===================================================================== */
     compass: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36z",
     checkin: "M8 2v4M16 2v4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18M9 16l2 2 4-4",
@@ -57,7 +57,6 @@ export const LV_ICON_PATHS = {
     exam: "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20M9 10l2 2 4-4",
     common: "M8 2h8a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 12h6M9 16h4",
     raikiri: "M13 2 3 14h9l-1 8 10-12h-9l1-8z",
-    exoskeleton: "M12 2 4 7v10l8 5 8-5V7l-8-5zM12 22V12M20 7l-8 5-8-5",
 
     /* ===================================================================== */
     /* C. 思源笔记官方 litheness 高频同源图标（35 枚 · #icon* 1:1 映射）      */
@@ -139,7 +138,6 @@ export const LV_SIYUAN_SYMBOL_MAP: Record<LvIconName, string> = {
     exam: "#iconLvExam",
     common: "#iconLvCommon",
     raikiri: "#iconLvSpeedSwitch",
-    exoskeleton: "#iconLvExoskeleton",
     sparkles: "#iconSparkles",
     pin: "#iconPin",
     unpin: "#iconUnpin",

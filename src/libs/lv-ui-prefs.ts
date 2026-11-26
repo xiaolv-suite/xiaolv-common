@@ -300,7 +300,9 @@ export interface LvUiPrefsSectionLabels {
 }
 
 export interface LvUiPrefsSectionOptions {
-    /** 分组标题，缺省「外观与动效」 */
+    /** 挂载作用域：仅 "ecosystem"（小驴罗盘统一设置）渲染完整卡；缺省或 "plugin" 返回空隐藏占位 */
+    scope?: "ecosystem" | "plugin";
+    /** 分组标题，缺省「动态与庆祝效果」 */
     title?: string;
     /** 分组说明文案，缺省为生态生效范围说明 */
     hint?: string;
@@ -409,15 +411,36 @@ export function createLvUiPrefsSection(options: LvUiPrefsSectionOptions = {}): H
     section.className = "lv-uipref";
     section.setAttribute("data-lv-uipref", "1");
 
+    // Ruling 1 (msg#4009): 仅小驴罗盘「生态设置」(scope === "ecosystem") 渲染唯一设置卡；
+    // 单插件设置页/默认调用自动收敛为不可见空占位（display:none 且不占用空间，向下兼容零报错）
+    if (opts.scope !== "ecosystem") {
+        section.className = "lv-uipref lv-uipref--hidden";
+        section.setAttribute("data-lv-uipref-scope", opts.scope || "plugin");
+        section.setAttribute("hidden", "true");
+        section.setAttribute("aria-hidden", "true");
+        if (section.style) {
+            section.style.display = "none";
+            section.style.margin = "0";
+            section.style.padding = "0";
+            section.style.height = "0";
+            section.style.overflow = "hidden";
+        }
+        const noop = () => { /* noop */ };
+        (section as any).destroy = noop;
+        (section as any).__lvDestroy = noop;
+        return section;
+    }
+
+    section.setAttribute("data-lv-uipref-scope", "ecosystem");
     const title = document.createElement("h4");
     title.className = "lv-uipref__title";
-    title.textContent = opts.title || "外观与动效";
+    title.textContent = opts.title || "动态与庆祝效果";
     section.appendChild(title);
 
     const hint = document.createElement("p");
     hint.className = "lv-uipref__hint";
     hint.textContent = opts.hint ||
-        "庆祝动画、吉祥物与装饰光效统一由生态偏好管理，对本机全部小驴插件生效；系统开启「减弱动态效果」时自动收敛至精简档。加载与进度类动效不受影响。";
+        "动态效果与庆祝撒花统一由小驴罗盘管理，对本机全部小驴插件生效；系统开启「减弱动态效果」时自动收敛至精简档。加载与进度类动效不受影响。";
     section.appendChild(hint);
 
     const card = document.createElement("div");
@@ -473,27 +496,18 @@ export function createLvUiPrefsSection(options: LvUiPrefsSectionOptions = {}): H
     segRow.appendChild(seg);
     card.appendChild(segRow);
 
-    // 三个细分开关
-    const defaultSwitchTexts = {
-        celebration: { text: "庆祝效果", sub: "纸屑、成就卡、满分撒花特效" },
-        mascot: { text: "吉祥物「小驴」", sub: "开启低调微形态陪伴，关闭回退中性图标" },
-        glowEffects: { text: "装饰光效", sub: "平缓呼吸追光、极光微波与按键流光" },
-    } as const;
-    const rows = (["celebration", "mascot", "glowEffects"] as const).map(key => ({
-        key,
-        text: (opts.labels?.switches && opts.labels.switches[key]?.text) || defaultSwitchTexts[key].text,
-        sub: (opts.labels?.switches && opts.labels.switches[key]?.sub) || defaultSwitchTexts[key].sub,
-    }));
-    const switches: Array<{ key: "celebration" | "mascot" | "glowEffects"; input: HTMLInputElement; wrap: any }> = [];
-    for (const r of rows) {
-        const { row, input, wrap } = buildSwitchRow(r.text, r.sub);
-        input.setAttribute("aria-label", r.text);
-        input.addEventListener("change", () => {
-            saveLvUiPrefs({ ...loadLvUiPrefs(), [r.key]: input.checked });
-        });
-        card.appendChild(row);
-        switches.push({ key: r.key, input, wrap });
-    }
+    // 仅保留真实生效的「庆祝效果」开关（移除尚未铺开的吉祥物与装饰光效半成品开关）
+    const celeText = (opts.labels?.switches && opts.labels.switches.celebration?.text) || "庆祝效果";
+    const celeSub = (opts.labels?.switches && opts.labels.switches.celebration?.sub) || "纸屑、成就卡、满分撒花特效";
+    const { row: celeRow, input: celeInput, wrap: celeWrap } = buildSwitchRow(celeText, celeSub);
+    celeInput.setAttribute("aria-label", celeText);
+    celeInput.addEventListener("change", () => {
+        saveLvUiPrefs({ ...loadLvUiPrefs(), celebration: celeInput.checked });
+    });
+    card.appendChild(celeRow);
+    const switches: Array<{ key: "celebration"; input: HTMLInputElement; wrap: any }> = [
+        { key: "celebration", input: celeInput, wrap: celeWrap },
+    ];
 
     // 渲染同步：读偏好 → 刷新控件状态 + 全局属性
     const refresh = () => {
@@ -504,8 +518,8 @@ export function createLvUiPrefsSection(options: LvUiPrefsSectionOptions = {}): H
         }
         for (const sw of switches) {
             sw.input.checked = prefs[sw.key];
-            // 细分开关只在 full 档可调（minimal/off 档被总闸强制收敛）
-            const disabled = sw.key === "mascot" ? prefs.effectLevel === "off" : prefs.effectLevel !== "full";
+            // 庆祝开关仅在 full 档可调（minimal/off 档被总闸强制收敛）
+            const disabled = prefs.effectLevel !== "full";
             sw.input.disabled = disabled;
             if (sw.wrap && typeof sw.wrap.classList !== "undefined") {
                 if (disabled) sw.wrap.classList.add("is-disabled");

@@ -4,7 +4,7 @@
 import {listSnippetRefs} from "./variables";
 import {isSafeHttpUrl} from "./item";
 import {itemBodyRestriction} from "./kramdown";
-import {PLACEHOLDER_PATTERN, resolvePlaceholder, PlaceholderKind} from "./placeholders";
+import {applyPlaceholders, resolvePlaceholder, scanBalancedPlaceholders, PlaceholderKind} from "./placeholders";
 
 export type IssueSeverity = "error" | "warning";
 
@@ -123,33 +123,54 @@ export function checkPlaceholderIntegrity(
         }
     }
 
-    // 2. 检查解析失败的占位符（未知类型、非法格式、非法表达式）
-    // 重置正则 index
-    PLACEHOLDER_PATTERN.lastIndex = 0;
-    for (const match of content.matchAll(PLACEHOLDER_PATTERN)) {
-        const full = match[0];
-        const rawKind = match[1]!;
-        const arg = match[2];
+    // 2. 检查解析失败的占位符（未知类型、非法格式、非法表达式；括号深度扫描支持嵌套宏）
+    const checkBalancedMatches = (src: string, depth: number): void => {
+        for (const match of scanBalancedPlaceholders(src)) {
+            const full = match.full;
+            const rawKind = match.rawKind;
+            const arg = match.arg;
 
-        // ask 语法有专属变量解析器，单独验证
-        if (rawKind === "ask" || rawKind.startsWith("ask:")) {
-            continue;
-        }
+            // ask 语法有专属变量解析器，单独验证
+            if (rawKind === "ask" || rawKind.startsWith("ask:")) {
+                continue;
+            }
 
-        // snippet 语法单独由缺失/循环检查负责
-        if (rawKind === "snippet") {
-            continue;
-        }
+            // snippet 语法单独由缺失/循环检查负责
+            if (rawKind === "snippet") {
+                continue;
+            }
 
-        // 验证标准占位符解析
-        const resolved = resolvePlaceholder(rawKind as PlaceholderKind, arg, NOW, {title: "示例", path: "/示例", selection: "示例选区"});
-        if (resolved === null) {
-            issues.push({
-                type: "malformed-placeholder",
-                details: full.slice(0, 60),
-            });
+            // 生态桥接占位符由 commands.ts / variables.ts 特化渲染
+            if (
+                rawKind.startsWith("checkin:") ||
+                rawKind.startsWith("home:") ||
+                rawKind.startsWith("butler:") ||
+                rawKind.startsWith("task:") ||
+                rawKind.startsWith("glean:") ||
+                rawKind.startsWith("contacts:") ||
+                rawKind.startsWith("cards:") ||
+                rawKind.startsWith("exam:")
+            ) {
+                continue;
+            }
+
+            if (arg && depth < 8 && arg.includes("{{xlc:")) {
+                checkBalancedMatches(arg, depth + 1);
+            }
+
+            const sampleDoc = {title: "示例", path: "/示例", selection: "示例选区"};
+            const resolved = arg && arg.includes("{{")
+                ? applyPlaceholders(full, NOW, true, sampleDoc) !== full ? "ok" : null
+                : resolvePlaceholder(rawKind as PlaceholderKind, arg, NOW, sampleDoc);
+            if (resolved === null) {
+                issues.push({
+                    type: "malformed-placeholder",
+                    details: full.slice(0, 60),
+                });
+            }
         }
-    }
+    };
+    checkBalancedMatches(content, 0);
 
     // 3. 检查空字段名的 ask 占位符 {{xlc:ask:}} 或 {{xlc:ask:|...}}
     const emptyAskMatches = content.match(/\{\{xlc:ask:(?:\|[^}]*)?\}\}/g);

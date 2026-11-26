@@ -85,6 +85,7 @@ module.exports = (env, argv) => {
             // SiYuan 插件加载器在 eval 包装中读取 module.exports：必须 commonjs2。
             // umd 会把赋值写到加载器读不到的位置，真实前端报 has-no-export 静默不装载（R142 P0）。
             libraryTarget: "commonjs2",
+            globalObject: "this",
         },
         // siyuan npm 包仅含类型；运行时由思源宿主提供同名模块（系列既有方案）
         externals: {
@@ -103,6 +104,9 @@ module.exports = (env, argv) => {
                                 target: "es2019",
                             },
                         },
+                        {
+                            loader: path.resolve(__dirname, "scripts/clean-sponsor-loader.cjs"),
+                        },
                     ],
                 },
                 {
@@ -117,6 +121,22 @@ module.exports = (env, argv) => {
         },
         optimization: {
             minimize: production,
+            minimizer: [
+                new (require(require.resolve("minimizer-webpack-plugin", {
+                    paths: [require.resolve("webpack/lib/config/defaults")],
+                })))({
+                    terserOptions: {
+                        compress: {
+                            passes: 2,
+                            pure_getters: true,
+                        },
+                        format: {
+                            comments: false,
+                        },
+                    },
+                    extractComments: false,
+                }),
+            ],
             // R142 P0：压缩器必须用 webpack 默认 terser。esbuild-loader 的 EsbuildPlugin
             // 会丢掉 commonjs2 的 module.exports 赋值（真实前端 "has no export"，插件静默不装载，
             // A/B 实证：同一产物手工 esbuild 保留、EsbuildPlugin 丢失）。

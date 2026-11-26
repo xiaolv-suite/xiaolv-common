@@ -2,16 +2,15 @@
 // 依赖经 SettingsUiContext 注入（不持有插件实例）；状态对象按引用共享，落盘由 persistSoon 节流。
 import {Dialog, confirm} from "siyuan";
 import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
-import {CONFIG_VERSION, LibraryConfig, PluginState, summarizeUsage} from "../model/storage";
+import {CONFIG_VERSION, LibraryConfig, summarizeUsage} from "../model/storage";
 import {LIMITS} from "../constants";
-import {validateImport, ConflictPolicy, ImportIssue, ImportReceipt, ExportedItem} from "../model/transfer";
+import {validateImport, ConflictPolicy, ImportIssue, ExportedItem} from "../model/transfer";
 import {buildZip} from "../model/zip";
 import {buildMarkdownExport, ExportIntegrityError} from "../service/export-markdown";
 import {parseMarkdownPack} from "../service/import-markdown";
-import {LibraryService} from "../service/library";
-import {AiAssistant} from "../service/ai";
-import {ProviderRegistry} from "../service/providers";
+import type {LibraryService} from "../service/library";
 import {CommonItem, newLogicalId} from "../model/item";
+import {writeRichClipboard} from "../model/clipboard";
 import {toErrorMessage} from "../model/errors";
 import {collectTags} from "../model/search";
 import {PROMPT_PACK_MD, REFORMULATION_PACK_MD, TASK_HORIZON_PACK_MD, CALLOUT_PACK_MD, ACADEMIC_CITATION_PACK_MD} from "../service/prompt-pack";
@@ -20,9 +19,7 @@ import {openCsvTsvImportWizard} from "./csv-tsv-wizard";
 import {diagnoseLibraryHealth, type HealthDoctorItem} from "../model/health-doctor";
 import {calculateUsageInsights, calculateHeatmap, buildDailyUsageMap, filterKnownTopItems, type UsageItemMeta} from "../model/usage-insights";
 import {detectEcosystem} from "../service/ecosystem";
-import {lvEcosystem} from "../libs/lv-notice-kit";
-// DL2 阶段0：生态统一「外观与动效」偏好分组（庆祝/吉祥物/光效可关）
-import {mountLvUiPrefsSection} from "../libs/lv-ui-prefs";
+import {lvEcosystem, lvSurfaceStack, mountLvAiThinkingCard} from "../libs/lv-notice-kit";
 import {openSanitizerOptionsDialog} from "./export-sanitizer-modal";
 import type {SanitizerOptions} from "../model/export-sanitizer";
 import {openSyncDiffModal} from "./sync-diff-modal";
@@ -30,13 +27,28 @@ import {diffLibraries, SyncEntry} from "../model/sync-diff";
 import {countRememberedFields, clearAllMemory} from "../model/variable-memory";
 import {openStepByStepGuideDialog} from "./guide-dialog";
 import {openStarterPacksHubDialog} from "./starter-packs-dialog";
+import {SettingsUiContext, SetupDialogOptions} from "./settings-types";
 
-type TFn = (key: string, ...args: string[]) => string;
+export type {SettingsUiContext, SetupDialogOptions};
 
 // 设置/首次引导是单实例浮层。入口可能同时来自命令面板、空态和移动端底栏；
 // 复用已打开的实例可避免重复点击堆积多个遮罩层，并保持焦点与当前表单状态。
 let activeSetupDialog: Dialog | null = null;
 let activeSettingsDialog: Dialog | null = null;
+
+/** 卸载时统一关闭遗留的设置 / 首次引导弹窗 */
+export function closeAllSettingsDialogs(): void {
+    const setup = activeSetupDialog;
+    activeSetupDialog = null;
+    if (setup) {
+        try { setup.destroy(); } catch {}
+    }
+    const settings = activeSettingsDialog;
+    activeSettingsDialog = null;
+    if (settings) {
+        try { settings.destroy(); } catch {}
+    }
+}
 
 // Espanso 解析器连同 js-yaml 仅在用户打开导入窗口时需要；保持设置首屏不加载重型 YAML 依赖。
 let espansoParserPromise: Promise<typeof import("../service/espanso-import")> | null = null;
@@ -77,37 +89,6 @@ function buildSwitchRow(text: string, sub: string | null, checked: boolean, onCh
     return row;
 }
 
-export interface SettingsUiContext {
-    t: TFn;
-    state: PluginState;
-    getConfig(): LibraryConfig | null;
-    library: LibraryService;
-    ai: AiAssistant;
-    registry: ProviderRegistry;
-    notify(kind: "info" | "error", message: string): void;
-    applyConfig(config: LibraryConfig): void;
-    persistSoon(): void;
-    exportBundle(): Promise<string>;
-    importBundleText(text: string, policy: ConflictPolicy): Promise<ImportReceipt>;
-    importMarkdownItems(items: ReadonlyArray<ExportedItem>, policy: ConflictPolicy): Promise<ImportReceipt>;
-    fetchAssetBytes(assetPath: string): Promise<Uint8Array | null>;
-    aiErrorText(err: unknown): string;
-    applyPinyinAdapter(): void;
-    refreshSearch?(): void;
-    openLibraryDoc?(): void;
-    /** Saved tag-scoped discovery shortcuts. The source blocks remain canonical. */
-    getSavedDiscoveryViews?(): readonly SavedDiscoveryView[];
-    openSavedDiscoveryView?(view: SavedDiscoveryView): void;
-    deleteSavedDiscoveryView?(id: string): void;
-}
-
-export interface SetupDialogOptions {
-    /** 配置落地后回调 */
-    onConfigured?: () => void;
-    /** 用户点击「稍后再说」 */
-    onDismiss?: () => void;
-}
-
 /** 首次引导（仅库选择，两步式；完整设置见 openSettingsDialog） */
 export function openSetupDialog(ctx: SettingsUiContext, opts?: SetupDialogOptions): void {
     if (activeSetupDialog?.element?.isConnected) {
@@ -122,7 +103,12 @@ export function openSetupDialog(ctx: SettingsUiContext, opts?: SetupDialogOption
         content: "",
         width: isMobileModal ? "100vw" : "min(680px, 92vw)",
         height: isMobileModal ? "100dvh" : "min(820px, 92vh)", // 首次快速开始卡需要留出阅读空间，长屏仍保持视口内滚动（R175）
-    });
+        disableClose: false,
+        ...({closedOnEsc: true} as Record<string, unknown>),
+        destroyCallback: () => {
+            if (activeSetupDialog === dialog) activeSetupDialog = null;
+        },
+    } as any);
     activeSetupDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-setup-root-host");
     mountPlatformDialogTitleWrap(dialog.element, t("setupTitle"));
@@ -150,18 +136,57 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     const isMobileModal = isMobileDialogViewport();
     // 移动端软键盘视口守卫：键盘弹起时同步 --lv-vv-h 并标记 lv-keyboard-open（销毁时解绑）
     let vvCleanup: (() => void) | undefined;
+    let surfaceUnreg: (() => void) | undefined;
+    let escCleanup: (() => void) | undefined;
     const dialog = new Dialog({
         title: t("openSettings"),
         content: "",
         width: isMobileModal ? "100vw" : "min(720px, 92vw)",
         height: isMobileModal ? "100dvh" : "min(860px, 92vh)", // 固定高：展开/收起/提示行显隐不再顶跳弹窗（R146）
+        disableClose: false,
+        ...({closedOnEsc: true} as Record<string, unknown>),
         destroyCallback: () => {
+            surfaceUnreg?.();
+            surfaceUnreg = undefined;
+            escCleanup?.();
+            escCleanup = undefined;
             vvCleanup?.();
             vvCleanup = undefined;
             if (activeSettingsDialog === dialog) activeSettingsDialog = null;
         },
-    });
+    } as any);
     activeSettingsDialog = dialog;
+    const isTopmostDialog = (): boolean => {
+        if (!dialog.element || dialog.element.isConnected === false) return false;
+        if (typeof document !== "undefined" && typeof document.querySelectorAll === "function") {
+            const dialogs = Array.from(document.querySelectorAll(".b3-dialog"));
+            if (dialogs.length > 1 && dialogs[dialogs.length - 1] !== dialog.element) {
+                return false;
+            }
+        }
+        return true;
+    };
+    surfaceUnreg = lvSurfaceStack.push({
+        id: "xlc-settings-dialog",
+        type: "dialog",
+        dismiss: () => {
+            if (!isTopmostDialog()) return false;
+            dialog.destroy();
+            return true;
+        },
+    });
+    if (dialog.element && typeof dialog.element.addEventListener === "function") {
+        const onDialogKeydown = (e: KeyboardEvent) => {
+            if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
+            if (e.key === "Escape" && isTopmostDialog()) {
+                e.preventDefault();
+                e.stopPropagation();
+                dialog.destroy();
+            }
+        };
+        dialog.element.addEventListener("keydown", onDialogKeydown);
+        escCleanup = () => dialog.element?.removeEventListener?.("keydown", onDialogKeydown);
+    }
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
     if (isMobileModal && typeof window !== "undefined" && window.visualViewport) {
         const vv = window.visualViewport;
@@ -209,7 +234,6 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
         {id: "xlc-settings-search", label: "🔍 搜索配置"},
         {id: "xlc-settings-health", label: "🏥 健康体检"},
         {id: "xlc-settings-ext", label: "⚡ 外部联动"},
-        {id: "xlc-settings-appearance", label: "🎨 外观与动效"},
         {id: "xlc-settings-data", label: "💾 数据导入导出"},
     ];
     // 激活态统一入口：点击导航与滚动感知（scroll-spy）共用，避免两处口径漂移。
@@ -292,7 +316,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     changeBtn.setAttribute("aria-expanded", "false");
     // 原型屏 5：状态与按钮同行（状态左、按钮右贴）
     const libRow = document.createElement("div");
-    libRow.className = "xlc-setting-row";
+    libRow.className = "xlc-setting-row xlc-setting-row--with-control";
     const statusText = document.createElement("span");
     statusText.className = "xlc-setting-text";
     statusText.textContent = libStatus.textContent;
@@ -373,7 +397,6 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     buildHealthSection(ctx, root);
     buildExternalIntegrationSection(ctx, root);
     buildProviderSection(ctx, root);
-    buildAppearancePrefsSection(ctx, root);
     buildDataSection(ctx, root);
     const ecoOverviewBadge = document.createElement("div");
     ecoOverviewBadge.className = "xlc-settings-eco-badge";
@@ -755,7 +778,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
 
     // 剪贴板历史容量设置行（默认 30 条，支持 30/50/80/100 或自定义，最大 100 条）
     const clipLimitRow = document.createElement("div");
-    clipLimitRow.className = "xlc-setting-row";
+    clipLimitRow.className = "xlc-setting-row xlc-setting-row--with-control";
     clipLimitRow.dataset.xlcControl = "settings.prefs.clipboardLimitRow";
 
     const clipLimitCol = document.createElement("div");
@@ -878,7 +901,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     };
     syncClipLimitUi();
     const foot = document.createElement("div");
-    foot.className = "xlc-setting-row";
+    foot.className = "xlc-setting-row xlc-setting-row--with-control";
     const hint = document.createElement("span");
     hint.className = "xlc-setting-text";
     hint.textContent = t("usageStatsHint");
@@ -912,7 +935,7 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
 
     // 变量填写历史记忆管理（G22 / TD-006：提供侧车变量记忆项数可视化与一键清空入口）
     const memRow = document.createElement("div");
-    memRow.className = "xlc-setting-row";
+    memRow.className = "xlc-setting-row xlc-setting-row--with-control";
     const memHint = document.createElement("span");
     memHint.className = "xlc-setting-text";
     memHint.textContent = t("variableMemoryHint") || "变量填写历史记忆保存在本机侧车，插入填写时自动预填上次输入值。";
@@ -1066,9 +1089,10 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
                         const got = await ctx.library.getItem(item.id);
                         if (got.ok) {
                             const kd = await ctx.library.getItemKramdown(got.data);
-                            if (kd.ok && navigator.clipboard) {
-                                await navigator.clipboard.writeText(kd.data);
-                                ctx.notify("info", `已复制高频资产「${item.title}」到剪贴板`);
+                            if (kd.ok) {
+                                const copied = await writeRichClipboard(kd.data);
+                                if (copied) ctx.notify("info", `已复制高频资产「${item.title}」到剪贴板`);
+                                else ctx.notify("error", t("copyFailed"));
                             }
                         }
                     } catch {
@@ -1290,7 +1314,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     root.appendChild(quickStart);
     if (!showQuickStart) quickStart.style.display = "none";
 
-    // 🚀 最简一键快速建库卡片（直达极简无脑完成路径）
+    // 🚀 最简一键快速建库卡片（直达极简一键完成路径）
     const oneClickCard = document.createElement("section");
     oneClickCard.className = "xlc-setup-oneclick-card";
     oneClickCard.setAttribute("role", "region");
@@ -1299,7 +1323,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
 
     const oneClickHead = document.createElement("div");
     oneClickHead.style.cssText = "display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;";
-    oneClickHead.innerHTML = `<strong>🚀 极速一键方案（最省心 · 推荐）</strong><span class="xlc-form-hint" style="font-size:12px;">自动建库与初始化，无脑点击即完成</span>`;
+    oneClickHead.innerHTML = `<strong>🚀 极速一键方案（最省心 · 推荐）</strong><span class="xlc-form-hint" style="font-size:12px;">自动建库与初始化，一键点击即完成</span>`;
     oneClickCard.appendChild(oneClickHead);
 
     const oneClickBtn = document.createElement("button");
@@ -1823,17 +1847,14 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
                         copyBtn.textContent = t("setupIndependentCopyOrphanId");
                         const orphanId = result.notebookId;
                         copyBtn.addEventListener("click", () => {
-                            if (navigator.clipboard?.writeText) {
-                                void navigator.clipboard.writeText(orphanId).then(() => {
+                            void writeRichClipboard(orphanId).then((ok) => {
+                                if (ok) {
                                     copyBtn.textContent = t("setupIndependentOrphanCopied");
                                     ctx.notify("info", t("setupIndependentOrphanCopied"));
-                                }).catch(() => {
+                                } else {
                                     ctx.notify("error", t("copyFailed"));
-                                });
-                            } else {
-                                copyBtn.textContent = t("setupIndependentOrphanCopied");
-                                ctx.notify("info", t("setupIndependentOrphanCopied"));
-                            }
+                                }
+                            });
                         });
                         orphanBox.appendChild(copyBtn);
                         independentNotebookWrap.appendChild(orphanBox);
@@ -1904,6 +1925,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
         syncCreateState();
     });
     nameInput.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.key === "Enter" && !e.shiftKey && !e.altKey && !createBtn.disabled) {
             e.preventDefault();
             createBtn.click();
@@ -1914,6 +1936,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
         syncCreateState();
     });
     independentNotebookInput.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.key === "Enter" && !e.shiftKey && !e.altKey && !createBtn.disabled) {
             e.preventDefault();
             createBtn.click();
@@ -2158,6 +2181,12 @@ function buildAiSection(ctx: SettingsUiContext, root: HTMLElement): void {
             aiShareBox.checked = false;
             ctx.state.ai.shareContent = false;
         }
+        const auditBtn = root.querySelector<HTMLButtonElement>('[data-xlc-control="settings.data.tagAudit"]');
+        if (auditBtn) {
+            auditBtn.hidden = !aiEnabledBox.checked;
+            auditBtn.style.display = aiEnabledBox.checked ? "" : "none";
+            auditBtn.disabled = !aiEnabledBox.checked;
+        }
     };
     const dirtyShare = !aiEnabledBox.checked && ctx.state.ai.shareContent; // 总开关关但正文开关仍开（R138）
     syncAiShare();
@@ -2351,7 +2380,7 @@ function buildSavedViewsSection(ctx: SettingsUiContext, root: HTMLElement, befor
             if (view.pathLabel) pieces.push(view.pathLabel);
 
             const row = document.createElement("div");
-            row.className = "xlc-setting-row xlc-saved-view-row";
+            row.className = "xlc-setting-row xlc-saved-view-row xlc-setting-row--with-control";
             row.dataset.xlcSavedViewId = view.id;
             row.setAttribute("role", "listitem");
             row.setAttribute("aria-label", `${view.name} · ${pieces.join(" · ")}`);
@@ -2484,18 +2513,37 @@ function buildHealthSection(ctx: SettingsUiContext, root: HTMLElement): void {
 
             const items: HealthDoctorItem[] = [];
             for (const entry of entries) {
-                const kdReceipt = await ctx.library.getItemKramdown({
+                const fullItem = index.items?.get(entry.id);
+                const targetItem: CommonItem = fullItem ?? ({
                     id: entry.id,
                     blockId: entry.blockId,
                     libraryDocId: entry.libraryDocId,
                     itemType: entry.itemType,
-                } as CommonItem);
+                    title: entry.title,
+                    alias: entry.alias ?? "",
+                    tags: entry.tags ?? [],
+                    category: entry.category ?? "",
+                    summary: entry.summary ?? "",
+                    varCount: entry.varCount ?? 0,
+                    source: {
+                        sourceDocId: entry.sourceDocId ?? "",
+                        sourceBlockId: entry.sourceBlockId ?? "",
+                        sourceType: "manual",
+                    },
+                    url: entry.url ?? "",
+                    targetBlockId: entry.targetBlockId ?? "",
+                    createdAt: entry.createdAt ?? 0,
+                    updatedAt: entry.updatedAt ?? 0,
+                    droppedFields: [],
+                });
+                const kdReceipt = await ctx.library.getItemKramdown(targetItem);
+                const resolvedUrl = (targetItem.url || entry.url || "").trim();
                 items.push({
                     id: entry.id,
                     title: entry.title,
                     content: kdReceipt.ok ? kdReceipt.data : (entry.summary || ""),
                     itemType: entry.itemType,
-                    url: entry.url,
+                    ...(resolvedUrl ? {url: resolvedUrl} : {}),
                 });
             }
 
@@ -2612,13 +2660,12 @@ function buildExternalIntegrationSection(ctx: SettingsUiContext, root: HTMLEleme
             quickerNote: "向思源内核 POST /api/command 发送上述指令，获取 recall/resolve 结果中的 plainText（微信/QQ专用）或 richHtml（Word专用），由 Quicker 写入剪贴板并模拟 Ctrl+V 喷射。"
         }, null, 2);
 
-        void navigator.clipboard.writeText(examplePayload).then(() => {
+        void writeRichClipboard(examplePayload).then((ok) => {
+            if (!ok) { ctx.notify("error", t("copyFailed")); return; }
             copyQuickerBtn.textContent = "✓ 已复制 Quicker 配置";
             setTimeout(() => {
                 copyQuickerBtn.textContent = "⧉ 复制 Quicker 动作配置";
             }, 3000);
-        }).catch(() => {
-            ctx.notify("error", t("copyFailed"));
         });
     });
 
@@ -2652,13 +2699,12 @@ function buildExternalIntegrationSection(ctx: SettingsUiContext, root: HTMLEleme
     }
 return`;
 
-        void navigator.clipboard.writeText(ahkScript).then(() => {
+        void writeRichClipboard(ahkScript).then((ok) => {
+            if (!ok) { ctx.notify("error", t("copyFailed")); return; }
             copyAhkBtn.textContent = "✓ 已复制 AHK 脚本";
             setTimeout(() => {
                 copyAhkBtn.textContent = "⚡ 复制 AutoHotkey (AHK) 全局直喷脚本";
             }, 3000);
-        }).catch(() => {
-            ctx.notify("error", t("copyFailed"));
         });
     });
 
@@ -2671,13 +2717,12 @@ return`;
   -H "Content-Type: application/json" \\
   -d '{"plugin":"xiaolv-common","action":"recall","data":{"alias":"cwbx"}}'`;
 
-        void navigator.clipboard.writeText(curlCmd).then(() => {
+        void writeRichClipboard(curlCmd).then((ok) => {
+            if (!ok) { ctx.notify("error", t("copyFailed")); return; }
             copyCurlBtn.textContent = "✓ 已复制 cURL 示例";
             setTimeout(() => {
                 copyCurlBtn.textContent = "⌨ 复制 cURL / REST API 示例";
             }, 3000);
-        }).catch(() => {
-            ctx.notify("error", t("copyFailed"));
         });
     });
 
@@ -2706,13 +2751,12 @@ else
   echo "未找到对应常用语"
 fi`;
 
-        void navigator.clipboard.writeText(raycastScript).then(() => {
+        void writeRichClipboard(raycastScript).then((ok) => {
+            if (!ok) { ctx.notify("error", t("copyFailed")); return; }
             copyRaycastBtn.textContent = "✓ 已复制 Raycast 脚本";
             setTimeout(() => {
                 copyRaycastBtn.textContent = "⌘ 复制 Raycast Script 脚本";
             }, 3000);
-        }).catch(() => {
-            ctx.notify("error", t("copyFailed"));
         });
     });
 
@@ -2761,20 +2805,6 @@ fi`;
     ecoBadge.textContent = lvEcosystem.getStatusBadgeText();
     sec.appendChild(ecoBadge);
 
-    root.appendChild(sec);
-}
-
-/** DL2 阶段0：生态统一「外观与动效」偏好分组（庆祝/吉祥物/光效，生态键唯一写入方） */
-function buildAppearancePrefsSection(_ctx: SettingsUiContext, root: HTMLElement): void {
-    const sec = document.createElement("div");
-    sec.className = "xlc-form-field xlc-card";
-    sec.id = "xlc-settings-appearance";
-    sec.dataset.xlcControl = "settings.appearance";
-    const label = document.createElement("span");
-    label.className = "xlc-form-label";
-    label.textContent = "🎨 外观与动效";
-    sec.appendChild(label);
-    mountLvUiPrefsSection(sec);
     root.appendChild(sec);
 }
 
@@ -2922,13 +2952,14 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
         });
     });
     clearRecentsBtn.disabled = ctx.state.recents.length === 0;
-    if (ctx.state.ai.enabled) {
-        const auditBtn = mkBtn("✦ " + t("tagAuditBtn"), undefined, "settings.data.tagAudit");
-        withFlight(auditBtn, async () => {
-            const result = await runTagAudit(ctx);
-            return result === "empty" ? {status: "empty" as const, message: t("tagAuditTooFew")} : undefined;
-        }, {flightLabel: "✦ " + t("aiWorking"), loading: t("aiWorking"), formatError: (err) => toErrorMessage(err)});
-    }
+    const auditBtn = mkBtn("✦ " + t("tagAuditBtn"), undefined, "settings.data.tagAudit");
+    auditBtn.hidden = !ctx.state.ai.enabled;
+    auditBtn.style.display = ctx.state.ai.enabled ? "" : "none";
+    auditBtn.disabled = !ctx.state.ai.enabled;
+    withFlight(auditBtn, async () => {
+        const result = await runTagAudit(ctx);
+        return result === "empty" ? {status: "empty" as const, message: t("tagAuditTooFew")} : undefined;
+    }, {flightLabel: "✦ " + t("aiWorking"), loading: t("aiWorking"), formatError: (err) => ctx.aiErrorText(err)});
     const exportBtn = mkBtn(t("exportBtn"), undefined, "settings.data.export");
     withFlight(exportBtn, async () => {
         const json = await ctx.exportBundle();
@@ -3093,6 +3124,8 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
             csvImportBtn.disabled = false;
             csvImportBtn.removeAttribute("aria-busy");
             setOperationStatus("idle");
+        }, (c, b, i, p) => {
+            openImportPolicyDialog(c, b, i, p);
         });
     });
     dataBtns.appendChild(csvImportBtn);
@@ -3427,29 +3460,28 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
     citationRow.appendChild(citationBtn);
     dataSec.appendChild(citationRow);
 
-    // 思源原生属性视图（AV 数据库）自动化联动指引（G51）
+    // 思源原生数据库（属性视图）自动化联动指引（G51）
     const avRow = document.createElement("div");
     avRow.className = "xlc-template-import-row";
     const avHint = document.createElement("div");
     avHint.className = "xlc-form-hint";
     const avStrong = document.createElement("strong");
-    avStrong.textContent = "思源属性视图（AV 数据库块）自动化联动：";
+    avStrong.textContent = "思源数据库（属性视图）自动化联动：";
     avHint.appendChild(avStrong);
     avHint.appendChild(document.createElement("br"));
-    avHint.appendChild(document.createTextNode("所有条目均锚定在真实思源块并携带 custom-xlc-* 属性。您可在笔记中输入 /av 插入原生属性视图，配置自动收集规则「custom-xlc-id 存在」，即可自动以原生表格、看板等形态管理全部常用资产。"));
+    avHint.appendChild(document.createTextNode("所有条目均锚定在真实思源块并携带 custom-xlc-* 属性。您可在笔记中输入 /av 插入原生数据库（属性视图），配置自动收集规则「custom-xlc-id 存在」，即可自动以原生表格、看板等形态管理全部常用资产。"));
     avRow.appendChild(avHint);
 
     const avCopyBtn = document.createElement("button");
     avCopyBtn.type = "button";
     avCopyBtn.className = "b3-button";
-    avCopyBtn.textContent = "📋 复制 AV 收集规则说明";
+    avCopyBtn.textContent = "📋 复制数据库收集规则说明";
     avCopyBtn.addEventListener("click", () => {
-        const guideText = `【思源属性视图 (AV 数据库) 常用资产自动化收集指引】\n1. 在思源笔记任意文档输入 /av 插入一个属性视图（数据库块）；\n2. 点击右上角视图设置 -> 自动收集规则 (Automations)；\n3. 添加块属性匹配条件：\n   - 属性名：custom-xlc-id\n   - 操作符：存在 (exists) 或 不为空\n4. （可选）按分类多维聚合：\n   - 属性名：custom-xlc-category\n   - 操作符：等于 (equals) 您指定的分类名\n5. 完成后，所有小驴常用资产将自动以思源官方原生表格、看板或列表形态全量汇聚，双向无缝读写！`;
-        if (navigator.clipboard) {
-            void navigator.clipboard.writeText(guideText).then(() => {
-                ctx.notify("info", "已复制思源属性视图 (AV 数据库) 收集规则说明到剪贴板");
-            }).catch(() => undefined);
-        }
+        const guideText = `【思源数据库（属性视图）常用资产自动化收集指引】\n1. 在思源笔记任意文档输入 /av 插入一个数据库（属性视图）；\n2. 点击右上角视图设置 -> 自动收集规则 (Automations)；\n3. 添加块属性匹配条件：\n   - 属性名：custom-xlc-id\n   - 操作符：存在 (exists) 或 不为空\n4. （可选）按分类多维聚合：\n   - 属性名：custom-xlc-category\n   - 操作符：等于 (equals) 您指定的分类名\n5. 完成后，所有小驴常用资产将自动以思源官方原生表格、看板或列表形态全量汇聚，双向无缝读写！`;
+        void writeRichClipboard(guideText).then((ok) => {
+            if (ok) ctx.notify("info", "已复制思源数据库（属性视图）收集规则说明到剪贴板");
+            else ctx.notify("error", t("copyFailed"));
+        });
     });
     avRow.appendChild(avCopyBtn);
     dataSec.appendChild(avRow);
@@ -3622,7 +3654,7 @@ function openEspansoImportDialog(ctx: SettingsUiContext, onClose?: () => void): 
 }
 
 /** AI 标签体检：仅标签清单出域；结果只展示，不自动修改任何条目 */
-async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown"> {
+async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown" | "cancelled"> {
     const t = ctx.t;
     let idx: Awaited<ReturnType<LibraryService["ensureIndex"]>>;
     try {
@@ -3635,61 +3667,141 @@ async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown"> {
         ctx.notify("info", t("tagAuditTooFew"));
         return "empty";
     }
-    let suggestions;
-    try {
-        suggestions = await ctx.ai.tagAudit(tags);
-    } catch (err) {
-        throw new Error(ctx.aiErrorText(err));
-    }
+    let controller = new AbortController();
+    let closed = false;
+    let thinkingHandle: ReturnType<typeof mountLvAiThinkingCard> | null = null;
     const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("tagAuditTitle"),
         content: "",
         width: isMobileModal ? "100vw" : "min(620px, 92vw)",
         height: isMobileModal ? "100dvh" : "min(600px, 84vh)", // 固定高：建议清单增长不顶跳（R146）
+        destroyCallback: () => {
+            closed = true;
+            controller.abort();
+            thinkingHandle?.destroy();
+            thinkingHandle = null;
+        },
     });
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("tagAuditTitle"));
     adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
-    if (!body) throw new Error(t("kernelError", "无法打开体检结果"));
-    body.innerHTML = "";
-    const wrap = document.createElement("div");
-    wrap.className = "xlc-form";
-    if (suggestions.length === 0) {
-        const empty = document.createElement("p");
-        empty.className = "xlc-form-hint";
-        empty.textContent = t("tagAuditEmpty");
-        wrap.appendChild(empty);
-    } else {
-        for (const s of suggestions) {
-            const row = document.createElement("div");
-            row.className = "xlc-sugrow";
-            const label = document.createElement("span");
-            label.textContent = `✦ ${t(s.type === "merge" ? "tagAuditMerge" : "tagAuditRename")}：${s.tags.join(" + ")} → ${s.suggestion}${s.reason ? `（${s.reason}）` : ""}`;
-            row.appendChild(label);
-            wrap.appendChild(row);
-        }
-        const hint = document.createElement("span");
-        hint.className = "xlc-form-hint";
-        hint.textContent = t("aiOriginalPreserved");
-        wrap.appendChild(hint);
+    if (!body) {
+        dialog.destroy();
+        throw new Error(t("kernelError", "无法打开体检结果"));
     }
-    const actions = document.createElement("div");
-    actions.className = "xlc-form-actions";
-    actions.setAttribute("role", "toolbar");
-    actions.setAttribute("aria-label", "标签体检操作栏");
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "b3-button";
-    close.dataset.xlcControl = "settings.tag-audit.close";
-    close.textContent = t("close");
-    close.setAttribute("aria-label", t("close"));
-    close.addEventListener("click", () => dialog.destroy());
-    actions.appendChild(close);
-    wrap.appendChild(actions);
-    body.appendChild(wrap);
-    return suggestions.length === 0 ? "empty" : "shown";
+
+    const executeAudit = async (): Promise<"empty" | "shown" | "cancelled"> => {
+        if (closed) return "cancelled";
+        controller.abort();
+        controller = new AbortController();
+        const activeCtrl = controller;
+        body.innerHTML = "";
+        const waitHost = document.createElement("div");
+        waitHost.className = "xlc-ai-thinking-host";
+        body.appendChild(waitHost);
+        thinkingHandle = mountLvAiThinkingCard(waitHost, {
+            scenario: "doc-judge",
+            title: t("tagAuditTitle"),
+            subtitle: t("aiWorking"),
+            cancelLabel: `⏹ ${t("cancel")}`,
+            signal: activeCtrl.signal,
+            onCancel: () => {
+                activeCtrl.abort();
+                if (!closed) {
+                    dialog.destroy();
+                }
+            },
+        });
+        let suggestions;
+        try {
+            suggestions = await ctx.ai.tagAudit(tags, activeCtrl.signal);
+        } catch (err) {
+            thinkingHandle?.done();
+            thinkingHandle = null;
+            if (closed || activeCtrl.signal.aborted) {
+                if (!closed) dialog.destroy();
+                return "cancelled";
+            }
+            const errMsg = ctx.aiErrorText(err);
+            body.innerHTML = "";
+            const wrap = document.createElement("div");
+            wrap.className = "xlc-form";
+            const errP = document.createElement("p");
+            errP.className = "xlc-form-error";
+            errP.setAttribute("role", "alert");
+            errP.textContent = errMsg;
+            wrap.appendChild(errP);
+            const actions = document.createElement("div");
+            actions.className = "xlc-form-actions";
+            actions.setAttribute("role", "toolbar");
+            actions.setAttribute("aria-label", "标签体检操作栏");
+            const retryBtn = document.createElement("button");
+            retryBtn.type = "button";
+            retryBtn.className = "b3-button xlc-btn-primary";
+            retryBtn.dataset.xlcControl = "settings.tag-audit.retry";
+            retryBtn.textContent = t("retry");
+            retryBtn.addEventListener("click", () => {
+                void executeAudit();
+            });
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.className = "b3-button";
+            closeBtn.dataset.xlcControl = "settings.tag-audit.close";
+            closeBtn.textContent = t("close");
+            closeBtn.addEventListener("click", () => dialog.destroy());
+            actions.append(retryBtn, closeBtn);
+            wrap.appendChild(actions);
+            body.appendChild(wrap);
+            return "shown";
+        }
+        thinkingHandle?.done();
+        thinkingHandle = null;
+        if (closed || activeCtrl.signal.aborted) {
+            if (!closed) dialog.destroy();
+            return "cancelled";
+        }
+        body.innerHTML = "";
+        const wrap = document.createElement("div");
+        wrap.className = "xlc-form";
+        if (suggestions.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "xlc-form-hint";
+            empty.textContent = t("tagAuditEmpty");
+            wrap.appendChild(empty);
+        } else {
+            for (const s of suggestions) {
+                const row = document.createElement("div");
+                row.className = "xlc-sugrow";
+                const label = document.createElement("span");
+                label.textContent = `✦ ${t(s.type === "merge" ? "tagAuditMerge" : "tagAuditRename")}：${s.tags.join(" + ")} → ${s.suggestion}${s.reason ? `（${s.reason}）` : ""}`;
+                row.appendChild(label);
+                wrap.appendChild(row);
+            }
+            const hint = document.createElement("span");
+            hint.className = "xlc-form-hint";
+            hint.textContent = t("aiOriginalPreserved");
+            wrap.appendChild(hint);
+        }
+        const actions = document.createElement("div");
+        actions.className = "xlc-form-actions";
+        actions.setAttribute("role", "toolbar");
+        actions.setAttribute("aria-label", "标签体检操作栏");
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "b3-button";
+        close.dataset.xlcControl = "settings.tag-audit.close";
+        close.textContent = t("close");
+        close.setAttribute("aria-label", t("close"));
+        close.addEventListener("click", () => dialog.destroy());
+        actions.appendChild(close);
+        wrap.appendChild(actions);
+        body.appendChild(wrap);
+        return "shown";
+    };
+
+    return executeAudit();
 }
 
 /** 导入策略确认（导入前校验已过；策略三选 → importBundleText → 汇总回执）。导出供渲染 harness 取证。 */

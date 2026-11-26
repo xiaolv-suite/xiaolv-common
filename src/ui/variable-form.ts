@@ -3,8 +3,8 @@
 // 填充值仅作用于本次插入（草稿不回写库）；同名重复变量只询问一次（listAskFields 已去重）。
 // 安全：字段名/选项一律 textContent 注入，绝不 innerHTML。
 import {Dialog} from "siyuan";
-import {getDialogBody, isMobileDialogViewport, openInfoDialog, openTextPromptDialog} from "./dialog-dom";
-import {AskField, askFieldTag, expandAsks, stripCursorToken} from "../model/variables";
+import {getDialogBody, isMobileDialogViewport, markSovereignDialog, openInfoDialog, openTextPromptDialog} from "./dialog-dom";
+import {AskField, askFieldTag, expandAsks, LiteralVault, stripCursorToken} from "../model/variables";
 import {ItemType} from "../model/item";
 import {formatPanguSpacing, tsvToMarkdownTable, stripUrlTrackingParams, normalizeListFormatting, normalizePunctuation, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, encodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, affixLines, titleCaseLines, reverseLines, numberLines, trimLinesAdvanced, normalizeObjectQuotes, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, extractInitials, stripMarkdownFormatting, shuffleLines, reverseText, romanToArabic, arabicToRoman, padLines, convertChineseVariant, compactBlankLines, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, extractRepeatedPhrases, extractColumnFromLines, pluralizeText, transposeMatrixText, expandEnglishContractions, convertColorFormat, humanizeIdentifier, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, sortLinesByColumn, extractKvValue, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, maskTextRange, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
 import {autoParameterizeText} from "../model/template-wizard";
@@ -59,8 +59,18 @@ export function renderLivePreviewText(
     docContext?: {title: string; path: string; selection?: string} | null
 ): string {
     if (!templateText) return "";
-    let expanded = stripCursorToken(expandAsks(templateText, fills));
-    expanded = applyPlaceholders(expanded, now, enablePlaceholders, docContext);
+    const vault = new LiteralVault(templateText);
+    let expanded = expandAsks(templateText, fills, (v) => vault.seal(v));
+    expanded = stripCursorToken(expanded);
+    expanded = applyPlaceholders(
+        expanded,
+        now,
+        enablePlaceholders,
+        docContext,
+        (v) => vault.seal(v),
+        (v) => vault.unseal(v),
+    );
+    expanded = vault.unseal(expanded);
     if (expanded.length > maxChars) {
         return expanded.slice(0, maxChars) + "…";
     }
@@ -128,6 +138,7 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         },
     });
     // 原型屏 4：紧凑卡形态，卡头（徽标+标题+Esc 取消）即标题，隐藏宿主标题栏
+    markSovereignDialog(dialog.element);
     container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     if (container) {
         container.classList.add("xlc-varform-host");

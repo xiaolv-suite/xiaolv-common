@@ -651,7 +651,9 @@ function compareResults(a: ScoredResult, b: ScoredResult, ctx: SearchContext): n
         const mb = ctx.manualOrder?.get(b.entry.id) ?? Number.MAX_SAFE_INTEGER;
         if (ma !== mb) return ma - mb;
     }
-    // 智能热度排序（Frecency）：热度分 > 最近使用 > 稳定序
+    const hasQueryMatch = a.matchedBy !== "none" || b.matchedBy !== "none";
+    if (hasQueryMatch && b.score !== a.score) return b.score - a.score;
+    // 智能热度排序（Frecency）：无关键词时热度分 > 最近使用；有关键词时仅在相关度同分后决胜
     if (ctx.sort === "frecency") {
         const now = ctx.now || Date.now();
         const fa = calculateFrecencyScore(ctx.usage?.get(a.entry.id) ?? 0, ctx.recents.get(a.entry.id), now);
@@ -661,7 +663,7 @@ function compareResults(a: ScoredResult, b: ScoredResult, ctx: SearchContext): n
         const rb = ctx.recents.get(b.entry.id) ?? 0;
         if (rb !== ra) return rb - ra;
     }
-    // 常用排序（F3）：次数 > 最近使用 > 相关度/稳定序
+    // 常用排序（F3）：无关键词时次数 > 最近使用；有关键词时仅在相关度同分后决胜
     if (ctx.sort === "frequent") {
         const ca = ctx.usage?.get(a.entry.id) ?? 0;
         const cb = ctx.usage?.get(b.entry.id) ?? 0;

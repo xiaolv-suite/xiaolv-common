@@ -8,7 +8,18 @@
 // （深度 ≤3、环检测；此处只提供语法模式与光标/检测工具）。
 
 import {LIMITS} from "../constants";
-import {applyPlaceholders} from "./placeholders";
+
+let _applyPlaceholders: ((
+    text: string,
+    now: Date,
+    enabled: boolean,
+    doc?: {title: string; path: string; selection?: string} | null,
+    onLiteral?: (value: string) => string,
+    unsealLiteral?: (text: string) => string,
+) => string) | null = null;
+export function registerMacroPreviewPlaceholders(fn: typeof _applyPlaceholders): void {
+    _applyPlaceholders = fn;
+}
 
 export type AskFieldKind = "text" | "select" | "date" | "textarea" | "toggle" | "multi";
 
@@ -107,11 +118,55 @@ function cleanFillValue(v: string): string {
 }
 
 /**
+ * 单遍不可重入保护容器：将用户填充值、剪贴板、选区等外部文本临时封装为安全哨兵令牌，
+ * 避免后续占位符/光标/正则展开对其进行二次求值或触发 $&/$$ 替换损坏。
+ */
+export class LiteralVault {
+    private readonly prefix: string;
+    private readonly entries: string[] = [];
+
+    constructor(seedText = "") {
+        let token = `\uE000XLC_${Math.random().toString(36).slice(2, 8)}_`;
+        while (seedText.includes(token)) {
+            token = `\uE000XLC_${Math.random().toString(36).slice(2, 8)}_`;
+        }
+        this.prefix = token;
+    }
+
+    seal(value: string): string {
+        const idx = this.entries.length;
+        this.entries.push(value);
+        return `${this.prefix}${idx}\uE001`;
+    }
+
+    unseal(text: string): string {
+        if (!text || this.entries.length === 0 || !text.includes(this.prefix)) return text;
+        const escapedPrefix = this.prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp(`${escapedPrefix}(\\d+)\\uE001`, "g");
+        let current = text;
+        for (let pass = 0; pass < 8 && current.includes(this.prefix); pass++) {
+            const next = current.replace(re, (match, idxStr: string) => {
+                const idx = Number(idxStr);
+                return Number.isInteger(idx) && idx >= 0 && idx < this.entries.length ? this.entries[idx]! : match;
+            });
+            if (next === current) break;
+            current = next;
+        }
+        return current;
+    }
+}
+
+/**
  * 用填充值展开 ask。未提供值的字段展开为 __名称__（SiYuan 模板占位惯例，可见可改，不静默丢）。
  * 填充值中若含占位符/ask 语法，不再二次展开（防注入式套娃）。
  */
-export function expandAsks(text: string, fills: Record<string, string>): string {
+export function expandAsks(
+    text: string,
+    fills: Record<string, string>,
+    transformValue?: (value: string) => string,
+): string {
     if (!text) return text;
+    const emit = transformValue ?? ((v: string) => v);
     return text.replace(ASK_PATTERN, (_match, rawName: string, rawOptions?: string) => {
         const field = parseAskField(rawName, rawOptions);
         if (!field) return _match;
@@ -121,13 +176,13 @@ export function expandAsks(text: string, fills: Record<string, string>): string 
                 if (filled === "" || filled === "false" || filled === "0" || filled === "否") {
                     return "";
                 }
-                return cleanFillValue(filled === "true" || filled === "是" ? (field.defaultValue || "是") : filled);
+                return emit(cleanFillValue(filled === "true" || filled === "是" ? (field.defaultValue || "是") : filled));
             }
             if (field.defaultValue) return cleanFillValue(field.defaultValue);
             return "";
         }
         const filled = Object.prototype.hasOwnProperty.call(fills, field.name) ? cleanFillValue(fills[field.name] ?? "") : "";
-        if (filled) return filled;
+        if (filled) return emit(filled);
         if (field.defaultValue) return cleanFillValue(field.defaultValue);
         return `__${field.name}__`;
     });
@@ -285,7 +340,9 @@ export function expandMacroPreview(
     // 2. 剥离光标锚点
     out = stripCursorToken(out);
     // 3. 展开动态占位符（日期算术、时间、文档上下文、计算、UUID 等）
-    out = applyPlaceholders(out, now, true, doc);
+    if (_applyPlaceholders) {
+        out = _applyPlaceholders(out, now, true, doc);
+    }
     out = out.replace(/\{\{date\}\}/g, () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`);
     out = out.replace(/\{\{time\}\}/g, () => `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
     out = out.replace(/\{\{datetime\}\}/g, () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);

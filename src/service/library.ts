@@ -45,7 +45,7 @@ import {itemBodyRestriction, normalizeKramdownIal, storedKramdownToBody, toItemS
 import {getPinyinAdapter} from "../model/pinyin";
 import {countAskFields, SNIPPET_PATTERN} from "../model/variables";
 import {getErrorProperty, toErrorMessage} from "../model/errors";
-import {buildInitialLibraryDocMarkdown} from "./prompt-pack";
+import {buildInitialLibraryDocMarkdown} from "./initial-doc";
 
 export interface IndexBuildResult {
     entries: SearchEntry[];
@@ -118,6 +118,19 @@ function ok<T>(data: T): Receipt<T> {
 }
 
 /** 为两步编排派生有界幂等键，避免给基础键追加后超过客户端 128 字符上限。 */
+function asciiHash(input: string): string {
+    let h1 = 0x811c9dc5;
+    let h2 = 0x9e3779b9;
+    for (let i = 0; i < input.length; i++) {
+        const code = input.charCodeAt(i);
+        h1 ^= code;
+        h1 = Math.imul(h1, 0x01000193);
+        h2 ^= code + i;
+        h2 = Math.imul(h2, 0x85ebca6b);
+    }
+    return `${(h1 >>> 0).toString(16).padStart(8, "0")}${(h2 >>> 0).toString(16).padStart(8, "0")}`;
+}
+
 function scopedIdempotencyKey(base: string, suffix: string): string {
     const tail = `:${suffix}`;
     const room = Math.max(8, 128 - tail.length);
@@ -423,6 +436,7 @@ export class LibraryService {
                     markdown: initialMd,
                 }, {idempotencyKey: idempotencyKey || undefined, maxRetries: 0}));
                 if (!docId) return fail("kernel-error", "createDocWithMd returned no id");
+                this.writeDocCache = null;
                 const receipt = ok({docId});
                 if (receiptKey) this.libraryDocReceipts.set(receiptKey, receipt);
                 return receipt;
@@ -478,6 +492,11 @@ export class LibraryService {
                     maxRetries: 0,
                 });
                 if (!parseVoid(data)) return fail("kernel-error", "removeNotebook returned an invalid response");
+                for (const [nbKey, nbReceipt] of this.notebookReceipts.entries()) {
+                    if (nbReceipt.ok && nbReceipt.data.notebookId === notebookId) {
+                        this.notebookReceipts.delete(nbKey);
+                    }
+                }
                 const receipt = ok({notebookId});
                 this.rememberReceipt(this.removeNotebookReceipts, receiptKey, receipt);
                 return receipt;
@@ -494,8 +513,9 @@ export class LibraryService {
         if (!normalizedName || normalizedName.length > LIMITS.title || !normalizedTitle || normalizedTitle.length > LIMITS.title) {
             return fail("invalid-input", "notebook/title required");
         }
-        const baseKey = typeof options.idempotencyKey === "string" && options.idempotencyKey.length >= 8
+        const rawBaseKey = typeof options.idempotencyKey === "string" && options.idempotencyKey.length >= 8
             && options.idempotencyKey.length <= 128 ? options.idempotencyKey : `independent:${normalizedName}:${normalizedTitle}`;
+        const baseKey = /^[\x21-\x7e]{8,128}$/.test(rawBaseKey) ? rawBaseKey : `independent:${asciiHash(rawBaseKey)}`;
         return this.withWriteLock(`independent-library:${baseKey}`, async () => {
             options.onProgress?.("creating-notebook");
             const notebook = await this.createNotebook(normalizedName, {idempotencyKey: scopedIdempotencyKey(baseKey, "nb")});
@@ -510,8 +530,12 @@ export class LibraryService {
             if (doc.ok) return ok({notebookId: createdNotebookId, docId: doc.data.docId});
 
             options.onProgress?.("rolling-back");
-            const compensation = await this.removeNotebook(createdNotebookId, {idempotencyKey: scopedIdempotencyKey(baseKey, "rollback")});
+            const nbReceiptKey = scopedIdempotencyKey(baseKey, "nb");
+            const rollbackReceiptKey = scopedIdempotencyKey(baseKey, "rollback");
+            const compensation = await this.removeNotebook(createdNotebookId, {idempotencyKey: rollbackReceiptKey});
             if (compensation.ok) {
+                this.notebookReceipts.delete(nbReceiptKey);
+                this.removeNotebookReceipts.delete(rollbackReceiptKey);
                 return {
                     ok: false,
                     reason: doc.reason,
@@ -1169,7 +1193,7 @@ export class LibraryService {
         const config = this.config;
         if (!config) return undefined;
         if (config.mode !== "notebook") return config.containerDocIds[0];
-        if (this.writeDocCache && this.writeDocCache.gen === this.indexGen) return this.writeDocCache.docId;
+        if (this.writeDocCache && this.writeDocCache.gen === this.indexGen && this.writeDocCache.docId) return this.writeDocCache.docId;
         let resolved: string | undefined;
         for (const notebookId of config.notebookIds.slice(0, 16)) {
             try {
@@ -1181,7 +1205,11 @@ export class LibraryService {
                 // 尝试下一个配置的笔记本；最终返回明确 invalid-input 回执。
             }
         }
-        this.writeDocCache = {gen: this.indexGen, docId: resolved};
+        if (resolved) {
+            this.writeDocCache = {gen: this.indexGen, docId: resolved};
+        } else {
+            this.writeDocCache = null;
+        }
         return resolved;
     }
 

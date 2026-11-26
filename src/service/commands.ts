@@ -5,14 +5,35 @@ import * as siyuan from "siyuan";
 import {getActiveEditor, openTab} from "siyuan";
 import {EVENTS, PROTOCOL_VERSION} from "../constants";
 import {ActionContext, InsertMode, InsertPlan, OpenTarget, planAction, planOpenSource} from "../model/actions";
-import {applyPlaceholders, formatLocalDate, listPlaceholders} from "../model/placeholders";
-import {applyAskDefaults, expandAsks, extractCursorPosition, stripCursorToken} from "../model/variables";
+import {formatLocalDate} from "../model/date-utils";
+import {applyAskDefaults, CURSOR_PATTERN, expandAsks, LiteralVault, stripCursorToken} from "../model/variables";
 import {CommonItem, extractCleanPayload} from "../model/item";
 import {LibraryService, SourceHealth} from "./library";
 import {isMarkdownFormattingPresent, renderSafeHtmlFromMarkdown, writeRichClipboard} from "../model/clipboard";
 import {callBridge} from "../ecosystem-bridge-kit";
-import {isMobileFrontend, lvActivity, withDocLock} from "../libs/lv-notice-kit";
-import {aiSmartExpandTemplate} from "./ai";
+import {lvActivity, withDocLock, withLvAiWait} from "../libs/lv-notice-kit";
+import {aiSmartExpandTemplate, type AiSettings} from "./ai";
+import {
+    detectMobileHost,
+    getSelectionInfo,
+    getSelectionText,
+    parseDocPath,
+    resolveTargetHPath,
+    minimizeToBackground,
+    type SelectionInfo,
+    type DocPathInfo,
+} from "../kernel/host-bridge";
+
+export {
+    detectMobileHost,
+    getSelectionInfo,
+    getSelectionText,
+    parseDocPath,
+    resolveTargetHPath,
+    minimizeToBackground,
+    type SelectionInfo,
+    type DocPathInfo,
+};
 
 /** 占位符应用钩子：由入口注入（读设置 + 当前时间 + 当前文档 + 剪贴板）；未注入则原样保留 */
 export interface IPlaceholderHook {
@@ -45,6 +66,10 @@ export interface IHostBridge {
     /** 当前文档 ID（relink 用） */
     currentDocId(): string | null;
     isMobile(): boolean;
+    getSelectionInfo?(): SelectionInfo;
+    getSelectionText?(): string;
+    minimizeToBackground?(): boolean;
+    getSelectionSeq?(): number;
 }
 
 /** A search dialog keeps the editor and tracked range it was opened from. */
@@ -119,68 +144,254 @@ export function setCaretAtOffset(container: Node, targetOffset: number): boolean
     return false;
 }
 
-/**
- * 统一移动端宿主判定：优先结合思源官方 getFrontend()（"mobile" | "browser-mobile"）
- * 与生态标准库 isMobileFrontend()，同时兼容思源 3.8.x window.siyuan.mobile 对象形态、
- * #mobileTopBar 节点以及 body--mobile 类名；桌面单测环境保持返回 false。
- */
-export function detectMobileHost(): boolean {
-    try {
-        const getFn = (siyuan as unknown as {getFrontend?: () => string}).getFrontend;
-        if (typeof getFn === "function") {
-            const frontend = getFn();
-            if (frontend === "mobile" || frontend === "browser-mobile") return true;
-        }
-    } catch {
-        // ignore
-    }
-    if (isMobileFrontend()) return true;
-    try {
-        const winMobile = typeof window !== "undefined"
-            ? (window as unknown as {siyuan?: {mobile?: unknown}}).siyuan?.mobile
-            : undefined;
-        if (winMobile === true || (typeof winMobile === "object" && winMobile !== null)) return true;
-    } catch {
-        // ignore
-    }
-    try {
-        if (typeof document !== "undefined") {
-            if (typeof document.getElementById === "function" && document.getElementById("mobileTopBar")) return true;
-            if (document.body?.classList?.contains?.("body--mobile")) return true;
-        }
-    } catch {
-        // ignore
-    }
-    return false;
+function asElement(node: Node | null | undefined): Element | null {
+    if (!node) return null;
+    if (typeof Element !== "undefined" && node instanceof Element) return node;
+    if ((node as Node).nodeType === 1) return node as unknown as Element;
+    return (node as Node).parentElement ?? null;
 }
 
 export class HostBridge implements IHostBridge {
     private lastActiveEditor: Protyle | null = null;
+    private lastSelectionRange: Range | null = null;
+    private lastSelectionDocId: string | null = null;
+    private selectionSeq = 0;
+    private editorByElement = new WeakMap<HTMLElement, Protyle>();
 
     constructor(private readonly app: App, private readonly owner: Plugin) {}
+
+    getSelectionInfo(): SelectionInfo {
+        return getSelectionInfo();
+    }
+
+    getSelectionText(): string {
+        return getSelectionText();
+    }
+
+    minimizeToBackground(): boolean {
+        return minimizeToBackground();
+    }
+
+    getSelectionSeq(): number {
+        return this.selectionSeq;
+    }
+
+    getLastSelectionInfo(): {docId: string | null; hasRange: boolean} {
+        return {
+            docId: this.lastSelectionDocId,
+            hasRange: Boolean(this.lastSelectionRange),
+        };
+    }
 
     public recordActiveEditor(editor: any): void {
         const candidate = editor?.protyle ? editor : (editor?.block?.rootID ? {protyle: editor} : null);
         if (candidate?.protyle?.block?.rootID) {
+            const changed = this.lastActiveEditor !== candidate;
             this.lastActiveEditor = candidate as Protyle;
+            if (candidate.protyle.element) {
+                this.editorByElement.set(candidate.protyle.element, candidate as Protyle);
+            }
+            if (changed) this.selectionSeq += 1;
+        }
+    }
+
+    private findEditableRangeFromSelection(): {range: Range; protyleEl: HTMLElement | null; containerEl: Element} | null {
+        if (typeof window === "undefined" || typeof window.getSelection !== "function") return null;
+        try {
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) return null;
+            const candidate = selection.getRangeAt(0);
+            const el = asElement(candidate.commonAncestorContainer);
+            if (!el) return null;
+            if (el.closest?.(".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .b3-dialog")) return null;
+            const editable = el.closest?.('[data-node-id] [contenteditable="true"], .protyle-wysiwyg [contenteditable="true"]');
+            if (!editable) return null;
+            const protyleEl = el.closest?.(".protyle") as HTMLElement | null;
+            if (!protyleEl || protyleEl.closest?.(".fn__none, [inert]") || protyleEl.isConnected === false) return null;
+            return {range: candidate, protyleEl, containerEl: el};
+        } catch {
+            return null;
+        }
+    }
+
+    private matchEditorForProtyleElement(protyleEl: HTMLElement): Protyle | null {
+        const mapped = this.editorByElement.get(protyleEl);
+        if (mapped?.protyle?.block?.rootID) return mapped;
+        if (
+            this.lastActiveEditor?.protyle?.block?.rootID
+            && (this.lastActiveEditor.protyle.element === protyleEl || this.lastActiveEditor.protyle.element?.contains?.(protyleEl))
+        ) {
+            return this.lastActiveEditor;
+        }
+        try {
+            const active = getActiveEditor() ?? null;
+            if (
+                active?.protyle?.block?.rootID
+                && (active.protyle.element === protyleEl || active.protyle.element?.contains?.(protyleEl))
+            ) {
+                this.editorByElement.set(protyleEl, active);
+                return active;
+            }
+        } catch {
+            // ignore
+        }
+        try {
+            const getAll = (siyuan as unknown as {getAllEditor?: () => Protyle[]}).getAllEditor;
+            if (typeof getAll === "function") {
+                for (const ed of getAll() || []) {
+                    if (ed?.protyle?.block?.rootID && (ed.protyle.element === protyleEl || ed.protyle.element?.contains?.(protyleEl))) {
+                        this.editorByElement.set(protyleEl, ed);
+                        return ed;
+                    }
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return null;
+    }
+
+    public recordSelectionFromDOM(): boolean {
+        const found = this.findEditableRangeFromSelection();
+        if (!found) return false;
+        const matched = found.protyleEl ? this.matchEditorForProtyleElement(found.protyleEl) : null;
+        const targetEditor = matched ?? (
+            this.lastActiveEditor?.protyle?.block?.rootID
+            && (!this.lastActiveEditor.protyle.element || this.lastActiveEditor.protyle.element.contains(found.containerEl))
+                ? this.lastActiveEditor
+                : null
+        );
+        if (!targetEditor?.protyle?.block?.rootID) return false;
+        this.lastActiveEditor = targetEditor;
+        if (targetEditor.protyle.element) {
+            this.editorByElement.set(targetEditor.protyle.element, targetEditor);
+        }
+        this.lastSelectionRange = typeof found.range.cloneRange === "function" ? found.range.cloneRange() : found.range;
+        this.lastSelectionDocId = targetEditor.protyle.block.rootID ?? null;
+        this.selectionSeq += 1;
+        return true;
+    }
+
+    private isFloatingSurfaceOpen(): boolean {
+        const owner = this.owner as unknown as {
+            searchDialog?: unknown;
+            quickAccessPopoverDismiss?: unknown;
+            dockView?: {container?: HTMLElement | null} | null;
+        } | null;
+        if (owner?.searchDialog || owner?.quickAccessPopoverDismiss) return true;
+        const dockEl = owner?.dockView?.container;
+        if (dockEl && dockEl.isConnected !== false && !dockEl.classList?.contains?.("fn__none") && !dockEl.closest?.(".fn__none")) {
+            return true;
+        }
+        if (typeof document !== "undefined" && typeof document.querySelector === "function") {
+            if (document.querySelector(".xlc-dialog, .xlc-quick-popover, .xlc-desktop-float-window")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public startSelectionTracking(): () => void {
+        if (typeof document === "undefined" || typeof document.addEventListener !== "function") {
+            return () => {};
+        }
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+        const clearDebounce = () => {
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+                debounceTimer = null;
+            }
+        };
+        const debouncedHandler = () => {
+            if (!this.isFloatingSurfaceOpen()) {
+                clearDebounce();
+                return;
+            }
+            clearDebounce();
+            debounceTimer = setTimeout(() => {
+                debounceTimer = null;
+                if (!this.isFloatingSurfaceOpen()) return;
+                this.recordSelectionFromDOM();
+            }, 150);
+        };
+        const immediateHandler = () => {
+            if (!this.isFloatingSurfaceOpen()) {
+                clearDebounce();
+                return;
+            }
+            clearDebounce();
+            this.recordSelectionFromDOM();
+        };
+        document.addEventListener("selectionchange", debouncedHandler);
+        document.addEventListener("pointerup", immediateHandler, {capture: true, passive: true});
+        document.addEventListener("keyup", debouncedHandler, {capture: true, passive: true});
+        document.addEventListener("focusin", immediateHandler, {capture: true, passive: true});
+        return () => {
+            clearDebounce();
+            document.removeEventListener("selectionchange", debouncedHandler);
+            document.removeEventListener("pointerup", immediateHandler, true);
+            document.removeEventListener("keyup", debouncedHandler, true);
+            document.removeEventListener("focusin", immediateHandler, true);
+        };
+    }
+
+    private getValidLastSelectionRange(editor: Protyle): Range | null {
+        if (!this.lastSelectionRange || !editor?.protyle?.block?.rootID) return null;
+        if (this.lastSelectionDocId !== editor.protyle.block.rootID) return null;
+        try {
+            const ancestor = this.lastSelectionRange.commonAncestorContainer;
+            if (!ancestor || (ancestor as Node & {isConnected?: boolean}).isConnected === false) return null;
+            if (!editor.protyle.element?.contains?.(ancestor)) return null;
+            const node = asElement(ancestor);
+            if (!node || !node.closest?.('[data-node-id] [contenteditable="true"], .protyle-wysiwyg [contenteditable="true"]')) {
+                return null;
+            }
+            return typeof this.lastSelectionRange.cloneRange === "function"
+                ? this.lastSelectionRange.cloneRange()
+                : this.lastSelectionRange;
+        } catch {
+            return null;
         }
     }
 
     private resolveActiveEditor(): Protyle | null {
+        try {
+            const active = (typeof getActiveEditor === "function" ? (getActiveEditor() ?? getActiveEditor(true)) : null) ?? null;
+            if (active?.protyle?.block?.rootID) {
+                const el = active.protyle?.wysiwyg?.element;
+                const protyleEl = active.protyle?.element;
+                const isVisible = (!el || (el.isConnected && !el.closest?.(".fn__none, [inert]")))
+                    && !protyleEl?.closest?.(".fn__none, [inert]");
+                if (isVisible) {
+                    this.lastActiveEditor = active;
+                    if (active.protyle.element) {
+                        this.editorByElement.set(active.protyle.element, active);
+                    }
+                    return active;
+                }
+            }
+        } catch {
+            // ignore
+        }
         if (this.lastActiveEditor?.protyle?.block?.rootID) {
             const el = this.lastActiveEditor.protyle?.wysiwyg?.element;
-            if (!el || (el.isConnected && !el.closest?.(".fn__none, [inert]"))) {
+            const protyleEl = this.lastActiveEditor.protyle?.element;
+            if ((!el || (el.isConnected && !el.closest?.(".fn__none, [inert]"))) && !protyleEl?.closest?.(".fn__none, [inert]")) {
                 return this.lastActiveEditor;
             }
         }
         try {
-            const active = getActiveEditor() ?? null;
-            if (active?.protyle?.block?.rootID) {
-                const el = active.protyle?.wysiwyg?.element;
-                const isVisible = !el || (el.isConnected && !el.closest?.(".fn__none, [inert]"));
-                if (isVisible) {
-                    this.lastActiveEditor = active;
-                    return active;
+            const getAll = (siyuan as unknown as {getAllEditor?: () => Protyle[]}).getAllEditor;
+            if (typeof getAll === "function") {
+                for (const ed of getAll() || []) {
+                    if (ed?.protyle?.block?.rootID) {
+                        const el = ed.protyle?.wysiwyg?.element;
+                        const protyleEl = ed.protyle?.element;
+                        if ((!el || (el.isConnected && !el.closest?.(".fn__none, [inert]"))) && !protyleEl?.closest?.(".fn__none, [inert]")) {
+                            this.lastActiveEditor = ed;
+                            return ed;
+                        }
+                    }
                 }
             }
         } catch {
@@ -201,6 +412,7 @@ export class HostBridge implements IHostBridge {
         let editor: Protyle | null = null;
         let docId: string | null = null;
         try {
+            this.recordSelectionFromDOM();
             editor = this.resolveActiveEditor();
             if (!editor) return {editor: null, handle: null, docId: null};
             docId = editor.protyle.block.rootID ?? null;
@@ -209,18 +421,24 @@ export class HostBridge implements IHostBridge {
             const selection = window.getSelection();
             if (selection && selection.rangeCount > 0) {
                 const candidate = selection.getRangeAt(0);
-                const container = candidate.commonAncestorContainer;
-                const node = container instanceof Element ? container : container.parentElement;
+                const node = asElement(candidate.commonAncestorContainer);
                 if (node && node.closest('[data-node-id] [contenteditable="true"]') && protyleEl.contains(candidate.commonAncestorContainer)) {
                     range = candidate;
                 }
             }
-            // 若用户点击了顶栏按钮或侧栏搜索框导致选区移出编辑器，优先回退 Protyle 自身记录的 toolbar.range
+            // 窄模式/置顶非模态下焦点可能在右侧浮窗中：优先恢复最近一次在编辑器内记录的选区/光标
+            if (!range) {
+                range = this.getValidLastSelectionRange(editor);
+            }
+            // 若用户点击了顶栏按钮或侧栏搜索框导致选区移出编辑器，回退 Protyle 自身记录的 toolbar.range
             if (!range) {
                 const toolbarRange = (editor.protyle as unknown as {toolbar?: {range?: Range}})?.toolbar?.range;
-                if (toolbarRange && protyleEl.contains(toolbarRange.commonAncestorContainer)) {
-                    const container = toolbarRange.commonAncestorContainer;
-                    const node = container instanceof Element ? container : container.parentElement;
+                if (
+                    toolbarRange
+                    && (toolbarRange.commonAncestorContainer as Node & {isConnected?: boolean})?.isConnected !== false
+                    && protyleEl.contains(toolbarRange.commonAncestorContainer)
+                ) {
+                    const node = asElement(toolbarRange.commonAncestorContainer);
                     if (node && node.closest('[data-node-id] [contenteditable="true"]')) {
                         range = toolbarRange;
                     }
@@ -261,6 +479,11 @@ export class HostBridge implements IHostBridge {
             const protyle = target.editor.protyle;
             const rootId = protyle.block.rootID ?? null;
             if (!rootId || !target.docId || rootId !== target.docId || protyle.disabled) return false;
+            const wysiwygEl = protyle.wysiwyg?.element;
+            if (wysiwygEl && (wysiwygEl.isConnected === false || wysiwygEl.closest?.(".fn__none, [inert]"))) return false;
+            if (protyle.element?.closest?.(".fn__none, [inert]")) return false;
+            const activeEditor = this.resolveActiveEditor();
+            if (activeEditor && protyle !== activeEditor.protyle) return false;
             const fallbackRange = (target.handle as unknown as {__xlcFallbackRange?: Range}).__xlcFallbackRange;
             if (fallbackRange) {
                 return protyle.element.isConnected && protyle.element.contains(fallbackRange.commonAncestorContainer);
@@ -334,6 +557,25 @@ export class HostBridge implements IHostBridge {
                 }
             }
 
+            const focusEditableForRange = (range: Range | null): void => {
+                if (typeof (editor as any).focus === "function") {
+                    (editor as any).focus();
+                } else if (typeof (editor as any).protyle?.getInstance === "function" && typeof (editor as any).protyle.getInstance()?.focus === "function") {
+                    (editor as any).protyle.getInstance().focus();
+                } else if (typeof (editor as any).protyle?.element?.focus === "function") {
+                    (editor as any).protyle.element.focus();
+                }
+                if (range) {
+                    try {
+                        const startEl = asElement(range.startContainer);
+                        const editableEl = startEl?.closest?.('[contenteditable="true"]') as HTMLElement | null;
+                        if (editableEl && typeof editableEl.focus === "function") {
+                            editableEl.focus({preventScroll: true});
+                        }
+                    } catch {}
+                }
+            };
+
             if (target !== undefined) {
                 if (!this.canInsertAtTarget(target) || !target?.handle) return false;
                 const fallbackRange = (target.handle as unknown as {__xlcFallbackRange?: Range}).__xlcFallbackRange;
@@ -345,19 +587,39 @@ export class HostBridge implements IHostBridge {
                 }
                 const selection = window.getSelection();
                 if (!selection) return false;
-                if (typeof (editor as any).focus === "function") {
-                    (editor as any).focus();
-                } else if (typeof (editor as any).protyle?.getInstance === "function" && typeof (editor as any).protyle.getInstance()?.focus === "function") {
-                    (editor as any).protyle.getInstance().focus();
-                } else if (typeof (editor as any).protyle?.element?.focus === "function") {
-                    (editor as any).protyle.element.focus();
-                }
+                focusEditableForRange(rangeToRestore);
                 try {
                     selection.removeAllRanges();
                     selection.addRange(rangeToRestore);
                 } catch {}
                 const protyleToolbar = (editor.protyle as unknown as {toolbar?: {range?: Range}})?.toolbar;
                 if (protyleToolbar) protyleToolbar.range = rangeToRestore;
+            } else {
+                const selection = typeof window !== "undefined" ? window.getSelection?.() : null;
+                const protyleEl = editor.protyle?.element;
+                let hasLiveEditorSel = false;
+                if (selection && selection.rangeCount > 0 && protyleEl) {
+                    const cur = selection.getRangeAt(0);
+                    const node = asElement(cur.commonAncestorContainer);
+                    if (node && node.closest?.('[data-node-id] [contenteditable="true"]') && protyleEl.contains(cur.commonAncestorContainer)) {
+                        hasLiveEditorSel = true;
+                    }
+                }
+                if (!hasLiveEditorSel) {
+                    const savedRange = this.getValidLastSelectionRange(editor)
+                        ?? ((editor.protyle as unknown as {toolbar?: {range?: Range}})?.toolbar?.range ?? null);
+                    if (savedRange) {
+                        focusEditableForRange(savedRange);
+                        try {
+                            if (selection) {
+                                selection.removeAllRanges();
+                                selection.addRange(savedRange);
+                            }
+                        } catch {}
+                        const protyleToolbar = (editor.protyle as unknown as {toolbar?: {range?: Range}})?.toolbar;
+                        if (protyleToolbar) protyleToolbar.range = savedRange;
+                    }
+                }
             }
 
             let inserted = false;
@@ -394,6 +656,9 @@ export class HostBridge implements IHostBridge {
 
             if (inserted && typeof cursorOffset === "number" && cursorOffset >= 0) {
                 this.positionCursorAtOffset(editor, cursorOffset);
+            }
+            if (inserted) {
+                this.recordSelectionFromDOM();
             }
 
             return inserted;
@@ -462,7 +727,9 @@ export class HostBridge implements IHostBridge {
             const editor = this.resolveActiveEditor();
             const rootID = editor?.protyle?.block?.rootID;
             if (typeof rootID === "string" && rootID.length > 0) {
-                const hPath = editor?.protyle?.title?.editElement?.textContent?.trim() || undefined;
+                const hPath = editor?.protyle?.title?.editElement?.textContent?.trim()
+                    || (editor?.protyle as {path?: string})?.path?.trim()
+                    || undefined;
                 return {docId: rootID, hPath};
             }
             return null;
@@ -491,6 +758,7 @@ export class ActionExecutor {
         notify: (kind: "info" | "error", message: string) => void,
         private readonly onItemUsed?: (item: CommonItem) => void,
         private readonly placeholders?: IPlaceholderHook,
+        private readonly getAiSettings?: () => AiSettings,
     ) {
         // notify 保留在签名中以维持调用方兼容（index.ts 注入）；当前执行器回执走 receipt 返回
         void notify;
@@ -512,20 +780,25 @@ export class ActionExecutor {
         let payload = text;
         if (item?.itemType !== "code") {
             payload = await this.library.expandSnippetRefs(payload);
+            const vault = new LiteralVault(payload);
             if (fills) {
-                payload = expandAsks(payload, fills);
+                payload = expandAsks(payload, fills, (v) => vault.seal(v));
             }
             payload = extractCleanPayload(applyAskDefaults(stripCursorToken(payload)));
+            const withOutput = (await this.applyOutput(payload, item, vault)) ?? payload;
+            return vault.unseal(withOutput);
         }
         return (await this.applyOutput(payload, item)) ?? payload;
     }
 
-    private async applyOutput(text: string | undefined, item?: CommonItem): Promise<string | undefined> {
+    private async applyOutput(text: string | undefined, item?: CommonItem, outerVault?: LiteralVault): Promise<string | undefined> {
         if (text === undefined) return undefined;
         if (item?.itemType === "code") return text;
         if (!this.placeholders) return text;
         try {
             if (!this.placeholders.enabled()) return text;
+            const vault = outerVault ?? new LiteralVault(text);
+            const {applyPlaceholders, listPlaceholders} = await import(/* webpackChunkName: "placeholders-engine" */ "../model/placeholders");
             const needsDoc = listPlaceholders(text).some((k) => k === "title" || k === "path" || k === "doc" || k === "selection");
             const docInfo = needsDoc ? await this.placeholders.currentDoc() : null;
             let selectionText = "";
@@ -539,7 +812,10 @@ export class ActionExecutor {
             const doc = docInfo
                 ? {...docInfo, selection: selectionText.slice(0, 4000)}
                 : (selectionText ? {title: "", path: "", selection: selectionText.slice(0, 4000)} : null);
-            let output = applyPlaceholders(text, this.placeholders.now(), true, doc);
+
+            // 先解析异步剪贴板与生态桥接占位符并封入 LiteralVault，
+            // 使 {{xlc:case|upper|{{xlc:clipboard}}}} 等嵌套宏能参与外层变换，同时继续阻断二次求值。
+            let output = text;
             if ((output.includes("{{xlc:clipboard}}") || output.includes("{{clipboard}}")) && this.placeholders.clipboard) {
                 let clipboardText = "";
                 try {
@@ -547,7 +823,10 @@ export class ActionExecutor {
                 } catch {
                     clipboardText = "";
                 }
-                output = output.replaceAll("{{xlc:clipboard}}", clipboardText.slice(0, 4000)).replaceAll("{{clipboard}}", clipboardText.slice(0, 4000));
+                const safeClip = clipboardText.slice(0, 4000);
+                output = output
+                    .replaceAll("{{xlc:clipboard}}", () => vault.seal(safeClip))
+                    .replaceAll("{{clipboard}}", () => vault.seal(safeClip));
             }
             if (output.includes("{{xlc:checkin:today}}")) {
                 const checkinSummaryText = await callBridge<any, string>(
@@ -566,7 +845,7 @@ export class ActionExecutor {
                     },
                     () => "（未检测到小驴打卡）"
                 );
-                output = output.replaceAll("{{xlc:checkin:today}}", checkinSummaryText);
+                output = output.replaceAll("{{xlc:checkin:today}}", () => vault.seal(checkinSummaryText));
             }
             if (output.includes("{{xlc:home:today}}") || output.includes("{{xlc:butler:today}}")) {
                 const homeSummaryText = await callBridge<any, string>(
@@ -591,8 +870,9 @@ export class ActionExecutor {
                     },
                     () => "（未检测到小驴管家）"
                 );
-                output = output.replaceAll("{{xlc:home:today}}", homeSummaryText)
-                               .replaceAll("{{xlc:butler:today}}", homeSummaryText);
+                output = output
+                    .replaceAll("{{xlc:home:today}}", () => vault.seal(homeSummaryText))
+                    .replaceAll("{{xlc:butler:today}}", () => vault.seal(homeSummaryText));
             }
             if (output.includes("{{xlc:task:today}}")) {
                 const taskSummaryText = await callBridge<any, string>(
@@ -615,7 +895,7 @@ export class ActionExecutor {
                     },
                     () => "（未检测到任务视界）"
                 );
-                output = output.replaceAll("{{xlc:task:today}}", taskSummaryText);
+                output = output.replaceAll("{{xlc:task:today}}", () => vault.seal(taskSummaryText));
             }
             if (output.includes("{{xlc:glean:recent}}")) {
                 const gleanSummaryText = await callBridge<any, string>(
@@ -636,7 +916,7 @@ export class ActionExecutor {
                     },
                     () => "（未检测到小驴拾遗）"
                 );
-                output = output.replaceAll("{{xlc:glean:recent}}", gleanSummaryText);
+                output = output.replaceAll("{{xlc:glean:recent}}", () => vault.seal(gleanSummaryText));
             }
             if (output.includes("{{xlc:contacts:recent}}")) {
                 const contactsSummaryText = await callBridge<any, string>(
@@ -658,7 +938,7 @@ export class ActionExecutor {
                     },
                     () => "（未检测到小驴人脉）"
                 );
-                output = output.replaceAll("{{xlc:contacts:recent}}", contactsSummaryText);
+                output = output.replaceAll("{{xlc:contacts:recent}}", () => vault.seal(contactsSummaryText));
             }
             if (output.includes("{{xlc:cards:today}}") || output.includes("{{xlc:flashcard:today}}")) {
                 const cardsSummaryText = await callBridge<any, string>(
@@ -684,8 +964,9 @@ export class ActionExecutor {
                     },
                     () => "（未检测到小驴闪卡）"
                 );
-                output = output.replaceAll("{{xlc:cards:today}}", cardsSummaryText)
-                               .replaceAll("{{xlc:flashcard:today}}", cardsSummaryText);
+                output = output
+                    .replaceAll("{{xlc:cards:today}}", () => vault.seal(cardsSummaryText))
+                    .replaceAll("{{xlc:flashcard:today}}", () => vault.seal(cardsSummaryText));
             }
             if (output.includes("{{xlc:exam:today}}") || output.includes("{{xlc:exam:stats}}")) {
                 const examSummaryText = await callBridge<any, string>(
@@ -709,8 +990,9 @@ export class ActionExecutor {
                     },
                     () => "（未检测到小驴考试）"
                 );
-                output = output.replaceAll("{{xlc:exam:today}}", examSummaryText)
-                               .replaceAll("{{xlc:exam:stats}}", examSummaryText);
+                output = output
+                    .replaceAll("{{xlc:exam:today}}", () => vault.seal(examSummaryText))
+                    .replaceAll("{{xlc:exam:stats}}", () => vault.seal(examSummaryText));
             }
             if (output.includes("{{xlc:raikiri:active}}") || output.includes("{{xlc:speedswitch:active}}")) {
                 const raikiriSummaryText = await callBridge<any, string>(
@@ -728,10 +1010,20 @@ export class ActionExecutor {
                     },
                     () => "（未检测到小驴雷切）"
                 );
-                output = output.replaceAll("{{xlc:raikiri:active}}", raikiriSummaryText)
-                               .replaceAll("{{xlc:speedswitch:active}}", raikiriSummaryText);
+                output = output
+                    .replaceAll("{{xlc:raikiri:active}}", () => vault.seal(raikiriSummaryText))
+                    .replaceAll("{{xlc:speedswitch:active}}", () => vault.seal(raikiriSummaryText));
             }
-            return output;
+
+            output = applyPlaceholders(
+                output,
+                this.placeholders.now(),
+                true,
+                doc,
+                (v) => vault.seal(v),
+                (v) => vault.unseal(v),
+            );
+            return outerVault ? output : vault.unseal(output);
         } catch {
             return text;
         }
@@ -809,16 +1101,28 @@ export class ActionExecutor {
         }
     }
 
-    private async resolveWithFills(item: CommonItem, fills?: Record<string, string>, context?: {before?: string; after?: string; docTitle?: string; smartExpand?: boolean}) {
+    private async resolveWithFills(
+        item: CommonItem,
+        fills?: Record<string, string>,
+        context?: {before?: string; after?: string; docTitle?: string; smartExpand?: boolean},
+        vault?: LiteralVault,
+    ) {
         const content = await this.resolveContent(item);
         if (!content) return null;
         if (item.itemType !== "code") {
             let kramdown = await this.library.expandSnippetRefs(content.kramdown);
             if (fills) {
-                kramdown = expandAsks(kramdown, fills);
+                kramdown = expandAsks(kramdown, fills, vault ? (v) => vault.seal(v) : undefined);
             } else if (context?.smartExpand) {
                 try {
-                    kramdown = await aiSmartExpandTemplate(kramdown, context);
+                    kramdown = await withLvAiWait({
+                        scenario: "transform",
+                        title: `AI 模板智能展开 · ${item.title || "常用模版"}`,
+                        subtitle: context?.docTitle ? `上下文：${context.docTitle}` : "正在结合上下文智能填充变量",
+                        cancelLabel: "⏹ 取消生成",
+                    }, async (signal) => {
+                        return aiSmartExpandTemplate(kramdown, context, this.getAiSettings?.(), signal);
+                    });
                 } catch {
                     // 降级使用普通展开
                 }
@@ -848,7 +1152,8 @@ export class ActionExecutor {
     }
 
     private async runAtTarget(item: CommonItem, mode: InsertMode, fills: Record<string, string> | undefined, editorTarget: EditorInsertTargetSnapshot | null | undefined, context?: {before?: string; after?: string; docTitle?: string; smartExpand?: boolean}): Promise<ExecutionReceipt> {
-        const content = await this.resolveWithFills(item, fills, context);
+        const vault = new LiteralVault();
+        const content = await this.resolveWithFills(item, fills, context, vault);
         if (!content) {
             return {ok: false, mode, message: "kernel-error:content", downgraded: false, pendingVerification: []};
         }
@@ -869,18 +1174,41 @@ export class ActionExecutor {
         if ((plan.mode === "copy" || plan.mode === "copy-content") && !plan.clipboardText) {
             return {ok: false, mode: plan.mode, message: "empty-plan", downgraded: plan.downgraded, pendingVerification: plan.pendingVerification};
         }
-        return this.execute(item, plan, editorTarget);
+        return this.execute(item, plan, editorTarget, vault);
     }
 
-    private async execute(item: CommonItem, plan: InsertPlan, editorTarget?: EditorInsertTargetSnapshot | null): Promise<ExecutionReceipt> {
+    private async execute(item: CommonItem, plan: InsertPlan, editorTarget?: EditorInsertTargetSnapshot | null, vault = new LiteralVault()): Promise<ExecutionReceipt> {
         // 插入语义输出：未填充 ask 兜底为 __名称__（可见可改），计算光标偏移并移除光标标记；复制路径保持模板原样
         const insertRenderWithCursor = async (text: string | undefined): Promise<{text: string | undefined; cursorOffset: number | null}> => {
             if (text === undefined) return {text: undefined, cursorOffset: null};
-            if (item.itemType === "code" || plan.mode === "insert-ref" || plan.mode === "insert-embed") return {text, cursorOffset: null};
+            if (item.itemType === "code" || plan.mode === "insert-ref" || plan.mode === "insert-embed") return {text: vault.unseal(text), cursorOffset: null};
             const withDefaults = applyAskDefaults(text);
-            const withOutput = (await this.applyOutput(withDefaults, item)) ?? withDefaults;
-            const extracted = extractCursorPosition(withOutput);
-            return {text: stripCursorToken(extracted.text), cursorOffset: extracted.cursorOffset};
+            const withOutput = (await this.applyOutput(withDefaults, item, vault)) ?? withDefaults;
+            let cursorSentinel = "";
+            let replacedFirstCursor = false;
+            const withCursorSentinel = withOutput.replace(CURSOR_PATTERN, () => {
+                if (!replacedFirstCursor) {
+                    replacedFirstCursor = true;
+                    let candidate = `\uE002XLC_CUR_${Math.random().toString(36).slice(2, 8)}\uE003`;
+                    while (withOutput.includes(candidate)) {
+                        candidate = `\uE002XLC_CUR_${Math.random().toString(36).slice(2, 8)}\uE003`;
+                    }
+                    cursorSentinel = candidate;
+                    return candidate;
+                }
+                return "";
+            });
+            const unsealed = vault.unseal(withCursorSentinel);
+            let cursorOffset: number | null = null;
+            let cleanFinal = unsealed;
+            if (cursorSentinel) {
+                const idx = unsealed.indexOf(cursorSentinel);
+                if (idx !== -1) {
+                    cursorOffset = idx;
+                    cleanFinal = unsealed.slice(0, idx) + unsealed.slice(idx + cursorSentinel.length);
+                }
+            }
+            return {text: cleanFinal, cursorOffset};
         };
         // 移动端插入未验证：诚实降级为复制（B-002 解除后复核）
         if ((plan.mode === "insert" || plan.mode === "insert-content" || plan.mode === "insert-ref" || plan.mode === "insert-embed") && this.host.isMobile()) {
@@ -953,7 +1281,8 @@ export class ActionExecutor {
             });
         }
         if (plan.mode === "copy" || plan.mode === "copy-content") {
-            const text = (await this.applyOutput(plan.clipboardText, item)) ?? "";
+            const rawOut = (await this.applyOutput(plan.clipboardText, item, vault)) ?? "";
+            const text = vault.unseal(rawOut);
             let html: string | undefined;
             if (item.itemType === "markdown" || (item.itemType === "text" && isMarkdownFormattingPresent(text))) {
                 html = renderSafeHtmlFromMarkdown(text);

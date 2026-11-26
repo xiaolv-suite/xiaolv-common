@@ -12,3 +12,10 @@ prep-r*.tmp
 .jeikcode/codegraph/
 .zcode/
 scripts/.last-live-instance.json
+
+# Design prototype & harness build artifacts (S9)
+docs/design/*-bundle.js
+docs/design/*/*-bundle.js
+docs/design/*/*-harness.js
+docs/design/harness-bundle.js
+

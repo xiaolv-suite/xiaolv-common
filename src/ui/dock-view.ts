@@ -60,6 +60,7 @@ export class DockView {
     private deps: DockViewDeps;
     private currentScope: "all" | "common" | "recent" | "favorites" = "all";
     private results: SearchEntry[] = [];
+    private visibleEntries: SearchEntry[] = [];
     private activeIndex = -1;
     private searchSeq = 0;
     private debounceTimer: any = null;
@@ -246,8 +247,8 @@ export class DockView {
             if (e.isComposing || e.keyCode === 229) return;
             if (e.key === "ArrowDown") {
                 e.preventDefault();
-                if (this.results.length > 0) {
-                    this.activeIndex = this.activeIndex < this.results.length - 1 ? this.activeIndex + 1 : 0;
+                if (this.visibleEntries.length > 0) {
+                    this.activeIndex = this.activeIndex < this.visibleEntries.length - 1 ? this.activeIndex + 1 : 0;
                     this.updateActiveRow();
                     this.scrollToActiveRow();
                 }
@@ -255,8 +256,8 @@ export class DockView {
             }
             if (e.key === "ArrowUp") {
                 e.preventDefault();
-                if (this.results.length > 0) {
-                    this.activeIndex = this.activeIndex > 0 ? this.activeIndex - 1 : this.results.length - 1;
+                if (this.visibleEntries.length > 0) {
+                    this.activeIndex = this.activeIndex > 0 ? this.activeIndex - 1 : this.visibleEntries.length - 1;
                     this.updateActiveRow();
                     this.scrollToActiveRow();
                 }
@@ -274,9 +275,9 @@ export class DockView {
             if (e.key === "Enter") {
                 if (e.repeat) return;
                 e.preventDefault();
-                const target = (this.activeIndex >= 0 && this.results[this.activeIndex])
-                    ? this.results[this.activeIndex]
-                    : this.results[0];
+                const target = (this.activeIndex >= 0 && this.visibleEntries[this.activeIndex])
+                    ? this.visibleEntries[this.activeIndex]
+                    : this.visibleEntries[0];
 
                 if (e.ctrlKey || e.metaKey) {
                     if (target) void this.copyEntry(target);
@@ -446,7 +447,9 @@ export class DockView {
 
     private renderList(): void {
         this.listContainer.innerHTML = "";
+        this.visibleEntries = [];
         if (this.results.length === 0) {
+            this.activeIndex = -1;
             const empty = document.createElement("div");
             empty.className = "xlc-dock-empty";
             empty.textContent = "未找到常用条目，点击顶部 ＋ 新建";
@@ -469,7 +472,6 @@ export class DockView {
                         groups.get(tagKey)!.push(e);
                     }
                 }
-                let globalIdx = 0;
                 for (const [tagName, tagEntries] of groups.entries()) {
                     const isCollapsed = this.collapsedCategories.has(tagName);
                     const groupHead = document.createElement("div");
@@ -505,11 +507,11 @@ export class DockView {
 
                     if (!isCollapsed) {
                         for (const entry of tagEntries) {
-                            const row = this.renderItemRow(entry, globalIdx++);
+                            const visibleIdx = this.visibleEntries.length;
+                            this.visibleEntries.push(entry);
+                            const row = this.renderItemRow(entry, visibleIdx);
                             this.listContainer.appendChild(row);
                         }
-                    } else {
-                        globalIdx += tagEntries.length;
                     }
                 }
             } else {
@@ -524,7 +526,6 @@ export class DockView {
                 }
 
                 const tree = buildHierarchyTree(Array.from(groups.keys()), countsMap);
-                let globalIdx = 0;
 
                 const renderNode = (node: HierarchyNode) => {
                     const isCollapsed = this.collapsedCategories.has(node.path);
@@ -569,7 +570,9 @@ export class DockView {
                         for (let itemIdx = 0; itemIdx < orderedEntries.length; itemIdx++) {
                             const entry = orderedEntries[itemIdx];
                             if (!entry) continue;
-                            const row = this.renderItemRow(entry, globalIdx++, orderedEntries, itemIdx);
+                            const visibleIdx = this.visibleEntries.length;
+                            this.visibleEntries.push(entry);
+                            const row = this.renderItemRow(entry, visibleIdx, orderedEntries, itemIdx);
                             if (node.depth > 0) {
                                 row.style.marginLeft = `${Math.min(node.depth, 3) * 10}px`;
                             }
@@ -578,8 +581,6 @@ export class DockView {
                         for (const child of node.children) {
                             renderNode(child);
                         }
-                    } else {
-                        globalIdx += node.count;
                     }
                 };
 
@@ -590,9 +591,17 @@ export class DockView {
         } else {
             // 模式 B：过滤/搜索扁平模式
             for (let i = 0; i < this.results.length; i++) {
-                const row = this.renderItemRow(this.results[i]!, i);
+                const entry = this.results[i]!;
+                const visibleIdx = this.visibleEntries.length;
+                this.visibleEntries.push(entry);
+                const row = this.renderItemRow(entry, visibleIdx);
                 this.listContainer.appendChild(row);
             }
+        }
+
+        if (this.activeIndex >= this.visibleEntries.length) {
+            this.activeIndex = this.visibleEntries.length > 0 ? this.visibleEntries.length - 1 : -1;
+            this.updateActiveRow();
         }
     }
 

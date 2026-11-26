@@ -36,3 +36,27 @@ export function getErrorProperty(error: unknown, key: string): unknown {
         return undefined;
     }
 }
+
+/** Map AiUnavailableError reasons to localized user guidance without pulling service dependencies. */
+export function formatAiError(
+    error: unknown,
+    t: (key: string, ...args: string[]) => string,
+    maxContentChars = 4000,
+): string {
+    const name = getErrorProperty(error, "name");
+    if (name === "AiUnavailableError") {
+        const reason = getErrorProperty(error, "reason");
+        switch (reason) {
+            case "disabled": return t("aiDisabled");
+            case "not-configured": return t("aiNotConfigured");
+            case "empty-response": return t("aiEmpty");
+            case "parse": return t("aiParseFailed");
+            case "timeout": return t("aiTimeout");
+            case "content-not-allowed": return t("aiContentNotAllowed");
+            case "content-too-long": return t("aiContentTooLong", String(maxContentChars));
+            case "transport": return t("aiTransport");
+            case "cancelled": return t("aiCancelled");
+        }
+    }
+    return toErrorMessage(error, t("aiTransport"));
+}

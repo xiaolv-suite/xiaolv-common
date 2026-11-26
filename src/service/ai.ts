@@ -7,12 +7,12 @@
 //  - 空响应=失败（上游吞错为空串，model/ai.go L75-78），绝不拿假结果兜底
 //  - AI 结果永不回写来源块
 import {LIMITS} from "../constants";
-import {getErrorProperty} from "../model/errors";
+import {formatAiError as formatAiErrorBase, getErrorProperty} from "../model/errors";
 import {listAskFields} from "../model/variables";
 import {lvAi} from "../libs/lv-notice-kit";
 
 export interface IKernelTransport {
-    request<T = unknown>(endpoint: AiEndpointName, payload?: Record<string, unknown>): Promise<T>;
+    request<T = unknown>(endpoint: AiEndpointName, payload?: Record<string, unknown>, options?: {signal?: AbortSignal}): Promise<T>;
 }
 
 export type AiEndpointName = "chatGPT" | "listModels";
@@ -26,9 +26,21 @@ export interface AiSettings {
 export const DEFAULT_AI_SETTINGS: AiSettings = {enabled: false, shareContent: false};
 
 export class AiUnavailableError extends Error {
-    constructor(public readonly reason: "disabled" | "not-configured" | "empty-response" | "parse" | "timeout" | "content-not-allowed" | "content-too-long" | "transport") {
+    constructor(public readonly reason: "disabled" | "not-configured" | "empty-response" | "parse" | "timeout" | "content-not-allowed" | "content-too-long" | "transport" | "cancelled") {
         super(`ai unavailable: ${reason}`);
         this.name = "AiUnavailableError";
+    }
+}
+
+export function formatAiError(err: unknown, t: (key: string, ...args: string[]) => string): string {
+    return formatAiErrorBase(err, t, AI_MAX_CONTENT_CHARS);
+}
+
+function assertAiContentAllowed(settings: AiSettings = DEFAULT_AI_SETTINGS, contentLength?: number): void {
+    if (!settings?.enabled) throw new AiUnavailableError("disabled");
+    if (!settings?.shareContent) throw new AiUnavailableError("content-not-allowed");
+    if (typeof contentLength === "number" && contentLength > AI_MAX_CONTENT_CHARS) {
+        throw new AiUnavailableError("content-too-long");
     }
 }
 
@@ -230,20 +242,30 @@ export class AiAssistant {
         }
     }
 
-    private async complete(prompt: string, needContentPermission: boolean, content?: string): Promise<string> {
+    private async complete(prompt: string, needContentPermission: boolean, content?: string, signal?: AbortSignal): Promise<string> {
         if (!this.settings.enabled) throw new AiUnavailableError("disabled");
         if (needContentPermission && !this.settings.shareContent) throw new AiUnavailableError("content-not-allowed");
         if (needContentPermission && content && content.length > AI_MAX_CONTENT_CHARS) {
             // 与 prompt 截断阈值统一：不再存在「>4000 字静默截断出域」的诚实性盲区（R138）
             throw new AiUnavailableError("content-too-long");
         }
+        if (signal?.aborted) throw new AiUnavailableError("cancelled");
         let raw: unknown;
         try {
-            raw = await this.transport.request<string>("chatGPT", {msg: prompt});
+            raw = await this.transport.request<string>("chatGPT", {msg: prompt}, signal ? {signal} : undefined);
         } catch (err) {
+            if (
+                signal?.aborted
+                || getErrorProperty(err, "kind") === "cancelled"
+                || getErrorProperty(err, "name") === "KernelCancelledError"
+                || getErrorProperty(err, "name") === "AbortError"
+            ) {
+                throw new AiUnavailableError("cancelled");
+            }
             if (getErrorProperty(err, "name") === "KernelTimeoutError") throw new AiUnavailableError("timeout");
             throw new AiUnavailableError("transport");
         }
+        if (signal?.aborted) throw new AiUnavailableError("cancelled");
         if (typeof raw !== "string" || raw.trim().length === 0) {
             // 上游把「未配置/网络失败」都吞成空串（model/ai.go L75-78）
             throw new AiUnavailableError("empty-response");
@@ -252,8 +274,8 @@ export class AiAssistant {
     }
 
     /** 捕获表单「AI 整理」：需要正文出域权限。 */
-    async tidy(content: string): Promise<ReturnType<typeof parseTidyResult>> {
-        const raw = await this.complete(buildTidyPrompt(content), true, content);
+    async tidy(content: string, signal?: AbortSignal): Promise<ReturnType<typeof parseTidyResult>> {
+        const raw = await this.complete(buildTidyPrompt(content), true, content, signal);
         const parsed = parseTidyResult(raw);
         // 模型回非 JSON 散文≠空响应：分开报，用户才知道该重试而非检查配置（R138）
         if (!parsed) throw new AiUnavailableError("parse");
@@ -262,43 +284,43 @@ export class AiAssistant {
     }
 
     /** AI 生成草稿：需要正文出域权限（描述文本同样出域）。 */
-    async draft(description: string): Promise<string> {
-        return this.complete(buildDraftPrompt(description), true, description);
+    async draft(description: string, signal?: AbortSignal): Promise<string> {
+        return this.complete(buildDraftPrompt(description), true, description, signal);
     }
 
     /** 调用时变换：需要正文出域权限。返回预览文本，绝不回写。 */
-    async transform(kind: TransformKind, content: string): Promise<string> {
-        return this.complete(buildTransformPrompt(kind, content), true, content);
+    async transform(kind: TransformKind, content: string, signal?: AbortSignal): Promise<string> {
+        return this.complete(buildTransformPrompt(kind, content), true, content, signal);
     }
 
     /** 自定义变换（F7）：指令来自用户设置；需要正文出域权限（complete 的 needContent 门禁同内置） */
-    async transformCustom(instruction: string, content: string): Promise<string> {
-        return this.complete(buildCustomTransformPrompt(instruction, content), true, content);
+    async transformCustom(instruction: string, content: string, signal?: AbortSignal): Promise<string> {
+        return this.complete(buildCustomTransformPrompt(instruction, content), true, content, signal);
     }
 
     /** 语义找条目：默认仅元数据清单出域（不含正文）。返回按相关度排序的条目引用。 */
-    async semanticPick(query: string, entries: readonly SearchMetaEntry[]): Promise<SearchMetaEntry[]> {
+    async semanticPick(query: string, entries: readonly SearchMetaEntry[], signal?: AbortSignal): Promise<SearchMetaEntry[]> {
         if (entries.length === 0) return [];
-        const raw = await this.complete(buildSemanticPickPrompt(query, entries), false);
+        const raw = await this.complete(buildSemanticPickPrompt(query, entries), false, undefined, signal);
         const picks = parseSemanticPick(raw, Math.min(entries.length, AI_MAX_META_ITEMS));
         return picks.map((idx) => entries[idx - 1]).filter((e): e is SearchMetaEntry => !!e);
     }
 
     /** 标签体检：仅标签清单出域；只给建议不自动改。少于 2 个标签直接短路。 */
-    async tagAudit(tags: readonly string[]): Promise<TagAuditSuggestion[]> {
+    async tagAudit(tags: readonly string[], signal?: AbortSignal): Promise<TagAuditSuggestion[]> {
         if (tags.length < 2) return [];
-        const raw = await this.complete(buildTagAuditPrompt(tags), false);
+        const raw = await this.complete(buildTagAuditPrompt(tags), false, undefined, signal);
         return parseTagAudit(raw);
     }
 
     /** AI 智能模板根据上下文展开 (Epoch 7 Phase 6) */
-    async smartExpandTemplate(templateText: string, context?: TemplateExpansionContext): Promise<string> {
-        return aiSmartExpandTemplate(templateText, context);
+    async smartExpandTemplate(templateText: string, context?: TemplateExpansionContext, signal?: AbortSignal): Promise<string> {
+        return aiSmartExpandTemplate(templateText, context, this.settings, signal);
     }
 
     /** AI 智能变体生成（中英双语、礼貌商务、极简要点） (Epoch 7 Phase 6) */
-    async generateSnippetVariants(title: string, content: string): Promise<SnippetVariant[]> {
-        return aiGenerateSnippetVariants(title, content);
+    async generateSnippetVariants(title: string, content: string, signal?: AbortSignal): Promise<SnippetVariant[]> {
+        return aiGenerateSnippetVariants(title, content, this.settings, signal);
     }
 }
 
@@ -318,7 +340,14 @@ export interface SnippetVariant {
 /**
  * 模版根据上下文智能展开与补全：展开复杂宏模版时，AI 根据当前光标前后文自动生成填充内容。
  */
-export async function aiSmartExpandTemplate(templateText: string, context?: TemplateExpansionContext): Promise<string> {
+export async function aiSmartExpandTemplate(
+    templateText: string,
+    context?: TemplateExpansionContext,
+    settings: AiSettings = DEFAULT_AI_SETTINGS,
+    signal?: AbortSignal,
+): Promise<string> {
+    assertAiContentAllowed(settings, templateText.length);
+    if (signal?.aborted) throw new AiUnavailableError("cancelled");
     const fields = listAskFields(templateText);
     const prompt = [
         `你是文档智能助手。用户正在笔记中应用一个模板，请根据当前文档的上下文，推断并生成最合适的变量填充值。`,
@@ -338,10 +367,14 @@ export async function aiSmartExpandTemplate(templateText: string, context?: Temp
                 { role: "system", content: "你是一个专业的高效写作与排版助手。严格按照用户的上下文对模板进行变量填充与展开，保持原有 Markdown 排版格式，直接输出结果。" },
                 { role: "user", content: prompt }
             ],
-            temperature: 0.3
+            temperature: 0.3,
+            signal,
         });
         return res.content.trim() || templateText;
     } catch (err) {
+        if (signal?.aborted || getErrorProperty(err, "name") === "AbortError") {
+            throw new AiUnavailableError("cancelled");
+        }
         console.warn("[lvAi] 智能展开模板失败:", err);
         return templateText;
     }
@@ -350,7 +383,12 @@ export async function aiSmartExpandTemplate(templateText: string, context?: Temp
 /**
  * 模版变量根据上下文智能推断键值对映射。
  */
-export async function aiSmartFillVariables(templateText: string, context?: TemplateExpansionContext): Promise<Record<string, string>> {
+export async function aiSmartFillVariables(
+    templateText: string,
+    context?: TemplateExpansionContext,
+    settings: AiSettings = DEFAULT_AI_SETTINGS,
+): Promise<Record<string, string>> {
+    assertAiContentAllowed(settings, templateText.length);
     const fields = listAskFields(templateText);
     if (fields.length === 0) return {};
     const prompt = [
@@ -384,7 +422,14 @@ export async function aiSmartFillVariables(templateText: string, context?: Templ
 /**
  * 常用片段智能变体生成：对某个常用片段，一键由 AI 生成中英双语版、礼貌商务版、极简要点版。
  */
-export async function aiGenerateSnippetVariants(title: string, content: string): Promise<SnippetVariant[]> {
+export async function aiGenerateSnippetVariants(
+    title: string,
+    content: string,
+    settings: AiSettings = DEFAULT_AI_SETTINGS,
+    signal?: AbortSignal,
+): Promise<SnippetVariant[]> {
+    assertAiContentAllowed(settings, content.length);
+    if (signal?.aborted) throw new AiUnavailableError("cancelled");
     const prompt = [
         `请为常用文本片段「${title}」生成 3 个不同语气的变体版本：`,
         `1. bilingual: 中英双语对照版（保留中文并在每段后附上优雅英文对照）`,
@@ -402,14 +447,23 @@ export async function aiGenerateSnippetVariants(title: string, content: string):
         `}`
     ].join("\n");
 
-    const res = await lvAi.chat({
-        source: "小驴常用",
-        messages: [
-            { role: "system", content: "你是一个专业的文本重构与文案润色大师。严格按要求的格式输出三个语气的变体 JSON。" },
-            { role: "user", content: prompt }
-        ],
-        temperature: 0.4
-    });
+    let res;
+    try {
+        res = await lvAi.chat({
+            source: "小驴常用",
+            messages: [
+                { role: "system", content: "你是一个专业的文本重构与文案润色大师。严格按要求的格式输出三个语气的变体 JSON。" },
+                { role: "user", content: prompt }
+            ],
+            temperature: 0.4,
+            signal,
+        });
+    } catch (err) {
+        if (signal?.aborted || getErrorProperty(err, "name") === "AbortError") {
+            throw new AiUnavailableError("cancelled");
+        }
+        throw err;
+    }
 
     const jsonMatch = res.content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {

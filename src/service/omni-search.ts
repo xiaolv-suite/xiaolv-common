@@ -8,7 +8,7 @@ import type {IKernelClient} from "../kernel/client";
 import {parseChildBlocks, parseBatchKramdowns, parseDocSearch, parseFullTextSearch, IBlockSearchHit} from "../kernel/client";
 import {SearchEntry, splitSearchTokens} from "../model/search";
 import {deriveTitle, deriveSummary, inferItemType, isBlockId, ItemType} from "../model/item";
-import {inferTypeFromText} from "../ui/capture";
+import {inferTypeFromText} from "../model/item";
 import {bodyWriteRestriction} from "../model/kramdown";
 import {getPinyinAdapter} from "../model/pinyin";
 import {safeDocTitleFromHPath} from "../libs/lv-notice-kit";

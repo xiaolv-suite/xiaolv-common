@@ -8,7 +8,7 @@
 import {LIMITS} from "../constants";
 import {ExportedItem} from "../model/transfer";
 import {ItemType, isItemType, cleanTagList, isSafeHttpUrl} from "../model/item";
-import {inferTypeFromText} from "../ui/capture";
+import {inferTypeFromText} from "../model/item";
 import {itemBodyRestriction} from "../model/kramdown";
 
 export interface CsvTsvImportResult {

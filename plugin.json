@@ -2,7 +2,7 @@
   "name": "xiaolv-common",
   "author": "xiaolv-suite",
   "url": "https://github.com/xiaolv-suite/xiaolv-common",
-  "version": "0.10.90",
+  "version": "0.10.91",
   "minAppVersion": "3.8.4",
   "settingsWindow": true,
   "disabledInPublish": false,
@@ -17,8 +17,8 @@
     "browser-mobile"
   ],
   "displayName": {
-    "default": "Lv Common (Beta)",
-    "zh-CN": "小驴常用（内测版）"
+    "default": "Lv Common",
+    "zh-CN": "小驴常用"
   },
   "description": {
     "default": "Save and recall common content (phrases, snippets, code, links, images, assets, block structures) anchored to real SiYuan blocks — with fill-in variables, snippet nesting, AI transforms, template packs, and faithful source references.",
@@ -48,7 +48,6 @@
     "快速插入",
     "quick insert",
     "小驴常用",
-    "小驴常用（内测版）",
     "xiaolv",
     "xiaolv-common",
     "变量",

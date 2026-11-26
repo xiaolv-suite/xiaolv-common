@@ -2,7 +2,7 @@
 // 核心场景：客服/邮件模板复制到外部富文本应用（Outlook、网页邮箱、飞书、微信、钉钉等）
 // 关键红线：绝对杜绝 XSS 注入，所有非转义用户输入一律转义为安全 HTML 实体。
 
-import {stripMarkdownFormatting} from "./clipboard-cleaner";
+import {stripMarkdownFormatting} from "./markdown-strip";
 
 /** HTML 特殊字符安全转义 */
 export function escapeHtml(text: string): string {

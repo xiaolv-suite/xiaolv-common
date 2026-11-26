@@ -2128,49 +2128,11 @@ export function extractInitials(text: string, options: InitialsOptions = {}): st
     return initials.join(sep);
 }
 
-export interface StripMarkdownOptions {
-    /** 是否保留超链接中的文本（默认 true，如 [思源](url) -> 思源） */
-    keepLinksText?: boolean;
-    /** 是否保留代码块/行内代码的内容（默认 true） */
-    keepCodeContent?: boolean;
-}
-
 /**
  * 剥离 Markdown 格式语法标记，提取纯文本 (stripMarkdownFormatting)
  */
-export function stripMarkdownFormatting(text: string, options: StripMarkdownOptions = {}): string {
-    if (!text || typeof text !== "string") return text ?? "";
-    const keepLinksText = options.keepLinksText !== false;
-    const keepCodeContent = options.keepCodeContent !== false;
-
-    let res = text.replace(/\r\n?/g, "\n");
-
-    // 1. 代码围栏 ```lang\ncode\n```
-    res = res.replace(/```[a-zA-Z0-9_-]*\n([\s\S]*?)\n```/g, (_, code) => (keepCodeContent ? code : ""));
-
-    // 2. 行内代码 `code`
-    res = res.replace(/`([^`]+)`/g, (_, code) => (keepCodeContent ? code : ""));
-
-    // 3. 图片与超链接
-    res = res.replace(/!\[([^\]]*)\]\([^)]+\)/g, (_, alt) => (alt ? `[图片: ${alt}]` : ""));
-    res = res.replace(/\[([^\]]+)\]\([^)]+\)/g, (_, label) => (keepLinksText ? label : ""));
-
-    // 4. 标题符号 # H1 -> H1
-    res = res.replace(/^#{1,6}\s+/gm, "");
-
-    // 5. 引用符号 > quote -> quote
-    res = res.replace(/^>\s*/gm, "");
-
-    // 6. 粗体、斜体与删除线
-    res = res.replace(/[*_]{2}([^*_]+)[*_]{2}/g, "$1");
-    res = res.replace(/[*_]([^*_]+)[*_]/g, "$1");
-    res = res.replace(/~~([^~]+)~~/g, "$1");
-
-    // 7. 水平分割线
-    res = res.replace(/^[-*_]{3,}\s*$/gm, "");
-
-    return res.trim();
-}
+import {stripMarkdownFormatting, type StripMarkdownOptions} from "./markdown-strip";
+export {stripMarkdownFormatting, type StripMarkdownOptions};
 
 /**
  * 将字节数值格式化为人类可读的容量单位 (formatByteSize)
@@ -5428,31 +5390,7 @@ export function shiftMarkdownBlockquotes(text: string, delta: number): ShiftBloc
  * 字符串轻量校验和计算引擎 (calculateChecksum)
  * 支持 crc32 与 adler32，输出标准十六进制字符串
  */
-export function calculateChecksum(text: string, algorithm: "crc32" | "adler32" = "crc32"): string {
-    if (!text || typeof text !== "string") return "00000000";
-
-    const bytes = stringToUtf8Bytes(text);
-
-    if (algorithm === "adler32") {
-        let a = 1;
-        let b = 0;
-        const MOD_ADLER = 65521;
-        for (let i = 0; i < bytes.length; i++) {
-            a = (a + bytes[i]!) % MOD_ADLER;
-            b = (b + a) % MOD_ADLER;
-        }
-        const adler = ((b << 16) | a) >>> 0;
-        return adler.toString(16).padStart(8, "0");
-    }
-
-    let crc = 0xFFFFFFFF;
-    for (let i = 0; i < bytes.length; i++) {
-        const byte = bytes[i]!;
-        crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xFF]!;
-    }
-    crc = (crc ^ 0xFFFFFFFF) >>> 0;
-    return crc.toString(16).padStart(8, "0");
-}
+export {calculateChecksum} from "./checksum";
 
 export interface AlignColumnsOptions {
     /** 列间填充留白数量（默认 1 个空格） */

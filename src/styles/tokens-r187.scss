@@ -421,7 +421,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
 
   .xlc-setting-row { padding: var(--xlc-space-2) var(--xlc-space-0); gap: var(--xlc-space-3); font-size: var(--xlc-font-md); line-height: var(--xlc-line-body); }
   .xlc-setting-text { font-size: var(--xlc-font-md); font-weight: var(--xlc-weight-medium); line-height: var(--xlc-line-control); color: var(--xlc-ink); }
-  .xlc-setting-sub { margin-top: var(--xlc-space-1); font-size: var(--xlc-font-xs); line-height: var(--xlc-line-control); color: var(--xlc-muted); }
+  .xlc-setting-sub { display: block; margin-top: var(--xlc-space-1); font-size: var(--xlc-font-xs); line-height: var(--xlc-line-control); color: var(--xlc-muted); }
   .xlc-switch { width: 40px; height: 24px; }
   .xlc-switch::after { width: 18px; height: 18px; top: 3px; left: 3px; }
   .xlc-switch:checked::after { transform: translateX(16px); }
@@ -633,7 +633,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
   .xlc-row-meta { color: var(--xlc-muted); font-size: var(--xlc-font-sm); line-height: var(--xlc-line-control); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
   .xlc-row-ordinal { width: 20px; height: 20px; border: 0; border-radius: var(--xlc-radius-sm); background: var(--xlc-soft); color: var(--xlc-muted); flex-shrink: 0; }
   .xlc-row--active .xlc-row-ordinal { background: var(--b3-theme-primary); color: var(--b3-theme-on-primary, #ffffff); border: 0; }
-  .xlc-row-action-wrap { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 1; min-width: 0; margin-left: auto; max-width: 140px; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+  .xlc-row-action-wrap { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 3px; flex-shrink: 1; min-width: 0; margin-left: auto; max-width: 100%; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
   .xlc-row:hover .xlc-row-action-wrap,
   .xlc-row--active .xlc-row-action-wrap,
   .xlc-row:focus-within .xlc-row-action-wrap { opacity: 1; pointer-events: auto; }
@@ -1380,7 +1380,7 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
   }
 }
 
-:is(#{$roots}).b3-dialog__container.xlc-form-host:has(.xlc-capture) {
+:is(#{$roots}).b3-dialog__container.xlc-form-host.xlc-capture-host {
   max-height: calc(100vh - 24px);
   max-height: calc(100dvh - 24px); /* 移动端动态视口回退 */
   display: flex;

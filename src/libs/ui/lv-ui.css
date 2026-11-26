@@ -748,10 +748,10 @@ to{background-position:-100% 0}
 [data-lv-ui] .lvx-dialog{border-radius:var(--lvx-r-lg)}
 }
 [data-lv-ui] :is(.lvx-selbar,.lvx-batchbar,.lvx-blockmenu){background:color-mix(in srgb,var(--lvx-surface-elevated) 82%,transparent);border:1px solid var(--lvx-border-strong);box-shadow:var(--lvx-shadow-3)}
-[data-lv-ui] .lvx-selbar{position:relative;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--lvx-r-md);z-index:40;max-width:100%;backdrop-filter:blur(16px);width:fit-content;flex-wrap:wrap}
-[data-lv-ui] .lvx-batchbar{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-radius:var(--lvx-r-lg);width:100%;max-width:540px;backdrop-filter:blur(16px)}
+[data-lv-ui] .lvx-selbar{position:relative;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--lvx-r-md);z-index:40;max-width:100%;backdrop-filter:blur(12px);width:fit-content;flex-wrap:wrap}
+[data-lv-ui] .lvx-batchbar{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-radius:var(--lvx-r-lg);width:100%;max-width:540px;backdrop-filter:blur(12px)}
 [data-lv-ui] .lvx-reportcard{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:var(--lvx-r-lg);background:linear-gradient(180deg,var(--lvx-surface) 0%,var(--lvx-surface-sunken) 100%);border:1px solid var(--lvx-border);box-shadow:var(--lvx-shadow-2);width:100%}
-[data-lv-ui] .lvx-blockmenu{min-width:220px;padding:6px;border-radius:var(--lvx-r-md);display:flex;flex-direction:column;gap:2px;backdrop-filter:blur(16px)}
+[data-lv-ui] .lvx-blockmenu{min-width:220px;padding:6px;border-radius:var(--lvx-r-md);display:flex;flex-direction:column;gap:2px;backdrop-filter:blur(12px)}
 @keyframes lvx-shm{0%{background-position:200% 0}
 28%{background-position:-200% 0}
 100%{background-position:-200% 0}
@@ -774,3 +774,4 @@ to{background-position:-100% 0}
 }
 [data-lv-ui] :is(.lvx-pill-btn,.lvx-calendar__day,.lvx-chip__close,.lvx-alert__close,.lvx-combobox__option,.lvx-medal,.lvx-seqcard__row,.lvx-pinboard__tile,.lvx-fsrsbar__btn):focus-visible{outline:0;box-shadow:var(--lvx-focus-ring)}
 @media (prefers-reduced-motion:reduce){[data-lv-ui] .lvx-progress__bar{transition:none}[data-lv-ui] .lvx-skeleton{animation:none;opacity:.55}[data-lv-ui] .lvx-drawer,[data-lv-ui] .lvx-drawer-mask{transition:none}[data-lv-ui] .lvx-confetti__piece{display:none!important;animation:none!important}[data-lv-ui] .lvx-btn,[data-lv-ui] .lvx-switch__track,[data-lv-ui] .lvx-switch__knob{transition:none}[data-lv-ui] :is(.lvx-shm-btn,.lvx-orb__track,.lvx-orb__node>*,.lvx-medal,.lvx-seqcard__row,.lvx-pinboard__tile,.lvx-pill-btn,.lvx-fsrsbar__btn,.lvx-remchip,.lvx-compass__pulse){animation:none;transition:none}}
+@media print{#lvLaunchpadDesktopEntry,#lvLaunchpadMobileEntry,#lv-desktop-launchpad-popover,#lv-launchpad-sheet-mask,#lv-launchpad-mobile-ball,#lv-notice-host,#lv-quick-workspace-mask,#lv-block-assistant-portal,#lv-shared-block-capsule,#lv-block-ai-result-card,#lv-block-type-picker-root,#lv-block-action-store-mask,#lv-ai-tier4-confirm-mask,.lv-bam,.lv-bam-mobile-mask,.lv-card-badge-pill,.lv-shared-ba-capsule,.lv-toast,.lv-floating-note,.lv-qw-mask,.lv-desktop-launchpad-popover,[data-lv-ui] .lvx-toast,[data-lv-ui] .lvx-fball,[data-lv-ui] .lvx-selbar,[data-lv-ui] .lvx-batchbar,[data-lv-ui] .lvx-blockmenu,[data-lv-ui] .lvx-drawer-mask,[data-lv-ui] .lvx-drawer,[data-lv-ui] .lvx-compass-mini{display:none!important;visibility:hidden!important}}

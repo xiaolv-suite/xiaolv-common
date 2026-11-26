@@ -8,7 +8,7 @@ import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mo
 import {inferColumnMapping} from "../service/csv-tsv-import";
 import {ExportedItem} from "../model/transfer";
 import {toErrorMessage} from "../model/errors";
-import type {SettingsUiContext} from "./settings-dialog";
+import type {SettingsUiContext} from "./settings-types";
 
 export interface CsvTsvWizardState {
     rawText: string;
@@ -26,7 +26,11 @@ export interface CsvTsvWizardState {
 }
 
 /** 交互式字段映射向导对话框 */
-export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => void): void {
+export function openCsvTsvImportWizard(
+    ctx: SettingsUiContext,
+    onClose?: () => void,
+    onPolicyDialog?: (ctx: SettingsUiContext, bundle: {items: Array<{id: string; title: string}>}, issues: Array<{index: number; reason: string}>, payload: {kind: "csv-tsv"; items: any[]}) => void
+): void {
     const t = ctx.t;
     let released = false;
     let parseTimer: ReturnType<typeof setTimeout> | undefined;
@@ -247,14 +251,14 @@ export function openCsvTsvImportWizard(ctx: SettingsUiContext, onClose?: () => v
         void loadParser().then((parser) => {
             const fullResult = parser.parseCsvTsvItems(state.rawText, state.delimiter, Date.now(), state.mapping);
             const importIssues = fullResult.issues.map((reason, index) => ({index, reason}));
-            void import("./settings-dialog").then((mod) => {
-                mod.openImportPolicyDialog(
+            if (typeof onPolicyDialog === "function") {
+                onPolicyDialog(
                     ctx,
                     {items: fullResult.items.map((i) => ({id: i.id, title: i.title}))},
                     importIssues,
                     {kind: "csv-tsv", items: fullResult.items},
                 );
-            });
+            }
         });
     });
 

@@ -45,10 +45,18 @@ export interface AiChatPayload {
     taskType?: AiTaskType;
     /** 用户或调用方指定首选通道（可选，若不指定则自动按最优层级瀑布降级） */
     preferredProvider?: AiProviderType;
+    /** 透传自 AI 中枢的通道层级标识（用于缓存隔离与首选映射） */
+    preferredTier?: string;
+    /** 单次请求级免费公用池开关（隔离并发请求，不修改全局单例配置） */
+    allowPublicFree?: boolean;
+    /** 外部取消信号 */
+    signal?: AbortSignal;
 }
 
 export interface AiChatResult {
     ok: boolean;
+    /** 是否为本地离线规则兜底结果（严禁冒充真实在线 AI 成功） */
+    isFallback?: boolean;
     content: string;
     provider: AiProviderType;
     model: string;
@@ -61,7 +69,12 @@ export interface AiChatResult {
 export interface UserCustomConfig {
     enabled?: boolean;
     baseUrl?: string;    // 如 "https://api.siliconflow.cn/v1" 或 "https://api.deepseek.com/v1"
+    /** 仅允许在内存/运行时传入；持久化到 localStorage 前必须剥离并通过 /api/setting/setSecrets 存入思源密钥库 */
     apiKey?: string;
+    /** 脱敏状态标记：密钥是否已安全存入思源密钥库 */
+    hasSecret?: boolean;
+    /** 对应的思源密钥库槽位名 */
+    secretSlot?: string;
     model?: string;      // 如 "Qwen/Qwen2.5-7B-Instruct" 或 "deepseek-chat"
 }
 
@@ -78,6 +91,8 @@ export interface PublicFreeConfig {
 }
 
 export interface AiRouterConfig {
+    /** 首选通道模式（可选） */
+    preferredProvider?: AiProviderType;
     /** 是否启用思源内核智能体探测（默认 true） */
     enableSiyuan?: boolean;
     /** 用户自填配置 */
@@ -314,76 +329,76 @@ export const AI_TIER_DESCRIPTIONS: AiTierDescription[] = [
     {
         tier: 1,
         provider: "siyuan",
-        title: "Tier 1: 思源内核智能体 (Kernel Agent)",
+        title: "第 1 级：思源内置智能体",
         shortTitle: "思源智能体",
         icon: "🟢",
         themeColor: "#10b981",
         costTag: "由思源配置决定",
-        costText: "由思源笔记「设置 ➔ 智能体」中的官方服务商或自定义配置计费，小驴套件不收取任何额外费用。",
-        privacyTag: "思源内核代理",
-        privacyText: "直接经由思源本地内核 `/api/ai/chat` 转发，与思源笔记官方隐私及安全策略完全一致。",
-        description: "小驴全家桶无缝复用思源全局智能体配置，若您已在思源设置中配置了大模型，无需二次填写，自动优先调度。",
-        bestFor: "已在思源笔记中配好 AI 智能体的用户，零多余配置开箱即用。",
-        setupGuide: "在思源笔记主界面点击「设置」➔「智能体」启用并配置服务商即可。",
+        costText: "由思源笔记「设置 ➔ AI」中的官方服务商或自定义配置计费，小驴套件不收取任何额外费用。",
+        privacyTag: "思源本地通道",
+        privacyText: "直接经由思源本地内置流式通道转发，与思源笔记官方隐私及安全策略完全一致。",
+        description: "小驴全家桶无缝复用思源全局模型配置，若您已在思源设置中配置了大模型，无需二次填写，自动优先调度。",
+        bestFor: "已在思源笔记中配好 AI 模型的用户，零多余配置开箱即用。",
+        setupGuide: "在思源笔记主界面点击「设置」➔「AI」启用并配置服务商即可。",
     },
     {
         tier: 2,
         provider: "user_custom",
-        title: "Tier 2: 用户自配商用 API (OpenAI 协议)",
+        title: "第 2 级：自配商用 API",
         shortTitle: "自配商用 Key",
         icon: "🔵",
         themeColor: "#3b82f6",
         costTag: "低至 ¥0.001/千字 · 赠海量额度",
-        costText: "硅基流动/百炼/智谱等主流平台新用户注册即赠送数百万至两千万 Token，耗尽后极低成本按量扣费。",
-        privacyTag: "客户端直连 · 本地脱敏",
-        privacyText: "直连模型官方端点，绝无第三方中间服务截留；外发前纯本地执行 PII 隐私脱敏护盾清洗敏感信息。",
+        costText: "硅基流动/百炼/智谱等主流平台新用户注册即赠送数百万至两千万额度，耗尽后极低成本按量扣费。",
+        privacyTag: "直连官方 · 自动脱敏",
+        privacyText: "直连模型官方服务地址，绝无第三方中间服务截留；外发前先在本地自动屏蔽手机号、身份证等敏感隐私信息。",
         description: "最高质量与最快响应首选！支持 DeepSeek-V3/R1、Qwen2.5 等业界前沿大模型，拟题质量与逻辑深度最佳。",
-        bestFor: "追求题目拟制质量、高深度思维链反思与极致稳定性的日常高频用户。",
-        setupGuide: "在下方推荐厂商列表中点击「一键填入」，然后填写您在该平台申请的 API Key 即可。",
+        bestFor: "追求题目拟制质量、高深度思考与稳定响应的日常高频用户。",
+        setupGuide: "在下方推荐服务商列表中点击「一键填入配置」，然后填写您在该平台申请的 API Key 即可。",
     },
     {
         tier: 3,
         provider: "ollama",
-        title: "Tier 3: 本地 Ollama 离线推理 (物理级绝对隐私)",
+        title: "第 3 级：本地 Ollama 离线推理",
         shortTitle: "本地 Ollama",
         icon: "🟣",
         themeColor: "#8b5cf6",
         costTag: "0 元永久免费",
-        costText: "完全基于个人电脑显卡或 CPU 算力运行，无任何调用次数或 Token 消费限制。",
-        privacyTag: "100% 物理级绝对隐私",
-        privacyText: "数据永不出本地物理设备！纯离线局域推理，绝无任何外网传输风险。",
-        description: "自动感知本地已启动的 Ollama 守护进程 (默认 http://127.0.0.1:11434)，智能选取本机已下载的最优模型。",
-        bestFor: "断网离线环境、高度敏感个人笔记与重视数据主权的极客用户。",
-        setupGuide: "访问 https://ollama.com 安装后执行 ollama run qwen2.5:7b，小驴将自动即时感知。",
+        costText: "完全基于个人电脑显卡或 CPU 算力运行，无任何调用次数或额度限制。",
+        privacyTag: "100% 本地绝对隐私",
+        privacyText: "数据永不出本地设备！纯离线局域推理，绝无任何外网传输风险。",
+        description: "自动识别本地已启动的 Ollama 服务 (默认 http://127.0.0.1:11434)，智能选取本机已下载的最优模型。",
+        bestFor: "断网离线环境、高度私密笔记与重视数据主权的用户。",
+        setupGuide: "访问 https://ollama.com 安装后执行 ollama run qwen2.5:7b，小驴将自动即时识别。",
     },
     {
         tier: 4,
         provider: "public_free",
-        title: "Tier 4: 公开免密免费通道 (0 元免配置)",
+        title: "第 4 级：公开免密免费通道",
         shortTitle: "免费公用池",
         icon: "🌐",
         themeColor: "#f59e0b",
         costTag: "0 元免密即用",
-        costText: "无需注册、无需绑定信用卡、无需填写任何 Key，小驴官方公用算力池与全球免密通道开箱即用。",
-        privacyTag: "强制前置 PII 隐私脱敏",
-        privacyText: "🛡️ 客户端强制过滤！外发前在浏览器内存自动剔除人名、电话、邮箱、身份证与私密数字。",
-        description: "即插即用的轻量推理通道，为新手提供零门槛快速体验，自动保障日常简单拟题与分类。",
-        bestFor: "刚刚安装插件的新手、不想折腾 API 账号的轻量体验用户。",
-        setupGuide: "默认已启用，在上方首选模式选择「五级自适应瀑布流」即可随时兜底。",
+        costText: "无需注册、无需绑定银行卡、无需填写任何密钥，即开即用公共免费通道。",
+        privacyTag: "强制本地隐私脱敏",
+        privacyText: "🛡️ 自动屏蔽敏感信息！外发前在本地自动遮盖人名、电话、邮箱、身份证与银行卡号。",
+        description: "即插即用的轻量通道（默认关闭，需在设置中手动开启并确认外发隐私提示后方可使用）。",
+        bestFor: "手动开启后用于轻量尝鲜与应急体验场景。",
+        setupGuide: "默认关闭；需在设置中心手动勾选开启「公开免密免费通道」并确认提示后生效。",
     },
     {
         tier: 5,
         provider: "rule_fallback",
-        title: "Tier 5: 本地规则离线兜底 (Heuristic Fallback)",
-        shortTitle: "离线规则兜底",
+        title: "第 5 级：本地规则离线保底",
+        shortTitle: "离线规则保底",
         icon: "⚡",
         themeColor: "#ec4899",
         costTag: "0 成本 · 0 延迟",
-        costText: "纯前端 TypeScript 内置启发式语法分析器与反思模板，不消耗任何外部资源与网络流量。",
-        privacyTag: "100% 纯内存本地",
-        privacyText: "完全在本地浏览器内存中运行，不发起任何 HTTP 网络请求。",
-        description: "终极可靠性保护伞！当网络中断、API 欠费或超时时自动毫秒级接管，保障制卡与打卡解析绝不弹红报错。",
-        bestFor: "全场景故障防线，保障系统高可用性永不宕机。",
+        costText: "纯本地内置规则与模板引擎，不消耗任何外部资源与网络流量。",
+        privacyTag: "100% 纯本地运行",
+        privacyText: "完全在本地内存中运行，不发起任何网络请求。",
+        description: "终极可靠性保底！当网络中断、额度耗尽或超时时自动毫秒级接管，给出离线参考初稿。",
+        bestFor: "全场景断网防线，保障基础辅助能力随时可用。",
         setupGuide: "系统内嵌守护，无需任何配置，自动默默守护。",
     },
 ];
@@ -563,9 +578,22 @@ export class AiResponseCache {
 
     /**
      * 生成请求缓存键 (FNV-1a 极速哈希)
+     * 纳入 preferredProvider / preferredTier / model / allowPublicFree 维度，防止切换渠道/模型后串缓存。
      */
-    static computeKey(taskType: string = "chat", messages: Array<{ role: string; content: string }>): string {
-        const str = `${taskType}::` + messages.map((m) => `${m.role}:${m.content}`).join("||");
+    static computeKey(
+        taskType: string = "chat",
+        messages: Array<{ role: string; content: string }>,
+        options?: {
+            preferredProvider?: string;
+            preferredTier?: string;
+            model?: string;
+            allowPublicFree?: boolean;
+        }
+    ): string {
+        const scope = options
+            ? `${options.preferredProvider || ""}|${options.preferredTier || ""}|${options.model || ""}|${options.allowPublicFree === undefined ? "" : String(options.allowPublicFree)}::`
+            : "";
+        const str = `${taskType}::${scope}` + messages.map((m) => `${m.role}:${m.content}`).join("||");
         let hash = 2166136261;
         for (let i = 0; i < str.length; i++) {
             hash ^= str.charCodeAt(i);
@@ -697,6 +725,43 @@ function getSafeFetch(fetchFunc?: any): any {
         return (globalThis as any).fetch.bind(globalThis);
     }
     return async () => { throw new Error("fetch is not available in current environment"); };
+}
+
+function createLinkedAbortController(
+    timeoutMs: number,
+    externalSignal?: AbortSignal
+): { controller: AbortController | null; cleanup: () => void } {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    if (!controller) {
+        return { controller: null, cleanup: () => {} };
+    }
+    const timer = setTimeout(() => {
+        try { controller.abort(new DOMException("Timeout", "AbortError")); } catch { controller.abort(); }
+    }, timeoutMs);
+    const onExternalAbort = () => {
+        try { controller.abort(externalSignal?.reason ?? new DOMException("Aborted", "AbortError")); } catch { controller.abort(); }
+    };
+    if (externalSignal) {
+        if (externalSignal.aborted) {
+            onExternalAbort();
+        } else if (typeof externalSignal.addEventListener === "function") {
+            externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+        }
+    }
+    const cleanup = () => {
+        clearTimeout(timer);
+        if (externalSignal && typeof externalSignal.removeEventListener === "function") {
+            externalSignal.removeEventListener("abort", onExternalAbort);
+        }
+    };
+    return { controller, cleanup };
+}
+
+function isAbortLikeError(err: unknown, controller?: AbortController | null, externalSignal?: AbortSignal): boolean {
+    if (externalSignal?.aborted || controller?.signal?.aborted) return true;
+    const e = err as { name?: string; message?: string } | null | undefined;
+    if (!e) return false;
+    return e.name === "AbortError" || /aborted|abort/i.test(String(e.message || ""));
 }
 
 export interface SiyuanFetchFunc {
@@ -870,32 +935,53 @@ export class SiyuanAiProvider {
 
     async call(payload: AiChatPayload, timeoutMs = 15000): Promise<AiChatResult> {
         const start = Date.now();
-        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+        if (payload.signal?.aborted) {
+            return {
+                ok: false,
+                content: "",
+                provider: "siyuan",
+                model: "siyuan-kernel-agent",
+                latencyMs: 0,
+                error: "aborted",
+            };
+        }
+        const { controller, cleanup } = createLinkedAbortController(timeoutMs, payload.signal);
 
         try {
             const lastMsg = payload.messages[payload.messages.length - 1]?.content || "";
             const systemMsg = payload.messages.find((m) => m.role === "system")?.content || "";
             const fullPrompt = systemMsg ? `${systemMsg}\n\n${lastMsg}` : lastMsg;
 
-            // 1. 优先调用思源 v3.8+ 官方 agent 接口 (/api/ai/agent/chat)，支持 SSE 流式推流
+            // 1. 唯一首选流式 SSE 主链：POST /api/ai/editor/chat (v3.8.12 原生接口，支持 start/reasoning/content/truncated/error/done)
             let resp: Response | null = null;
             try {
-                resp = await this.customFetch("/api/ai/agent/chat", {
+                resp = await this.customFetch("/api/ai/editor/chat", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "text/event-stream",
+                    },
                     body: JSON.stringify({
-                        prompt: fullPrompt,
-                        messages: payload.messages,
+                        taskID: `lv-router-${start}`,
+                        ids: [],
+                        history: [],
+                        input: fullPrompt,
+                        action: payload.taskType || "chat",
                     }),
                     signal: controller?.signal,
                 });
-            } catch {
+            } catch (err: any) {
+                if (isAbortLikeError(err, controller, payload.signal)) {
+                    throw err;
+                }
                 resp = null;
             }
 
-            // 2. 若 404 则降级至旧版接口 (/api/ai/chat)
-            if (!resp || resp.status === 404) {
+            // 2. 仅当 404/405 老宿主时回退至 /api/ai/chat（取消/超时绝不继续请求 /api/ai/chat）
+            if (!resp || resp.status === 404 || resp.status === 405) {
+                if (controller?.signal?.aborted || payload.signal?.aborted) {
+                    throw new DOMException("The operation was aborted", "AbortError");
+                }
                 resp = await this.customFetch("/api/ai/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -924,20 +1010,28 @@ export class SiyuanAiProvider {
                     const { done, value } = await reader.read();
                     if (done) break;
                     buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split("\n");
+                    const lines = buffer.split(/\r?\n/);
                     buffer = lines.pop() || "";
                     for (const rawLine of lines) {
                         const line = rawLine.trim();
-                        if (line.startsWith("event:")) {
+                        if (!line) {
+                            currentEvent = "";
+                        } else if (line.startsWith("event:")) {
                             currentEvent = line.slice(6).trim();
                         } else if (line.startsWith("data:")) {
+                            const rawData = line.slice(5).trim();
+                            if (rawData === "[DONE]") continue;
                             try {
-                                const dataObj = JSON.parse(line.slice(5).trim());
-                                if (currentEvent === "content" && dataObj.token) {
+                                const dataObj = JSON.parse(rawData);
+                                if ((currentEvent === "content" || !currentEvent) && dataObj.token) {
                                     content += dataObj.token;
                                     payload.onChunk?.(dataObj.token);
+                                } else if (currentEvent === "error" && (dataObj.msg || dataObj.message)) {
+                                    throw new Error(String(dataObj.msg || dataObj.message));
                                 }
-                            } catch { /* ignore parse error */ }
+                            } catch (sseErr: any) {
+                                if (currentEvent === "error" && sseErr?.message) throw sseErr;
+                            }
                         }
                     }
                 }
@@ -1004,10 +1098,10 @@ export class SiyuanAiProvider {
                 provider: "siyuan",
                 model: "siyuan-kernel-agent",
                 latencyMs: Date.now() - start,
-                error: err?.message || String(err),
+                error: isAbortLikeError(err, controller, payload.signal) ? "aborted" : (err?.message || String(err)),
             };
         } finally {
-            if (timer) clearTimeout(timer);
+            cleanup();
         }
     }
 }
@@ -1015,6 +1109,128 @@ export class SiyuanAiProvider {
 /**
  * Tier 2: 用户自配 API Key Provider (兼容 OpenAI 规范)
  */
+export const LV_AI_TIER2_SECRET_SLOT = "lv_ai_secret_tier2_apikey";
+let inMemoryTier2ApiKey = "";
+let secretWriteQueue: Promise<unknown> = Promise.resolve();
+
+export function resolveTier2ApiKey(explicitKey?: string): string {
+    const direct = typeof explicitKey === "string" ? explicitKey.trim() : "";
+    if (direct) return direct;
+    if (inMemoryTier2ApiKey && inMemoryTier2ApiKey.trim()) return inMemoryTier2ApiKey.trim();
+    try {
+        const w = typeof window !== "undefined" ? (window as any) : (typeof globalThis !== "undefined" ? (globalThis as any) : null);
+        const pluginReader = w?.__LV_SECRET_PLUGIN__ || w?.__LV_HOST_API__?.plugin;
+        if (pluginReader && typeof pluginReader.getSecret === "function") {
+            const val = String(pluginReader.getSecret(LV_AI_TIER2_SECRET_SLOT) || "").trim();
+            if (val) return val;
+        }
+        const items = w?.siyuan?.config?.secrets?.items;
+        if (Array.isArray(items)) {
+            const hit = items.find((it: any) => it && (it.name === LV_AI_TIER2_SECRET_SLOT || it.key === LV_AI_TIER2_SECRET_SLOT));
+            if (hit && typeof hit.value === "string" && hit.value.trim()) {
+                return hit.value.trim();
+            }
+        }
+    } catch { /* ignore */ }
+    return "";
+}
+
+export function hasPersistedTier2SecretInHost(): boolean {
+    try {
+        const w = typeof window !== "undefined" ? (window as any) : (typeof globalThis !== "undefined" ? (globalThis as any) : null);
+        const pluginReader = w?.__LV_SECRET_PLUGIN__ || w?.__LV_HOST_API__?.plugin;
+        if (pluginReader && typeof pluginReader.getSecret === "function") {
+            const val = String(pluginReader.getSecret(LV_AI_TIER2_SECRET_SLOT) || "").trim();
+            if (val.length > 3) return true;
+        }
+        const items = w?.siyuan?.config?.secrets?.items;
+        if (Array.isArray(items)) {
+            const hit = items.find((it: any) => it && (it.name === LV_AI_TIER2_SECRET_SLOT || it.key === LV_AI_TIER2_SECRET_SLOT));
+            if (hit && typeof hit.value === "string" && hit.value.trim().length > 3) {
+                return true;
+            }
+        }
+    } catch { /* ignore */ }
+    return false;
+}
+
+export function hasTier2SecretConfigured(explicitKey?: string): boolean {
+    const direct = typeof explicitKey === "string" ? explicitKey.trim() : "";
+    if (direct.length > 3) return true;
+    return hasPersistedTier2SecretInHost();
+}
+
+export async function saveTier2SecretToHost(
+    value: string,
+    fetchFunc?: typeof fetch
+): Promise<{ ok: boolean; reason?: string; readOnlyFallback?: boolean }> {
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    inMemoryTier2ApiKey = trimmed;
+    const w = typeof window !== "undefined" ? (window as any) : (typeof globalThis !== "undefined" ? (globalThis as any) : null);
+    const isReadOnly =
+        w?.siyuan?.isReadOnly === true ||
+        w?.isReadOnly === true ||
+        w?.isAdmin === false;
+    if (isReadOnly) {
+        return { ok: false, readOnlyFallback: true, reason: "readonly_or_non_admin" };
+    }
+    const fetchImpl = getSafeFetch(fetchFunc);
+    if (!fetchImpl) {
+        return { ok: false, readOnlyFallback: true, reason: "fetch_unavailable" };
+    }
+    const task = secretWriteQueue.catch(() => {}).then(async () => {
+        try {
+            const existingItems: Array<{ name: string; value: string; allowedHosts?: string[] | null }> = Array.isArray(w?.siyuan?.config?.secrets?.items)
+                ? w.siyuan.config.secrets.items.filter(Boolean).map((it: any) => ({
+                    name: it.name || it.key || "",
+                    value: String(it.value ?? ""),
+                    allowedHosts: it.allowedHosts ?? null,
+                }))
+                : [];
+            const idx = existingItems.findIndex((it) => it.name === LV_AI_TIER2_SECRET_SLOT);
+            const nextEntry = {
+                name: LV_AI_TIER2_SECRET_SLOT,
+                value: trimmed,
+                allowedHosts: idx >= 0 ? existingItems[idx]?.allowedHosts ?? null : null,
+            };
+            if (idx >= 0) existingItems[idx] = nextEntry;
+            else existingItems.push(nextEntry);
+
+            const resp = await fetchImpl("/api/setting/setSecrets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ items: existingItems }),
+            });
+            if (resp.status === 401 || resp.status === 403) {
+                return { ok: false, readOnlyFallback: true, reason: `http_${resp.status}` };
+            }
+            if (!resp.ok) {
+                return { ok: false, reason: `http_${resp.status}` };
+            }
+            try {
+                const json = await resp.json();
+                if (typeof json?.code === "number" && json.code !== 0) {
+                    return { ok: false, reason: json.msg || `code_${json.code}` };
+                }
+                if (w?.siyuan?.config) {
+                    if (!w.siyuan.config.secrets) w.siyuan.config.secrets = { items: [] };
+                    w.siyuan.config.secrets.items = Array.isArray(json?.data?.items) ? json.data.items : existingItems;
+                }
+            } catch {
+                if (w?.siyuan?.config) {
+                    if (!w.siyuan.config.secrets) w.siyuan.config.secrets = { items: [] };
+                    w.siyuan.config.secrets.items = existingItems;
+                }
+            }
+            return { ok: true };
+        } catch (err: any) {
+            return { ok: false, reason: err?.message || "setSecrets_error" };
+        }
+    });
+    secretWriteQueue = task;
+    return task;
+}
+
 export class UserCustomAiProvider {
     private config: UserCustomConfig;
     private customFetch: typeof fetch;
@@ -1029,12 +1245,13 @@ export class UserCustomAiProvider {
     }
 
     isConfigured(): boolean {
-        return Boolean(this.config.apiKey && this.config.apiKey.trim().length > 3);
+        return resolveTier2ApiKey(this.config.apiKey).length > 3;
     }
 
     async call(payload: AiChatPayload, timeoutMs = 15000): Promise<AiChatResult> {
         const start = Date.now();
-        if (!this.isConfigured()) {
+        const resolvedKey = resolveTier2ApiKey(this.config.apiKey);
+        if (resolvedKey.length <= 3) {
             return {
                 ok: false,
                 content: "",
@@ -1045,8 +1262,18 @@ export class UserCustomAiProvider {
             };
         }
 
-        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+        if (payload.signal?.aborted) {
+            return {
+                ok: false,
+                content: "",
+                provider: "user_custom",
+                model: this.config.model || "unknown",
+                latencyMs: 0,
+                error: "aborted",
+            };
+        }
+
+        const { controller, cleanup } = createLinkedAbortController(timeoutMs, payload.signal);
 
         try {
             let baseUrl = (this.config.baseUrl || "https://api.siliconflow.cn/v1").replace(/\/+$/, "");
@@ -1067,7 +1294,7 @@ export class UserCustomAiProvider {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${this.config.apiKey?.trim()}`,
+                    "Authorization": `Bearer ${resolvedKey}`,
                 },
                 body: JSON.stringify(reqBody),
                 signal: controller?.signal,
@@ -1100,10 +1327,10 @@ export class UserCustomAiProvider {
                 provider: "user_custom",
                 model: this.config.model || "unknown",
                 latencyMs: Date.now() - start,
-                error: err?.message || String(err),
+                error: isAbortLikeError(err, controller, payload.signal) ? "aborted" : (err?.message || String(err)),
             };
         } finally {
-            if (timer) clearTimeout(timer);
+            cleanup();
         }
     }
 }
@@ -1169,6 +1396,16 @@ export class OllamaAiProvider {
 
     async call(payload: AiChatPayload, timeoutMs = 30000): Promise<AiChatResult> {
         const start = Date.now();
+        if (payload.signal?.aborted) {
+            return {
+                ok: false,
+                content: "",
+                provider: "ollama",
+                model: this.specifiedModel || "ollama",
+                latencyMs: 0,
+                error: "aborted",
+            };
+        }
         const probeRes = await this.probe();
         if (!probeRes.available) {
             return {
@@ -1182,8 +1419,7 @@ export class OllamaAiProvider {
         }
 
         const targetModel = probeRes.activeModel;
-        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+        const { controller, cleanup } = createLinkedAbortController(timeoutMs, payload.signal);
 
         try {
             const resp = await this.customFetch(`${this.baseUrl}/api/chat`, {
@@ -1226,10 +1462,10 @@ export class OllamaAiProvider {
                 provider: "ollama",
                 model: targetModel,
                 latencyMs: Date.now() - start,
-                error: err?.message || String(err),
+                error: isAbortLikeError(err, controller, payload.signal) ? "aborted" : (err?.message || String(err)),
             };
         } finally {
-            if (timer) clearTimeout(timer);
+            cleanup();
         }
     }
 }
@@ -1249,14 +1485,33 @@ export class PublicFreeAiProvider {
 
     async call(payload: AiChatPayload, timeoutMs = 10000): Promise<AiChatResult> {
         const start = Date.now();
+        if (payload.signal?.aborted) {
+            return {
+                ok: false,
+                content: "",
+                provider: "public_free",
+                model: "pollinations-public-tier",
+                latencyMs: 0,
+                error: "aborted",
+            };
+        }
         // 关键守卫：外发到公开免费端点前，强制在纯本地执行 PII 隐私脱敏！
         const safeMessages = sanitizeMessages(payload.messages);
 
         let lastError = "";
 
         for (const endpoint of this.endpoints) {
-            const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-            const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+            if (payload.signal?.aborted) {
+                return {
+                    ok: false,
+                    content: "",
+                    provider: "public_free",
+                    model: "pollinations-public-tier",
+                    latencyMs: Date.now() - start,
+                    error: "aborted",
+                };
+            }
+            const { controller, cleanup } = createLinkedAbortController(timeoutMs, payload.signal);
 
             try {
                 const body = {
@@ -1307,9 +1562,10 @@ export class PublicFreeAiProvider {
                     latencyMs: Date.now() - start,
                 };
             } catch (err: any) {
-                lastError = err?.message || String(err);
+                lastError = isAbortLikeError(err, controller, payload.signal) ? "aborted" : (err?.message || String(err));
+                if (payload.signal?.aborted) break;
             } finally {
-                if (timer) clearTimeout(timer);
+                cleanup();
             }
         }
 
@@ -1354,11 +1610,13 @@ export class RuleFallbackProvider {
         }
 
         return {
-            ok: true,
+            ok: false,
+            isFallback: true,
             content: fallbackText,
             provider: "rule_fallback",
             model: "local-heuristic-engine",
             latencyMs: Date.now() - start,
+            error: "offline_rule_fallback",
         };
     }
 
@@ -1430,6 +1688,43 @@ export class RuleFallbackProvider {
 /* 7. 全生态调度中枢核心类 (LvAiRouter)                                       */
 /* ========================================================================= */
 
+function buildHubContextInput(context: any, piiPolicy: string = "standard", maxChars = 12000): string {
+    const applyMask = (s: string) => (piiPolicy === "none" ? s : maskPiiText(s));
+    const headParts: string[] = [];
+    const tailParts: string[] = [];
+    const heading = typeof context?.parentOutlineHeading === "string" ? context.parentOutlineHeading.trim() : "";
+    if (heading) headParts.push(`[大纲] ${applyMask(heading).slice(0, 300)}`);
+    const prev = typeof context?.siblingContext?.prev === "string" ? context.siblingContext.prev.trim() : "";
+    if (prev) headParts.push(`[上文] ${applyMask(prev).slice(0, 400)}`);
+    const next = typeof context?.siblingContext?.next === "string" ? context.siblingContext.next.trim() : "";
+    if (next) tailParts.push(`[下文] ${applyMask(next).slice(0, 400)}`);
+    if (Array.isArray(context?.referenceLinks) && context.referenceLinks.length > 0) {
+        const refs = context.referenceLinks
+            .slice(0, 8)
+            .map((r: unknown) => applyMask(String(r || "").trim()))
+            .filter(Boolean);
+        if (refs.length > 0) tailParts.push(`[引用] ${refs.join(" | ").slice(0, 600)}`);
+    }
+    const overhead = [...headParts, ...tailParts].reduce((acc, s) => acc + s.length + 2, 0);
+    const focusRaw = applyMask(String(context?.focusBlockContent || ""));
+    const focusBudget = Math.max(128, maxChars - overhead);
+    const focus = focusRaw.length <= focusBudget
+        ? focusRaw
+        : `${focusRaw.slice(0, Math.max(0, focusBudget - 1))}…`;
+    const joined = [...headParts, ...(focus ? [focus] : []), ...tailParts].join("\n\n");
+    if (joined.length <= maxChars) return joined;
+    return `${joined.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function mapPreferredTierToProvider(preferredTier?: string): AiProviderType | undefined {
+    if (!preferredTier) return undefined;
+    if (preferredTier === "siyuan_editor" || preferredTier === "siyuan_legacy" || preferredTier === "siyuan") return "siyuan";
+    if (preferredTier === "user_custom" || preferredTier === "ollama" || preferredTier === "public_free" || preferredTier === "rule_fallback") {
+        return preferredTier;
+    }
+    return undefined;
+}
+
 export class LvAiRouter {
     private config: AiRouterConfig;
     private siyuanProvider: SiyuanAiProvider;
@@ -1439,6 +1734,8 @@ export class LvAiRouter {
     private ruleFallbackProvider: RuleFallbackProvider;
     private cache: AiResponseCache;
 
+    private customFetchRef?: typeof fetch;
+
     constructor(config: AiRouterConfig = {}, fetchFunc?: typeof fetch) {
         this.config = {
             enableSiyuan: true,
@@ -1446,8 +1743,9 @@ export class LvAiRouter {
             defaultTimeoutMs: 12000,
             maxTotalTimeoutMs: 25000,
             ...config,
+            publicFree: { enabled: false, ...config.publicFree },
         };
-
+        this.customFetchRef = fetchFunc;
         this.siyuanProvider = new SiyuanAiProvider(fetchFunc as any);
         this.userCustomProvider = new UserCustomAiProvider(config.userCustom, fetchFunc);
         this.ollamaProvider = new OllamaAiProvider(config.ollama, fetchFunc);
@@ -1456,19 +1754,220 @@ export class LvAiRouter {
         this.cache = new AiResponseCache();
     }
 
+    /** 委托复用 Wave 1B lv-ai-hub.ts 统一中枢实例（在浏览器打包环境自动挂载内建兼容 Hub） */
+    getHubDelegate(): any {
+        const g = typeof globalThis !== "undefined" ? (globalThis as any) : null;
+        if (!this.customFetchRef) {
+            if (g?.__LV_AI_HUB__) return g.__LV_AI_HUB__;
+            if (typeof window !== "undefined" && (window as any).__LV_AI_HUB__) return (window as any).__LV_AI_HUB__;
+        }
+        try {
+            const dynRequire = g && typeof g.require === "function" ? g.require : null;
+            if (dynRequire) {
+                const hubSpec = "./core/" + "lv-ai-hub.ts";
+                const mod = dynRequire(hubSpec);
+                if (mod && typeof mod.createLvAiHub === "function") {
+                    return mod.createLvAiHub({
+                        fetchFn: this.customFetchRef,
+                        enableSiyuan: this.config.enableSiyuan,
+                        enableRuleFallback: this.config.enableRuleFallback,
+                        userCustom: this.config.userCustom,
+                        ollama: this.config.ollama,
+                        publicFree: this.config.publicFree,
+                    });
+                }
+            }
+        } catch { /* standalone single-file fallback */ }
+        return this.createBuiltinHubAdapter();
+    }
+
+    private createBuiltinHubAdapter(): any {
+        const routerRef = this;
+        const stats = {
+            activeRequests: 0,
+            totalRequests: 0,
+            fallbackCount: 0,
+        };
+        const runTask = async (hubPayload: any, validator?: (raw: string) => any): Promise<any> => {
+            stats.activeRequests++;
+            stats.totalRequests++;
+            try {
+                const piiPolicy = hubPayload?.piiPolicy || "standard";
+                const safeText = buildHubContextInput(hubPayload?.context, piiPolicy, 12000);
+                const taskType: AiTaskType = hubPayload?.taskType === "block_skill" ? "chat" : (hubPayload?.taskType || "chat");
+                const allowFree = hubPayload?.allowFreePool === true && routerRef.config.publicFree?.enabled === true;
+                const preferredProvider = mapPreferredTierToProvider(hubPayload?.preferredTier);
+
+                if (hubPayload?.signal?.aborted) {
+                    return {
+                        templateId: "T6",
+                        headline: "已取消，未发起写回",
+                        state: "done",
+                        outcome: { cancelReason: hubPayload?.cancelReasonHint || "user", completeness: 0 },
+                        controls: { canStop: false, canBackground: false, canRetry: true },
+                        evidence: [],
+                        blocks: [],
+                        actions: [],
+                        meta: {
+                            provider: preferredProvider === "siyuan" ? "siyuan_editor" : (preferredProvider || "siyuan_editor"),
+                            model: "aborted",
+                            promptId: hubPayload?.promptId || "legacy",
+                            promptVersion: hubPayload?.promptVersion || 1,
+                            generatedAt: new Date().toISOString(),
+                            sourceHash: "",
+                            aiSourceAttr: "editor",
+                            offlineDegraded: false,
+                            savedToDisk: false,
+                            errorReason: "aborted",
+                        },
+                    };
+                }
+
+                // 单次请求级传入 allowPublicFree 与 signal，绝不改写全局单例 routerRef.config.publicFree
+                const chatRes: AiChatResult = await routerRef.chat({
+                    messages: [{ role: "user", content: safeText }],
+                    taskType,
+                    preferredProvider,
+                    preferredTier: hubPayload?.preferredTier,
+                    allowPublicFree: allowFree,
+                    signal: hubPayload?.signal,
+                    onChunk: hubPayload?.onChunk,
+                });
+
+                if (hubPayload?.signal?.aborted || chatRes.error === "aborted") {
+                    return {
+                        templateId: "T6",
+                        headline: "已取消，未发起写回",
+                        state: "done",
+                        outcome: { cancelReason: hubPayload?.cancelReasonHint || "user", completeness: 0 },
+                        controls: { canStop: false, canBackground: false, canRetry: true },
+                        evidence: [],
+                        blocks: [],
+                        actions: [],
+                        meta: {
+                            provider: chatRes.provider === "siyuan" ? "siyuan_editor" : chatRes.provider,
+                            model: chatRes.model || "aborted",
+                            promptId: hubPayload?.promptId || "legacy",
+                            promptVersion: hubPayload?.promptVersion || 1,
+                            generatedAt: new Date().toISOString(),
+                            sourceHash: "",
+                            aiSourceAttr: "editor",
+                            offlineDegraded: false,
+                            savedToDisk: false,
+                            errorReason: "aborted",
+                        },
+                    };
+                }
+
+                const isRealSuccess = Boolean(chatRes.ok && !chatRes.isFallback && chatRes.provider !== "rule_fallback");
+                if (!isRealSuccess) stats.fallbackCount++;
+                let parsed: any;
+                if (validator && chatRes.content && isRealSuccess) {
+                    parsed = validator(chatRes.content);
+                }
+                return {
+                    templateId: "T6",
+                    headline: (isRealSuccess ? (chatRes.content || "AI 已完成") : `离线/未配置 (${chatRes.error || "未配置模型"})`).slice(0, 40),
+                    state: isRealSuccess ? "done" : "failedFallback",
+                    controls: { canStop: false, canBackground: false, canRetry: !isRealSuccess },
+                    evidence: [],
+                    blocks: chatRes.content ? [{ type: "markdown", text: chatRes.content }] : [],
+                    actions: isRealSuccess ? [] : [{ id: "copy", label: "仅复制初稿（未保存）", kind: "copy", needsConfirm: false }],
+                    meta: {
+                        provider: chatRes.provider === "siyuan" ? "siyuan_editor" : chatRes.provider,
+                        model: chatRes.model,
+                        promptId: hubPayload?.promptId || "legacy",
+                        promptVersion: hubPayload?.promptVersion || 1,
+                        generatedAt: new Date().toISOString(),
+                        sourceHash: "",
+                        aiSourceAttr: "editor",
+                        offlineDegraded: !isRealSuccess,
+                        savedToDisk: false,
+                        errorReason: isRealSuccess ? undefined : (chatRes.error || "offline_or_unconfigured"),
+                    },
+                    parsed,
+                };
+            } finally {
+                stats.activeRequests = Math.max(0, stats.activeRequests - 1);
+            }
+        };
+        const api = {
+            protocol: 200,
+            runTask,
+            runBlockSkill: async (skillOpts: any) => runTask({
+                requestId: `blk-${skillOpts?.blockId || "0"}-${Date.now()}`,
+                generationNonce: 1,
+                sourcePlugin: skillOpts?.sourcePlugin || "lv-block-assistant",
+                capability: skillOpts?.capability || "L3",
+                taskType: "block_skill",
+                promptId: `block-skill:${skillOpts?.skillId || "default"}`,
+                promptVersion: 1,
+                context: {
+                    focusBlockContent: skillOpts?.focusBlockContent || "",
+                    docAttributes: { blockId: skillOpts?.blockId, blockType: skillOpts?.blockType },
+                },
+                piiPolicy: "standard",
+                allowFreePool: false,
+                signal: skillOpts?.signal,
+            }),
+            probeAllTiers: () => routerRef.testAllTiers(),
+            getStats: () => ({ ...stats }),
+            updateOptions: (patch: Partial<AiRouterConfig>) => routerRef.updateConfig(patch),
+        };
+        return api;
+    }
+
+    async runTask(hubPayload: any, validator?: (raw: string) => any): Promise<any> {
+        const hub = this.getHubDelegate();
+        if (hub && typeof hub.runTask === "function") {
+            return hub.runTask(hubPayload, validator);
+        }
+        const piiPolicy = hubPayload?.piiPolicy || "standard";
+        const safeText = buildHubContextInput(hubPayload?.context, piiPolicy, 12000);
+        const allowFree = hubPayload?.allowFreePool === true && this.config.publicFree?.enabled === true;
+        const chatRes = await this.chat({
+            messages: [{ role: "user", content: safeText }],
+            taskType: hubPayload?.taskType === "block_skill" ? "chat" : hubPayload?.taskType,
+            preferredProvider: mapPreferredTierToProvider(hubPayload?.preferredTier),
+            preferredTier: hubPayload?.preferredTier,
+            allowPublicFree: allowFree,
+            signal: hubPayload?.signal,
+            onChunk: hubPayload?.onChunk,
+        });
+        return {
+            templateId: "T6",
+            headline: (chatRes.content || "").slice(0, 40),
+            state: chatRes.ok ? "done" : "failedFallback",
+            controls: { canStop: false, canBackground: false, canRetry: true },
+            evidence: [],
+            blocks: chatRes.content ? [{ type: "markdown", text: chatRes.content }] : [],
+            actions: [],
+            meta: {
+                provider: chatRes.provider === "siyuan" ? "siyuan_editor" : chatRes.provider,
+                model: chatRes.model,
+                promptId: hubPayload?.promptId || "legacy",
+                promptVersion: hubPayload?.promptVersion || 1,
+                generatedAt: new Date().toISOString(),
+                sourceHash: "",
+                aiSourceAttr: "editor",
+            },
+            parsed: validator && chatRes.content ? validator(chatRes.content) : undefined,
+        };
+    }
+
     static cleanAndParseJson = cleanAndParseJson;
     static maskPiiText = maskPiiText;
 
     updateConfig(newConfig: Partial<AiRouterConfig>): void {
         this.config = { ...this.config, ...newConfig };
         if (newConfig.userCustom) {
-            this.userCustomProvider = new UserCustomAiProvider(this.config.userCustom);
+            this.userCustomProvider = new UserCustomAiProvider(this.config.userCustom, this.customFetchRef);
         }
         if (newConfig.ollama) {
-            this.ollamaProvider = new OllamaAiProvider(this.config.ollama);
+            this.ollamaProvider = new OllamaAiProvider(this.config.ollama, this.customFetchRef);
         }
         if (newConfig.publicFree) {
-            this.publicFreeProvider = new PublicFreeAiProvider(this.config.publicFree);
+            this.publicFreeProvider = new PublicFreeAiProvider(this.config.publicFree, this.customFetchRef);
         }
     }
 
@@ -1607,18 +2106,18 @@ export class LvAiRouter {
         }
     }
 
-    /** 探测 Tier 4: 公开免密免费通道 */
+    /** 探测第 4 级: 公开免密免费通道（默认关闭，需手动开启） */
     async probeTier4(timeoutMs = 6000): Promise<TierProbeResult> {
         const start = Date.now();
-        if (this.config.publicFree?.enabled === false) {
+        if (this.config.publicFree?.enabled !== true) {
             return {
                 provider: "public_free",
                 tier: 4,
                 tierName: "免费公用池",
                 ok: false,
                 latencyMs: 0,
-                error: "已在设置中停用",
-                statusText: "已停用",
+                error: "默认关闭（需在设置中手动开启）",
+                statusText: "默认关闭",
             };
         }
         try {
@@ -1678,9 +2177,36 @@ export class LvAiRouter {
         const fallbackHistory: Array<{ provider: AiProviderType; error: string; latencyMs: number }> = [];
         const singleTimeout = payload.timeoutMs || this.config.defaultTimeoutMs || 12000;
         const maxTotalTime = this.config.maxTotalTimeoutMs || 25000;
+        const effectivePreferred = payload.preferredProvider || this.config.preferredProvider;
+        const allowPublicFreeForReq = payload.allowPublicFree !== undefined
+            ? (payload.allowPublicFree === true && this.config.publicFree?.enabled === true)
+            : (this.config.publicFree?.enabled === true);
 
-        // 1. 尝试从 LRU 内存缓存中读取（仅针对非流式且未禁缓存的请求）
-        const cacheKey = AiResponseCache.computeKey(payload.taskType, payload.messages);
+        if (payload.signal?.aborted) {
+            return {
+                ok: false,
+                isFallback: false,
+                content: "",
+                provider: effectivePreferred || "siyuan",
+                model: "aborted",
+                latencyMs: 0,
+                error: "aborted",
+                fallbackHistory,
+            };
+        }
+
+        // 1. 尝试从 LRU 内存缓存中读取（仅针对非流式且未禁缓存的请求；按渠道/模型/层级隔离）
+        const activeModelHint =
+            effectivePreferred === "user_custom" ? (this.config.userCustom?.model || "") :
+            effectivePreferred === "ollama" ? (this.config.ollama?.model || "") :
+            effectivePreferred === "public_free" ? (this.config.publicFree?.fallbackModel || "") :
+            `${this.config.userCustom?.model || ""}|${this.config.ollama?.model || ""}|${effectivePreferred || ""}`;
+        const cacheKey = AiResponseCache.computeKey(payload.taskType, payload.messages, {
+            preferredProvider: effectivePreferred || "auto",
+            preferredTier: payload.preferredTier || "",
+            model: activeModelHint,
+            allowPublicFree: allowPublicFreeForReq,
+        });
         if (!payload.stream) {
             const cached = this.cache.get(cacheKey);
             if (cached) {
@@ -1690,45 +2216,97 @@ export class LvAiRouter {
         }
 
         // 2. 若用户指定首选通道，优先调度
-        if (payload.preferredProvider) {
-            const res = await this.invokeSingleProvider(payload.preferredProvider, payload, singleTimeout);
-            if (res.ok) {
-                this.cache.set(cacheKey, res);
-                return res;
+        if (effectivePreferred) {
+            if (effectivePreferred === "public_free" && !allowPublicFreeForReq) {
+                fallbackHistory.push({
+                    provider: "public_free",
+                    error: "免费公用池默认关闭",
+                    latencyMs: 0,
+                });
+            } else {
+                const res = await this.invokeSingleProvider(effectivePreferred, payload, singleTimeout);
+                if (payload.signal?.aborted) {
+                    return {
+                        ok: false,
+                        isFallback: false,
+                        content: "",
+                        provider: effectivePreferred,
+                        model: res.model || "aborted",
+                        latencyMs: Date.now() - start,
+                        error: "aborted",
+                        fallbackHistory,
+                    };
+                }
+                if (effectivePreferred === "rule_fallback") {
+                    return {
+                        ...res,
+                        ok: false,
+                        isFallback: true,
+                        fallbackHistory,
+                    };
+                }
+                if (res.ok) {
+                    this.cache.set(cacheKey, res);
+                    return res;
+                }
+                fallbackHistory.push({
+                    provider: effectivePreferred,
+                    error: res.error || "指定通道调用失败",
+                    latencyMs: res.latencyMs,
+                });
             }
-            fallbackHistory.push({
-                provider: payload.preferredProvider,
-                error: res.error || "指定通道调用失败",
-                latencyMs: res.latencyMs,
-            });
         }
 
         // 3. 构建默认瀑布流队列
         const pipeline: AiProviderType[] = [];
 
-        if (this.config.enableSiyuan !== false && payload.preferredProvider !== "siyuan") {
+        if (this.config.enableSiyuan !== false && effectivePreferred !== "siyuan") {
             pipeline.push("siyuan");
         }
 
-        if (this.userCustomProvider.isConfigured() && payload.preferredProvider !== "user_custom") {
+        if (this.userCustomProvider.isConfigured() && effectivePreferred !== "user_custom") {
             pipeline.push("user_custom");
         }
 
-        if (this.config.ollama?.enabled !== false && payload.preferredProvider !== "ollama") {
+        if (this.config.ollama?.enabled !== false && effectivePreferred !== "ollama") {
             pipeline.push("ollama");
         }
 
-        if (this.config.publicFree?.enabled !== false && payload.preferredProvider !== "public_free") {
+        if (allowPublicFreeForReq && effectivePreferred !== "public_free") {
             pipeline.push("public_free");
         }
 
         // 依次执行瀑布降级
         for (const providerType of pipeline) {
+            if (payload.signal?.aborted) {
+                return {
+                    ok: false,
+                    isFallback: false,
+                    content: "",
+                    provider: providerType,
+                    model: "aborted",
+                    latencyMs: Date.now() - start,
+                    error: "aborted",
+                    fallbackHistory,
+                };
+            }
             if (Date.now() - start > maxTotalTime) {
                 break;
             }
 
             const res = await this.invokeSingleProvider(providerType, payload, singleTimeout);
+            if (payload.signal?.aborted) {
+                return {
+                    ok: false,
+                    isFallback: false,
+                    content: "",
+                    provider: providerType,
+                    model: res.model || "aborted",
+                    latencyMs: Date.now() - start,
+                    error: "aborted",
+                    fallbackHistory,
+                };
+            }
             if (res.ok) {
                 const finalResult: AiChatResult = {
                     ...res,
@@ -1745,19 +2323,37 @@ export class LvAiRouter {
             });
         }
 
-        // 4. 终极兜底：本地轻量规则引擎（保证业务永不白屏报错）
+        if (payload.signal?.aborted) {
+            return {
+                ok: false,
+                isFallback: false,
+                content: "",
+                provider: effectivePreferred || "siyuan",
+                model: "aborted",
+                latencyMs: Date.now() - start,
+                error: "aborted",
+                fallbackHistory,
+            };
+        }
+
+        // 4. 终极兜底：本地轻量规则引擎（显式标记 isFallback: true 且 ok: false，绝不冒充真实 AI 成功）
         if (this.config.enableRuleFallback !== false) {
             const fallbackRes = this.ruleFallbackProvider.call(payload);
             const finalResult: AiChatResult = {
                 ...fallbackRes,
+                ok: false,
+                isFallback: true,
+                error: fallbackHistory.length > 0
+                    ? `在线通道不可用 (${fallbackHistory.map((h) => `[${h.provider}]: ${h.error}`).join("; ")})，已生成本地离线初稿`
+                    : "offline_rule_fallback",
                 fallbackHistory,
             };
-            payload.onChunk?.(fallbackRes.content);
             return finalResult;
         }
 
         return {
             ok: false,
+            isFallback: false,
             content: "",
             provider: "rule_fallback",
             model: "none",
@@ -1808,7 +2404,91 @@ function getSafeStorage(): any {
     return null;
 }
 
-/** 从 localStorage 读取全生态统一配置（无配置时返回默认五级自适应参数） */
+function sanitizeAiRouterConfigForStorage(config: AiRouterConfig, preservedLegacyKey = ""): AiRouterConfig {
+    const out: AiRouterConfig = {
+        ...config,
+        publicFree: {
+            enabled: config.publicFree?.enabled === true,
+            ...(config.publicFree?.endpoint ? { endpoint: config.publicFree.endpoint } : {}),
+            ...(config.publicFree?.fallbackModel ? { fallbackModel: config.publicFree.fallbackModel } : {}),
+        },
+    };
+    const hostHasSecret = hasPersistedTier2SecretInHost();
+    if (config.userCustom || preservedLegacyKey) {
+        const rawKey = typeof config.userCustom?.apiKey === "string" ? config.userCustom.apiKey.trim() : "";
+        const { apiKey: _stripped, ...restCustom } = config.userCustom || {};
+        out.userCustom = {
+            ...restCustom,
+            // 若调用方未显式覆写 apiKey，且本地仍存在未确认迁入 setSecrets 的旧明文 Key，必须保留等待迁移成功后再剥离
+            ...(!rawKey && preservedLegacyKey ? { apiKey: preservedLegacyKey } : {}),
+            // hasSecret 只能由宿主真实持久凭据决定，绝不由内存 Key 推导
+            hasSecret: hostHasSecret,
+            secretSlot: LV_AI_TIER2_SECRET_SLOT,
+        };
+    }
+    return out;
+}
+
+let pendingLegacyRouterMigration: { key: string; promise: Promise<{ ok: boolean; reason?: string }> } | null = null;
+
+export async function waitForLegacyAiRouterSecretMigration(): Promise<void> {
+    if (pendingLegacyRouterMigration) {
+        try {
+            await pendingLegacyRouterMigration.promise;
+        } catch { /* ignore */ }
+    }
+}
+
+function scheduleLegacyRouterSecretMigration(legacyKey: string, storage: any): void {
+    if (!legacyKey) return;
+    if (pendingLegacyRouterMigration && pendingLegacyRouterMigration.key === legacyKey) {
+        return;
+    }
+    const promise = (async () => {
+        const res = await saveTier2SecretToHost(legacyKey);
+        if (res.ok && storage) {
+            try {
+                const latestRaw = storage.getItem(LV_AI_ROUTER_STORAGE_KEY);
+                if (latestRaw) {
+                    const latestParsed = JSON.parse(latestRaw);
+                    if (latestParsed && typeof latestParsed === "object") {
+                        const latestLegacy = typeof latestParsed.userCustom?.apiKey === "string" ? latestParsed.userCustom.apiKey.trim() : "";
+                        // 仅当该 legacyKey 对应的 setSecrets 确认成功，且重新核对 localStorage 仍为同一 legacyKey 时才执行剥离并置 hasSecret: true
+                        if (latestLegacy === legacyKey) {
+                            const { apiKey: _stripped, ...restCustom } = latestParsed.userCustom || {};
+                            const cleaned: AiRouterConfig = {
+                                ...latestParsed,
+                                publicFree: (!latestParsed.publicFree || typeof latestParsed.publicFree !== "object")
+                                    ? { enabled: false }
+                                    : { ...latestParsed.publicFree, enabled: latestParsed.publicFree.enabled === true },
+                                userCustom: {
+                                    ...restCustom,
+                                    hasSecret: true,
+                                    secretSlot: LV_AI_TIER2_SECRET_SLOT,
+                                },
+                            };
+                            storage.setItem(LV_AI_ROUTER_STORAGE_KEY, JSON.stringify(cleaned));
+                            if (sharedRouterInstance) {
+                                sharedRouterInstance.updateConfig(cleaned);
+                            }
+                            if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+                                window.dispatchEvent(new CustomEvent("lv-ai-router-config-updated", { detail: cleaned }));
+                            }
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+        }
+        return res;
+    })().finally(() => {
+        if (pendingLegacyRouterMigration?.promise === promise) {
+            pendingLegacyRouterMigration = null;
+        }
+    });
+    pendingLegacyRouterMigration = { key: legacyKey, promise };
+}
+
+/** 从 localStorage 读取全生态统一配置（检测到老版本明文 apiKey 时先异步迁入 setSecrets，仅成功后才剥离写回，绝不丢 Key） */
 export function loadAiRouterConfig(): AiRouterConfig {
     try {
         const storage = getSafeStorage();
@@ -1817,6 +2497,26 @@ export function loadAiRouterConfig(): AiRouterConfig {
             if (raw) {
                 const parsed = JSON.parse(raw);
                 if (parsed && typeof parsed === "object") {
+                    if (!parsed.publicFree || typeof parsed.publicFree !== "object") {
+                        parsed.publicFree = { enabled: false };
+                    } else if (parsed.publicFree.enabled !== true) {
+                        parsed.publicFree.enabled = false;
+                    }
+                    const legacyKey = typeof parsed.userCustom?.apiKey === "string" ? parsed.userCustom.apiKey.trim() : "";
+                    if (legacyKey) {
+                        inMemoryTier2ApiKey = legacyKey;
+                        // 严禁先剥离 localStorage 或假置 hasSecret: true；仅当 setSecrets 真实落盘成功后再剥离
+                        scheduleLegacyRouterSecretMigration(legacyKey, storage);
+                        const { apiKey: _omitPlaintext, ...restCustom } = parsed.userCustom || {};
+                        return {
+                            ...parsed,
+                            userCustom: {
+                                ...restCustom,
+                                hasSecret: hasPersistedTier2SecretInHost(),
+                                secretSlot: LV_AI_TIER2_SECRET_SLOT,
+                            },
+                        };
+                    }
                     return parsed;
                 }
             }
@@ -1829,26 +2529,48 @@ export function loadAiRouterConfig(): AiRouterConfig {
         enableRuleFallback: true,
         defaultTimeoutMs: 12000,
         maxTotalTimeoutMs: 25000,
-        publicFree: { enabled: true },
+        publicFree: { enabled: false },
         ollama: { enabled: true, baseUrl: "http://127.0.0.1:11434" },
     };
 }
 
-/** 保存全生态统一配置到 localStorage，并向当前窗口广播配置变更事件 */
+/** 保存全生态统一配置到 localStorage（严禁写入新明文 apiKey，同时在旧明文 Key 迁移未落盘前保留原旧 Key 不丢失），并向当前窗口广播配置变更事件 */
 export function saveAiRouterConfig(config: AiRouterConfig): void {
+    const rawKey = typeof config?.userCustom?.apiKey === "string" ? config.userCustom.apiKey.trim() : "";
+    if (rawKey) {
+        inMemoryTier2ApiKey = rawKey;
+    }
+    const storage = getSafeStorage();
+    let existingLegacyKey = "";
+    if (!rawKey && storage) {
+        try {
+            const prevRaw = storage.getItem(LV_AI_ROUTER_STORAGE_KEY);
+            if (prevRaw) {
+                const prevParsed = JSON.parse(prevRaw);
+                if (prevParsed && typeof prevParsed === "object" && typeof prevParsed.userCustom?.apiKey === "string") {
+                    existingLegacyKey = prevParsed.userCustom.apiKey.trim();
+                }
+            }
+        } catch { /* ignore */ }
+    }
+    const toPersist = sanitizeAiRouterConfigForStorage(config || {}, existingLegacyKey);
+    const runtimeView = sanitizeAiRouterConfigForStorage(config || {});
     try {
-        const storage = getSafeStorage();
         if (storage) {
-            storage.setItem(LV_AI_ROUTER_STORAGE_KEY, JSON.stringify(config));
+            storage.setItem(LV_AI_ROUTER_STORAGE_KEY, JSON.stringify(toPersist));
+            if (existingLegacyKey) {
+                inMemoryTier2ApiKey = existingLegacyKey;
+                scheduleLegacyRouterSecretMigration(existingLegacyKey, storage);
+            }
         }
         if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
-            window.dispatchEvent(new CustomEvent("lv-ai-router-config-updated", { detail: config }));
+            window.dispatchEvent(new CustomEvent("lv-ai-router-config-updated", { detail: runtimeView }));
         }
     } catch {
         // ignore
     }
     if (sharedRouterInstance) {
-        sharedRouterInstance.updateConfig(config);
+        sharedRouterInstance.updateConfig(runtimeView);
     }
 }
 
@@ -1864,13 +2586,35 @@ export function getSharedAiRouter(config?: AiRouterConfig): LvAiRouter {
     return sharedRouterInstance;
 }
 
+export function ensureSharedAiHubMounted(): any {
+    const g = typeof globalThis !== "undefined" ? (globalThis as any) : null;
+    if (g?.__LV_AI_HUB__) return g.__LV_AI_HUB__;
+    if (typeof window !== "undefined" && (window as any).__LV_AI_HUB__) return (window as any).__LV_AI_HUB__;
+    try {
+        const hub = getSharedAiRouter().getHubDelegate();
+        if (hub) {
+            if (g) g.__LV_AI_HUB__ = hub;
+            if (typeof window !== "undefined") (window as any).__LV_AI_HUB__ = hub;
+        }
+        return hub;
+    } catch {
+        return null;
+    }
+}
+
 // 自动挂载至全局 window，供小驴全家桶任意插件与罗盘免 import 无缝复用
 if (typeof window !== "undefined") {
     (window as any).LvAiRouter = LvAiRouter;
     (window as any).getSharedAiRouter = getSharedAiRouter;
     (window as any).loadAiRouterConfig = loadAiRouterConfig;
     (window as any).saveAiRouterConfig = saveAiRouterConfig;
+    (window as any).saveTier2SecretToHost = saveTier2SecretToHost;
+    (window as any).resolveTier2ApiKey = resolveTier2ApiKey;
+    (window as any).hasTier2SecretConfigured = hasTier2SecretConfigured;
+    (window as any).waitForLegacyAiRouterSecretMigration = waitForLegacyAiRouterSecretMigration;
+    (window as any).ensureSharedAiHubMounted = ensureSharedAiHubMounted;
     (window as any).AI_PROVIDER_REFERRALS = AI_PROVIDER_REFERRALS;
     (window as any).AI_TIER_DESCRIPTIONS = AI_TIER_DESCRIPTIONS;
     (window as any).openExternalUrl = openExternalUrl;
+    ensureSharedAiHubMounted();
 }

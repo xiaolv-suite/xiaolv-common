@@ -277,6 +277,14 @@ export function extractCleanPayload(text: string): string {
     return parseSnippetAnnotations(text).cleanText;
 }
 
+/** 链接目标分类：仅接受 http(s) 外链与 assets/ 资源；其余（siyuan:// 等）返回 null */
+export function classifyLinkTarget(href: string): {kind: "url" | "asset"; value: string} | null {
+    const h = (href ?? "").trim();
+    if (isSafeHttpUrl(h)) return {kind: "url", value: h};
+    if (/^assets\/[^\s]+$/.test(h)) return {kind: "asset", value: h};
+    return null;
+}
+
 // SiYuan 块类型（getChildBlocks）：p 段落 / h 标题 / c 代码 / l 列表 / t 表格 /
 // b 引用 / s 超级块 / i iframe / html / m 公式 / query_embed 嵌入
 export function inferItemType(blockType: string, subtype: string, kramdown: string): ItemType {
@@ -492,4 +500,20 @@ export function getCategoryColorVariant(category: string): CategoryColorVariant 
         "business", "support", "dev", "writing", "ai",
     ];
     return variants[hash % variants.length] ?? "business";
+}
+
+/** 选区 / 文本 → 条目类型推断（纯领域规则） */
+export function inferTypeFromText(text: string): ItemType {
+    const trimmed = (text || "").trim();
+    if (/^!\[[^\]]*\]\((assets\/[^)\s]+)[^)]*\)$/.test(trimmed)
+        || /^!\[[^\]]*\]\([^)]+\)$/.test(trimmed)
+        || /^data:image\/\w+;base64,/i.test(trimmed)
+        || /^https?:\/\/\S+\.(?:png|jpe?g|gif|webp|svg)(?:\?\S*)?$/i.test(trimmed)) {
+        return "image";
+    }
+    if (/\]\((assets\/[^)\s]+)[^)]*\)/.test(trimmed)) return "asset";
+    if (/^https?:\/\/\S+$/i.test(trimmed)) return "url";
+    if (/^```[\w+#.-]*\s*\n[\s\S]*\n```\s*$/.test(trimmed)) return "code";
+    if (/^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|\*\*/.test(trimmed) || trimmed.includes("\n")) return "markdown";
+    return "text";
 }

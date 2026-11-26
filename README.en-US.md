@@ -1,4 +1,4 @@
-# Lv Common (Beta)
+# Lv Common
 
 > **High-Frequency Content Asset Layer & Instant Cross-App Launcher for SiYuan Note**<br>
 > Consolidate scattered code snippets, customer service replies, Prompt engineering libraries, tables, and text templates into parametric, source-traceable native SiYuan block assets.
@@ -9,14 +9,14 @@
 
 ---
 
-## 🚀 What's New in v0.10.90 (Cumulative Updates)
+## 🚀 What's New in v0.10.91 (2026-11-26 Milestone Release)
 
-- **Dedicated Clipboard Panel & Expanded Three-Column Layout**: Added a resident clipboard lane and history drawer in the desktop modal, enabling one-click insertion, saving to favorites, text cleaning, and copying; collapsible to a 36px bar with layout persistence; enlarged workbench modal (`min(1280px, 95vw) × min(880px, 94vh)`);
-- **SiYuan Desktop Exoskeleton Interop**: Launchpad integration with live status badges ("Online / Inactive") and secondary action shortcuts;
-- **Zero Typing Latency via Lazy Caching**: Introduced `cachedWatchedIds` and `cachedLibDocIds` lazy Set caches in transaction listeners, eradicating per-keystroke garbage collection during editor typing;
-- **Live AI Progress Tracker & Resilient Sync Retries**: Phase-based AI thinking cards and automated exponential backoff retries when encountering SiYuan sync locks;
-- **Settings UX Alignment**: 44px touch targets on navigation pills and standardized 38px inputs aligned with `$ui-checker` 47-point standards;
-- **Daily Note Sync Hardening**: Fully compatible multi-level workspace daily note probing with double conflict file filtering and concurrency mutex locking.
+- **Compact Topbar & Unmasked Non-Modal Floating**: Mini mode features a unified single-row compact drag bar, while the full desktop workbench opens unmasked and non-modal by default so you can keep typing and clicking across editor paragraphs;
+- **High-Density Cards & Instant Category Jump**: Compact mini rows display more items per screen, paired with scrollable category pills, left/right pager arrows, one-click category expansion, and instant jump filtering;
+- **Live Clipboard Hero & Four Dedicated Mini Tabs**: Home view surfaces the 3 latest clipboard entries with a one-click jump to the full `Clipboard` tab alongside dedicated `Home`, `Common`, `Clipboard`, and `Starred` tabs;
+- **Standalone Always-On-Top Desktop Float Window**: Pop out a standalone always-on-top window that stays visible above external apps even when SiYuan is minimized;
+- **Shared Ecosystem Hubs & Unified `.lv-ai-thinking` AI Experience**: Integrated with Launchpad, unified AI Router, Block Assistant 1–8 native base + custom double-click, Backup/Restore, and `#### 🐴 小驴记录` 4-level diary sync; all AI entry points render unified `.lv-ai-thinking` cards with `AbortSignal` cancellation;
+- **60fps Zero `:has()` / Zero Heavy-Blur Performance**: Eliminated CSS `:has()` selectors and `blur(>=15px)`, deferred clipboard auto-listen by 5s on startup with lazy `CaptureDialog`, debounced selection/column-resize persistence, and hardened multi-level daily note probing.
 
 ---
 
@@ -56,8 +56,8 @@ Traditional solutions fall short:
 
 1. **SiYuan Marketplace (Recommended)**: Open `Settings → Marketplace → Plugins` in SiYuan, search for **"Lv Common"** (`小驴常用`), and click Install & Enable.
 2. **Manual Offline Install / Rollback**:
-   - Extract `package.zip` (or rollback archive `package-v0.10.78.zip`) into `<workspace>/data/plugins/xiaolv-common/`;
-   - Enable **Lv Common (Beta)** in `Settings → Plugins`.
+   - Extract `package.zip` (or rollback archive `package-v0.10.91.zip`) into `<workspace>/data/plugins/xiaolv-common/`;
+   - Enable **Lv Common** in `Settings → Plugins`.
 
 ---
 
@@ -219,7 +219,7 @@ v0.10.82 Local Release: Starter Packs Hub with ready-to-use industry suites & de
   - **Top Drag Handle & Memory**: Drag anywhere with coordinate persistence;
   - **1-Click Collapse to Floating Pill**: Minimizes to `search.mini.collapsed-pill` at the desktop margin, expanding on click.
 - **Deep Ecosystem Interoperability (T-0817~T-0820 / Batch F15)**:
-  - **External Bridge (window.xiaolvCommon) Contract Alignment**: Added populated `content` fields to search, recent, and get endpoints, ensuring Lv Raikiri (`siyuan-speed-switch`) and quickgate copy clean snippet text on Enter;
+  - **External Bridge (window.xiaolvCommon) Contract Alignment**: Added populated `content` fields to search, recent, and get endpoints, ensuring Lv Raikiri (`siyuan-speed-switch`) copies clean snippet text on Enter;
   - **Dynamic Ecosystem Macro Matrix**: Asynchronous resolution of `{{xlc:home:today}}` / `{{xlc:butler:today}}` (Lv Home reminders), `{{xlc:task:today}}` (Task Horizon), `{{xlc:glean:recent}}` (Lv Glean clips), `{{xlc:contacts:recent}}` (Lv Contacts cards), and `{{xlc:checkin:today}}` (Lv Checkin) with timeout circuit breaking and graceful fallback text when uninstalled;
   - **Federated Ecosystem Search**: Concurrent multi-plugin queries for reminders, clips, and habits with direct Enter insertion;
   - **1-Click Push to Lv Home Memo**: Added `📋` promote action on clipboard history cards to create reminders directly in Lv Home;
@@ -311,6 +311,7 @@ v0.10.81 Local Release: Default-on clipboard history with capacity tiers, 1-clic
 | **Lv Checkin** | Local-first habit and goal check-in workbench | [xiaolv-suite/siyuan-checkin](https://github.com/xiaolv-suite/siyuan-checkin) |
 | **Lv Contacts** | Relationship network, contact profiles, and interaction logs | [xiaolv-suite/siyuan-contacts](https://github.com/xiaolv-suite/siyuan-contacts) |
 | **Lv Glean** | Clipping and deep reading review management | [xiaolv-suite/siyuan-glean](https://github.com/xiaolv-suite/siyuan-glean) |
+| **Lv Cards** | Native FSRS spaced-repetition engine, atomic card authoring & maintenance | [xiaolv-suite/siyuan-lv-cards](https://github.com/xiaolv-suite/siyuan-lv-cards) |
 | **Lv Exam** | Local exam preparation, test banks, and wrong answer review | [xiaolv-suite/siyuan-exam](https://github.com/xiaolv-suite/siyuan-exam) |
 | **Lv Home** | Family records, living asset ledger, and reminder center | [xiaolv-suite/siyuan-home](https://github.com/xiaolv-suite/siyuan-home) |
 
@@ -318,6 +319,6 @@ v0.10.81 Local Release: Default-on clipboard history with capacity tiers, 1-clic
 
 ## 💬 Community & Feedback
 
-- **Beta Tester QQ Group**: **871707735**
+- **Community & Feedback QQ Group**: **871707735**
 - **Issue Tracker**: [GitHub Issues](https://github.com/xiaolv-suite/xiaolv-common/issues)
 - **License**: [MIT License](./LICENSE)

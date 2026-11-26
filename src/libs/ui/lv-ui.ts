@@ -772,10 +772,10 @@ to{background-position:-100% 0}
 [data-lv-ui] .lvx-dialog{border-radius:var(--lvx-r-lg)}
 }
 [data-lv-ui] :is(.lvx-selbar,.lvx-batchbar,.lvx-blockmenu){background:color-mix(in srgb,var(--lvx-surface-elevated) 82%,transparent);border:1px solid var(--lvx-border-strong);box-shadow:var(--lvx-shadow-3)}
-[data-lv-ui] .lvx-selbar{position:relative;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--lvx-r-md);z-index:40;max-width:100%;backdrop-filter:blur(16px);width:fit-content;flex-wrap:wrap}
-[data-lv-ui] .lvx-batchbar{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-radius:var(--lvx-r-lg);width:100%;max-width:540px;backdrop-filter:blur(16px)}
+[data-lv-ui] .lvx-selbar{position:relative;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--lvx-r-md);z-index:40;max-width:100%;backdrop-filter:blur(12px);width:fit-content;flex-wrap:wrap}
+[data-lv-ui] .lvx-batchbar{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-radius:var(--lvx-r-lg);width:100%;max-width:540px;backdrop-filter:blur(12px)}
 [data-lv-ui] .lvx-reportcard{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:var(--lvx-r-lg);background:linear-gradient(180deg,var(--lvx-surface) 0%,var(--lvx-surface-sunken) 100%);border:1px solid var(--lvx-border);box-shadow:var(--lvx-shadow-2);width:100%}
-[data-lv-ui] .lvx-blockmenu{min-width:220px;padding:6px;border-radius:var(--lvx-r-md);display:flex;flex-direction:column;gap:2px;backdrop-filter:blur(16px)}
+[data-lv-ui] .lvx-blockmenu{min-width:220px;padding:6px;border-radius:var(--lvx-r-md);display:flex;flex-direction:column;gap:2px;backdrop-filter:blur(12px)}
 @keyframes lvx-shm{0%{background-position:200% 0}
 28%{background-position:-200% 0}
 100%{background-position:-200% 0}
@@ -798,6 +798,7 @@ to{background-position:-100% 0}
 }
 [data-lv-ui] :is(.lvx-pill-btn,.lvx-calendar__day,.lvx-chip__close,.lvx-alert__close,.lvx-combobox__option,.lvx-medal,.lvx-seqcard__row,.lvx-pinboard__tile,.lvx-fsrsbar__btn):focus-visible{outline:0;box-shadow:var(--lvx-focus-ring)}
 @media (prefers-reduced-motion:reduce){[data-lv-ui] .lvx-progress__bar{transition:none}[data-lv-ui] .lvx-skeleton{animation:none;opacity:.55}[data-lv-ui] .lvx-drawer,[data-lv-ui] .lvx-drawer-mask{transition:none}[data-lv-ui] .lvx-confetti__piece{display:none!important;animation:none!important}[data-lv-ui] .lvx-btn,[data-lv-ui] .lvx-switch__track,[data-lv-ui] .lvx-switch__knob{transition:none}[data-lv-ui] :is(.lvx-shm-btn,.lvx-orb__track,.lvx-orb__node>*,.lvx-medal,.lvx-seqcard__row,.lvx-pinboard__tile,.lvx-pill-btn,.lvx-fsrsbar__btn,.lvx-remchip,.lvx-compass__pulse){animation:none;transition:none}}
+@media print{#lvLaunchpadDesktopEntry,#lvLaunchpadMobileEntry,#lv-desktop-launchpad-popover,#lv-launchpad-sheet-mask,#lv-launchpad-mobile-ball,#lv-notice-host,#lv-quick-workspace-mask,#lv-block-assistant-portal,#lv-shared-block-capsule,#lv-block-ai-result-card,#lv-block-type-picker-root,#lv-block-action-store-mask,#lv-ai-tier4-confirm-mask,.lv-bam,.lv-bam-mobile-mask,.lv-card-badge-pill,.lv-shared-ba-capsule,.lv-toast,.lv-floating-note,.lv-qw-mask,.lv-desktop-launchpad-popover,[data-lv-ui] .lvx-toast,[data-lv-ui] .lvx-fball,[data-lv-ui] .lvx-selbar,[data-lv-ui] .lvx-batchbar,[data-lv-ui] .lvx-blockmenu,[data-lv-ui] .lvx-drawer-mask,[data-lv-ui] .lvx-drawer,[data-lv-ui] .lvx-compass-mini{display:none!important;visibility:hidden!important}}
 `;
 
 /** 一次性把 lv-ui 样式注入 document（幂等；与 lv-ui-prefs 同模式） */
@@ -972,8 +973,8 @@ export function mountLvPopoverSurface(opts: {
     setupLvUiRoot(el);
     el.setAttribute("data-lv-surface", "popover");
     el.style.background = "color-mix(in srgb, var(--lvx-surface) 86%, transparent)";
-    el.style.backdropFilter = "blur(16px) saturate(180%)";
-    (el.style as any).WebkitBackdropFilter = "blur(16px) saturate(180%)";
+    el.style.backdropFilter = "blur(12px) saturate(180%)";
+    (el.style as any).WebkitBackdropFilter = "blur(12px) saturate(180%)";
     el.style.border = "1px solid var(--lvx-border-strong)";
     el.style.borderRadius = "var(--lvx-r-lg)";
     el.style.boxShadow = "var(--lvx-inner-sheen), var(--lvx-shadow-3)";
@@ -2626,6 +2627,7 @@ export function lvxCommandPalette(opts: {
 
     input.addEventListener("input", () => renderList(input.value));
     input.addEventListener("keydown", (ev: KeyboardEvent) => {
+        if (ev.isComposing || ev.keyCode === 229) return;
         if (!currentBtns.length) return;
         if (ev.key === "ArrowDown") {
             ev.preventDefault?.();
@@ -3937,7 +3939,7 @@ export function lvxLaunchpadCard(opts: {
 
     const brandColors: Record<string, string> = {
         checkin: "#F59E0B", raikiri: "#38BDF8", speed: "#38BDF8", home: "#10B981", glean: "#A855F7",
-        exam: "#3B82F6", cards: "#F43F5E", contacts: "#F97316", common: "#14B8A6", exoskeleton: "#64748B",
+        exam: "#3B82F6", cards: "#F43F5E", contacts: "#F97316", common: "#14B8A6",
     };
     const defaultMeta: Record<string, { desc: string; actions: string[] }> = {
         checkin: { desc: "习惯打卡 · 连击指数", actions: ["立即打卡全部待办", "查看今日待办", "快速记录一条", "启动番茄专注", "使用连击补卡券", "本周连击复盘"] },
@@ -3948,7 +3950,6 @@ export function lvxLaunchpadCard(opts: {
         cards: { desc: "间隔复习 · 记忆曲线", actions: ["复习到期闪卡", "从当前文档制卡", "阶梯序列卡特训", "牌组树管理"] },
         contacts: { desc: "关系图谱 · 联络提醒", actions: ["快速记录一次互动", "打开人脉图谱", "人情往来对账", "近期生日与纪念日"] },
         common: { desc: "常用片段 · 宏模版", actions: ["打开双核短语侧栏", "动态变量模版填充", "连环取用拼板", "隐私脱敏导出"] },
-        exoskeleton: { desc: "桌面穿透 · 全局速记", actions: ["唤醒全局速记浮窗", "屏幕区域截图入库", "剪贴板历史穿透"] },
     };
     if (defaultMeta.raikiri) {
         defaultMeta.speed = defaultMeta.raikiri;
@@ -5587,7 +5588,7 @@ export function lvxQuickCaptureModal(opts: {
     const offsets = ["现在", "-5分", "-15分", "-30分", "-1时"];
     let curOffset = "现在";
     let attachMode: "assets" | "local-link" = "assets";
-    let textVal = "完成了小驴 DL2 组件库罗盘与设置体系全量打磨";
+    let textVal = "完成了小驴生态组件库罗盘与设置体系全量打磨";
 
     const root = lvxH("div", { class: "lvx-qcapture", role: "region", ariaLabel: "一键记事与 LifeLog 极速流工作台" });
 
@@ -5658,6 +5659,7 @@ export function lvxQuickCaptureModal(opts: {
             },
         });
         input.addEventListener("keydown", (e: KeyboardEvent) => {
+            if (e.isComposing || e.keyCode === 229) return;
             if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                 e.preventDefault();
                 opts.onSubmit?.({ target: targets[targetIdx] || "", category: curCat, offset: curOffset, text: textVal, attachMode });
@@ -5987,7 +5989,7 @@ export function lvxProtyleContextStrip(opts: {
                 style: {
                     display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px",
                     borderRadius: "12px", background: "color-mix(in srgb, var(--lvx-surface) 92%, transparent)",
-                    backdropFilter: "blur(16px)", border: "1px solid var(--lvx-border)", width: "100%", flexWrap: "wrap", gap: "6px",
+                    backdropFilter: "blur(12px)", border: "1px solid var(--lvx-border)", width: "100%", flexWrap: "wrap", gap: "6px",
                 },
             },
                 lvxH("div", { style: { display: "inline-flex", alignItems: "center", gap: "6px" } },
@@ -6141,7 +6143,7 @@ export function lvxShareQuoteStudio(opts: {
             lvxH("div", { style: { fontSize: "14px", fontWeight: "650", lineHeight: "1.6" }, text: `“${opts.quote}”` }),
             lvxH("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px", fontSize: "12px", opacity: "0.86" } },
                 lvxH("span", { style: { minWidth: "0", flex: "1 1 140px" }, text: `— ${opts.author} · 《${opts.sourceDoc}》` }),
-                lvxH("span", { style: { fontFamily: "var(--lvx-font-num)", fontWeight: "700", whiteSpace: "nowrap", flexShrink: "0" }, text: `🐴 小驴 DL2 · ${curRatio}` }),
+                lvxH("span", { style: { fontFamily: "var(--lvx-font-num)", fontWeight: "700", whiteSpace: "nowrap", flexShrink: "0" }, text: `🐴 小驴生态 · ${curRatio}` }),
             ),
         );
         root.appendChild(poster);
@@ -11250,8 +11252,8 @@ export function lvxBottomTabBar(opts: {
             position: "fixed", left: "0", right: "0", bottom: "0", zIndex: "70",
             display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)",
             background: "color-mix(in srgb, var(--lvx-surface-elevated) 86%, transparent)",
-            backdropFilter: "blur(16px) saturate(180%)",
-            WebkitBackdropFilter: "blur(16px) saturate(180%)",
+            backdropFilter: "blur(12px) saturate(180%)",
+            WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderTop: "1px solid var(--lvx-border)",
             boxShadow: "var(--lvx-inner-sheen), var(--lvx-shadow-2)",
         },
@@ -13066,6 +13068,7 @@ function lvxPromptDialog(title: string, placeholder = ""): Promise<string | null
             resolve(val);
         };
         const onKeyDown = (e: KeyboardEvent) => {
+            if (e.isComposing || e.keyCode === 229) return;
             if (e.key === "Escape") { e.preventDefault(); close(null); }
             else if (e.key === "Enter") { e.preventDefault(); close(input?.value.trim() ?? null); }
         };
@@ -16103,7 +16106,7 @@ export function lvxMobileReadingFloatingBar(opts: {
             display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap",
             gap: "8px", width: "100%", padding: "8px 12px", borderRadius: "var(--lvx-r-pill)",
             background: "color-mix(in srgb, var(--lvx-surface) 80%, transparent)",
-            backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+            backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
             border: "1px solid var(--lvx-border-strong)", boxShadow: "var(--lvx-shadow-3)",
             boxSizing: "border-box", fontSize: "12px",
         },
@@ -16611,7 +16614,7 @@ export function lvxAuroraContainer(opts: {
     const mesh = lvxH("div", {
         style: {
             position: "absolute", inset: "-30px", pointerEvents: "none",
-            filter: "blur(48px)", opacity: "0.36", zIndex: "0",
+            filter: "blur(12px)", opacity: "0.36", zIndex: "0",
         },
         "aria-hidden": "true",
     },
@@ -16637,8 +16640,8 @@ export function lvxAuroraContainer(opts: {
         style: {
             position: "relative", zIndex: "1", padding: "16px",
             background: "color-mix(in srgb, var(--lvx-surface) 75%, transparent)",
-            backdropFilter: "blur(20px) saturate(180%)",
-            WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            backdropFilter: "blur(12px) saturate(180%)",
+            WebkitBackdropFilter: "blur(12px) saturate(180%)",
             boxShadow: "var(--lvx-inner-sheen)",
         },
     });
@@ -19313,7 +19316,7 @@ export function lvxDockMagnificationPod(opts: {
             display: "inline-flex", alignItems: "flex-end", gap: "6px", padding: "6px 10px",
             borderRadius: "var(--lvx-r-pill)",
             background: "color-mix(in srgb, var(--lvx-surface) 82%, transparent)",
-            backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+            backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
             border: "1px solid var(--lvx-border-strong)",
             boxShadow: "var(--lvx-inner-sheen), var(--lvx-shadow-3)",
             userSelect: "none", boxSizing: "border-box", maxWidth: "100%", overflowX: "auto",

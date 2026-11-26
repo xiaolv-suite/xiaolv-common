@@ -202,6 +202,8 @@ export interface LvQuickWorkspaceConfig {
     quickNoteDocumentId?: string;
     quickNoteDocumentTitle?: string;
     quickNoteAttachMode?: "assets" | "local-link";
+    diaryZoneDefaultFolded?: boolean;
+    diaryZoneHeadingLevel?: 3 | 4;
 }
 
 export interface LvPluginBackupPayload {
@@ -234,7 +236,10 @@ export interface LvEcosystemDiagnostics {
 
 export interface LvAiConfig {
     endpoint: string;    // e.g. "https://api.deepseek.com/v1" or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    apiKey: string;      // 共享 Key
+    /** 仅允许在内存/单次请求中使用；持久化前必须剥离并存入思源密钥库 */
+    apiKey?: string;
+    hasSecret?: boolean;
+    secretSlot?: string;
     model: string;       // e.g. "deepseek-chat" or "qwen-plus"
     temperature?: number;
     maxTokens?: number;
@@ -340,6 +345,9 @@ interface LvLaunchpadHub {
     register: (item: LvLaunchpadItem) => () => void;
     getItems: () => Array<LvLaunchpadItem & { state: "pinned" | "docked" | "hidden" }>;
     setPluginState: (id: string, state: "pinned" | "docked" | "hidden") => void;
+    movePluginOrder?: (id: string, direction: "up" | "down") => boolean;
+    resetPluginOrder?: () => void;
+    getPluginOrder?: () => string[];
     updateItem?: (id: string, patch: Partial<LvLaunchpadItem>) => void;
     executeAction: (id: string, actionName: string) => boolean;
     open: (mode?: "popover" | "center") => void;
@@ -399,14 +407,102 @@ declare global {
 /* ========================================================================= */
 
 const STYLES = `
-:root {
+:is(
+    [data-lv-ui],
+    #lv-notice-host,
+    #lv-launchpad-sheet-mask,
+    #lv-launchpad-mobile-ball,
+    #lvLaunchpadDesktopEntry,
+    #lvLaunchpadMobileEntry,
+    #lv-desktop-launchpad-popover,
+    .lv-desktop-launchpad-popover,
+    #lv-quick-workspace-mask,
+    .lv-qw-mask,
+    #lv-block-assistant-portal,
+    #lv-shared-block-capsule,
+    .lv-shared-ba-capsule,
+    #lv-block-ai-result-card,
+    #lv-block-type-picker-root,
+    #lv-block-action-store-mask,
+    #lv-ai-tier4-confirm-mask,
+    #lv-ai-wait-overlay-mask,
+    .lv-ai-wait-mask,
+    .lv-bam,
+    .lv-bam-mobile-mask,
+    .lv-floating-note,
+    .lv-toast,
+    .lv-mobile-host,
+    .b3-dialog.xlc-sovereign-dialog,
+    .b3-dialog.glean-dialog-host,
+    .b3-dialog.sw-dialog-host,
+    .b3-dialog.lvct-dialog-host
+) {
     --lv-safe-surface: #ffffff;
     --lv-safe-surface-sub: #f8fafc;
     --lv-safe-text: #0f172a;
     --lv-safe-text-muted: #64748b;
     --lv-safe-border: rgba(0, 0, 0, 0.08);
 }
-:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark, body.dark) {
+:is([data-theme-mode="dark"], [data-appearance="dark"], body.body--dark, body.theme--dark, html.dark, body.dark) :is(
+    [data-lv-ui],
+    #lv-notice-host,
+    #lv-launchpad-sheet-mask,
+    #lv-launchpad-mobile-ball,
+    #lvLaunchpadDesktopEntry,
+    #lvLaunchpadMobileEntry,
+    #lv-desktop-launchpad-popover,
+    .lv-desktop-launchpad-popover,
+    #lv-quick-workspace-mask,
+    .lv-qw-mask,
+    #lv-block-assistant-portal,
+    #lv-shared-block-capsule,
+    .lv-shared-ba-capsule,
+    #lv-block-ai-result-card,
+    #lv-block-type-picker-root,
+    #lv-block-action-store-mask,
+    #lv-ai-tier4-confirm-mask,
+    #lv-ai-wait-overlay-mask,
+    .lv-ai-wait-mask,
+    .lv-bam,
+    .lv-bam-mobile-mask,
+    .lv-floating-note,
+    .lv-toast,
+    .lv-mobile-host,
+    .b3-dialog.xlc-sovereign-dialog,
+    .b3-dialog.glean-dialog-host,
+    .b3-dialog.sw-dialog-host,
+    .b3-dialog.lvct-dialog-host
+),
+:is(
+    [data-lv-ui],
+    #lv-notice-host,
+    #lv-launchpad-sheet-mask,
+    #lv-launchpad-mobile-ball,
+    #lvLaunchpadDesktopEntry,
+    #lvLaunchpadMobileEntry,
+    #lv-desktop-launchpad-popover,
+    .lv-desktop-launchpad-popover,
+    #lv-quick-workspace-mask,
+    .lv-qw-mask,
+    #lv-block-assistant-portal,
+    #lv-shared-block-capsule,
+    .lv-shared-ba-capsule,
+    #lv-block-ai-result-card,
+    #lv-block-type-picker-root,
+    #lv-block-action-store-mask,
+    #lv-ai-tier4-confirm-mask,
+    #lv-ai-wait-overlay-mask,
+    .lv-ai-wait-mask,
+    .lv-bam,
+    .lv-bam-mobile-mask,
+    .lv-floating-note,
+    .lv-toast,
+    .lv-mobile-host,
+    .b3-dialog.xlc-sovereign-dialog,
+    .b3-dialog.glean-dialog-host,
+    .b3-dialog.sw-dialog-host,
+    .b3-dialog.lvct-dialog-host
+)[data-lv-theme="dark"] {
     --lv-safe-surface: #1e222b;
     --lv-safe-surface-sub: #272c37;
     --lv-safe-text: #f1f5f9;
@@ -440,6 +536,7 @@ const STYLES = `
     position: fixed;
     right: max(20px, env(safe-area-inset-right, 0px));
     bottom: max(38px, calc(var(--b3-toolbar-height, 0px) + 12px + env(safe-area-inset-bottom, 0px)));
+    transition: bottom 0.16s ease;
     z-index: 999;
     pointer-events: none;
     font-family: var(--b3-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
@@ -496,8 +593,8 @@ const STYLES = `
     background: var(--lv-nt-bg);
     border: 1px solid var(--lv-nt-border);
     box-shadow: 0 12px 32px -6px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
     color: var(--lv-nt-text);
     font-size: 13px;
     line-height: 1.45;
@@ -680,7 +777,7 @@ const STYLES = `
     background: rgba(255, 255, 255, 0.97);
     border: 1px solid rgba(15, 23, 42, 0.09);
     box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05);
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(14px);
     font-size: 12.5px;
     font-weight: 500;
     color: #0f172a;
@@ -1193,18 +1290,47 @@ const STYLES = `
 @keyframes lvSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* ===== 全生态通用苏格拉底式 AI 思考感知卡片 (LvAiProgress) ===== */
-.lv-ai-thinking{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;gap:12px;text-align:center;width:100%;box-sizing:border-box}
-.lv-ai-thinking__title{font-size:13px;font-weight:700;color:var(--b3-theme-on-surface,#0f172a);margin-bottom:2px}
-.lv-ai-thinking__glow{position:relative;width:52px;height:52px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--b3-theme-primary,#3b82f6) 12%,transparent);box-shadow:0 0 24px color-mix(in srgb,var(--b3-theme-primary,#3b82f6) 24%,transparent);animation:lvAiPulse 2s ease-in-out infinite}
+.lv-ai-thinking{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;gap:12px;text-align:center;width:100%;box-sizing:border-box;white-space:normal}
+.lv-ai-thinking--compact{padding:14px 12px;gap:8px}
+.lv-ai-thinking--compact .lv-ai-thinking__glow{width:40px;height:40px}
+.lv-ai-thinking--compact .lv-ai-thinking__icon{font-size:20px}
+.lv-ai-thinking__title{font-size:13.5px;font-weight:700;color:var(--b3-theme-on-surface,var(--lv-safe-text,#0f172a));margin-bottom:2px;line-height:1.4}
+.lv-ai-thinking__subtitle{font-size:11.5px;color:var(--b3-theme-on-surface-light,var(--lv-safe-text-muted,#64748b));margin-top:-6px;line-height:1.45;max-width:340px}
+.lv-ai-thinking__glow{position:relative;width:52px;height:52px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--b3-theme-primary,#3b82f6) 12%,transparent);box-shadow:0 0 24px color-mix(in srgb,var(--b3-theme-primary,#3b82f6) 24%,transparent);animation:lvAiPulse 2s ease-in-out infinite;flex-shrink:0}
 .lv-ai-thinking__icon{font-size:24px;line-height:1}
-.lv-ai-thinking__stage{font-size:13px;font-weight:600;color:var(--b3-theme-primary,#2563eb);min-height:20px;transition:color .2s ease;animation:lvAiFade .3s ease both}
-.lv-ai-thinking__timer{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--b3-theme-on-surface,#0f172a) 6%,transparent);color:var(--b3-theme-on-surface,#475569);font-variant-numeric:tabular-nums}
-.lv-ai-thinking__progress{width:min(260px,80%);height:4px;border-radius:999px;background:color-mix(in srgb,var(--b3-theme-primary,#3b82f6) 15%,transparent);overflow:hidden;position:relative}
+.lv-ai-thinking__stage{font-size:13px;font-weight:600;color:var(--b3-theme-primary,#2563eb);min-height:20px;line-height:1.45;transition:color .2s ease;animation:lvAiFade .3s ease both}
+.lv-ai-thinking__timer{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--b3-theme-on-surface,#0f172a) 6%,transparent);color:var(--b3-theme-on-surface,var(--lv-safe-text-muted,#475569));font-variant-numeric:tabular-nums}
+.lv-ai-thinking__progress{width:min(260px,84%);height:4px;border-radius:999px;background:color-mix(in srgb,var(--b3-theme-primary,#3b82f6) 15%,transparent);overflow:hidden;position:relative}
 .lv-ai-thinking__bar{position:absolute;inset:0;width:40%;border-radius:999px;background:var(--b3-theme-primary,#2563eb);animation:lvAiIndeterminate 1.8s ease-in-out infinite}
-.lv-ai-thinking__cancel{margin-top:4px;font-size:11.5px}
+.lv-ai-thinking__cancel{margin-top:4px;font-size:11.5px;padding:5px 14px;min-height:30px;border-radius:999px;border:1px solid var(--b3-theme-surface-lighter,rgba(15,23,42,.16));background:transparent;color:var(--b3-theme-on-surface-light,var(--lv-safe-text-muted,#475569));cursor:pointer;font-family:inherit;transition:background-color .15s ease,color .15s ease,border-color .15s ease}
+.lv-ai-thinking__cancel:hover{background:rgba(239,68,68,.1);color:#ef4444;border-color:rgba(239,68,68,.35)}
+.lv-ai-thinking__cancel:focus-visible{outline:2px solid var(--b3-theme-primary,#2563eb);outline-offset:2px}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-thinking__title{color:var(--b3-theme-on-surface,#f1f5f9)}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-thinking__subtitle{color:var(--b3-theme-on-surface-light,#94a3b8)}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-thinking__stage{color:var(--b3-theme-primary,#60a5fa)}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-thinking__timer{background:rgba(255,255,255,.08);color:var(--b3-theme-on-surface,#cbd5e1)}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-thinking__cancel{border-color:rgba(255,255,255,.16);color:#cbd5e1}
 @keyframes lvAiPulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.08);opacity:1;box-shadow:0 0 32px color-mix(in srgb,var(--b3-theme-primary,#3b82f6) 38%,transparent)}}
 @keyframes lvAiIndeterminate{0%{left:-40%}100%{left:100%}}
 @keyframes lvAiFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== 全生态非阻塞 AI 等待浮层 (withLvAiWait / openLvAiWaitOverlay) ===== */
+.lv-ai-wait-mask{position:fixed;inset:0;z-index:1120;background:rgba(15,23,42,.38);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:16px max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));box-sizing:border-box;animation:lvSheetMaskIn 180ms ease both}
+.lv-ai-wait-card{position:relative;width:min(420px,calc(100vw - 24px));max-height:85dvh;overflow-y:auto;background:var(--b3-theme-surface,var(--lv-safe-surface,#fff));color:var(--b3-theme-on-surface,var(--lv-safe-text,#0f172a));border:1px solid var(--b3-theme-surface-lighter,var(--lv-safe-border,rgba(15,23,42,.12)));border-radius:16px;box-shadow:0 20px 48px -10px rgba(15,23,42,.26),0 0 0 1px rgba(255,255,255,.08) inset;padding:8px 12px 12px;box-sizing:border-box;font-family:var(--b3-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif);animation:lvSheetCenter 200ms cubic-bezier(.22,1,.36,1) both}
+.lv-ai-wait-card__close{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:8px;border:none;background:transparent;color:var(--b3-theme-on-surface-light,var(--lv-safe-text-muted,#64748b));cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center;transition:background-color .14s ease,color .14s ease}
+.lv-ai-wait-card__close:hover{background:rgba(15,23,42,.06);color:var(--b3-theme-on-surface,var(--lv-safe-text,#0f172a))}
+.lv-ai-wait-card__close:focus-visible{outline:2px solid var(--b3-theme-primary,#2563eb);outline-offset:2px}
+.lv-ai-wait-card__body{width:100%;box-sizing:border-box}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-wait-mask{background:rgba(0,0,0,.56)}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-wait-card{background:var(--b3-theme-surface,#1e2433);color:var(--b3-theme-on-surface,#f1f5f9);border-color:rgba(255,255,255,.14);box-shadow:0 24px 54px -10px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06) inset}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-wait-card__close{color:#94a3b8}
+:is([data-theme-mode="dark"],[data-appearance="dark"],body.body--dark,body.theme--dark,html.dark,body.dark) .lv-ai-wait-card__close:hover{background:rgba(255,255,255,.08);color:#f8fafc}
+@media (max-width:600px){
+  .lv-ai-wait-card{width:min(366px,calc(100vw - 24px));border-radius:14px;padding:8px 10px 10px}
+  .lv-ai-thinking{padding:18px 12px;gap:10px}
+  .lv-ai-thinking__cancel{min-height:38px;padding:7px 16px;font-size:12.5px}
+  .lv-ai-wait-card__close{width:34px;height:34px}
+}
 
 /* ===== 极速工作台弹窗（一键记事 / LifeLog） ===== */
 .lv-qw-mask{
@@ -1460,21 +1586,118 @@ const STYLES = `
     max-height: 16px !important;
     flex-shrink: 0 !important;
 }
+html[data-lv-motion="off"] #lv-notice-host,
+html[data-lv-motion="off"] #lv-notice-host *,
+html[data-lv-motion="off"] #lv-quick-workspace-mask,
+html[data-lv-motion="off"] #lv-quick-workspace-mask *,
+html[data-lv-motion="off"] #lv-launchpad-sheet-mask,
+html[data-lv-motion="off"] #lv-launchpad-sheet-mask *,
+html[data-lv-motion="off"] #lv-ai-wait-overlay-mask,
+html[data-lv-motion="off"] #lv-ai-wait-overlay-mask *,
+html[data-lv-motion="off"] .lv-ai-wait-mask,
+html[data-lv-motion="off"] .lv-ai-wait-mask *,
+html[data-lv-motion="off"] .lv-ai-thinking,
+html[data-lv-motion="off"] .lv-ai-thinking *,
+html[data-lv-motion="off"] #lv-launchpad-mobile-ball {
+    animation: none !important;
+    transition: none !important;
+}
+#lv-shared-block-capsule.lv-shared-ba-capsule {
+    position: fixed;
+    top: 0;
+    left: 0;
+    will-change: transform;
+    z-index: 99990;
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--b3-theme-surface, #ffffff);
+    color: var(--b3-theme-on-surface, #1e293b);
+    border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.34));
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+    font-family: var(--b3-font-family, sans-serif);
+    font-size: 11.5px;
+    line-height: 1.2;
+    user-select: none;
+}
+#lv-shared-block-capsule .lv-shared-ba-capsule__trigger,
+#lv-shared-block-capsule .lv-shared-ba-capsule__quick-btn {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+#lv-shared-block-capsule .lv-shared-ba-capsule__trigger:hover,
+#lv-shared-block-capsule .lv-shared-ba-capsule__quick-btn:hover {
+    background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 12%, transparent);
+    color: var(--b3-theme-primary, #6366f1);
+}
+#lv-shared-block-capsule.lv-shared-ba-capsule[data-is-card="true"] {
+    border-color: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 42%, var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.34)));
+    background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 7%, var(--b3-theme-surface, #ffffff));
+}
+#lv-shared-block-capsule.lv-shared-ba-capsule[data-is-card="true"] .lv-shared-ba-capsule__trigger {
+    color: var(--b3-theme-primary, #6366f1);
+}
+#lv-shared-block-capsule.lv-shared-ba-capsule[data-readonly="true"] {
+    border-color: rgba(245, 158, 11, 0.42);
+}
+@media print {
+    #lvLaunchpadDesktopEntry,
+    #lvLaunchpadMobileEntry,
+    #lv-desktop-launchpad-popover,
+    #lv-launchpad-sheet-mask,
+    #lv-launchpad-mobile-ball,
+    #lv-notice-host,
+    #lv-quick-workspace-mask,
+    #lv-block-assistant-portal,
+    #lv-shared-block-capsule,
+    #lv-block-ai-result-card,
+    #lv-block-type-picker-root,
+    #lv-block-action-store-mask,
+    #lv-ai-tier4-confirm-mask,
+    #lv-ai-wait-overlay-mask,
+    .lv-ai-wait-mask,
+    .lv-bam,
+    .lv-bam-mobile-mask,
+    .lv-card-badge-pill,
+    .lv-shared-ba-capsule,
+    .lv-toast,
+    .lv-floating-note,
+    .lv-qw-mask,
+    .lv-desktop-launchpad-popover {
+        display: none !important;
+        visibility: hidden !important;
+    }
+}
 `;
+
+const STYLES_VERSION = "3.7";
 
 function ensureStyles(): void {
     if (typeof document === "undefined" || !document.head || typeof document.createElement !== "function") return;
     const styleId = "lv-notice-styles";
     const existing = typeof document.getElementById === "function" ? document.getElementById(styleId) : null;
     if (existing) {
-        if (existing.getAttribute?.("data-lv-ver") === "3.0") return;
+        if (existing.getAttribute?.("data-lv-ver") === STYLES_VERSION) return;
         existing.textContent = STYLES;
-        existing.setAttribute?.("data-lv-ver", "3.0");
+        existing.setAttribute?.("data-lv-ver", STYLES_VERSION);
         return;
     }
     const styleEl = document.createElement("style");
     styleEl.id = styleId;
-    styleEl.setAttribute?.("data-lv-ver", "3.0");
+    styleEl.setAttribute?.("data-lv-ver", STYLES_VERSION);
     styleEl.textContent = STYLES;
     document.head.appendChild(styleEl);
 }
@@ -2131,8 +2354,113 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl =
 
     // 接入统一浮层栈 Esc 秒关（动态同步：仅当真正存在活动卡片时入栈，卡片清空时出栈）
     let unregisterNoticeSurface: (() => void) | null = null;
+    let avoidanceCleanup: (() => void) | null = null;
+    let avoidanceRafId: number | null = null;
+
+    function syncNoticeHostAvoidance() {
+        if (!hostEl || typeof document === "undefined" || typeof document.querySelectorAll !== "function") return;
+        if (document.hidden) return;
+        try {
+            const vw = typeof window !== "undefined" ? (window.innerWidth || 1440) : 1440;
+            const vh = typeof window !== "undefined" ? (window.innerHeight || 900) : 900;
+            const candidates = document.querySelectorAll<HTMLElement>(
+                ".lv-bam, .b3-dialog.xlc-dialog--pinned, .xlc-dialog--pinned, .xlc-dialog--mini, .sw-floating-ball"
+            );
+            let avoidBottom = 0;
+            candidates.forEach((node) => {
+                if (!node) return;
+                if (typeof node.closest === "function" && node.closest(".fn__none")) return;
+                const rect = typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
+                if (rect && (rect.width > 0 || rect.height > 0)) {
+                    // 检测是否位于右下角通知区域（右侧 460px、底部 420px 范围）
+                    if (rect.right > vw - 460 && rect.bottom > vh - 420) {
+                        const neededBottom = Math.max(120, Math.round(vh - rect.top + 14));
+                        avoidBottom = Math.max(avoidBottom, Math.min(neededBottom, Math.max(180, vh - 160)));
+                    }
+                } else {
+                    // 非浏览器几何桩环境：只要存在 .lv-bam 或 .xlc-dialog--pinned 即触发避让
+                    avoidBottom = Math.max(avoidBottom, 220);
+                }
+            });
+            if (avoidBottom > 0) {
+                hostEl.style.bottom = `${avoidBottom}px`;
+                hostEl.setAttribute?.("data-lv-avoiding", "true");
+            } else {
+                if (hostEl.style.bottom) hostEl.style.bottom = "";
+                hostEl.removeAttribute?.("data-lv-avoiding");
+            }
+        } catch { /* ignore */ }
+    }
+
+    function teardownAvoidanceWatchers() {
+        if (avoidanceRafId !== null) {
+            try {
+                if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(avoidanceRafId);
+                else clearTimeout(avoidanceRafId);
+            } catch { /* ignore */ }
+            avoidanceRafId = null;
+        }
+        if (avoidanceCleanup) {
+            try { avoidanceCleanup(); } catch { /* ignore */ }
+            avoidanceCleanup = null;
+        }
+    }
+
     function syncNoticeSurface() {
         const hasVisible = activePackets.length > 0;
+        const canObserveAvoidance = typeof window !== "undefined"
+            && typeof document !== "undefined"
+            && typeof document.querySelectorAll === "function";
+        if (hasVisible && !avoidanceCleanup && canObserveAvoidance) {
+            const scheduleAvoidanceSync = () => {
+                if (activePackets.length === 0 || (hostEl && hostEl.isConnected === false)) {
+                    teardownAvoidanceWatchers();
+                    return;
+                }
+                if (typeof document !== "undefined" && document.hidden) return;
+                if (avoidanceRafId !== null) return;
+                const run = () => {
+                    avoidanceRafId = null;
+                    if (activePackets.length === 0 || (hostEl && hostEl.isConnected === false)) {
+                        teardownAvoidanceWatchers();
+                        return;
+                    }
+                    syncNoticeHostAvoidance();
+                };
+                if (typeof requestAnimationFrame === "function") {
+                    avoidanceRafId = requestAnimationFrame(run);
+                } else {
+                    avoidanceRafId = window.setTimeout(run, 16);
+                }
+            };
+            let ro: ResizeObserver | null = null;
+            if (typeof ResizeObserver === "function" && document.body) {
+                try {
+                    ro = new ResizeObserver(scheduleAvoidanceSync);
+                    ro.observe(document.body);
+                } catch { ro = null; }
+            }
+            let mo: MutationObserver | null = null;
+            if (typeof MutationObserver === "function" && document.body) {
+                try {
+                    mo = new MutationObserver(scheduleAvoidanceSync);
+                    mo.observe(document.body, { childList: true, subtree: false });
+                } catch { mo = null; }
+            }
+            const onVisibility = () => {
+                if (typeof document !== "undefined" && !document.hidden) scheduleAvoidanceSync();
+            };
+            try { window.addEventListener?.("resize", scheduleAvoidanceSync, { passive: true } as any); } catch { /* ignore */ }
+            try { document.addEventListener?.("visibilitychange", onVisibility, { passive: true } as any); } catch { /* ignore */ }
+            avoidanceCleanup = () => {
+                try { ro?.disconnect(); } catch { /* ignore */ }
+                try { mo?.disconnect(); } catch { /* ignore */ }
+                try { window.removeEventListener?.("resize", scheduleAvoidanceSync as any); } catch { /* ignore */ }
+                try { document.removeEventListener?.("visibilitychange", onVisibility as any); } catch { /* ignore */ }
+            };
+        } else if (!hasVisible && avoidanceCleanup) {
+            teardownAvoidanceWatchers();
+        }
         if (hasVisible && !unregisterNoticeSurface) {
             unregisterNoticeSurface = lvSurfaceStack.push({
                 id: "lv-notice-active-card",
@@ -2160,6 +2488,7 @@ function createCoordinator(initialPlugin: string): LvNoticeHub {    let hostEl =
         syncNoticeSurface();
         if (!hostEl) return;
         if (activePackets.length > 0) ensureStyles();
+        syncNoticeHostAvoidance();
         // 动态提升 z-index，保障通知全局浮于所有弹窗/抽屉/蒙层之上
         try {
             const currentZ = typeof window !== "undefined" && (window as any).siyuan?.zIndex;
@@ -2994,8 +3323,15 @@ function wireExternalModalHarmonizer(hub: LvNoticeHub): () => void {
      */
     const sweepExternalReminderEls = () => {
         try {
+            if (typeof document === "undefined" || document.hidden) return;
             const body = document.body;
             if (!body || typeof body.querySelectorAll !== "function") return;
+            const hasPotentialModal = typeof body.querySelector === "function"
+                ? Boolean(body.querySelector(
+                    ".b3-dialog--open, .tm-remind-modal, .tm-semantic-date-confirm-modal, .tm-calendar-reminder-toast, .tm-prompt-modal, [data-tm-semantic-summary]"
+                ))
+                : true;
+            if (!hasPotentialModal) return;
             // 结构化候选：第三方已知弹层类（querySelectorAll 任意深度可达，含宿主容器内部，代价极低）
             const structural = body.querySelectorAll<HTMLElement>(
                 ".tm-remind-modal, .tm-semantic-date-confirm-modal, .tm-calendar-reminder-toast, .tm-prompt-modal, [data-tm-semantic-summary]",
@@ -3041,28 +3377,38 @@ function wireExternalModalHarmonizer(hub: LvNoticeHub): () => void {
     };
 
     // 自续链扫描调度：用裸 setTimeout 逐轮自排（vm 测试环境会进入 context 计时账本随 close() 清空；
-    // 生产环境等价 3 秒轮询，且不留存活的 interval 句柄——杜绝 node --test 事件循环被 interval 挂死）
+    // 生产环境 10s 低频兜底 + document.hidden / 无弹窗早退门控，杜绝空转）
     const scheduleSweep = (delayMs: number) => {
         if (holder.sweepStopped) return;
         try {
             holder.sweepTimer = setTimeout(() => {
                 holder.sweepTimer = null;
                 if (holder.sweepStopped) return;
-                sweepExternalReminderEls();
-                scheduleSweep(3000);
+                if (typeof document === "undefined" || !document.hidden) {
+                    sweepExternalReminderEls();
+                }
+                scheduleSweep(10000);
             }, delayMs);
         } catch { /* ignore */ }
     };
 
     if (!holder.obs) {
-        // 启动竞态兜底：装配后 1.2s 先扫一遍已存在的弹层，随后每 3 秒一轮轻量扫描
-        //（结构化选择器 + tm- 前缀预筛的顶层文本签名）
+        // 启动竞态兜底：装配后 1.2s 先扫一遍已存在的弹层，随后每 10 秒一轮轻量门控扫描
         scheduleSweep(1200);
         holder.obs = new MutationObserver((muts) => {
+            if (typeof document !== "undefined" && document.hidden) return;
             for (const m of muts) {
                 m.addedNodes?.forEach?.((n) => {
                     const el = n as HTMLElement;
                     if (!el || typeof el.querySelector !== "function") return;
+                    const classId = `${el.className || ""} ${el.id || ""}`;
+                    const mayBeModal = el.classList?.contains?.("b3-dialog--open")
+                        || el.classList?.contains?.("tm-remind-modal")
+                        || el.classList?.contains?.("tm-semantic-date-confirm-modal")
+                        || classId.includes("tm-")
+                        || classId.includes("task-horizon")
+                        || /remind|notif|alert|popup|dialog|modal/i.test(classId);
+                    if (!mayBeModal) return;
                     const isExternalModal = Boolean(
                         el.querySelector?.(".tm-semantic-date-confirm-box, [data-tm-semantic-summary]") ||
                         el.classList?.contains?.("tm-remind-modal") ||
@@ -3789,6 +4135,136 @@ export const lvNotify = {
 /* ========================================================================= */
 
 let fallbackAiConfig: LvAiConfig | null = null;
+const SHARED_SECRET_SLOT = "lv_ai_secret_tier2_apikey";
+let inMemorySharedApiKey = "";
+let sharedSecretQueue: Promise<unknown> = Promise.resolve();
+let pendingLegacySharedMigration: { key: string; promise: Promise<{ ok: boolean; reason?: string }> } | null = null;
+
+function hasPersistedSharedSecretInHost(): boolean {
+    try {
+        const w = typeof window !== "undefined" ? (window as any) : (typeof globalThis !== "undefined" ? (globalThis as any) : null);
+        const pluginReader = w?.__LV_SECRET_PLUGIN__ || w?.__LV_HOST_API__?.plugin;
+        if (pluginReader && typeof pluginReader.getSecret === "function") {
+            const k = String(pluginReader.getSecret(SHARED_SECRET_SLOT) || "").trim();
+            if (k.length > 3) return true;
+        }
+        const items = w?.siyuan?.config?.secrets?.items;
+        if (Array.isArray(items)) {
+            const hit = items.find((it: any) => it && (it.name === SHARED_SECRET_SLOT || it.key === SHARED_SECRET_SLOT));
+            if (hit && typeof hit.value === "string" && hit.value.trim().length > 3) return true;
+        }
+    } catch { /* ignore */ }
+    return false;
+}
+
+export async function waitForLegacySharedSecretMigration(): Promise<void> {
+    if (pendingLegacySharedMigration) {
+        try {
+            await pendingLegacySharedMigration.promise;
+        } catch { /* ignore */ }
+    }
+}
+
+function scheduleLegacySharedSecretMigration(legacyKey: string): void {
+    if (!legacyKey) return;
+    if (pendingLegacySharedMigration && pendingLegacySharedMigration.key === legacyKey) {
+        return;
+    }
+    const promise = persistSecretToSiyuanSlot(legacyKey).then((res) => {
+        if (res.ok) {
+            try {
+                if (typeof localStorage !== "undefined") {
+                    const latestRaw = localStorage.getItem(AI_STORAGE_KEY);
+                    if (latestRaw) {
+                        const latestParsed = JSON.parse(latestRaw);
+                        if (latestParsed && typeof latestParsed === "object") {
+                            const latestLegacy = typeof latestParsed.apiKey === "string" ? latestParsed.apiKey.trim() : "";
+                            if (latestLegacy === legacyKey) {
+                                const { apiKey: _stripped, ...rest } = latestParsed;
+                                const cleaned: LvAiConfig = { ...rest, hasSecret: true, secretSlot: SHARED_SECRET_SLOT };
+                                localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(cleaned));
+                            }
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+        }
+        return res;
+    }).finally(() => {
+        if (pendingLegacySharedMigration?.promise === promise) {
+            pendingLegacySharedMigration = null;
+        }
+    });
+    pendingLegacySharedMigration = { key: legacyKey, promise };
+}
+
+function resolveSharedSecretFromHost(): string {
+    if (inMemorySharedApiKey && inMemorySharedApiKey.trim()) return inMemorySharedApiKey.trim();
+    try {
+        const w = typeof window !== "undefined" ? (window as any) : (typeof globalThis !== "undefined" ? (globalThis as any) : null);
+        if (typeof w?.resolveTier2ApiKey === "function") {
+            const k = String(w.resolveTier2ApiKey() || "").trim();
+            if (k) return k;
+        }
+        const pluginReader = w?.__LV_SECRET_PLUGIN__ || w?.__LV_HOST_API__?.plugin;
+        if (pluginReader && typeof pluginReader.getSecret === "function") {
+            const k = String(pluginReader.getSecret(SHARED_SECRET_SLOT) || "").trim();
+            if (k) return k;
+        }
+        const items = w?.siyuan?.config?.secrets?.items;
+        if (Array.isArray(items)) {
+            const hit = items.find((it: any) => it && (it.name === SHARED_SECRET_SLOT || it.key === SHARED_SECRET_SLOT));
+            if (hit && typeof hit.value === "string" && hit.value.trim()) return hit.value.trim();
+        }
+    } catch { /* ignore */ }
+    return "";
+}
+
+function persistSecretToSiyuanSlot(val: string): Promise<{ ok: boolean; reason?: string }> {
+    const trimmed = val.trim();
+    inMemorySharedApiKey = trimmed;
+    const w = typeof window !== "undefined" ? (window as any) : null;
+    if (w && typeof w.saveTier2SecretToHost === "function") {
+        return w.saveTier2SecretToHost(trimmed);
+    }
+    if (typeof fetch !== "function" || w?.siyuan?.isReadOnly === true || w?.isReadOnly === true || w?.isAdmin === false) {
+        return Promise.resolve({ ok: false, reason: "readonly_or_no_fetch" });
+    }
+    const task = sharedSecretQueue.catch(() => {}).then(async () => {
+        try {
+            const existingItems: Array<{ name: string; value: string; allowedHosts?: string[] | null }> = Array.isArray(w?.siyuan?.config?.secrets?.items)
+                ? w.siyuan.config.secrets.items.filter(Boolean).map((it: any) => ({
+                    name: it.name || it.key || "",
+                    value: String(it.value ?? ""),
+                    allowedHosts: it.allowedHosts ?? null,
+                }))
+                : [];
+            const idx = existingItems.findIndex((it) => it.name === SHARED_SECRET_SLOT);
+            const nextEntry = { name: SHARED_SECRET_SLOT, value: trimmed, allowedHosts: idx >= 0 ? existingItems[idx]?.allowedHosts ?? null : null };
+            if (idx >= 0) existingItems[idx] = nextEntry;
+            else existingItems.push(nextEntry);
+            const resp = await fetch("/api/setting/setSecrets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ items: existingItems }),
+            });
+            if (!resp.ok) return { ok: false, reason: `http_${resp.status}` };
+            const json = await resp.json().catch((): any => null);
+            if (json && typeof json.code === "number" && json.code !== 0) {
+                return { ok: false, reason: json.msg || `code_${json.code}` };
+            }
+            if (w?.siyuan?.config) {
+                if (!w.siyuan.config.secrets) w.siyuan.config.secrets = { items: [] };
+                w.siyuan.config.secrets.items = Array.isArray(json?.data?.items) ? json.data.items : existingItems;
+            }
+            return { ok: true };
+        } catch (err: any) {
+            return { ok: false, reason: err?.message || "setSecrets_failed" };
+        }
+    });
+    sharedSecretQueue = task;
+    return task;
+}
 
 function getAiHub(): LvAiGatewayHub {
     if (typeof window === "undefined") {
@@ -3825,7 +4301,7 @@ function getAiHub(): LvAiGatewayHub {
     }
 
     async function executeChatRequest(cfg: LvAiConfig | null, opts: LvAiRequestOptions): Promise<LvAiResponse> {
-        const apiKey = opts.apiKey || cfg?.apiKey;
+        const apiKey = opts.apiKey || resolveSharedSecretFromHost() || cfg?.apiKey;
         if (!apiKey) {
             throw new Error("[LvAiGateway] 未配置共享 API Key（请在任意小驴插件设置中配置）");
         }
@@ -3896,8 +4372,62 @@ function getAiHub(): LvAiGatewayHub {
         version: PROTOCOL_VERSION,
         setConfig(cfg: LvAiConfig) {
             try {
+                const rawKey = typeof cfg?.apiKey === "string" ? cfg.apiKey.trim() : "";
+                let existingLegacyKey = "";
+                if (!rawKey && typeof localStorage !== "undefined") {
+                    try {
+                        const prevRaw = localStorage.getItem(AI_STORAGE_KEY);
+                        if (prevRaw) {
+                            const prevParsed = JSON.parse(prevRaw);
+                            if (prevParsed && typeof prevParsed === "object" && typeof prevParsed.apiKey === "string") {
+                                existingLegacyKey = prevParsed.apiKey.trim();
+                            }
+                        }
+                    } catch { /* ignore */ }
+                }
+                if (rawKey) {
+                    inMemorySharedApiKey = rawKey;
+                    const p = persistSecretToSiyuanSlot(rawKey).then((res) => {
+                        if (res.ok) {
+                            try {
+                                if (typeof localStorage !== "undefined") {
+                                    const curRaw = localStorage.getItem(AI_STORAGE_KEY);
+                                    const curObj = curRaw ? JSON.parse(curRaw) : {};
+                                    if (curObj && typeof curObj === "object") {
+                                        const { apiKey: _s, ...restCur } = curObj;
+                                        localStorage.setItem(AI_STORAGE_KEY, JSON.stringify({
+                                            ...restCur,
+                                            hasSecret: true,
+                                            secretSlot: SHARED_SECRET_SLOT,
+                                        }));
+                                    }
+                                }
+                            } catch { /* ignore */ }
+                        }
+                        return res;
+                    });
+                    pendingLegacySharedMigration = { key: rawKey, promise: p };
+                    void p.finally(() => {
+                        if (pendingLegacySharedMigration?.promise === p) {
+                            pendingLegacySharedMigration = null;
+                        }
+                    });
+                }
+                const { apiKey: _stripped, ...rest } = cfg || ({} as LvAiConfig);
+                const persistedInHost = hasPersistedSharedSecretInHost();
+                const sanitized: LvAiConfig = {
+                    ...rest,
+                    // 无显式新 Key 时，若本地仍存未落盘的旧明文 Key，绝不提前剥离，待 setSecrets 确认后再剥离
+                    ...(!rawKey && existingLegacyKey ? { apiKey: existingLegacyKey } : {}),
+                    hasSecret: persistedInHost,
+                    secretSlot: SHARED_SECRET_SLOT,
+                };
                 if (typeof localStorage !== "undefined") {
-                    localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(cfg));
+                    localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(sanitized));
+                }
+                if (!rawKey && existingLegacyKey) {
+                    inMemorySharedApiKey = existingLegacyKey;
+                    scheduleLegacySharedSecretMigration(existingLegacyKey);
                 }
             } catch { /* storage fallback */ }
         },
@@ -3905,7 +4435,24 @@ function getAiHub(): LvAiGatewayHub {
             try {
                 if (typeof localStorage !== "undefined") {
                     const raw = localStorage.getItem(AI_STORAGE_KEY);
-                    if (raw) return JSON.parse(raw);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === "object") {
+                            const legacyKey = typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "";
+                            if (legacyKey) {
+                                inMemorySharedApiKey = legacyKey;
+                                // 严禁先剥离 localStorage 或假置 hasSecret: true；先异步迁移至 setSecrets，仅成功后剥离
+                                scheduleLegacySharedSecretMigration(legacyKey);
+                                const { apiKey: _omitPlaintext, ...rest } = parsed;
+                                return {
+                                    ...rest,
+                                    hasSecret: hasPersistedSharedSecretInHost(),
+                                    secretSlot: SHARED_SECRET_SLOT,
+                                } as LvAiConfig;
+                            }
+                            return parsed as LvAiConfig;
+                        }
+                    }
                 }
             } catch { /* fallback */ }
             return null;
@@ -3993,6 +4540,10 @@ export const lvAi = {
      */
     chat(options: LvAiRequestOptions): Promise<LvAiResponse> {
         return getAiHub().chat(options);
+    },
+    /** 等待异步旧明文密钥迁移完成（供测试与启动自检使用） */
+    waitForLegacyMigration(): Promise<void> {
+        return waitForLegacySharedSecretMigration();
     }
 };
 
@@ -4573,7 +5124,7 @@ export const lvEcosystem = {
             coordinatorHost: noticeHub?.hostPlugin ?? "none",
             registeredPlugins: registered,
             todayActivitiesCount: activities.length,
-            hasSharedAiConfig: Boolean(aiCfg?.apiKey),
+            hasSharedAiConfig: Boolean(aiCfg?.apiKey || aiCfg?.hasSecret || (typeof window !== "undefined" && (window as any).hasTier2SecretConfigured?.())),
             sharedAiModel: aiCfg?.model,
             recentErrorCount: getRecentDiagErrors().length,
         };
@@ -5036,6 +5587,91 @@ export function computeBlockLevelLcsDiff(
     };
 }
 
+async function lvEditorChatFallback(prompt: string, signal?: AbortSignal, skipHub = false): Promise<string> {
+    if (signal?.aborted) return "";
+    if (!skipHub) {
+        try {
+            const aiHub = typeof window !== "undefined" ? (window as any).__LV_AI_HUB__ : null;
+            if (aiHub && typeof aiHub.runTask === "function") {
+                const card = await aiHub.runTask({
+                    requestId: `nk-${Date.now()}`,
+                    generationNonce: 1,
+                    sourcePlugin: "lv-notice-kit",
+                    capability: "L3",
+                    taskType: "summary",
+                    promptId: "notice-advisor",
+                    promptVersion: 1,
+                    context: { focusBlockContent: prompt },
+                    piiPolicy: "standard",
+                    allowFreePool: false,
+                    signal: signal || new AbortController().signal,
+                });
+                const mdBlock = Array.isArray(card?.blocks) ? card.blocks.find((b: any) => b.type === "markdown") : null;
+                if (mdBlock?.text) return String(mdBlock.text).trim();
+            }
+        } catch { /* soft */ }
+    }
+    if (signal?.aborted || typeof fetch !== "function") return "";
+    try {
+        const res = await fetch("/api/ai/editor/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+            body: JSON.stringify({
+                taskID: `lv-nk-${Date.now()}`,
+                ids: [],
+                history: [],
+                input: prompt,
+                action: "chat",
+            }),
+            signal,
+        });
+        if (signal?.aborted) return "";
+        if (res.status === 404 || res.status === 405) {
+            const legacy = await lvKernelPost("/api/ai/chat", { prompt });
+            if (legacy.code === 0 && typeof legacy.data === "string") return legacy.data.trim();
+            if (legacy.code === 0 && (legacy.data as any)?.content) return String((legacy.data as any).content).trim();
+            return "";
+        }
+        if (!res.ok) return "";
+        const ct = res.headers?.get?.("Content-Type") || "";
+        if (ct.includes("text/event-stream") && res.body && typeof (res.body as any).getReader === "function") {
+            const reader = (res.body as any).getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buf = "";
+            let ev = "";
+            let out = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buf += decoder.decode(value, { stream: true });
+                const lines = buf.split(/\r?\n/);
+                buf = lines.pop() || "";
+                for (const raw of lines) {
+                    const line = raw.trim();
+                    if (line.startsWith("event:")) ev = line.slice(6).trim();
+                    else if (line.startsWith("data:")) {
+                        try {
+                            const obj = JSON.parse(line.slice(5).trim());
+                            if ((!ev || ev === "content") && obj?.token) out += String(obj.token);
+                        } catch {}
+                    }
+                }
+            }
+            return out.trim();
+        }
+        const txt = typeof (res as any).text === "function" ? await res.text() : "";
+        if (!txt) return "";
+        try {
+            const j = JSON.parse(txt);
+            if (j?.code === 0 && typeof j.data === "string") return j.data.trim();
+            if (j?.code === 0 && j.data?.content) return String(j.data.content).trim();
+        } catch {}
+        return txt.trim();
+    } catch {
+        return "";
+    }
+}
+
 export const lvDeduplicator = {
     /** 扫描全库因同步冲突产生的带 (冲突 或 conflict 字样的分叉文档（并自动检索匹配原件真身） */
     async scanConflictDocs(): Promise<LvConflictDocItem[]> {
@@ -5330,11 +5966,13 @@ export const lvDeduplicator = {
                 return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
             })()).replace(/\D/g, "").slice(0, 8);
             if (!targetDate) return { removedCount: 0, duplicateGroups: 0, details: [] };
+            const targetDateHyphen = `${targetDate.slice(0, 4)}-${targetDate.slice(4, 6)}-${targetDate.slice(6, 8)}`;
             const sql = `
-                SELECT b.id, b.root_id, b.content, b.created
+                SELECT DISTINCT b.id, b.root_id, b.content, b.created
                 FROM attributes a
                 JOIN blocks b ON a.block_id = b.id
-                WHERE a.name = 'custom-lifelog-type' AND (b.created LIKE '${targetDate}%' OR a.value LIKE '%${targetDate}%')
+                WHERE (a.name = 'custom-lifelog-type' OR a.name = 'custom-lv-lifelog')
+                  AND (b.created LIKE '${targetDate}%' OR a.value LIKE '%${targetDate}%' OR b.ial LIKE '%${targetDateHyphen}%' OR b.ial LIKE '%${targetDate}%')
                 ORDER BY b.created ASC
                 LIMIT 2000
             `;
@@ -5525,13 +6163,26 @@ export const lvDeduplicator = {
                 return { ok: false, mergedCount: 0, msg: "清理空文档失败" };
             }
 
-            // 2. 定位或创建主日记文档
+            // 2. 定位或创建主日记文档（严格走统一防重建档入口，绝不直调原始 createDailyNote 旁路）
             let mainDocId = target.mainDocId;
             const mainNbId = target.mainDocBox || await resolveDailyNotebookId();
             if (!mainDocId && mainNbId) {
-                const createRes = await lvKernelPost("/api/filetree/createDailyNote", { notebook: mainNbId });
-                if (createRes.code === 0 && createRes.data?.id) {
-                    mainDocId = String(createRes.data.id);
+                const todayYmd = getLocalYmd();
+                if (target.date === todayYmd) {
+                    const resolvedId = await findOrCreateTodayDailyNoteDocId(mainNbId, {
+                        strictNotebook: true,
+                        expectedNotebookId: mainNbId,
+                        expectedYmd: todayYmd,
+                    });
+                    if (resolvedId) {
+                        mainDocId = resolvedId;
+                    }
+                } else {
+                    return {
+                        ok: false,
+                        mergedCount: 0,
+                        msg: `未找到 ${target.date} 对应的主日记文档，为避免跨日错并，暂停合并以保数据绝对安全`,
+                    };
                 }
             }
             if (!mainDocId) {
@@ -5838,12 +6489,15 @@ export const lvDeduplicator = {
         conflictDocs: LvConflictDocItem[];
         orphanDailyNotes: LvOrphanDailyNoteEntry[];
         dupClips: LvDuplicateClipGroup[];
-    }): Promise<{
+    }, options?: { signal?: AbortSignal }): Promise<{
         score: number;
         level: "excellent" | "good" | "warning" | "danger";
         summaryHtml: string;
         recommendations: string[];
     }> {
+        if (options?.signal?.aborted) {
+            throw new Error("AI request aborted");
+        }
         const totalGroups = params.dupDocGroups.length;
         const emptyGroups = params.dupDocGroups.filter((g) => g.hasEmptyShell).length;
         const benignGroups = params.dupDocGroups.filter((g) => g.isBenign).length;
@@ -5881,20 +6535,25 @@ export const lvDeduplicator = {
                 const outcome = await router.chat({
                     messages: [{ role: "user", content: prompt }],
                     taskType: "summary",
+                    signal: options?.signal,
                 });
+                if (options?.signal?.aborted) {
+                    throw new Error("AI request aborted");
+                }
                 if (outcome.ok && outcome.content) {
                     aiComment = outcome.content.trim();
                 }
             }
-            if (!aiComment) {
-                const aiRes = await lvKernelPost("/api/ai/agent/chat", { prompt });
-                if (aiRes.code === 0 && typeof aiRes.data === "string" && aiRes.data.trim()) {
-                    aiComment = aiRes.data.trim();
-                } else if (aiRes.code === 0 && (aiRes.data as any)?.content) {
-                    aiComment = String((aiRes.data as any).content).trim();
-                }
+            if (!aiComment && !options?.signal?.aborted) {
+                aiComment = await lvEditorChatFallback(prompt, options?.signal);
             }
-        } catch { /* soft */ }
+        } catch (err) {
+            if (options?.signal?.aborted) throw err;
+            /* soft */
+        }
+        if (options?.signal?.aborted) {
+            throw new Error("AI request aborted");
+        }
 
         if (!aiComment) {
             aiComment = score >= 90
@@ -6056,7 +6715,14 @@ export const lvAiJudge = {
     },
 
     /** 调动思源内置 AI 执行深度语义研判（失败时自动无缝降级到启发式规则） */
-    async judgeDocPair(docA: LvAiJudgeDocInfo, docB: LvAiJudgeDocInfo): Promise<LvAiJudgeReport> {
+    async judgeDocPair(
+        docA: LvAiJudgeDocInfo,
+        docB: LvAiJudgeDocInfo,
+        options?: { signal?: AbortSignal }
+    ): Promise<LvAiJudgeReport> {
+        if (options?.signal?.aborted) {
+            throw new Error("AI request aborted");
+        }
         try {
             const prompt = `你是一位知识库架构与数据治理专家。用户当前在思源笔记中发现两篇同名（或疑似冲突）的文档，需要你进行客观、专业的语义对账分析。
 
@@ -6111,7 +6777,11 @@ ${docB.snippet || "(无正文/空文档)"}
                 const aiRes = await router.chat({
                     messages: [{ role: "user", content: prompt }],
                     taskType: "chat",
+                    signal: options?.signal,
                 });
+                if (options?.signal?.aborted) {
+                    throw new Error("AI request aborted");
+                }
                 if (aiRes.ok && aiRes.content) {
                     rawText = aiRes.content.trim();
                     usedChannel = aiRes.provider;
@@ -6121,15 +6791,10 @@ ${docB.snippet || "(无正文/空文档)"}
                     }
                 }
             } else {
-                let aiRes = await lvKernelPost("/api/ai/agent/chat", { prompt });
-                if (aiRes.code !== 0) {
-                    aiRes = await lvKernelPost("/api/ai/chat", { prompt });
-                }
-                if (aiRes.code === 0 && typeof aiRes.data === "string" && aiRes.data.trim()) {
-                    rawText = aiRes.data.trim();
-                } else if (aiRes.code === 0 && (aiRes.data as any)?.content) {
-                    rawText = String((aiRes.data as any).content).trim();
-                }
+                rawText = await lvEditorChatFallback(prompt, options?.signal);
+            }
+            if (options?.signal?.aborted) {
+                throw new Error("AI request aborted");
             }
 
             if (rawText && rawText.length > 20) {
@@ -6180,7 +6845,13 @@ ${docB.snippet || "(无正文/空文档)"}
                     rawMarkdown: rawText,
                 };
             }
-        } catch { /* soft fallback */ }
+        } catch (err) {
+            if (options?.signal?.aborted) throw err;
+            /* soft fallback */
+        }
+        if (options?.signal?.aborted) {
+            throw new Error("AI request aborted");
+        }
 
         return this.heuristicJudge(docA, docB);
     },
@@ -6332,7 +7003,7 @@ function healMissingPluginsFromHost(reg: Map<string, LvLaunchpadItem>): void {
                         digit: 2,
                         badge: "已就绪",
                         badgeType: "success",
-                        actions: ["打开切片库", "切片当前文档", "开关动作悬浮球", "搜索当前文档切片", "打开暂存栈顶切片"],
+                        actions: ["极速页签预览切换", "聚合工作区", "恢复最近关闭页签", "分屏"],
                         topBarElement: Array.isArray(p.topBarIcons) ? p.topBarIcons[0] : undefined,
                         onClick: () => {
                             if (typeof p.openMainView === "function") p.openMainView();
@@ -6380,6 +7051,83 @@ function getLaunchpadStates(): Record<string, "pinned" | "docked" | "hidden"> {
     return { ...memoryLaunchpadStates };
 }
 
+const LAUNCHPAD_ORDER_STORAGE_KEY = "lv_launchpad_tile_order_v1";
+let memoryLaunchpadTileOrder: string[] = [];
+
+function getLaunchpadTileOrder(): string[] {
+    const ls = getSafeLocalStorage();
+    if (!ls) return [...memoryLaunchpadTileOrder];
+    try {
+        const raw = ls.getItem(LAUNCHPAD_ORDER_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                const clean = parsed.filter((x: unknown): x is string => typeof x === "string" && x.trim().length > 0);
+                memoryLaunchpadTileOrder = clean;
+                return [...clean];
+            }
+        }
+    } catch { /* ignore */ }
+    return [...memoryLaunchpadTileOrder];
+}
+
+function saveLaunchpadTileOrder(order: string[]): void {
+    const clean: string[] = [];
+    const seen = new Set<string>();
+    for (const id of order) {
+        if (typeof id === "string" && id.trim() && !seen.has(id)) {
+            seen.add(id);
+            clean.push(id);
+        }
+    }
+    memoryLaunchpadTileOrder = clean;
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
+    try {
+        ls.setItem(LAUNCHPAD_ORDER_STORAGE_KEY, JSON.stringify(clean));
+    } catch { /* ignore */ }
+}
+
+function resetLaunchpadTileOrder(): void {
+    memoryLaunchpadTileOrder = [];
+    const ls = getSafeLocalStorage();
+    if (!ls) return;
+    try {
+        ls.removeItem(LAUNCHPAD_ORDER_STORAGE_KEY);
+    } catch { /* ignore */ }
+}
+
+function sortLaunchpadItems<T extends { id: string; digit?: number }>(list: T[]): T[] {
+    const sorted = [...list].sort((a, b) => (a.digit ?? 99) - (b.digit ?? 99));
+    const customOrder = getLaunchpadTileOrder();
+    if (customOrder.length === 0) return sorted;
+    const orderMap = new Map<string, number>();
+    customOrder.forEach((id, idx) => orderMap.set(id, idx));
+    return sorted.sort((a, b) => {
+        const ia = orderMap.has(a.id) ? orderMap.get(a.id)! : Number.MAX_SAFE_INTEGER;
+        const ib = orderMap.has(b.id) ? orderMap.get(b.id)! : Number.MAX_SAFE_INTEGER;
+        if (ia !== ib) return ia - ib;
+        return (a.digit ?? 99) - (b.digit ?? 99);
+    });
+}
+
+function moveLaunchpadTileInItems(
+    items: Array<{ id: string }>,
+    pluginId: string,
+    direction: "up" | "down"
+): boolean {
+    const ids = items.map((it) => it.id);
+    const idx = ids.indexOf(pluginId);
+    if (idx < 0) return false;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= ids.length) return false;
+    const tmp = ids[idx]!;
+    ids[idx] = ids[swapIdx]!;
+    ids[swapIdx] = tmp;
+    saveLaunchpadTileOrder(ids);
+    return true;
+}
+
 function saveLaunchpadStates(states: Record<string, "pinned" | "docked" | "hidden">): void {
     memoryLaunchpadStates = { ...states };
     const ls = getSafeLocalStorage();
@@ -6392,30 +7140,64 @@ function saveLaunchpadStates(states: Record<string, "pinned" | "docked" | "hidde
     } catch { /* ignore */ }
 }
 
+function filterRetiredCompassActions(actions?: string[]): string[] | undefined {
+    if (!Array.isArray(actions)) return actions;
+    return actions.filter((act) => {
+        const s = String(act || "").trim();
+        return s.length > 0 && !/开关动作悬浮球|动作悬浮球|floatingball|exoskeleton|外骨骼/i.test(s);
+    });
+}
+
 function getLaunchpadHub(): LvLaunchpadHub {
     if (typeof window === "undefined") {
         return {
             version: PROTOCOL_VERSION,
             register: (item) => {
-                launchpadRegistry.set(item.id, item);
+                const normId = String(item?.id || "").trim().toLowerCase();
+                if (!normId || normId === "siyuan-exoskeleton" || normId === "exoskeleton" || normId === "siyuan-quickgate" || normId === "quickgate") {
+                    return () => {};
+                }
+                const sanitized = { ...item, actions: filterRetiredCompassActions(item.actions) };
+                launchpadRegistry.set(item.id, sanitized);
                 return () => launchpadRegistry.delete(item.id);
             },
             getItems: () => {
                 const states = getLaunchpadStates();
-                return Array.from(launchpadRegistry.values()).map(item => ({
-                    ...item,
-                    state: states[item.id] || "docked",
-                }));
+                const list = Array.from(launchpadRegistry.values())
+                    .filter((item) => {
+                        const normId = String(item?.id || "").trim().toLowerCase();
+                        return normId !== "siyuan-exoskeleton" && normId !== "exoskeleton" && normId !== "siyuan-quickgate" && normId !== "quickgate";
+                    })
+                    .map(item => ({
+                        ...item,
+                        actions: filterRetiredCompassActions(item.actions),
+                        state: states[item.id] || "docked",
+                    }));
+                return sortLaunchpadItems(list);
             },
             setPluginState: (id, state) => {
                 const states = getLaunchpadStates();
                 states[id] = state;
                 saveLaunchpadStates(states);
             },
+            movePluginOrder: (id, direction) => {
+                const list = sortLaunchpadItems(
+                    Array.from(launchpadRegistry.values()).filter((item) => {
+                        const normId = String(item?.id || "").trim().toLowerCase();
+                        return normId !== "siyuan-exoskeleton" && normId !== "exoskeleton" && normId !== "siyuan-quickgate" && normId !== "quickgate";
+                    })
+                );
+                return moveLaunchpadTileInItems(list, id, direction);
+            },
+            resetPluginOrder: () => {
+                resetLaunchpadTileOrder();
+            },
+            getPluginOrder: () => getLaunchpadTileOrder(),
             updateItem: (id, patch) => {
                 const item = launchpadRegistry.get(id);
                 if (item) {
-                    Object.assign(item, patch);
+                    const nextPatch = patch.actions !== undefined ? { ...patch, actions: filterRetiredCompassActions(patch.actions) } : patch;
+                    Object.assign(item, nextPatch);
                     refreshEntryBadgeDot();
                     syncTopBarConvergence();
                 }
@@ -6440,7 +7222,7 @@ function getLaunchpadHub(): LvLaunchpadHub {
                 for (const prev of prevItems) {
                     if (prev && prev.id && !sharedRegistry.has(prev.id)) {
                         const { state: _st, ...rest } = prev;
-                        sharedRegistry.set(prev.id, rest);
+                        sharedRegistry.set(prev.id, { ...rest, actions: filterRetiredCompassActions(rest.actions) });
                     }
                 }
             }
@@ -6451,12 +7233,25 @@ function getLaunchpadHub(): LvLaunchpadHub {
         version: PROTOCOL_VERSION,
 
         register(item: LvLaunchpadItem): () => void {
+            const normId = String(item?.id || "").trim().toLowerCase();
+            if (!normId || normId === "siyuan-exoskeleton" || normId === "exoskeleton" || normId === "siyuan-quickgate" || normId === "quickgate") {
+                return () => {};
+            }
+            const sanitized: LvLaunchpadItem = {
+                ...item,
+                actions: filterRetiredCompassActions(item.actions),
+            };
             const reg = getSharedLaunchpadRegistry();
-            reg.set(item.id, item);
+            reg.set(item.id, sanitized);
+            let baDisposer: (() => void) | null = null;
+            try {
+                baDisposer = getBlockAssistantHub().ensureLeader(item.id);
+            } catch { /* ignore */ }
             maybeShowOnboardingCard();
             scheduleTopBarConvergence(60);
             return () => {
-                if (reg.get(item.id) === item) reg.delete(item.id);
+                if (reg.get(item.id) === sanitized) reg.delete(item.id);
+                try { baDisposer?.(); } catch { /* ignore */ }
                 scheduleTopBarConvergence(60);
             };
         },
@@ -6465,12 +7260,17 @@ function getLaunchpadHub(): LvLaunchpadHub {
             const reg = getSharedLaunchpadRegistry();
             healMissingPluginsFromHost(reg);
             const states = getLaunchpadStates();
-            const list = Array.from(reg.values()).map(item => ({
-                ...item,
-                state: states[item.id] || "docked",
-            }));
-            list.sort((a, b) => (a.digit ?? 99) - (b.digit ?? 99));
-            return list;
+            const list = Array.from(reg.values())
+                .filter((item) => {
+                    const normId = String(item?.id || "").trim().toLowerCase();
+                    return normId !== "siyuan-exoskeleton" && normId !== "exoskeleton" && normId !== "siyuan-quickgate" && normId !== "quickgate";
+                })
+                .map(item => ({
+                    ...item,
+                    actions: filterRetiredCompassActions(item.actions),
+                    state: states[item.id] || "docked",
+                }));
+            return sortLaunchpadItems(list);
         },
 
         setPluginState(id: string, state: "pinned" | "docked" | "hidden"): void {
@@ -6480,11 +7280,28 @@ function getLaunchpadHub(): LvLaunchpadHub {
             syncTopBarConvergence();
         },
 
+        movePluginOrder(id: string, direction: "up" | "down"): boolean {
+            const items = hub.getItems();
+            const moved = moveLaunchpadTileInItems(items, id, direction);
+            if (moved) syncTopBarConvergence();
+            return moved;
+        },
+
+        resetPluginOrder(): void {
+            resetLaunchpadTileOrder();
+            syncTopBarConvergence();
+        },
+
+        getPluginOrder(): string[] {
+            return getLaunchpadTileOrder();
+        },
+
         updateItem(id: string, patch: Partial<LvLaunchpadItem>): void {
             const reg = getSharedLaunchpadRegistry();
             const item = reg.get(id);
             if (item) {
-                Object.assign(item, patch);
+                const nextPatch = patch.actions !== undefined ? { ...patch, actions: filterRetiredCompassActions(patch.actions) } : patch;
+                Object.assign(item, nextPatch);
                 refreshEntryBadgeDot();
                 syncTopBarConvergence();
             }
@@ -6592,6 +7409,21 @@ function getLaunchpadHub(): LvLaunchpadHub {
     return hub;
 }
 
+function isIsolatedSettingsOrChildWindow(pluginHost?: unknown): boolean {
+    const h = pluginHost as Record<string, unknown> | undefined;
+    if (h && (h.settingsWindow === true || h.openInWindow === true || h.isSettingsWindow === true)) {
+        return true;
+    }
+    try {
+        const sy = typeof window !== "undefined" ? (window as unknown as { siyuan?: Record<string, unknown> }).siyuan : undefined;
+        if (sy && (sy.isSettingsWindow === true || sy.openInWindow === true)) return true;
+        if (typeof location !== "undefined" && typeof location.search === "string" && /[?&](?:settingsWindow|openInWindow)=true\b/i.test(location.search)) {
+            return true;
+        }
+    } catch { /* ignore */ }
+    return false;
+}
+
 export const lvLaunchpad = {
     /** 打开小驴罗盘与全生态统一设置中心（760×560px 独立分类窗口） */
     openSettings(tab?: string): void {
@@ -6611,6 +7443,21 @@ export const lvLaunchpad = {
     /** 用户动态设定插件状态：pinned（置顶在外） | docked（仅在坞内） | hidden（彻底隐藏） */
     setPluginState(pluginId: string, state: "pinned" | "docked" | "hidden"): void {
         getLaunchpadHub().setPluginState(pluginId, state);
+    },
+
+    /** 调整罗盘磁贴排列顺序（上移 / 下移）并持久化 */
+    movePluginOrder(pluginId: string, direction: "up" | "down"): boolean {
+        return getLaunchpadHub().movePluginOrder?.(pluginId, direction) ?? false;
+    },
+
+    /** 恢复罗盘磁贴默认顺序 */
+    resetPluginOrder(): void {
+        getLaunchpadHub().resetPluginOrder?.();
+    },
+
+    /** 获取当前自定义磁贴顺序 ID 列表 */
+    getPluginOrder(): string[] {
+        return getLaunchpadHub().getPluginOrder?.() ?? [];
     },
 
     /** 动态更新已注册条目的元数据（如徽标、提示语或宿主按钮引用，支持热更新） */
@@ -6692,6 +7539,9 @@ export const lvLaunchpad = {
 
     /** 统一全端顶栏收敛入口（自动适配桌面与移动端环境，注册全局冷僻快捷键 Ctrl+Alt+Shift+K 供 Quicker 唤醒） */
     ensureUnifiedEntry(pluginHost?: unknown): () => void {
+        if (isIsolatedSettingsOrChildWindow(pluginHost)) {
+            return () => {};
+        }
         ensureStyles();
         const cleanM = ensureMobileEntry();
         const cleanD = ensureDesktopEntry();
@@ -6730,21 +7580,52 @@ export const lvLaunchpad = {
             if (isMobileFrontend()) openMobileSheet();
             else toggleDesktopLaunchpadPopover();
         };
-        if (host && typeof host.addCommand === "function") {
-            const w = typeof window !== "undefined" ? (window as unknown as { __LV_LAUNCHPAD_CMD_REGISTERED__?: boolean }) : {};
+        const registerLaunchpadCmd = (targetHost: any, targetWake: (fromGlobal?: boolean) => void): boolean => {
+            if (!targetHost || typeof targetHost.addCommand !== "function" || typeof window === "undefined") return false;
+            const w = window as unknown as { __LV_LAUNCHPAD_CMD_REGISTERED__?: boolean; __LV_LAUNCHPAD_CMD_OWNER__?: unknown };
+            w.__LV_LAUNCHPAD_CMD_REGISTERED__ = true;
+            w.__LV_LAUNCHPAD_CMD_OWNER__ = targetHost;
+            try {
+                targetHost.addCommand({
+                    langKey: "openLaunchpad",
+                    langText: "小驴罗盘：全家桶极速直达与工作台 (Ctrl+Alt+Shift+K 支持最小化呼出)",
+                    hotkey: "⌥⇧⌘K",
+                    callback: () => targetWake(false),
+                    globalCallback: () => targetWake(true),
+                });
+                return true;
+            } catch {
+                w.__LV_LAUNCHPAD_CMD_REGISTERED__ = false;
+                w.__LV_LAUNCHPAD_CMD_OWNER__ = undefined;
+                return false;
+            }
+        };
+        const candidateEntry = { host, wakeAndOpen };
+        let didRegisterLaunchpadCommand = false;
+        if (host && typeof host.addCommand === "function" && typeof window !== "undefined") {
+            const w = window as unknown as {
+                __LV_LAUNCHPAD_CMD_REGISTERED__?: boolean;
+                __LV_LAUNCHPAD_CMD_OWNER__?: unknown;
+                __LV_LAUNCHPAD_CMD_CANDIDATES__?: Array<{ host: any; wakeAndOpen: (fromGlobal?: boolean) => void }>;
+            };
+            if (!Array.isArray(w.__LV_LAUNCHPAD_CMD_CANDIDATES__)) {
+                w.__LV_LAUNCHPAD_CMD_CANDIDATES__ = [];
+            }
+            if (!w.__LV_LAUNCHPAD_CMD_CANDIDATES__.some((c) => c.host === host)) {
+                w.__LV_LAUNCHPAD_CMD_CANDIDATES__.push(candidateEntry);
+            }
             if (!w.__LV_LAUNCHPAD_CMD_REGISTERED__) {
-                w.__LV_LAUNCHPAD_CMD_REGISTERED__ = true;
-                try {
-                    host.addCommand({
-                        langKey: "openLaunchpad",
-                        langText: "小驴罗盘：全家桶极速直达与工作台 (Ctrl+Alt+Shift+K 支持最小化呼出)",
-                        hotkey: "⌥⇧⌘K",
-                        callback: () => wakeAndOpen(false),
-                        globalCallback: () => wakeAndOpen(true),
-                    });
-                } catch { /* ignore */ }
+                didRegisterLaunchpadCommand = registerLaunchpadCmd(host, wakeAndOpen);
             }
         }
+        const hostPluginId = String(host?.name || host?.id || "").trim();
+        let autoBaDispose: (() => void) | null = null;
+        if (hostPluginId) {
+            try {
+                autoBaDispose = getBlockAssistantHub().ensureLeader(hostPluginId);
+            } catch { /* ignore */ }
+        }
+        ensureBlockAssistantAltBFallback();
         let urlCleanup: (() => void) | null = null;
         if (host?.eventBus && typeof host.eventBus.on === "function") {
             const onUrl = (event: CustomEvent<{ url?: string }>) => {
@@ -6768,6 +7649,28 @@ export const lvLaunchpad = {
             cleanM();
             cleanD();
             urlCleanup?.();
+            autoBaDispose?.();
+            if (typeof window !== "undefined") {
+                const w = window as unknown as {
+                    __LV_LAUNCHPAD_CMD_REGISTERED__?: boolean;
+                    __LV_LAUNCHPAD_CMD_OWNER__?: unknown;
+                    __LV_LAUNCHPAD_CMD_CANDIDATES__?: Array<{ host: any; wakeAndOpen: (fromGlobal?: boolean) => void }>;
+                };
+                if (Array.isArray(w.__LV_LAUNCHPAD_CMD_CANDIDATES__)) {
+                    w.__LV_LAUNCHPAD_CMD_CANDIDATES__ = w.__LV_LAUNCHPAD_CMD_CANDIDATES__.filter((c) => c.host !== host);
+                }
+                if ((didRegisterLaunchpadCommand || w.__LV_LAUNCHPAD_CMD_OWNER__ === host) && w.__LV_LAUNCHPAD_CMD_OWNER__ === host) {
+                    w.__LV_LAUNCHPAD_CMD_REGISTERED__ = false;
+                    w.__LV_LAUNCHPAD_CMD_OWNER__ = undefined;
+                    // 原注册插件卸载后，若仍有其他存活宿主插件，自动委托存活插件重注册 ⌥⇧⌘K
+                    const survivors = Array.isArray(w.__LV_LAUNCHPAD_CMD_CANDIDATES__) ? w.__LV_LAUNCHPAD_CMD_CANDIDATES__ : [];
+                    for (const next of survivors) {
+                        if (registerLaunchpadCmd(next.host, next.wakeAndOpen)) {
+                            break;
+                        }
+                    }
+                }
+            }
         };
     },
 
@@ -7133,6 +8036,7 @@ function buildMobileEntryButton(): boolean {
         }
     } catch { /* ignore */ }
     if (!inserted) topBar.appendChild(btn);
+    updateBallSuppression();
     refreshEntryBadgeDot();
     return true;
 }
@@ -7431,7 +8335,7 @@ function selfHealMobileEntryPlacement(): void {
         entry.style.left = "max(6px, env(safe-area-inset-left, 6px))";
         entry.style.top = "max(6px, env(safe-area-inset-top, 6px))";
         entry.style.zIndex = "960";
-        entry.style.visibility = "visible";
+        entry.style.visibility = ballDialogOpen ? "" : "visible";
     } else if (topBar) {
         // 顶栏真正恢复健康（topBarH >= 24）：迁回 topbar 并清掉内联样式
         try {
@@ -7663,7 +8567,7 @@ function stopMobileEntryHealSentinel(): void {
 }
 
 function ensureMobileEntry(): MobileEntryCleanup {
-    if (typeof document === "undefined") return () => {};
+    if (typeof document === "undefined" || isIsolatedSettingsOrChildWindow()) return () => {};
     ensureStyles();
     if (!isMobileFrontend()) return () => {}; // 桌面端完全 no-op，不挂任何计时器
     // 2026-11-21 走查修复（LPM-1）：LPM-1 的模态遮挡规避规则位于 ensureDesktopStyles 注入表，
@@ -7732,7 +8636,7 @@ const SIYUAN_NATIVE_BUTTON_IDS = new Set([
     "barSearch", "barSync", "barBack", "barForward",
     "barDockL", "barDockR", "barDockB", "barSetting", "barSettings",
     "barHelp", "barHistory", "barMode", "drag", "windowControls",
-    "barWorkspace", "barExit"
+    "barMainMenu", "barWorkspace", "barExit"
 ]);
 
 /** 智能探测 #toolbar 中对应插件的顶栏 DOM 元素（抗主题重构与 DOM 自愈探针，严格规避原生与第三方按钮冲突） */
@@ -7936,11 +8840,19 @@ export function syncTopBarConvergence(opts?: { ignoreHysteresis?: boolean }): vo
                 }
             }
             if (el && typeof el === "object" && "style" in el && el.style) {
-                const targetDisplay = needConverge
-                    ? (item.state === "pinned" ? "" : "none")
-                    : (item.state === "hidden" ? "none" : "");
+                const isPinned = needConverge ? item.state === "pinned" : item.state !== "hidden";
+                const targetDisplay = isPinned ? "" : "none";
                 if (el.style.display !== targetDisplay) {
                     el.style.display = targetDisplay;
+                }
+                if (isPinned) {
+                    if (typeof el.getAttribute !== "function" || el.getAttribute("data-lv-pinned") !== "true") {
+                        el.setAttribute?.("data-lv-pinned", "true");
+                    }
+                } else {
+                    if (typeof el.hasAttribute !== "function" || el.hasAttribute("data-lv-pinned")) {
+                        el.removeAttribute?.("data-lv-pinned");
+                    }
                 }
             }
         }
@@ -8097,8 +9009,8 @@ function ensureDesktopStyles(): void {
   border: 1px solid var(--lv-lp-border-strong) !important;
   border-radius: 18px;
   box-shadow: 0 24px 56px -12px rgba(15, 23, 42, 0.18), 0 8px 20px -6px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
-  backdrop-filter: blur(32px) saturate(190%);
-  -webkit-backdrop-filter: blur(32px) saturate(190%);
+  backdrop-filter: blur(14px) saturate(190%);
+  -webkit-backdrop-filter: blur(14px) saturate(190%);
   transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   animation: lvPopoverEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   outline: none;
@@ -8123,15 +9035,22 @@ function ensureDesktopStyles(): void {
     const existing = document.getElementById("lv-launchpad-desktop-styles");
     try {
         const style = existing ?? document.createElement("style");
-        if (existing && existing.getAttribute?.("data-lv-ver") === "3.1") return;
+        if (existing && existing.getAttribute?.("data-lv-ver") === "3.3") return;
         style.id = "lv-launchpad-desktop-styles";
-        style.setAttribute?.("data-lv-ver", "3.1");
+        style.setAttribute?.("data-lv-ver", "3.3");
         style.textContent = cssText + `
 #toolbar > :is([id^="plugin_siyuan-"], [id^="plugin_xiaolv-"]):not([data-lv-pinned="true"]):is(
   [id*="checkin"], [id*="home"], [id*="contacts"], [id*="glean"],
   [id*="lv-cards"], [id*="exam"], [id*="speed-switch"], [id*="common"]
 ) {
   display: none !important;
+}
+html[data-lv-motion="off"] .lv-desktop-launchpad-popover,
+html[data-lv-motion="off"] .lv-desktop-launchpad-popover *,
+html[data-lv-motion="off"] #lvLaunchpadDesktopEntry,
+html[data-lv-motion="off"] #lvLaunchpadMobileEntry {
+  animation: none !important;
+  transition: none !important;
 }
 #lvLaunchpadDesktopEntry {
   display: inline-flex !important;
@@ -8142,12 +9061,9 @@ function ensureDesktopStyles(): void {
 #lvLaunchpadMobileEntry {
   transition: transform 0.14s ease, background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
-/* LPM-1（2026-11-21 走查修复）：模态弹窗打开期间隐藏移动罗盘入口。
-   入口 z-index(960) 高于思源模态层（.b3-dialog z≈60），几何上完全压住全屏移动弹窗
-   左上角的返回/关闭控件（实证：打卡移动端关闭按钮 44×44 被完全遮挡，点击命中罗盘），
-   并在雷切/闪卡/考试弹窗左上角形成视觉叠压。用 opacity+visibility 保布局不回流；
-   思源移动端 WebView 已要求 Chromium 111+（同文件使用 color-mix），:has 安全。 */
-body:has(.b3-dialog--open) #lvLaunchpadMobileEntry {
+/* LPM-1（2026-11-25 性能优化）：模态弹窗打开期间隐藏移动罗盘入口。
+   改用 wireMobileSuppression 显式挂载 .lv-entry-suppressed 类名，彻底清零根级 CSS has 选择器样式失效风暴。 */
+#lvLaunchpadMobileEntry.lv-entry-suppressed {
   opacity: 0 !important;
   pointer-events: none !important;
   visibility: hidden !important;
@@ -8195,8 +9111,8 @@ body:has(.b3-dialog--open) #lvLaunchpadMobileEntry {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 14px 9px;
+  gap: 6px;
+  padding: 10px 12px 9px;
   border-bottom: 1px solid var(--lv-lp-border);
   background: var(--lv-lp-card-bg);
   flex-shrink: 0;
@@ -8213,7 +9129,7 @@ body:has(.b3-dialog--open) #lvLaunchpadMobileEntry {
   background: transparent;
   color: var(--lv-lp-text-sub);
   font-size: 11px;
-  padding: 2.5px 8px;
+  padding: 2.5px 6px;
   border-radius: 5px;
   cursor: pointer;
   font-family: inherit;
@@ -8229,7 +9145,7 @@ body:has(.b3-dialog--open) #lvLaunchpadMobileEntry {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3.5px 8.5px;
+  padding: 3.5px 7px;
   border-radius: 7px;
   font-size: 11px;
   font-weight: 500;
@@ -8241,6 +9157,13 @@ body:has(.b3-dialog--open) #lvLaunchpadMobileEntry {
   font-family: inherit;
   transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, color 0.14s ease;
   user-select: none;
+}
+.lv-pop-header .lv-pop-sub-btn {
+  padding: 3px 6px;
+}
+.lv-pop-footer .lv-pop-sub-btn {
+  padding: 3px 6px;
+  gap: 3px;
 }
 .lv-pop-sub-btn:hover,
 .lv-pop-sub-btn.active {
@@ -8950,6 +9873,32 @@ body:has(.b3-dialog--open) #lvLaunchpadMobileEntry {
   .lv-ai-referrals-grid { grid-template-columns: 1fr; }
   .lv-ai-waterfall-track { flex-wrap: nowrap; }
 }
+@media print {
+  #lvLaunchpadDesktopEntry,
+  #lvLaunchpadMobileEntry,
+  #lv-desktop-launchpad-popover,
+  #lv-launchpad-sheet-mask,
+  #lv-launchpad-mobile-ball,
+  #lv-notice-host,
+  #lv-quick-workspace-mask,
+  #lv-block-assistant-portal,
+  #lv-shared-block-capsule,
+  #lv-block-ai-result-card,
+  #lv-block-type-picker-root,
+  #lv-block-action-store-mask,
+  #lv-ai-tier4-confirm-mask,
+  .lv-bam,
+  .lv-bam-mobile-mask,
+  .lv-card-badge-pill,
+  .lv-shared-ba-capsule,
+  .lv-toast,
+  .lv-floating-note,
+  .lv-qw-mask,
+  .lv-desktop-launchpad-popover {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
 `;
         if (!existing) document.head.appendChild(style);
     } catch { /* ignore */ }
@@ -9599,11 +10548,11 @@ function getSafeAiReferrals(): typeof FALLBACK_AI_REFERRALS {
 
 function buildAiWaterfallFlowchartHtml(prefProvider = "auto"): string {
     const nodes = [
-        { key: "siyuan", tier: "Tier 1", name: "思源智能体", icon: "🟢", initial: "未检测" },
-        { key: "user_custom", tier: "Tier 2", name: "自配商用Key", icon: "🔵", initial: "未配置" },
-        { key: "ollama", tier: "Tier 3", name: "本地Ollama", icon: "🟣", initial: "未检测" },
-        { key: "public_free", tier: "Tier 4", name: "免密公用池", icon: "🌐", initial: "就绪" },
-        { key: "rule_fallback", tier: "Tier 5", name: "离线规则", icon: "⚡", initial: "始终就绪" },
+        { key: "siyuan", tier: "第 1 级", name: "思源智能体", icon: "🟢", initial: "未检测" },
+        { key: "user_custom", tier: "第 2 级", name: "自配商用Key", icon: "🔵", initial: "未配置" },
+        { key: "ollama", tier: "第 3 级", name: "本地Ollama", icon: "🟣", initial: "未检测" },
+        { key: "public_free", tier: "第 4 级", name: "免密公用池", icon: "🌐", initial: "默认关闭" },
+        { key: "rule_fallback", tier: "第 5 级", name: "离线规则", icon: "⚡", initial: "始终就绪" },
     ];
 
     let trackHtml = "";
@@ -9694,16 +10643,23 @@ function buildAiReferralVendorsHtml(): string {
 function buildAiTierCardsHtml(aiCfg: any, _isCompact = false): string {
     const custom = aiCfg.userCustom || {};
     const ollama = aiCfg.ollama || {};
+    const publicFreeEnabled = aiCfg?.publicFree?.enabled === true;
+    const hasSecret = Boolean(
+        custom.hasSecret ||
+        custom.apiKey ||
+        (typeof window !== "undefined" && (window as any).hasTier2SecretConfigured?.())
+    );
+    const keyPlaceholder = hasSecret ? "•••••••• (已安全存入思源密钥库，留空保持不变)" : "sk-...";
 
     return `
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <!-- Card 1: 思源内核智能体 -->
+        <!-- Card 1: 思源内置智能体 -->
         <div class="lv-ai-tier-card" data-tier="1">
           <div class="lv-ai-tier-header">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🟢 Tier 1 · 思源内核智能体 (Kernel Agent)</strong>
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🟢 第 1 级 · 思源内置智能体</strong>
               <span class="lv-ai-chip">思源全局设置计费</span>
-              <span class="lv-ai-chip">内核原生中转</span>
+              <span class="lv-ai-chip">思源本地通道</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
               <span class="lv-ai-status-badge lv-ai-tier-badge-siyuan lv-ai-probe-siyuan">未检测</span>
@@ -9711,25 +10667,25 @@ function buildAiTierCardsHtml(aiCfg: any, _isCompact = false): string {
             </div>
           </div>
           <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
-            💡 <strong>机制与定位</strong>：复用思源笔记「设置 ➔ 智能体」中的官方服务商或代理。若您已在思源配置好大模型，小驴全家桶自动优先调用，多插件零多余配置。
+            💡 <strong>说明</strong>：复用思源笔记「设置 ➔ AI」中的官方服务商或自定义配置。若您已在思源配置好大模型，小驴全家桶自动优先调用，无需重复填写。
           </div>
         </div>
 
-        <!-- Card 2: 用户自配商用 API -->
+        <!-- Card 2: 自配商用 API -->
         <div class="lv-ai-tier-card" data-tier="2">
           <div class="lv-ai-tier-header">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🔵 Tier 2 · 用户自配商用 API (OpenAI 协议)</strong>
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🔵 第 2 级 · 自配商用 API</strong>
               <span class="lv-ai-chip success">赠海量免费额度</span>
-              <span class="lv-ai-chip accent">直连端点 · 本地脱敏</span>
+              <span class="lv-ai-chip accent">官方直连 · 安全加密保存</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
-              <span class="lv-ai-status-badge lv-ai-tier-badge-user_custom lv-ai-probe-user_custom">未配置</span>
+              <span class="lv-ai-status-badge lv-ai-tier-badge-user_custom lv-ai-probe-user_custom">${hasSecret ? "密钥已配置" : "未配置"}</span>
               <button type="button" class="lv-pop-sub-btn lv-ai-test-tier-btn" data-provider="user_custom" style="padding:1.5px 7px;font-size:10px;">🧪 测速</button>
             </div>
           </div>
           <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
-            💡 <strong>机制与品质</strong>：直连云端商业大模型（支持 DeepSeek-V3/R1、Qwen2.5 等满血版）。新用户注册主流平台免费赠送数百万至两千万 Token，耗尽后每千字仅几厘钱，生成质量与思维链最佳。
+            💡 <strong>说明</strong>：直连云端大模型（支持 DeepSeek-V3/R1、Qwen2.5 等通用模型）。密钥通过思源官方加密凭据库保存，绝不以明文存入本地或页面。
           </div>
           ${buildAiReferralVendorsHtml()}
           <div style="display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
@@ -9739,7 +10695,7 @@ function buildAiTierCardsHtml(aiCfg: any, _isCompact = false): string {
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
               <span style="font-size:11.5px;color:var(--lv-lp-text,#0f172a);font-weight:600;">API Key</span>
-              <input type="password" class="lv-cfg-ai-custom-key lv-ai-custom-key-input b3-text-field" placeholder="sk-..." value="${escapeHtml(custom.apiKey || '')}" style="font-size:11px;padding:4px 8px;border-radius:6px;width:240px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);" />
+              <input type="password" class="lv-cfg-ai-custom-key lv-ai-custom-key-input b3-text-field" autocomplete="new-password" data-has-secret="${hasSecret ? "true" : "false"}" placeholder="${escapeHtml(keyPlaceholder)}" value="" style="font-size:11px;padding:4px 8px;border-radius:6px;width:240px;background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);" />
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
               <span style="font-size:11.5px;color:var(--lv-lp-text,#0f172a);font-weight:600;">模型名称</span>
@@ -9752,7 +10708,7 @@ function buildAiTierCardsHtml(aiCfg: any, _isCompact = false): string {
         <div class="lv-ai-tier-card" data-tier="3">
           <div class="lv-ai-tier-header">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🟣 Tier 3 · 本地 Ollama 离线推理 (物理级绝对隐私)</strong>
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🟣 第 3 级 · 本地 Ollama 离线推理</strong>
               <span class="lv-ai-chip success">0 元永久免费</span>
               <span class="lv-ai-chip">100% 数据不出设备</span>
             </div>
@@ -9762,7 +10718,7 @@ function buildAiTierCardsHtml(aiCfg: any, _isCompact = false): string {
             </div>
           </div>
           <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
-            💡 <strong>机制与隐私</strong>：自动感知本地运行的 Ollama 进程。笔记与题库 100% 在本机物理显卡/CPU 计算，断网环境畅通运行，永无任何外网传输风险。推荐模型：<code>qwen2.5:7b</code> / <code>deepseek-r1:7b</code>。
+            💡 <strong>说明</strong>：自动识别本地运行的 Ollama 服务。笔记与题库 100% 在本机显卡/CPU 计算，断网环境也能顺畅使用，无外网传输风险。推荐模型：<code>qwen2.5:7b</code> / <code>deepseek-r1:7b</code>。
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));flex-wrap:wrap;">
             <div style="display:flex;align-items:center;gap:8px;">
@@ -9777,27 +10733,33 @@ function buildAiTierCardsHtml(aiCfg: any, _isCompact = false): string {
         <div class="lv-ai-tier-card" data-tier="4">
           <div class="lv-ai-tier-header">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🌐 Tier 4 · 公开免密免费通道 (0 元免配置)</strong>
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">🌐 第 4 级 · 公开免密免费通道 (默认关闭)</strong>
               <span class="lv-ai-chip success">0 元免密即用</span>
-              <span class="lv-ai-chip accent">强制前置 PII 脱敏</span>
+              <span class="lv-ai-chip accent">强制本地隐私脱敏</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
-              <span class="lv-ai-status-badge lv-ai-tier-badge-public_free lv-ai-probe-public_free">就绪</span>
+              <span class="lv-ai-status-badge lv-ai-tier-badge-public_free lv-ai-probe-public_free">${publicFreeEnabled ? "已开启" : "默认关闭"}</span>
               <button type="button" class="lv-pop-sub-btn lv-ai-test-tier-btn" data-provider="public_free" style="padding:1.5px 7px;font-size:10px;">🧪 测速</button>
             </div>
           </div>
           <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
-            💡 <strong>机制与脱敏安全</strong>：开箱即用，无需申请任何 Key 或绑定手机。🛡️ <strong>本地 PII 隐私脱敏护盾自动生效</strong>：数据外发前纯本地抹除人名、电话、邮箱、身份证与内网 IP，绝不泄露个人隐私。
+            💡 <strong>隐私与安全</strong>：默认处于关闭状态以防笔记内容意外外发；仅在您手动开启并确认提示后可用。🛡️ <strong>本地隐私保护自动生效</strong>：外发前在本地自动屏蔽人名、电话、邮箱、身份证与银行卡号。
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+            <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:11.5px;font-weight:600;color:var(--lv-lp-text,#0f172a);user-select:none;">
+              <input type="checkbox" class="lv-cfg-ai-public-free-toggle lv-ai-public-free-toggle" ${publicFreeEnabled ? "checked" : ""} />
+              <span>启用公开免密免费通道（需二次确认数据出域）</span>
+            </label>
           </div>
         </div>
 
-        <!-- Card 5: 本地轻量规则兜底 -->
+        <!-- Card 5: 本地轻量规则保底 -->
         <div class="lv-ai-tier-card" data-tier="5">
           <div class="lv-ai-tier-header">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">⚡ Tier 5 · 本地轻量规则离线兜底 (Heuristic Fallback)</strong>
+              <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">⚡ 第 5 级 · 本地轻量规则离线保底</strong>
               <span class="lv-ai-chip">0 成本 · 0 延迟</span>
-              <span class="lv-ai-chip">100% 纯本地内存</span>
+              <span class="lv-ai-chip">100% 纯本地运行</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
               <span class="lv-ai-status-badge lv-ai-tier-badge-rule_fallback lv-ai-probe-rule_fallback">始终就绪 (1ms)</span>
@@ -9805,7 +10767,7 @@ function buildAiTierCardsHtml(aiCfg: any, _isCompact = false): string {
             </div>
           </div>
           <div style="font-size:11.5px;line-height:1.5;color:var(--lv-lp-text-sub,#64748b);">
-            💡 <strong>可靠性终极防线</strong>：内置纯 TypeScript 启发式语法分词与反思模板。当所有外部 API 离线或欠费时自动毫秒级接管，保障制卡、试卷解析绝不白屏报错。
+            💡 <strong>说明</strong>：内置纯本地规则分词与思考模板。当所有在线模型离线或未配置时仅提供离线参考初稿（不会冒充在线大模型结果）。
           </div>
         </div>
       </div>
@@ -9833,6 +10795,40 @@ function updateTierStatusBadge(container: HTMLElement, provider: string, res: an
     });
 }
 
+function openTier4OutboundConfirmModal(onConfirm: () => void, onCancel: () => void): void {
+    if (typeof document === "undefined" || !document.body) {
+        onCancel();
+        return;
+    }
+    try { document.getElementById("lv-ai-tier4-confirm-mask")?.remove(); } catch { /* ignore */ }
+    const mask = document.createElement("div");
+    mask.id = "lv-ai-tier4-confirm-mask";
+    mask.style.cssText = "position:fixed;inset:0;z-index:100020;background:rgba(15,23,42,0.45);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
+    mask.innerHTML = `
+      <div style="width:min(92vw,420px);background:var(--b3-theme-surface,#fff);color:var(--b3-theme-on-surface,#0f172a);border:1px solid var(--b3-theme-surface-lighter,rgba(15,23,42,0.14));border-radius:14px;padding:18px 20px;box-shadow:0 24px 60px rgba(15,23,42,0.3);display:flex;flex-direction:column;gap:12px;">
+        <div style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;">
+          <span>🌐</span><span>确认开启公开免密免费通道？</span>
+        </div>
+        <div style="font-size:12.5px;line-height:1.6;color:var(--b3-theme-on-surface-light,#475569);">
+          开启后，当思源智能体、自填密钥与本地 Ollama 均不可用时，请求内容将在本地自动屏蔽敏感隐私信息后外发至第三方公开免密接口。请勿在涉密或敏感文档场景下开启。
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+          <button type="button" class="lv-tier4-cancel-btn b3-button b3-button--outline" style="padding:6px 14px;border-radius:8px;cursor:pointer;">取消（保持关闭）</button>
+          <button type="button" class="lv-tier4-confirm-btn b3-button" style="padding:6px 14px;border-radius:8px;background:var(--b3-theme-primary,#2563eb);color:#fff;border:none;cursor:pointer;font-weight:600;">确认外发并开启</button>
+        </div>
+      </div>
+    `;
+    const close = (confirmed: boolean) => {
+        try { mask.remove(); } catch { /* ignore */ }
+        if (confirmed) onConfirm();
+        else onCancel();
+    };
+    mask.querySelector(".lv-tier4-cancel-btn")?.addEventListener("click", () => close(false));
+    mask.querySelector(".lv-tier4-confirm-btn")?.addEventListener("click", () => close(true));
+    mask.addEventListener("click", (e) => { if (e.target === mask) close(false); });
+    document.body.appendChild(mask);
+}
+
 function attachAiHubEventListeners(
     root: HTMLElement,
     onSaveCallback?: () => void,
@@ -9850,6 +10846,39 @@ function attachAiHubEventListeners(
     };
 
     root.querySelectorAll("input, select").forEach((el) => {
+        if ((el as HTMLElement).classList?.contains("lv-cfg-ai-public-free-toggle") || (el as HTMLElement).classList?.contains("lv-ai-public-free-toggle")) {
+            el.addEventListener("change", () => {
+                const cb = el as HTMLInputElement;
+                const badge = root.querySelector<HTMLElement>(".lv-ai-tier-badge-public_free, .lv-ai-probe-public_free");
+                if (cb.checked) {
+                    cb.checked = false;
+                    openTier4OutboundConfirmModal(
+                        () => {
+                            cb.checked = true;
+                            if (badge) {
+                                badge.textContent = "已开启";
+                                badge.style.color = "#10b981";
+                            }
+                            triggerSave();
+                        },
+                        () => {
+                            cb.checked = false;
+                            if (badge) {
+                                badge.textContent = "默认关闭";
+                                badge.style.color = "";
+                            }
+                        }
+                    );
+                } else {
+                    if (badge) {
+                        badge.textContent = "默认关闭";
+                        badge.style.color = "";
+                    }
+                    triggerSave();
+                }
+            });
+            return;
+        }
         el.addEventListener("change", triggerSave);
     });
 
@@ -10034,12 +11063,12 @@ export function buildLaunchpadPopoverHtml(
     const focusLabel = focusActive ? `🌙 至${new Date(focusUntil).toTimeString().slice(0, 5)}` : "🌙 专注";
     const headerHtml = `
       <div class="lv-pop-header">
-        <div style="display:flex;align-items:center;gap:7px;min-width:0;">
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
           <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);flex-shrink:0;">${COMPASS_SVG}</span>
-          <span style="font-weight:700;font-size:14px;color:var(--lv-lp-text,#0f172a);white-space:nowrap;letter-spacing:-0.01em;">小驴罗盘</span>
-          <span style="font-size:10.5px;font-weight:600;padding:1.5px 7px;border-radius:999px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);white-space:nowrap;" title="当前接入小驴罗盘的插件数量（数字键 1-8 可瞬发对应磁贴）">${items.length} 联结</span>
+          <span style="font-weight:700;font-size:13.5px;color:var(--lv-lp-text,#0f172a);white-space:nowrap;letter-spacing:-0.01em;">小驴罗盘</span>
+          <span style="font-size:10.5px;font-weight:600;padding:1.5px 6.5px;border-radius:999px;background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));color:var(--lv-lp-accent,#2563eb);white-space:nowrap;flex-shrink:0;" title="当前接入小驴罗盘的插件数量（数字键 1-8 可瞬发对应磁贴）">${items.length} 联结</span>
         </div>
-        <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
           <div class="lv-pop-view-tabs" role="tablist" aria-label="视图切换">
             <button type="button" role="tab" aria-selected="${view === "grid"}" class="lv-pop-view-tab ${view === "grid" ? "active" : ""}" data-view="grid">九宫格</button>
             <button type="button" role="tab" aria-selected="${view === "list"}" class="lv-pop-view-tab ${view === "list" ? "active" : ""}" data-view="list">列表</button>
@@ -10048,31 +11077,37 @@ export function buildLaunchpadPopoverHtml(
           <button type="button" class="lv-pop-sub-btn lv-pop-inbox-btn ${showInbox ? "active" : ""}" aria-label="通知中心" title="全生态通知中心历史（${unreadCount} 未读）">🔔${unreadCount > 0 ? `<span class="lv-pop-inbox-badge">${unreadCount}</span>` : ""}</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-pref-btn ${showPref ? "active" : ""}" aria-label="设置" title="顶栏与罗盘坞内显隐及跨插件联动设置">⚙ 设置</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-toggle-all-btn" title="${toggleAllTitle}">${pinSvg}<span>${toggleAllText}</span></button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-close-btn" aria-label="关闭" title="关闭 (Esc)" style="padding:3.5px 7px;">✕</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-close-btn" aria-label="关闭" title="关闭 (Esc)" style="padding:3px 6px;">✕</button>
         </div>
       </div>
     `;
 
-    // 【设置】抽屉：三态顶栏显隐管理 (置顶在外 / 仅在坞内 / 彻底隐藏) + IFTTT 自动化规则
+    // 【设置】抽屉：三态顶栏显隐管理 (置顶在外 / 仅在坞内 / 彻底隐藏) + 磁贴排序 + IFTTT 自动化规则
     let prefDrawerHtml = "";
     if (showPref) {
         let stateRowsHtml = "";
-        allItemsForPref.forEach((p) => {
+        allItemsForPref.forEach((p, idx) => {
             const pId = escapeHtml(p.id);
             const pTitle = escapeHtml((p.fullName && !p.fullName.includes("<")) ? p.fullName : (p.name || p.id));
             const pColor = resolveSafeBrandColor(p.id, p.color);
             const pSvg = renderPluginLitheSvg(p.id, 15);
+            const isFirst = idx === 0;
+            const isLast = idx === allItemsForPref.length - 1;
             stateRowsHtml += `
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="color:${pColor};display:inline-flex;align-items:center;">${pSvg}</span>
-                  <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);">${pTitle}</strong>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 0;border-bottom:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1;">
+                  <span style="color:${pColor};display:inline-flex;align-items:center;flex-shrink:0;">${pSvg}</span>
+                  <strong style="font-size:12.5px;color:var(--lv-lp-text,#0f172a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${pTitle}</strong>
                 </div>
-                <select class="lv-pop-state-select" data-state-id="${pId}" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:3px 8px;border-radius:6px;font-size:11.5px;font-family:inherit;cursor:pointer;">
-                  <option value="docked" ${p.state === "docked" ? "selected" : ""}>📥 仅在罗盘坞内 (顶栏隐藏)</option>
-                  <option value="pinned" ${p.state === "pinned" ? "selected" : ""}>📌 置顶在外 (顶栏+坞内同时显示)</option>
-                  <option value="hidden" ${p.state === "hidden" ? "selected" : ""}>👁️ 彻底隐藏 (仅快捷键唤醒)</option>
-                </select>
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  <button type="button" class="lv-pop-sub-btn lv-pop-order-up-btn" data-order-id="${pId}" title="上移磁贴" aria-label="上移" ${isFirst ? "disabled" : ""} style="padding:2px 6px;font-size:11px;min-width:24px;opacity:${isFirst ? "0.4" : "1"};">↑</button>
+                  <button type="button" class="lv-pop-sub-btn lv-pop-order-down-btn" data-order-id="${pId}" title="下移磁贴" aria-label="下移" ${isLast ? "disabled" : ""} style="padding:2px 6px;font-size:11px;min-width:24px;opacity:${isLast ? "0.4" : "1"};">↓</button>
+                  <select class="lv-pop-state-select" data-state-id="${pId}" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:3px 6px;border-radius:6px;font-size:11.5px;font-family:inherit;cursor:pointer;max-width:142px;">
+                    <option value="docked" ${p.state === "docked" ? "selected" : ""}>📥 仅在罗盘坞内</option>
+                    <option value="pinned" ${p.state === "pinned" ? "selected" : ""}>📌 置顶在外</option>
+                    <option value="hidden" ${p.state === "hidden" ? "selected" : ""}>👁️ 彻底隐藏</option>
+                  </select>
+                </div>
               </div>
             `;
         });
@@ -10107,7 +11142,10 @@ export function buildLaunchpadPopoverHtml(
             <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:7px 11px;border-radius:8px;font-size:11.5px;line-height:1.5;color:var(--lv-lp-text,#0f172a);">
               👋 <strong>顶栏与罗盘主权设置</strong>：自主决定哪些插件<strong>常驻在思源顶栏</strong>，哪些<strong>仅在罗盘坞内收敛</strong>，哪些<strong>彻底隐藏</strong>。
             </div>
-            <div style="font-weight:700;font-size:12px;color:var(--lv-lp-accent,#2563eb);margin-top:2px;">📌 顶栏与罗盘图标显隐管理</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px;flex-wrap:wrap;">
+              <div style="font-weight:700;font-size:12px;color:var(--lv-lp-accent,#2563eb);">📌 顶栏与罗盘图标显隐及排序</div>
+              <button type="button" class="lv-pop-sub-btn lv-pop-reset-order-btn" title="恢复插件磁贴默认排序" style="padding:2px 8px;font-size:10.5px;">↺ 恢复默认顺序</button>
+            </div>
             <div>${stateRowsHtml}</div>
             <div style="font-weight:700;font-size:12px;color:var(--lv-lp-accent,#2563eb);margin-top:4px;">⚡ 极速工作台与移动端入口配置</div>
             <div style="display:flex;flex-direction:column;gap:7px;padding:6px 0;border-bottom:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
@@ -10158,7 +11196,7 @@ export function buildLaunchpadPopoverHtml(
                     : {
                         enableSiyuan: true,
                         enableRuleFallback: true,
-                        publicFree: { enabled: true },
+                        publicFree: { enabled: false },
                         ollama: { enabled: true, baseUrl: "http://127.0.0.1:11434" },
                     };
                 const prefProvider = aiCfg.preferredProvider || "auto";
@@ -10351,24 +11389,23 @@ export function buildLaunchpadPopoverHtml(
     } catch { /* ignore */ }
 
     const footerHtml = `
-      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-top:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));background:var(--lv-lp-card-bg,#ffffff);flex-shrink:0;font-size:11px;color:var(--lv-lp-text-sub,#64748b);">
-        <div style="display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+      <div class="lv-pop-footer" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:7px 12px;border-top:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));background:var(--lv-lp-card-bg,#ffffff);flex-shrink:0;font-size:11px;color:var(--lv-lp-text-sub,#64748b);">
+        <div style="display:flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0;" title="${items.length} 插件协同 · 今日活动 ${todayActCount} 项 · P 键置顶">
           <span class="lv-pop-pulse-dot"></span>
-          <span>${items.length} 插件协同 · 今日活动 <strong style="color:var(--lv-lp-text,#0f172a);">${todayActCount} 项</strong> · P 键置顶</span>
+          <span>${items.length}协同 · 活动<strong style="color:var(--lv-lp-text,#0f172a);">${todayActCount}</strong>项</span>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-          <button type="button" class="lv-pop-sub-btn lv-pop-store-btn" title="打开全能块助手资产库，分类装配块级能力与快捷栏">📦 块助手库</button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-diary-btn" title="将今日全生态活动汇总写入日记或复制">📝 今日回顾</button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-backup-btn" title="一键导出小驴全家桶联合灾备包">💾 联合备份</button>
+        <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+          <button type="button" class="lv-pop-sub-btn lv-pop-store-btn" title="打开全能块助手资产库，分类装配块级能力与快捷栏">📦 块助手</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-diary-btn" title="将今日全生态活动汇总写入日记或复制">📝 回顾</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-backup-btn" title="一键导出小驴全家桶联合灾备包">💾 备份</button>
           <button type="button" class="lv-pop-sub-btn lv-pop-restore-btn" title="从备份文件恢复小驴全家桶数据（会覆盖当前数据）">♻ 恢复</button>
-          <button type="button" class="lv-pop-sub-btn lv-pop-dedup-btn" title="全生态同步对账与多端重复内容治理 (快捷键 D)">🧹 对账 <span style="opacity:.6;font-size:10px;">D</span></button>
-          <button type="button" class="lv-pop-close-btn" style="background:transparent;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--lv-lp-accent,#2563eb);padding:2px 4px;">Esc</button>
+          <button type="button" class="lv-pop-sub-btn lv-pop-dedup-btn" title="全生态同步对账与多端重复内容治理 (快捷键 D)">🧹 对账</button>
         </div>
       </div>
-      <div class="lv-pop-community-bar" style="display:flex;align-items:center;justify-content:space-between;padding:5px 16px 7px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));background:color-mix(in srgb, var(--lv-lp-card-bg,#ffffff) 88%, var(--lv-lp-accent-soft,rgba(37,99,235,0.06)));border-radius:0 0 18px 18px;flex-shrink:0;font-size:11px;color:var(--lv-lp-text-sub,#64748b);">
-        <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+      <div class="lv-pop-community-bar" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 12px 7px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));background:color-mix(in srgb, var(--lv-lp-card-bg,#ffffff) 88%, var(--lv-lp-accent-soft,rgba(37,99,235,0.06)));border-radius:0 0 18px 18px;flex-shrink:0;font-size:11px;color:var(--lv-lp-text-sub,#64748b);">
+        <div style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0;">
           <span style="font-size:12px;">💬</span>
-          <span>官方交流与反馈 QQ 群：<strong style="color:var(--lv-lp-text,#0f172a);font-family:var(--lv-font-mono,monospace);font-weight:700;">${LV_FEEDBACK_QQ_GROUP}</strong>（开发者在线，欢迎反馈与交流）</span>
+          <span>QQ 群 <strong style="color:var(--lv-lp-text,#0f172a);font-family:var(--lv-font-mono,monospace);font-weight:700;">${LV_FEEDBACK_QQ_GROUP}</strong></span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
           <button type="button" class="lv-pop-sub-btn lv-pop-sponsor-btn" style="background:rgba(234, 179, 8, 0.12);color:#b45309;border:1px solid rgba(234, 179, 8, 0.35);border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:3px;cursor:pointer;transition:transform 0.12s ease, background 0.15s ease;" title="为小驴投喂 Token 算力，支持生态持续进化">
@@ -10570,24 +11607,70 @@ function openDesktopLaunchpadPopoverImpl(
     const savePopAi = () => {
         const loadFn = (typeof window !== "undefined" && (window as any).loadAiRouterConfig) || null;
         const saveFn = (typeof window !== "undefined" && (window as any).saveAiRouterConfig) || null;
+        const saveSecretFn = (typeof window !== "undefined" && (window as any).saveTier2SecretToHost) || null;
         if (typeof loadFn === "function" && typeof saveFn === "function") {
             const current = loadFn();
             const prefVal = popover.querySelector<HTMLSelectElement>(".lv-ai-pref-provider-select")?.value || "auto";
             const cUrl = popover.querySelector<HTMLInputElement>(".lv-ai-custom-url-input")?.value.trim() || undefined;
-            const cKey = popover.querySelector<HTMLInputElement>(".lv-ai-custom-key-input")?.value.trim() || undefined;
+            const keyInput = popover.querySelector<HTMLInputElement>(".lv-ai-custom-key-input");
+            const cKey = keyInput?.value.trim() || "";
             const cModel = popover.querySelector<HTMLInputElement>(".lv-ai-custom-model-input")?.value.trim() || undefined;
             const oUrl = popover.querySelector<HTMLInputElement>(".lv-ai-ollama-url-input")?.value.trim() || undefined;
+            const publicFreeEnabled = Boolean(popover.querySelector<HTMLInputElement>(".lv-ai-public-free-toggle")?.checked);
 
+            if (cKey) {
+                const savePromise = typeof saveSecretFn === "function"
+                    ? Promise.resolve(saveSecretFn(cKey))
+                    : persistSecretToSiyuanSlot(cKey);
+                void savePromise.then((res: any) => {
+                    if (res?.ok) {
+                        try {
+                            if (typeof localStorage !== "undefined") {
+                                const rawStored = localStorage.getItem("lv_ai_router_config_v1");
+                                if (rawStored) {
+                                    const parsedStored = JSON.parse(rawStored);
+                                    if (parsedStored?.userCustom && "apiKey" in parsedStored.userCustom) {
+                                        delete parsedStored.userCustom.apiKey;
+                                        parsedStored.userCustom.hasSecret = true;
+                                        localStorage.setItem("lv_ai_router_config_v1", JSON.stringify(parsedStored));
+                                    }
+                                }
+                            }
+                        } catch { /* ignore */ }
+                        const latest = loadFn();
+                        if (latest?.userCustom) delete latest.userCustom.apiKey;
+                        latest.userCustom = {
+                            ...(latest.userCustom || {}),
+                            hasSecret: true,
+                            secretSlot: "lv_ai_secret_tier2_apikey",
+                        };
+                        saveFn(latest);
+                        if (keyInput) {
+                            keyInput.value = "";
+                            keyInput.placeholder = "•••••••• (已安全存入思源密钥库，留空保持不变)";
+                            keyInput.setAttribute("data-has-secret", "true");
+                        }
+                    }
+                }).catch(() => { /* ignore */ });
+            }
+
+            const prevHasSecret = Boolean(typeof window !== "undefined" && (window as any).hasTier2SecretConfigured?.());
             current.preferredProvider = prefVal === "auto" ? undefined : (prefVal as any);
             current.userCustom = {
                 ...(current.userCustom || {}),
                 baseUrl: cUrl,
-                apiKey: cKey,
                 model: cModel,
+                hasSecret: prevHasSecret,
+                secretSlot: "lv_ai_secret_tier2_apikey",
             };
+            delete current.userCustom.apiKey;
             current.ollama = {
                 ...(current.ollama || {}),
                 baseUrl: oUrl || "http://127.0.0.1:11434",
+            };
+            current.publicFree = {
+                ...(current.publicFree || {}),
+                enabled: publicFreeEnabled,
             };
             saveFn(current);
             flashSaveToast("✓ AI 调度配置已更新");
@@ -11058,30 +12141,7 @@ function openDesktopLaunchpadPopoverImpl(
                 const customModelInput = target.closest<HTMLInputElement>(".lv-ai-custom-model-input");
                 const ollamaUrlInput = target.closest<HTMLInputElement>(".lv-ai-ollama-url-input");
                 if (aiPrefSelect || customUrlInput || customKeyInput || customModelInput || ollamaUrlInput) {
-                    const loadFn = (window as any).loadAiRouterConfig;
-                    const saveFn = (window as any).saveAiRouterConfig;
-                    if (typeof loadFn === "function" && typeof saveFn === "function") {
-                        const current = loadFn();
-                        const prefVal = popover.querySelector<HTMLSelectElement>(".lv-ai-pref-provider-select")?.value || "auto";
-                        const cUrl = popover.querySelector<HTMLInputElement>(".lv-ai-custom-url-input")?.value.trim() || undefined;
-                        const cKey = popover.querySelector<HTMLInputElement>(".lv-ai-custom-key-input")?.value.trim() || undefined;
-                        const cModel = popover.querySelector<HTMLInputElement>(".lv-ai-custom-model-input")?.value.trim() || undefined;
-                        const oUrl = popover.querySelector<HTMLInputElement>(".lv-ai-ollama-url-input")?.value.trim() || undefined;
-
-                        current.preferredProvider = prefVal === "auto" ? undefined : (prefVal as any);
-                        current.userCustom = {
-                            ...(current.userCustom || {}),
-                            baseUrl: cUrl,
-                            apiKey: cKey,
-                            model: cModel,
-                        };
-                        current.ollama = {
-                            ...(current.ollama || {}),
-                            baseUrl: oUrl || "http://127.0.0.1:11434",
-                        };
-                        saveFn(current);
-                        flashSaveToast("✓ AI 调度配置已更新");
-                    }
+                    savePopAi();
                     return;
                 }
             });
@@ -11089,6 +12149,37 @@ function openDesktopLaunchpadPopoverImpl(
             popover.addEventListener("click", (e) => {
                 const target = e.target as HTMLElement;
                 if (!target || typeof target.closest !== "function") return;
+
+                const orderUpBtn = target.closest<HTMLElement>(".lv-pop-order-up-btn");
+                if (orderUpBtn) {
+                    e.stopPropagation();
+                    const pid = orderUpBtn.getAttribute("data-order-id");
+                    if (pid && getLaunchpadHub().movePluginOrder?.(pid, "up")) {
+                        rerenderPopover({ preserveScroll: true, refreshItems: true });
+                        flashSaveToast("✓ 磁贴已上移");
+                    }
+                    return;
+                }
+
+                const orderDownBtn = target.closest<HTMLElement>(".lv-pop-order-down-btn");
+                if (orderDownBtn) {
+                    e.stopPropagation();
+                    const pid = orderDownBtn.getAttribute("data-order-id");
+                    if (pid && getLaunchpadHub().movePluginOrder?.(pid, "down")) {
+                        rerenderPopover({ preserveScroll: true, refreshItems: true });
+                        flashSaveToast("✓ 磁贴已下移");
+                    }
+                    return;
+                }
+
+                const resetOrderBtn = target.closest<HTMLElement>(".lv-pop-reset-order-btn");
+                if (resetOrderBtn) {
+                    e.stopPropagation();
+                    getLaunchpadHub().resetPluginOrder?.();
+                    rerenderPopover({ preserveScroll: true, refreshItems: true });
+                    flashSaveToast("✓ 已恢复默认顺序");
+                    return;
+                }
 
                 const testAiBtn = target.closest<HTMLElement>(".lv-test-ai-btn");
                 if (testAiBtn) {
@@ -11571,23 +12662,54 @@ function openDesktopLaunchpadPopoverImpl(
             }
         });
 
+        let hoverIntentTimer: number | null = null;
+        let hoverIntentTargetIdx = -1;
+        const clearHoverIntent = () => {
+            if (hoverIntentTimer !== null) {
+                try { clearTimeout(hoverIntentTimer); } catch { /* ignore */ }
+                hoverIntentTimer = null;
+            }
+            hoverIntentTargetIdx = -1;
+        };
+
         popover.addEventListener("mousemove", (e) => {
             // 当鼠标进入二级抽屉时锁定当前插件，杜绝斜滑经过其他卡片时发生意外跳变
-            if (isDrawerHovered) return;
+            if (isDrawerHovered) {
+                clearHoverIntent();
+                return;
+            }
             const target = e.target as HTMLElement;
             if (!target || typeof target.closest !== "function") return;
+            if (target.closest(".lv-pop-actions-drawer")) {
+                clearHoverIntent();
+                return;
+            }
             const tile = target.closest<HTMLElement>(".lv-pop-tile");
             if (tile) {
                 const idxStr = tile.getAttribute("data-idx");
                 if (idxStr !== null) {
                     const idx = parseInt(idxStr, 10);
                     if (idx >= 0 && idx < items.length && idx !== currentFocusIndex) {
-                        currentFocusIndex = idx;
-                        updateFocusHighlight();
+                        if (hoverIntentTargetIdx === idx && hoverIntentTimer !== null) return;
+                        clearHoverIntent();
+                        hoverIntentTargetIdx = idx;
+                        const setT = typeof window !== "undefined" && typeof window.setTimeout === "function" ? window.setTimeout.bind(window) : setTimeout;
+                        hoverIntentTimer = Number(setT(() => {
+                            hoverIntentTimer = null;
+                            if (!isDrawerHovered && popover.isConnected && idx !== currentFocusIndex) {
+                                currentFocusIndex = idx;
+                                updateFocusHighlight();
+                            }
+                        }, 80));
+                    } else if (idx === currentFocusIndex) {
+                        clearHoverIntent();
                     }
                 }
+            } else {
+                clearHoverIntent();
             }
         });
+        popover.addEventListener("mouseleave", clearHoverIntent);
 
         // 磁贴右键就地聚焦二级菜单：右键点击磁贴立即高亮并锁定其二级行动
         popover.addEventListener("contextmenu", (e) => {
@@ -11897,11 +13019,15 @@ function wireDesktopGlobalHotkey(): void {
 function insertDesktopEntryButton(toolbar: HTMLElement, btn: HTMLElement): void {
     if (!toolbar || !btn) return;
 
-    // 关键门禁（Left-Edge Drift Guard）：若顶栏基础结构（#drag 或 #barMore）尚未就绪，绝不盲目 appendChild！
-    // 盲目 appendChild 会将罗盘暂时置于左侧 #barWorkspace 旁（index 1），在视觉上形成「先在左上角出现、稍后跳到右上角」的来回横跳！
+    // 关键门禁（Left-Edge Drift Guard）：若顶栏基础结构（#drag 或 #barMore 或 #windowControls 或 #barMainMenu/#barWorkspace 之后区域）尚未就绪，绝不盲目 appendChild！
+    // 盲目 appendChild 会将罗盘暂时置于左侧 #barMainMenu / #barWorkspace 旁（index 1），在视觉上形成「先在左上角出现、稍后跳到右上角」的来回横跳！
     const drag = toolbar.querySelector<HTMLElement>("#drag");
     const barMore = toolbar.querySelector<HTMLElement>("#barMore");
     const winCtrl = toolbar.querySelector<HTMLElement>("#windowControls");
+    const barMainMenu = toolbar.querySelector<HTMLElement>("#barMainMenu") || toolbar.querySelector<HTMLElement>("#barWorkspace");
+    if (!drag && !barMore && !winCtrl && !barMainMenu) {
+        return;
+    }
     if (!drag && !barMore && !winCtrl) {
         return;
     }
@@ -11944,7 +13070,7 @@ function buildDesktopEntryButton(forceRebuild = false): boolean {
     if (!toolbar) return false;
     if (document.getElementById(DESKTOP_ENTRY_ID)) { refreshEntryBadgeDot(); scheduleTopBarConvergence(80); return true; }
 
-    // 顶栏未就绪保护：若顶栏还处于纯空白或仅有 #barWorkspace 状态，暂不插入，等待 observer 在 #drag 或 #barMore 挂载时就位
+    // 顶栏未就绪保护：若顶栏还处于纯空白或仅有左侧 #barMainMenu / #barWorkspace 状态，暂不插入，等待 observer 在 #drag 或 #barMore 挂载时就位
     if (!toolbar.querySelector("#drag") && !toolbar.querySelector("#barMore") && !toolbar.querySelector("#windowControls")) {
         wireDesktopToolbarObserver();
         return false;
@@ -11983,7 +13109,7 @@ function buildDesktopEntryButton(forceRebuild = false): boolean {
         btn.className = "toolbar__item ariaLabel";
         // 消除横跳根因（Zero-Jitter Citizen）：严禁标记 data-topbar-entry！
         // 思源 3.8.x 会对所有 [data-topbar-entry] 按思源内置 orders.topBar 配置表重排，
-        // 若持有该属性但不在内核配置表中，思源重排时会将其他按钮搬走而把罗盘遗弃在左侧 #barWorkspace 后面（index 1），
+        // 若持有该属性但不在内核配置表中，思源重排时会将其他按钮搬走而把罗盘遗弃在左侧 #barMainMenu / #barWorkspace 后面（index 1），
         // 进而触发小驴自愈搬移形成拉锯横跳。移除该属性即可对思源配置重排完全免疫，永久稳定常驻右侧！
         btn.setAttribute("data-location", "right");
         btn.setAttribute("aria-label", "小驴罗盘");
@@ -12097,7 +13223,7 @@ function wireDesktopToolbarObserver(): void {    if (typeof document === "undefi
 }
 
 function ensureDesktopEntry(): MobileEntryCleanup {
-    if (typeof document === "undefined") return () => {};
+    if (typeof document === "undefined" || isIsolatedSettingsOrChildWindow()) return () => {};
     ensureStyles();
     if (isMobileFrontend()) return () => {};
     const owners = getSharedDesktopEntryOwners();
@@ -12201,11 +13327,16 @@ function isOverlayElementVisible(el: Element): boolean {
 function updateBallSuppression(): void {
     if (typeof document === "undefined") return;
     const ball = document.getElementById(MOBILE_BALL_ID);
-    if (!ball) return;
-    // 仅在原生弹窗全屏覆盖时彻底隐藏球；正文编辑聚焦时仅进入半隐贴边态，确保用户随时可见可唤醒
-    ball.classList.toggle("lv-ball-suppressed", ballDialogOpen);
-    if (ballInputFocused && !ballDialogOpen) {
-        ball.classList.add("lv-ball-idle");
+    if (ball) {
+        // 仅在原生弹窗全屏覆盖时彻底隐藏球；正文编辑聚焦时仅进入半隐贴边态，确保用户随时可见可唤醒
+        ball.classList.toggle("lv-ball-suppressed", ballDialogOpen);
+        if (ballInputFocused && !ballDialogOpen) {
+            ball.classList.add("lv-ball-idle");
+        }
+    }
+    const mobileEntry = document.getElementById(MOBILE_ENTRY_ID);
+    if (mobileEntry) {
+        mobileEntry.classList.toggle("lv-entry-suppressed", ballDialogOpen);
     }
 }
 
@@ -12462,9 +13593,13 @@ function dismissActiveMobilePluginDialogs(): void {
             ".b3-dialog__container.lv-exam-dialog",
             ".b3-dialog__container.sw-mobile-switcher-dialog",
             ".b3-dialog__container.xlc-sheet",
-            ".b3-dialog__container:has(.lv-mobile-host)",
         ];
-        const openContainers = document.querySelectorAll<HTMLElement>(selectors.join(", "));
+        const openContainers = new Set<HTMLElement>();
+        document.querySelectorAll<HTMLElement>(selectors.join(", ")).forEach((el) => openContainers.add(el));
+        document.querySelectorAll<HTMLElement>(".lv-mobile-host").forEach((host) => {
+            const c = host.closest?.(".b3-dialog__container") as HTMLElement | null;
+            if (c) openContainers.add(c);
+        });
         openContainers.forEach((container) => {
             const closeEl = container.querySelector<HTMLElement>(".b3-dialog__close")
                 || container.closest(".b3-dialog--open")?.querySelector<HTMLElement>(".b3-dialog__close");
@@ -13237,13 +14372,34 @@ function openMobileSheetImpl(): void {
                     const missing = bundle.failed?.length ?? 0;
                     const okCount = Object.keys(bundle.plugins || {}).length;
                     if (isMobileFrontend()) {
-                        // 移动 WebView 没有可靠的 blob 下载通道：写入工作空间 temp 目录，桌面端可取出另存
-                        const nodeBuf = (globalThis as any).Buffer;
-                        const b64 = nodeBuf?.from ? String(nodeBuf.from(json, "utf8").toString("base64")) : "";
-                        if (!b64) throw new Error("no buffer available");
+                        // 移动 WebView 没有可靠的 blob 下载通道：使用纯浏览器 TextEncoder + 分块 Base64 / FormData 写入工作空间 temp 目录
                         const backupPath = `/temp/xiaolv-backup-${getTodayKey()}.json`;
-                        const put = await lvKernelPost("/api/file/putFile", { path: backupPath, file: b64, isDir: false });
-                        if (put.code !== 0) throw new Error(put.msg || "putFile failed");
+                        const encodeUtf8ToBase64 = (text: string): string => {
+                            const bytes = new TextEncoder().encode(text);
+                            let binary = "";
+                            const chunkSize = 0x8000;
+                            for (let i = 0; i < bytes.length; i += chunkSize) {
+                                const sub = bytes.subarray(i, i + chunkSize);
+                                let part = "";
+                                for (let j = 0; j < sub.length; j++) {
+                                    part += String.fromCharCode(sub[j]!);
+                                }
+                                binary += part;
+                            }
+                            return btoa(binary);
+                        };
+                        const b64 = encodeUtf8ToBase64(json);
+                        if (!b64) throw new Error("base64 encode failed");
+                        if (typeof FormData !== "undefined" && typeof Blob !== "undefined" && typeof fetch === "function") {
+                            const fd = new FormData();
+                            fd.append("path", backupPath);
+                            fd.append("isDir", "false");
+                            fd.append("file", new Blob([json], { type: "application/json;charset=utf-8" }), `xiaolv-backup-${getTodayKey()}.json`);
+                            await putFileFormDataChecked(fd);
+                        } else {
+                            const put = await lvKernelPost("/api/file/putFile", { path: backupPath, file: b64, isDir: false });
+                            if (put.code !== 0) throw new Error(put.msg || "putFile failed");
+                        }
                         lvNotify.capsule({
                             source: "罗盘",
                             message: `💾 备份已写入工作空间 ${backupPath}${missing > 0 ? `（${okCount} 项成功，${missing} 项失败）` : ""}`,
@@ -13671,6 +14827,8 @@ export function getQuickWorkspaceConfig(): LvQuickWorkspaceConfig {
                 quickNoteDocumentId: typeof data.quickNoteDocumentId === "string" ? data.quickNoteDocumentId : undefined,
                 quickNoteDocumentTitle: typeof data.quickNoteDocumentTitle === "string" ? data.quickNoteDocumentTitle : undefined,
                 quickNoteAttachMode: data.quickNoteAttachMode === "local-link" ? "local-link" : "assets",
+                diaryZoneDefaultFolded: data.diaryZoneDefaultFolded !== undefined ? Boolean(data.diaryZoneDefaultFolded) : undefined,
+                diaryZoneHeadingLevel: data.diaryZoneHeadingLevel === 3 ? 3 : (data.diaryZoneHeadingLevel === 4 ? 4 : undefined),
             };
         }
     } catch { /* ignore */ }
@@ -13862,7 +15020,9 @@ export function createLvAiProgressTracker(options: {
     defaultIcon?: string;
     onUpdate?: (state: LvAiProgressState) => void;
     onCancel?: () => void;
-}): LvAiProgressTracker {
+} = {}): LvAiProgressTracker {
+    // 根治独立调用场景下样式未注入导致 .lv-ai-thinking 退化为无样式纯 HTML 的隐患
+    ensureStyles();
     const stages = (options.stages && options.stages.length > 0)
         ? options.stages.slice().sort((a, b) => a.afterSec - b.afterSec)
         : getLvAiPresetStages(options.scenario || "general");
@@ -13954,6 +15114,543 @@ export function createLvAiProgressTracker(options: {
     };
 }
 
+export interface LvAiThinkingMountOptions {
+    /** 预设场景（socratic | question-gen | extract-contacts | transform | doc-judge | general） */
+    scenario?: LvAiPresetScenario;
+    /** 自定义阶段列表（可选，覆盖 scenario 预设） */
+    stages?: LvAiStageDefinition[];
+    /** 默认图标（可选） */
+    defaultIcon?: string;
+    /** 卡片主标题 */
+    title?: string;
+    /** 副标题或补充说明（可选） */
+    subtitle?: string;
+    /** 取消按钮文案；传 false 可隐藏按钮，默认 "⏹ 取消生成" */
+    cancelLabel?: string | false;
+    /** 紧凑模式（适合抽屉、列表项或窄侧栏） */
+    compact?: boolean;
+    /** 附加 CSS 类名 */
+    extraClass?: string;
+    /** 外部 AbortSignal（外部中止时自动同步中止内部信号并停表） */
+    signal?: AbortSignal;
+    /** 取消回调（点击取消按钮、点击浮层关闭或按 Esc 触发） */
+    onCancel?: () => void;
+    /** 挂载前是否清空 container 原有内容（默认 true） */
+    replaceContent?: boolean;
+}
+
+export interface LvAiThinkingCardHandle {
+    /** 动态更新标题、副标题、阶段文案、图标或取消按钮文字 */
+    update: (patch: {
+        title?: string;
+        subtitle?: string;
+        stageText?: string;
+        stageIcon?: string;
+        cancelLabel?: string;
+    }) => void;
+    /** 正常完成或收尾清理（停止计时器并默认移除思考卡；传 keepDom:true 可保留 DOM） */
+    done: (opts?: { keepDom?: boolean }) => void;
+    /** 立即销毁卡片 DOM 与定时器（不触发 onCancel） */
+    destroy: () => void;
+    /** 手动触发取消（中止 signal、停表并执行 onCancel） */
+    cancel: () => void;
+    /** 透传给 AI / fetch 请求的取消信号 */
+    readonly signal: AbortSignal;
+    /** 是否已被取消 */
+    readonly aborted: boolean;
+    /** 挂载的 .lv-ai-thinking 根元素 */
+    readonly element: HTMLElement | null;
+    /** 底层进度追踪器 */
+    readonly tracker: LvAiProgressTracker;
+}
+
+export interface LvAiWaitOverlayOptions extends Omit<LvAiThinkingMountOptions, "replaceContent" | "compact"> {
+    /** Esc 键是否取消并关闭浮层（默认 true） */
+    closeOnEsc?: boolean;
+    /** 点击遮罩空白区域是否取消（默认 false，防止误触中断长任务） */
+    closeOnMaskClick?: boolean;
+    /** 是否在右上角显示关闭按钮（默认 true） */
+    showCloseButton?: boolean;
+    /** 自定义浮层根元素 ID（默认 #lv-ai-wait-overlay-mask） */
+    id?: string;
+}
+
+export interface LvAiWaitOverlayHandle extends LvAiThinkingCardHandle {
+    /** 居中等待浮层遮罩元素 */
+    readonly mask: HTMLElement | null;
+}
+
+let aiThinkingMountSeq = 0;
+
+function createSafeAbortController(): AbortController {
+    if (typeof AbortController !== "undefined") {
+        return new AbortController();
+    }
+    const listeners = new Set<() => void>();
+    const fakeSignal: any = {
+        aborted: false,
+        reason: undefined,
+        addEventListener(_type: string, fn: any) {
+            if (typeof fn === "function") listeners.add(fn);
+        },
+        removeEventListener(_type: string, fn: any) {
+            listeners.delete(fn);
+        },
+        dispatchEvent() { return true; },
+        onabort: null,
+        throwIfAborted() {
+            if (fakeSignal.aborted) throw fakeSignal.reason ?? new Error("Aborted");
+        },
+    };
+    return {
+        signal: fakeSignal as AbortSignal,
+        abort(reason?: any) {
+            if (fakeSignal.aborted) return;
+            fakeSignal.aborted = true;
+            fakeSignal.reason = reason;
+            listeners.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
+            if (typeof fakeSignal.onabort === "function") {
+                try { fakeSignal.onabort(); } catch { /* ignore */ }
+            }
+        },
+    } as AbortController;
+}
+
+function safeRemoveElement(el: HTMLElement | null | undefined): void {
+    if (!el) return;
+    try {
+        if (typeof el.remove === "function") {
+            el.remove();
+        } else if (el.parentNode && typeof el.parentNode.removeChild === "function") {
+            el.parentNode.removeChild(el);
+        }
+    } catch { /* ignore */ }
+}
+
+/**
+ * 零样板通用 AI 思考卡内联挂载器：
+ * 在指定 DOM 容器内原地渲染设计态 `.lv-ai-thinking` 卡片（脉冲光环 + 动态阶段 + 秒计时 + 流光条 + 可取消 AbortSignal），
+ * 并以细粒度 DOM 更新保持 CSS 动画流畅不中断。
+ */
+export function mountLvAiThinkingCard(
+    container: HTMLElement | null | undefined,
+    options: LvAiThinkingMountOptions = {}
+): LvAiThinkingCardHandle {
+    ensureStyles();
+    const ctrl = createSafeAbortController();
+    let cancelled = false;
+    let destroyed = false;
+    let customStageText: string | null = null;
+    let customStageIcon: string | null = null;
+
+    let cardEl: HTMLElement | null = null;
+    let titleEl: HTMLElement | null = null;
+    let subtitleEl: HTMLElement | null = null;
+    let iconEl: HTMLElement | null = null;
+    let stageEl: HTMLElement | null = null;
+    let timerEl: HTMLElement | null = null;
+    let cancelBtnEl: HTMLButtonElement | null = null;
+
+    const detachExternalAbort = () => {
+        if (options.signal) {
+            try { options.signal.removeEventListener("abort", onExternalAbort); } catch { /* ignore */ }
+        }
+    };
+
+    const tracker = createLvAiProgressTracker({
+        scenario: options.scenario,
+        stages: options.stages,
+        defaultIcon: options.defaultIcon,
+        onUpdate: (state) => {
+            if (destroyed || cancelled) return;
+            if (iconEl) iconEl.textContent = customStageIcon ?? state.stageIcon;
+            if (stageEl) stageEl.textContent = customStageText ?? state.stageText;
+            if (timerEl) timerEl.innerHTML = `已思考 <b>${state.elapsedSec}</b> 秒`;
+        },
+        onCancel: options.onCancel,
+    });
+
+    const onExternalAbort = () => {
+        if (cancelled || destroyed) return;
+        cancelled = true;
+        tracker.stop();
+        try { ctrl.abort(options.signal?.reason ?? new DOMException("Aborted", "AbortError")); } catch { ctrl.abort(); }
+    };
+
+    if (options.signal) {
+        if (options.signal.aborted) {
+            cancelled = true;
+            tracker.stop();
+            try { ctrl.abort(options.signal.reason ?? new DOMException("Aborted", "AbortError")); } catch { ctrl.abort(); }
+        } else {
+            try { options.signal.addEventListener("abort", onExternalAbort, { once: true }); } catch { /* ignore */ }
+        }
+    }
+
+    const triggerCancel = () => {
+        if (cancelled || destroyed) return;
+        cancelled = true;
+        tracker.stop();
+        detachExternalAbort();
+        try { ctrl.abort(new DOMException("User cancelled", "AbortError")); } catch { ctrl.abort(); }
+        try { options.onCancel?.(); } catch { /* ignore */ }
+    };
+
+    if (!container || typeof document === "undefined" || typeof document.createElement !== "function") {
+        tracker.dispose();
+        return {
+            update() {},
+            done() {
+                destroyed = true;
+                detachExternalAbort();
+                tracker.dispose();
+            },
+            destroy() {
+                destroyed = true;
+                detachExternalAbort();
+                tracker.dispose();
+            },
+            cancel: triggerCancel,
+            get signal() { return ctrl.signal; },
+            get aborted() { return ctrl.signal.aborted; },
+            get element(): HTMLElement | null { return null; },
+            tracker,
+        };
+    }
+
+    cardEl = document.createElement("div");
+    cardEl.className = [
+        "lv-ai-thinking",
+        options.compact ? "lv-ai-thinking--compact" : "",
+        options.extraClass || "",
+    ].filter(Boolean).join(" ");
+    cardEl.setAttribute("role", "status");
+    cardEl.setAttribute("aria-live", "polite");
+
+    if (options.title) {
+        titleEl = document.createElement("div");
+        titleEl.className = "lv-ai-thinking__title";
+        titleEl.textContent = options.title;
+        cardEl.appendChild(titleEl);
+    }
+
+    if (options.subtitle) {
+        subtitleEl = document.createElement("div");
+        subtitleEl.className = "lv-ai-thinking__subtitle";
+        subtitleEl.textContent = options.subtitle;
+        cardEl.appendChild(subtitleEl);
+    }
+
+    const glowEl = document.createElement("div");
+    glowEl.className = "lv-ai-thinking__glow";
+    iconEl = document.createElement("span");
+    iconEl.className = "lv-ai-thinking__icon";
+    iconEl.textContent = tracker.getStageIcon();
+    glowEl.appendChild(iconEl);
+    cardEl.appendChild(glowEl);
+
+    stageEl = document.createElement("div");
+    stageEl.className = "lv-ai-thinking__stage";
+    stageEl.textContent = tracker.getStageText();
+    cardEl.appendChild(stageEl);
+
+    timerEl = document.createElement("div");
+    timerEl.className = "lv-ai-thinking__timer";
+    timerEl.innerHTML = `已思考 <b>${tracker.getElapsedSec()}</b> 秒`;
+    cardEl.appendChild(timerEl);
+
+    const progressEl = document.createElement("div");
+    progressEl.className = "lv-ai-thinking__progress";
+    const barEl = document.createElement("div");
+    barEl.className = "lv-ai-thinking__bar";
+    progressEl.appendChild(barEl);
+    cardEl.appendChild(progressEl);
+
+    if (options.cancelLabel !== false) {
+        cancelBtnEl = document.createElement("button");
+        cancelBtnEl.type = "button";
+        cancelBtnEl.id = `lv-ai-thinking-cancel-${++aiThinkingMountSeq}`;
+        cancelBtnEl.className = "b3-button b3-button--cancel lv-ai-thinking__cancel";
+        cancelBtnEl.textContent = options.cancelLabel || "⏹ 取消生成";
+        cancelBtnEl.addEventListener("click", (e) => {
+            try { e.stopPropagation?.(); } catch { /* ignore */ }
+            triggerCancel();
+        });
+        cardEl.appendChild(cancelBtnEl);
+    }
+
+    if (options.replaceContent !== false) {
+        try { container.innerHTML = ""; } catch { /* ignore */ }
+    }
+    container.appendChild(cardEl);
+
+    const destroy = () => {
+        if (destroyed) return;
+        destroyed = true;
+        detachExternalAbort();
+        tracker.dispose();
+        safeRemoveElement(cardEl);
+        cardEl = null;
+    };
+
+    const done = (doneOpts?: { keepDom?: boolean }) => {
+        if (destroyed) return;
+        destroyed = true;
+        detachExternalAbort();
+        tracker.dispose();
+        if (!doneOpts?.keepDom) {
+            safeRemoveElement(cardEl);
+            cardEl = null;
+        }
+    };
+
+    const update: LvAiThinkingCardHandle["update"] = (patch) => {
+        if (destroyed || !cardEl) return;
+        if (patch.title !== undefined) {
+            if (!titleEl) {
+                titleEl = document.createElement("div");
+                titleEl.className = "lv-ai-thinking__title";
+                if (cardEl.children[0]) {
+                    try { (cardEl as any).insertBefore?.(titleEl, cardEl.children[0]); } catch { cardEl.appendChild(titleEl); }
+                } else {
+                    cardEl.appendChild(titleEl);
+                }
+            }
+            titleEl.textContent = patch.title;
+        }
+        if (patch.subtitle !== undefined) {
+            if (!subtitleEl) {
+                subtitleEl = document.createElement("div");
+                subtitleEl.className = "lv-ai-thinking__subtitle";
+                cardEl.appendChild(subtitleEl);
+            }
+            subtitleEl.textContent = patch.subtitle;
+        }
+        if (patch.stageText !== undefined) {
+            customStageText = patch.stageText || null;
+            if (stageEl) stageEl.textContent = customStageText ?? tracker.getStageText();
+        }
+        if (patch.stageIcon !== undefined) {
+            customStageIcon = patch.stageIcon || null;
+            if (iconEl) iconEl.textContent = customStageIcon ?? tracker.getStageIcon();
+        }
+        if (patch.cancelLabel !== undefined && cancelBtnEl) {
+            cancelBtnEl.textContent = patch.cancelLabel;
+        }
+    };
+
+    return {
+        update,
+        done,
+        destroy,
+        cancel: triggerCancel,
+        get signal() { return ctrl.signal; },
+        get aborted() { return ctrl.signal.aborted; },
+        get element() { return cardEl; },
+        tracker,
+    };
+}
+
+/**
+ * 为无内联容器的触发点（顶部按钮、右键菜单、OCR、体检/汇总/快捷指令等）
+ * 弹出非阻塞、设计态 `.lv-ai-thinking` 居中轻浮层等待卡（支持 Esc/点击取消立即中止 `AbortSignal`）。
+ */
+export function openLvAiWaitOverlay(options: LvAiWaitOverlayOptions = {}): LvAiWaitOverlayHandle {
+    ensureStyles();
+    const maskId = options.id || "lv-ai-wait-overlay-mask";
+
+    if (typeof document === "undefined" || !document.body || typeof document.createElement !== "function") {
+        const inert = mountLvAiThinkingCard(null, options);
+        return {
+            ...inert,
+            get mask(): HTMLElement | null { return null; },
+        };
+    }
+
+    try {
+        const prev = typeof document.getElementById === "function" ? document.getElementById(maskId) : null;
+        safeRemoveElement(prev);
+        lvSurfaceStack.pop(maskId);
+    } catch { /* ignore */ }
+
+    // 若外部传入的 signal 在挂载前已处于 aborted，直接安全返回且不挂载任何节点/栈登记
+    if (options.signal?.aborted) {
+        const inert = mountLvAiThinkingCard(null, options);
+        return {
+            ...inert,
+            get mask(): HTMLElement | null { return null; },
+        };
+    }
+
+    const mask = document.createElement("div");
+    mask.id = maskId;
+    mask.className = "lv-ai-wait-mask";
+    mask.setAttribute("role", "dialog");
+    mask.setAttribute("aria-modal", "true");
+    mask.setAttribute("aria-label", options.title || "AI 正在处理");
+
+    const card = document.createElement("div");
+    card.className = "lv-ai-wait-card";
+
+    const body = document.createElement("div");
+    body.className = "lv-ai-wait-card__body";
+    card.appendChild(body);
+    mask.appendChild(card);
+
+    let cleaned = false;
+    let cancelNotified = false;
+    let unregisterSurface: (() => void) | null = null;
+    let extSignal: AbortSignal | undefined = options.signal;
+    let cardHandle: LvAiThinkingCardHandle | null = null;
+
+    const notifyCancelOnce = () => {
+        if (cancelNotified) return;
+        cancelNotified = true;
+        try { options.onCancel?.(); } catch { /* ignore */ }
+    };
+
+    const onOverlayExternalAbort = () => {
+        cleanupOverlay();
+        cardHandle?.destroy();
+        notifyCancelOnce();
+    };
+
+    const detachOverlayExternalAbort = () => {
+        if (extSignal) {
+            try { extSignal.removeEventListener("abort", onOverlayExternalAbort); } catch { /* ignore */ }
+            extSignal = undefined;
+        }
+    };
+
+    const cleanupOverlay = () => {
+        if (cleaned) return;
+        cleaned = true;
+        detachOverlayExternalAbort();
+        if (unregisterSurface) {
+            try { unregisterSurface(); } catch { /* ignore */ }
+            unregisterSurface = null;
+        }
+        try { lvSurfaceStack.pop(maskId); } catch { /* ignore */ }
+        safeRemoveElement(mask);
+    };
+
+    const mountedHandle = mountLvAiThinkingCard(body, {
+        scenario: options.scenario,
+        stages: options.stages,
+        defaultIcon: options.defaultIcon,
+        title: options.title,
+        subtitle: options.subtitle,
+        cancelLabel: options.cancelLabel === false ? false : (options.cancelLabel || "⏹ 取消生成"),
+        extraClass: options.extraClass,
+        signal: options.signal,
+        onCancel: () => {
+            cleanupOverlay();
+            notifyCancelOnce();
+        },
+        replaceContent: true,
+    });
+    cardHandle = mountedHandle;
+
+    if (options.showCloseButton !== false) {
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "lv-ai-wait-card__close";
+        closeBtn.setAttribute("aria-label", "取消并关闭");
+        closeBtn.setAttribute("title", "取消 (Esc)");
+        closeBtn.textContent = "✕";
+        closeBtn.addEventListener("click", (e) => {
+            try { e.stopPropagation?.(); } catch { /* ignore */ }
+            mountedHandle.cancel();
+            cleanupOverlay();
+        });
+        card.appendChild(closeBtn);
+    }
+
+    if (options.closeOnMaskClick === true) {
+        mask.addEventListener("click", (e) => {
+            if (e.target === mask) {
+                mountedHandle.cancel();
+                cleanupOverlay();
+            }
+        });
+    }
+
+    try {
+        unregisterSurface = lvSurfaceStack.push({
+            id: maskId,
+            dismiss: () => {
+                if (options.closeOnEsc === false) return "keep";
+                mountedHandle.cancel();
+                cleanupOverlay();
+                return true;
+            },
+        });
+    } catch { /* ignore */ }
+
+    document.body.appendChild(mask);
+
+    if (extSignal) {
+        if (extSignal.aborted) {
+            onOverlayExternalAbort();
+        } else {
+            try { extSignal.addEventListener("abort", onOverlayExternalAbort, { once: true }); } catch { /* ignore */ }
+        }
+    }
+
+    // 若外部传入的 signal 在挂载期间已处于 aborted，确保立即自动关闭并不残留节点
+    if (mountedHandle.aborted) {
+        cleanupOverlay();
+        mountedHandle.destroy();
+    }
+
+    return {
+        update: mountedHandle.update,
+        done: (doneOpts) => {
+            mountedHandle.done(doneOpts);
+            cleanupOverlay();
+        },
+        destroy: () => {
+            mountedHandle.destroy();
+            cleanupOverlay();
+        },
+        cancel: () => {
+            mountedHandle.cancel();
+            cleanupOverlay();
+        },
+        get signal() { return mountedHandle.signal; },
+        get aborted() { return mountedHandle.aborted; },
+        get element() { return mountedHandle.element; },
+        get mask() { return cleaned ? null : mask; },
+        tracker: mountedHandle.tracker,
+    };
+}
+
+/**
+ * 零样板 AI 等待包装器：
+ * 自动挂载设计态 `.lv-ai-thinking` 等待浮层（或传入 `container` 时原地内联挂载），
+ * 向 `taskFn(signal, controls)` 注入 `AbortSignal`，并在任务结束或异常时通过 `finally` 自动销毁清理。
+ */
+export async function withLvAiWait<T>(
+    options: LvAiWaitOverlayOptions & {
+        /** 可选内联挂载容器；省略时弹出非阻塞居中等待浮层 */
+        container?: HTMLElement | null;
+        /** 内联挂载时使用紧凑样式 */
+        compact?: boolean;
+        /** 内联挂载时是否替换容器原有内容（默认 true） */
+        replaceContent?: boolean;
+    },
+    taskFn: (signal: AbortSignal, controls: LvAiThinkingCardHandle) => Promise<T>
+): Promise<T> {
+    const handle: LvAiThinkingCardHandle = options?.container
+        ? mountLvAiThinkingCard(options.container, options)
+        : openLvAiWaitOverlay(options);
+    try {
+        return await taskFn(handle.signal, handle);
+    } finally {
+        handle.done();
+    }
+}
+
 const CATEGORY_EMOJI_MAP: Record<string, string> = {
     "日记": "📔", "工作": "💼", "家庭": "🏠", "思考": "💡", "记录": "📝",
     "学习": "📚", "运动": "🏃", "生活": "☕", "阅读": "📖", "灵感": "✨",
@@ -13964,10 +15661,24 @@ function getCategoryEmoji(cat: string): string {
     return CATEGORY_EMOJI_MAP[cat] || "🏷️";
 }
 
+function queryActiveProtyle(): HTMLElement | null {
+    if (typeof document === "undefined" || typeof document.querySelector !== "function") return null;
+    try {
+        return (
+            document.querySelector<HTMLElement>(".layout__wnd--active .protyle:not(.fn__none)") ||
+            document.querySelector<HTMLElement>(".layout__wnd--active .protyle") ||
+            document.querySelector<HTMLElement>(".protyle:not(.fn__none)") ||
+            document.querySelector<HTMLElement>(".protyle")
+        );
+    } catch {
+        return null;
+    }
+}
+
 function getCurrentOpenDocInfo(): { id: string; title: string } | null {
     if (typeof document === "undefined") return null;
     try {
-        const activeProtyle = document.querySelector(".layout__wnd--active .protyle:not(.fn__none), .protyle:not(.fn__none)");
+        const activeProtyle = queryActiveProtyle();
         if (!activeProtyle) return null;
         const wysiwyg = activeProtyle.querySelector(".protyle-wysiwyg") as HTMLElement | null;
         const docId = wysiwyg?.getAttribute("data-doc-id") || activeProtyle.querySelector("[data-node-id]")?.getAttribute("data-node-id");
@@ -13983,35 +15694,57 @@ let lastNotebookCheckTime = 0;
 let cachedOpenNotebooks: Array<{ id: string; name: string }> = [];
 let lastNotebooksFetchTime = 0;
 
-async function listOpenNotebooks(force = false): Promise<Array<{ id: string; name: string }>> {
-    const now = Date.now();
-    if (!force && cachedOpenNotebooks.length > 0 && now - lastNotebooksFetchTime < 30_000) {
-        return cachedOpenNotebooks;
-    }
-    try {
-        const res = await lvKernelPost("/api/notebook/lsNotebooks", {});
-        const nbs = res?.data?.notebooks;
-        if (Array.isArray(nbs) && nbs.length > 0) {
-            cachedOpenNotebooks = nbs
-                .filter((nb: any) => nb && nb.id && !nb.closed)
-                .map((nb: any) => ({ id: String(nb.id).trim(), name: String(nb.name || nb.id) }));
-            lastNotebooksFetchTime = now;
-            return cachedOpenNotebooks;
-        }
-    } catch { /* ignore */ }
-    return cachedOpenNotebooks;
+export type LvDailyNotePostFn = (
+    endpoint: string,
+    payload: Record<string, unknown>
+) => Promise<{ code?: number; msg?: string; data?: any }>;
+
+export interface LvDailyNoteResolveOptions {
+    date?: Date;
+    postFn?: LvDailyNotePostFn;
+    getNow?: () => Date;
+    strictNotebook?: boolean;
+    strictSprig?: boolean;
+    skipNormalize?: boolean;
+    cacheScope?: object;
 }
 
-export async function resolveDailyNotebookId(): Promise<string> {
+export interface LvDailyNoteFindOrCreateOptions extends LvDailyNoteResolveOptions {
+    skipPreLockProbe?: boolean;
+    expectedNotebookId?: string;
+    expectedYmd?: string;
+}
+
+async function listOpenNotebooks(force = false, postFn?: LvDailyNotePostFn): Promise<Array<{ id: string; name: string }>> {
+    const now = Date.now();
+    if (!force && !postFn && cachedOpenNotebooks.length > 0 && now - lastNotebooksFetchTime < 30_000) {
+        return cachedOpenNotebooks;
+    }
+    const post = postFn ?? lvKernelPost;
+    try {
+        const res = await post("/api/notebook/lsNotebooks", {});
+        const nbs = res?.data?.notebooks;
+        if (Array.isArray(nbs) && nbs.length > 0) {
+            const list = nbs
+                .filter((nb: any) => nb && nb.id && !nb.closed)
+                .map((nb: any) => ({ id: String(nb.id).trim(), name: String(nb.name || nb.id) }));
+            if (!postFn) {
+                cachedOpenNotebooks = list;
+                lastNotebooksFetchTime = now;
+            }
+            return list;
+        }
+    } catch { /* ignore */ }
+    return postFn ? [] : cachedOpenNotebooks;
+}
+
+export async function resolveDailyNotebookId(postFn?: LvDailyNotePostFn): Promise<string> {
     const conf = getQuickWorkspaceConfig();
     const explicit = conf.lifeLogNotebookId?.trim() || conf.diaryNotebookId?.trim() || conf.quickNoteNotebookId?.trim();
     if (explicit) return explicit;
 
+    const post = postFn ?? lvKernelPost;
     const now = Date.now();
-    if (cachedDailyNotebookId && now - lastNotebookCheckTime < 60000) {
-        return cachedDailyNotebookId;
-    }
-
     try {
         if (typeof window !== "undefined") {
             const w = window as any;
@@ -14019,39 +15752,49 @@ export async function resolveDailyNotebookId(): Promise<string> {
                 || (w.siyuan?.config?.note as any)?.dailyNote?.notebook
                 || (w.siyuan?.config?.general as any)?.dailyNote?.notebook;
             if (stored && typeof stored === "string" && stored.trim()) {
-                cachedDailyNotebookId = stored.trim();
-                lastNotebookCheckTime = now;
-                return cachedDailyNotebookId;
+                if (!postFn) {
+                    cachedDailyNotebookId = stored.trim();
+                    lastNotebookCheckTime = now;
+                }
+                return stored.trim();
             }
             const ls = getSafeLocalStorage();
             const lsId = ls?.getItem("local-dailynoteid");
             if (lsId && typeof lsId === "string" && lsId.trim()) {
-                cachedDailyNotebookId = lsId.trim();
-                lastNotebookCheckTime = now;
-                return cachedDailyNotebookId;
+                if (!postFn) {
+                    cachedDailyNotebookId = lsId.trim();
+                    lastNotebookCheckTime = now;
+                }
+                return lsId.trim();
             }
         }
     } catch { /* ignore */ }
 
+    if (!postFn && cachedDailyNotebookId && now - lastNotebookCheckTime < 60000) {
+        return cachedDailyNotebookId;
+    }
+
     // 优先通过数据库查找用户已有日记正身所在笔记本（杜绝误创插件分立日记）
     try {
-        const sqlRes = await lvKernelPost("/api/query/sql", {
+        const sqlRes = await post("/api/query/sql", {
             stmt: "SELECT box FROM blocks WHERE type='d' AND (ial LIKE '%custom-dailynote-%' OR hpath LIKE '%/daily note/%' OR hpath LIKE '%/日记/%') AND box != '' AND content NOT LIKE '%(冲突%' AND content NOT LIKE '%conflict%' AND content NOT LIKE '%(Conflicted%' AND hpath NOT LIKE '%(冲突%' AND hpath NOT LIKE '%conflict%' AND hpath NOT LIKE '%(Conflicted%' ORDER BY updated DESC LIMIT 1",
         });
         if (sqlRes.code === 0 && Array.isArray(sqlRes.data) && sqlRes.data[0]?.box) {
             const candidateBox = String(sqlRes.data[0].box).trim();
-            const openNbs = await listOpenNotebooks();
+            const openNbs = await listOpenNotebooks(false, postFn);
             const match = openNbs.find((nb) => nb.id === candidateBox && !/管家|人脉|题库|闪卡|拾遗|生态|空间|exam|contacts|home|checkin|glean/i.test(nb.name));
             if (match && match.id) {
-                cachedDailyNotebookId = match.id;
-                lastNotebookCheckTime = now;
-                return cachedDailyNotebookId;
+                if (!postFn) {
+                    cachedDailyNotebookId = match.id;
+                    lastNotebookCheckTime = now;
+                }
+                return match.id;
             }
         }
     } catch { /* ignore */ }
 
     try {
-        const openNbs = await listOpenNotebooks();
+        const openNbs = await listOpenNotebooks(false, postFn);
         if (openNbs.length > 0) {
             // 严格排除插件专属账本（如“🏠 小驴管家”、“人脉”、“题库”），优先锁定主日记本或默认主笔记本
             const preferred = openNbs.find((nb) => /^(日记|Daily|Journal|我的笔记|默认)/i.test(nb.name))
@@ -14059,9 +15802,11 @@ export async function resolveDailyNotebookId(): Promise<string> {
                 || openNbs.find((nb) => !/管家|人脉|题库|闪卡|拾遗|生态|空间|exam|contacts|home|checkin|glean/i.test(nb.name))
                 || openNbs[0];
             if (preferred && preferred.id) {
-                cachedDailyNotebookId = preferred.id;
-                lastNotebookCheckTime = now;
-                return cachedDailyNotebookId;
+                if (!postFn) {
+                    cachedDailyNotebookId = preferred.id;
+                    lastNotebookCheckTime = now;
+                }
+                return preferred.id;
             }
         }
     } catch { /* ignore */ }
@@ -14231,22 +15976,8 @@ export async function openDiaryBottom(): Promise<void> {
     try {
         let docId = "";
         try {
-            let nb = conf.diaryNotebookId?.trim() || "";
-            if (!nb) nb = await resolveDailyNotebookId();
-            docId = (await findTodayDailyNoteDocId(nb)) || "";
-            if (!docId) {
-                const createPayload: Record<string, unknown> = { app: (window as any)?.siyuan?.app?.id || "siyuan" };
-                if (nb) createPayload.notebook = nb;
-                const res = await lvKernelPost("/api/filetree/createDailyNote", createPayload);
-                if (res.code === 0 && res.data?.id) {
-                    docId = String(res.data.id);
-                } else {
-                    const fallbackRes = await lvKernelPost("/api/filetree/createDailyNote", {});
-                    if (fallbackRes.code === 0 && fallbackRes.data?.id) {
-                        docId = String(fallbackRes.data.id);
-                    }
-                }
-            }
+            const nb = conf.diaryNotebookId?.trim() || "";
+            docId = (await findOrCreateTodayDailyNoteDocId(nb || undefined)) || "";
         } catch (err) {
             console.warn("[LvLaunchpad] createDailyNote API error:", err);
         }
@@ -14267,12 +15998,12 @@ export async function openDiaryBottom(): Promise<void> {
         const scrollBottomAndFocus = (): boolean => {
             if (settled || typeof document === "undefined") return true;
             const targetWysiwyg = docId
-                ? (document.querySelector(`.protyle:not(.fn__none) .protyle-wysiwyg[data-doc-id="${docId}"]`) as HTMLElement | null)
+                ? ((document.querySelector(`.layout__wnd--active .protyle:not(.fn__none) .protyle-wysiwyg[data-doc-id="${docId}"]`)
+                    || document.querySelector(`.protyle:not(.fn__none) .protyle-wysiwyg[data-doc-id="${docId}"]`)) as HTMLElement | null)
                 : null;
             const root = targetWysiwyg?.closest(".protyle")
-                || document.querySelector(".layout__wnd--active .protyle:not(.fn__none)")
-                || document.querySelector(".protyle:not(.fn__none) .protyle-content, #editor .protyle-content")?.closest(".protyle")
-                || document.querySelector(".protyle");
+                || queryActiveProtyle()
+                || document.querySelector(".protyle:not(.fn__none) .protyle-content, #editor .protyle-content")?.closest(".protyle");
             if (!root) return false;
             const downBtn = root.querySelector(".protyle-scroll__down") as HTMLElement | null;
             if (downBtn) downBtn.click();
@@ -14832,6 +16563,7 @@ function lvConfirm(title: string, message: string): Promise<boolean> {
             resolve(result);
         };
         const onKeyDown = (e: KeyboardEvent) => {
+            if (e.isComposing || e.keyCode === 229) return;
             if (e.key === "Escape") {
                 e.preventDefault();
                 close(false);
@@ -14883,6 +16615,7 @@ function lvPrompt(title: string, message: string, defaultValue = ""): Promise<st
             resolve(val);
         };
         const onKeyDown = (e: KeyboardEvent) => {
+            if (e.isComposing || e.keyCode === 229) return;
             if (e.key === "Escape") {
                 e.preventDefault();
                 close(null);
@@ -14924,6 +16657,25 @@ export function openConflictResolverDialog(): void {
     let aiHealthExpanded = false;
     let aiHealthLoading = false;
     let aiHealthData: { score: number; level: string; summaryHtml: string; recommendations: string[] } | null = null;
+    let aiHealthAbortCtrl: AbortController | null = null;
+    let aiHealthThinkingHandle: LvAiThinkingCardHandle | null = null;
+    const activeAiJudgeTasks = new Map<string, { ctrl: AbortController | null; handle: LvAiThinkingCardHandle | null }>();
+
+    const cancelAiHealthTask = () => {
+        try { aiHealthAbortCtrl?.abort(); } catch { /* ignore */ }
+        aiHealthAbortCtrl = null;
+        try { aiHealthThinkingHandle?.destroy(); } catch { /* ignore */ }
+        aiHealthThinkingHandle = null;
+        aiHealthLoading = false;
+    };
+
+    const cancelAllAiJudgeTasks = () => {
+        for (const task of activeAiJudgeTasks.values()) {
+            try { task.ctrl?.abort(); } catch { /* ignore */ }
+            try { task.handle?.destroy(); } catch { /* ignore */ }
+        }
+        activeAiJudgeTasks.clear();
+    };
 
     const currentDoc = getCurrentOpenDocInfo();
 
@@ -14931,6 +16683,10 @@ export function openConflictResolverDialog(): void {
         icon: "🧹",
         title: "全思源文档查重与对账治理",
         badgeHtml: `<span class="lv-qw-badge">全库级自愈中枢 v3.0</span>`,
+        onBeforeClose: () => {
+            cancelAiHealthTask();
+            cancelAllAiJudgeTasks();
+        },
         bodyHtml: `
             <div class="lv-conflict-top-bar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
                 <div class="lv-reconcile-stats" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
@@ -15121,9 +16877,25 @@ export function openConflictResolverDialog(): void {
         }
         aiHealthContainer.style.display = "block";
         if (aiHealthLoading) {
-            aiHealthContainer.innerHTML = `<div style="text-align:center;padding:12px;color:#7c3aed;">⏳ 正在调用 AI 智能诊断全库文档架构健康度…</div>`;
+            if (!aiHealthThinkingHandle || aiHealthThinkingHandle.element?.parentElement !== aiHealthContainer) {
+                aiHealthThinkingHandle?.destroy();
+                aiHealthThinkingHandle = mountLvAiThinkingCard(aiHealthContainer, {
+                    scenario: "doc-judge",
+                    compact: true,
+                    title: "🤖 AI 全库文档架构健康度诊断中",
+                    cancelLabel: "⏹ 取消诊断",
+                    signal: aiHealthAbortCtrl?.signal,
+                    onCancel: () => {
+                        cancelAiHealthTask();
+                        aiHealthExpanded = false;
+                        renderAiHealth();
+                    },
+                });
+            }
             return;
         }
+        aiHealthThinkingHandle?.destroy();
+        aiHealthThinkingHandle = null;
         if (aiHealthData) {
             aiHealthContainer.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
@@ -15140,6 +16912,7 @@ export function openConflictResolverDialog(): void {
 
     const renderCurrentTab = () => {
         if (!tabView) return;
+        cancelAllAiJudgeTasks();
         updateTabBadges();
         renderAiHealth();
         mask?.querySelectorAll(".lv-conflict-tab").forEach((btn) => {
@@ -15690,7 +17463,15 @@ export function openConflictResolverDialog(): void {
             e.stopPropagation();
             hapticFeedback(6);
             aiHealthExpanded = !aiHealthExpanded;
+            if (!aiHealthExpanded && aiHealthLoading) {
+                cancelAiHealthTask();
+                renderAiHealth();
+                return;
+            }
             if (aiHealthExpanded && !aiHealthData) {
+                cancelAiHealthTask();
+                const ctrl = createSafeAbortController();
+                aiHealthAbortCtrl = ctrl;
                 aiHealthLoading = true;
                 renderAiHealth();
                 void lvDeduplicator.aiSummarizeVaultHealth({
@@ -15698,9 +17479,18 @@ export function openConflictResolverDialog(): void {
                     conflictDocs,
                     orphanDailyNotes,
                     dupClips,
-                }).then((data) => {
+                }, { signal: ctrl.signal }).then((data) => {
+                    if (ctrl.signal.aborted || aiHealthAbortCtrl !== ctrl || !mask?.isConnected) return;
+                    aiHealthAbortCtrl = null;
+                    aiHealthThinkingHandle?.destroy();
+                    aiHealthThinkingHandle = null;
                     aiHealthData = data;
                     aiHealthLoading = false;
+                    renderAiHealth();
+                }).catch(() => {
+                    if (ctrl.signal.aborted || aiHealthAbortCtrl !== ctrl) return;
+                    cancelAiHealthTask();
+                    aiHealthExpanded = false;
                     renderAiHealth();
                 });
             } else {
@@ -15712,6 +17502,7 @@ export function openConflictResolverDialog(): void {
         const closeHealthBtn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(".lv-close-health-btn");
         if (closeHealthBtn) {
             e.stopPropagation();
+            cancelAiHealthTask();
             aiHealthExpanded = false;
             renderAiHealth();
             return;
@@ -15920,23 +17711,40 @@ export function openConflictResolverDialog(): void {
                 const aiDrawer = mask?.querySelector<HTMLElement>(`.lv-ai-drawer-${safeId}`);
                 if (aiDrawer) {
                     if (aiDrawer.style.display === "none") {
-                        aiDrawer.style.display = "block";
-                        aiDrawer.innerHTML = `
-                            <div style="text-align:center;padding:16px;color:#7c3aed;display:flex;align-items:center;justify-content:center;gap:6px;">
-                                <span>⏳</span>
-                                <span>正在调动 AI 深入研判文档语义与拓扑关系…</span>
-                            </div>
-                        `;
+                        const prevTask = activeAiJudgeTasks.get(safeId);
+                        if (prevTask) {
+                            try { prevTask.ctrl?.abort(); } catch { /* ignore */ }
+                            try { prevTask.handle?.destroy(); } catch { /* ignore */ }
+                            activeAiJudgeTasks.delete(safeId);
+                        }
                         const doc1 = targetGroup.docs[0];
                         const doc2 = targetGroup.docs[1] || doc1;
                         if (!doc1 || !doc2) {
                             aiDrawer.style.display = "none";
                             return;
                         }
+                        const ctrl = createSafeAbortController();
+                        aiDrawer.style.display = "block";
+                        const thinkingHandle = mountLvAiThinkingCard(aiDrawer, {
+                            scenario: "doc-judge",
+                            compact: true,
+                            title: `🤖 AI 双文档语义研判 · 《${targetGroup.title}》`,
+                            cancelLabel: "⏹ 取消研判",
+                            signal: ctrl.signal,
+                            onCancel: () => {
+                                try { ctrl.abort(new DOMException("User cancelled", "AbortError")); } catch { ctrl.abort(); }
+                                activeAiJudgeTasks.delete(safeId);
+                                thinkingHandle.destroy();
+                                aiDrawer.style.display = "none";
+                            },
+                        });
+                        activeAiJudgeTasks.set(safeId, { ctrl, handle: thinkingHandle });
+
                         void Promise.all([
                             lvDeduplicator.getDocPreviewSnippet(doc1.id, 500),
                             lvDeduplicator.getDocPreviewSnippet(doc2.id, 500),
                         ]).then(async ([snip1, snip2]) => {
+                            if (ctrl.signal.aborted || activeAiJudgeTasks.get(safeId)?.ctrl !== ctrl || !aiDrawer.isConnected) return;
                             const info1: LvAiJudgeDocInfo = {
                                 id: doc1.id,
                                 title: targetGroup.title,
@@ -15955,7 +17763,10 @@ export function openConflictResolverDialog(): void {
                                 length: doc2.length,
                                 snippet: snip2,
                             };
-                            const report = await lvAiJudge.judgeDocPair(info1, info2);
+                            const report = await lvAiJudge.judgeDocPair(info1, info2, { signal: ctrl.signal });
+                            if (ctrl.signal.aborted || activeAiJudgeTasks.get(safeId)?.ctrl !== ctrl || !aiDrawer.isConnected) return;
+                            thinkingHandle.destroy();
+                            activeAiJudgeTasks.delete(safeId);
 
                             aiDrawer.innerHTML = `
                                 <div style="display:flex;flex-direction:column;gap:8px;">
@@ -16006,8 +17817,19 @@ export function openConflictResolverDialog(): void {
                                     </div>
                                 </div>
                             `;
+                        }).catch(() => {
+                            if (ctrl.signal.aborted || activeAiJudgeTasks.get(safeId)?.ctrl !== ctrl) return;
+                            thinkingHandle.destroy();
+                            activeAiJudgeTasks.delete(safeId);
+                            aiDrawer.style.display = "none";
                         });
                     } else {
+                        const prevTask = activeAiJudgeTasks.get(safeId);
+                        if (prevTask) {
+                            try { prevTask.ctrl?.abort(); } catch { /* ignore */ }
+                            try { prevTask.handle?.destroy(); } catch { /* ignore */ }
+                            activeAiJudgeTasks.delete(safeId);
+                        }
                         aiDrawer.style.display = "none";
                     }
                 }
@@ -16043,6 +17865,12 @@ export function openConflictResolverDialog(): void {
             e.stopPropagation();
             const drawerId = closeAiDrawerBtn.getAttribute("data-drawer-id");
             if (drawerId) {
+                const activeTask = activeAiJudgeTasks.get(drawerId);
+                if (activeTask) {
+                    try { activeTask.ctrl?.abort(); } catch { /* ignore */ }
+                    try { activeTask.handle?.destroy(); } catch { /* ignore */ }
+                    activeAiJudgeTasks.delete(drawerId);
+                }
                 const drawer = mask?.querySelector<HTMLElement>(`.lv-ai-drawer-${drawerId}`);
                 if (drawer) drawer.style.display = "none";
             }
@@ -16477,6 +18305,7 @@ function openClipPreviewModal(rawText: string, timeStr: string, opts?: { manual?
         badgeHtml: `${manual ? "" : `${rawText.length} 字 · `}<button type="button" class="lv-qw-badge lv-qw-badge-btn lv-qw-clip-target-btn" title="点击切换存储目标（今日日记 / 当前文档 / 指定文档）">${escapeHtml(getBadgeLabel())}</button>`,
         bodyHtml: `<textarea class="lv-qw-textarea b3-text-field" placeholder="${manual ? (isMobileFrontend() ? "当前环境无法自动读取剪贴板，请长按屏幕粘贴内容到这里..." : "当前环境无法自动读取剪贴板，请长按 / Ctrl+V 粘贴内容到这里...") : "确认或编辑剪贴内容后入库..."}" rows="8"></textarea><div class="lv-qw-preview-tag lv-qw-clip-hint" style="margin-top:6px;">${escapeHtml(getHintText())}</div>`,
         primaryLabel: "保存入库",
+        showCharCount: true,
         onSave: async (saveBtn, cleanup) => {
             const ta = typeof document !== "undefined"
                 ? document.querySelector<HTMLTextAreaElement>("#lv-quick-workspace-mask textarea")
@@ -16840,160 +18669,1601 @@ function extractAppendIdsList(resData: any): { ids: string[]; docId?: string; bl
     return { ids: [] };
 }
 
-/** 并发建档互斥锁：防止多插件或多事件同一毫秒内并发调用 createDailyNote 产生竞态冲突 */
-let dailyNoteCreatingPromise: Promise<string> | null = null;
-let inMemoryTodayDailyNoteDocId: { date: string; docId: string } | null = null;
+/** 并发建档互斥锁：防止多插件或多事件同一毫秒内并发调用 createDailyNote 产生竞态冲突（严格绑定 ymd + notebookId） */
+interface DailyNoteSingleFlightResult {
+    docId: string;
+    ymd: string;
+    notebookId: string;
+}
+
+interface DailyNoteCacheBucket {
+    ymd: string;
+    notebookId: string;
+    docId: { date: string; ymd: string; notebookId: string; docId: string } | null;
+    flightMap: Map<string, Promise<DailyNoteSingleFlightResult | null>>;
+}
+
+const dailyNoteCreatingMap = new Map<string, Promise<DailyNoteSingleFlightResult | null>>();
+const defaultDailyNoteBucket: DailyNoteCacheBucket = {
+    ymd: "",
+    notebookId: "",
+    docId: null,
+    flightMap: dailyNoteCreatingMap,
+};
+const scopedDailyNoteBuckets = new WeakMap<object, DailyNoteCacheBucket>();
+
+function getDailyNoteBucket(cacheScope?: object): DailyNoteCacheBucket {
+    if (!cacheScope) return defaultDailyNoteBucket;
+    let bucket = scopedDailyNoteBuckets.get(cacheScope);
+    if (!bucket) {
+        bucket = {
+            ymd: "",
+            notebookId: "",
+            docId: null,
+            flightMap: new Map<string, Promise<DailyNoteSingleFlightResult | null>>(),
+        };
+        scopedDailyNoteBuckets.set(cacheScope, bucket);
+    }
+    return bucket;
+}
+
+export type DailyNoteProbeResult =
+    | { status: "found"; docId: string }
+    | { status: "confirmed-missing"; notebookId: string; ymd: string }
+    | { status: "unknown"; reason: string };
+
+function getLocalYmd(d: Date = new Date()): string {
+    return formatTodayDateParts(d).ymd;
+}
+
+function doesDocIdMatchYmdIfDated(docId: string, ymd: string): boolean {
+    const trimmed = String(docId || "").trim();
+    if (!trimmed) return false;
+    const m = trimmed.match(/^(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?:\d{6})?(?:[-_]|$)/);
+    if (!m) return true;
+    return `${m[1]}-${m[2]}-${m[3]}` === ymd;
+}
+
+function clearDailyNoteCacheUnlessDifferentValidDay(
+    boundYmd: string,
+    docId?: string,
+    opts?: { cacheScope?: object; now?: Date }
+): void {
+    const bucket = getDailyNoteBucket(opts?.cacheScope);
+    if (!bucket.docId && !bucket.ymd) return;
+    const curYmd = getLocalYmd(opts?.now);
+    if (
+        bucket.ymd !== curYmd
+        || bucket.ymd === boundYmd
+        || (docId && bucket.docId?.docId === docId)
+    ) {
+        invalidateTodayDailyNoteCache(opts?.cacheScope);
+    }
+}
+
+function getValidCachedTodayDailyNoteDocId(targetYmd: string, explicitNb?: string, cacheScope?: object): string | null {
+    const bucket = getDailyNoteBucket(cacheScope);
+    if (
+        !bucket.docId
+        || !bucket.docId.docId
+        || bucket.ymd !== targetYmd
+        || bucket.docId.ymd !== targetYmd
+    ) {
+        return null;
+    }
+    if (!doesDocIdMatchYmdIfDated(bucket.docId.docId, targetYmd)) {
+        return null;
+    }
+    const trimmedExplicit = String(explicitNb || "").trim();
+    const expectedNb = trimmedExplicit || peekCurrentDailyNotebookSetting();
+    const cachedNb = bucket.notebookId || bucket.docId.notebookId;
+    if (expectedNb && cachedNb && expectedNb !== cachedNb) {
+        return null;
+    }
+    if (trimmedExplicit && !cachedNb) {
+        return null;
+    }
+    return bucket.docId.docId;
+}
+
+function commitTodayDailyNoteCache(
+    docId: string,
+    boundYmd: string,
+    notebookId: string,
+    opts?: { cacheScope?: object; now?: Date }
+): boolean {
+    const trimmedDocId = String(docId || "").trim();
+    const trimmedYmd = String(boundYmd || "").trim();
+    const trimmedNb = String(notebookId || "").trim();
+    if (!trimmedDocId || !trimmedYmd) return false;
+    const currentYmd = getLocalYmd(opts?.now);
+    if (currentYmd !== trimmedYmd) {
+        clearDailyNoteCacheUnlessDifferentValidDay(trimmedYmd, trimmedDocId, opts);
+        return false;
+    }
+    if (!doesDocIdMatchYmdIfDated(trimmedDocId, trimmedYmd)) {
+        clearDailyNoteCacheUnlessDifferentValidDay(trimmedYmd, trimmedDocId, opts);
+        return false;
+    }
+    const bucket = getDailyNoteBucket(opts?.cacheScope);
+    bucket.ymd = trimmedYmd;
+    bucket.notebookId = trimmedNb;
+    bucket.docId = {
+        date: trimmedYmd.replace(/-/g, ""),
+        ymd: trimmedYmd,
+        notebookId: trimmedNb,
+        docId: trimmedDocId,
+    };
+    return true;
+}
 
 /**
  * 强制使今日日记内存缓存失效（用于日记文档被删除或外部主动刷新时）
  */
-export function invalidateTodayDailyNoteCache(): void {
-    inMemoryTodayDailyNoteDocId = null;
+export function invalidateTodayDailyNoteCache(cacheScope?: object): void {
+    const bucket = getDailyNoteBucket(cacheScope);
+    bucket.ymd = "";
+    bucket.notebookId = "";
+    bucket.docId = null;
 }
 
-/**
- * 探测今日日记文档 ID（多级只读探针模式，避让冲突副本，全库既有日记绝对优先，绝不主动盲建文档）
- */
-export async function findTodayDailyNoteDocId(notebook?: string): Promise<string | null> {
-    try {
-        const d = new Date();
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, "0");
-        const dd = String(d.getDate()).padStart(2, "0");
-        const yyyymmdd = `${yyyy}${mm}${dd}`;
-        const ymd = `${yyyy}-${mm}-${dd}`;
+function formatTodayDateParts(d: Date = new Date()): { yyyy: string; mm: string; dd: string; yyyymmdd: string; ymd: string } {
+    const yyyy = String(d.getFullYear());
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return {
+        yyyy,
+        mm,
+        dd,
+        yyyymmdd: `${yyyy}${mm}${dd}`,
+        ymd: `${yyyy}-${mm}-${dd}`,
+    };
+}
 
-        // 内存高速命中防线：规避 SQLite WAL 写入延迟与毫秒级高并发重复请求
-        if (inMemoryTodayDailyNoteDocId && inMemoryTodayDailyNoteDocId.date === yyyymmdd && inMemoryTodayDailyNoteDocId.docId) {
-            return inMemoryTodayDailyNoteDocId.docId;
+function normalizeDailyHPath(rawPath: string): string {
+    const collapsed = String(rawPath || "")
+        .trim()
+        .replace(/\\+/g, "/")
+        .replace(/\/+/g, "/")
+        .replace(/\/+$/, "");
+    if (!collapsed) return "";
+    const withLeading = collapsed.startsWith("/") ? collapsed : `/${collapsed}`;
+    return withLeading === "/" ? "" : withLeading;
+}
+
+const STRICT_GO_DATE_LAYOUT_RE = /^(?:2006|01|02|[-_./ \u4e00-\u9fff])+$/;
+const STRICT_SPRIG_NOW_DATE_RE = /^now\s*\|\s*date\s*(?:"([^"]*)"|'([^']*)')$/;
+
+function renderDailyNoteSavePathFallback(pathTemplate: string, d: Date): string | null {
+    const raw = String(pathTemplate || "").trim();
+    if (!raw) return null;
+    const { yyyy, mm, dd } = formatTodayDateParts(d);
+    let hasUnsupportedSyntax = false;
+    const rendered = raw.replace(/\{\{([\s\S]*?)\}\}/g, (_all: string, expr: string): string => {
+        const trimmedExpr = expr.trim();
+        const sprigMatch = trimmedExpr.match(STRICT_SPRIG_NOW_DATE_RE);
+        const layout = sprigMatch ? (sprigMatch[1] ?? sprigMatch[2] ?? "") : "";
+        if (
+            !sprigMatch
+            || !layout
+            || !STRICT_GO_DATE_LAYOUT_RE.test(layout)
+            || !/(?:2006|01|02)/.test(layout)
+            || /_2/.test(layout)
+        ) {
+            hasUnsupportedSyntax = true;
+            return "";
         }
+        return layout.replace(/2006|01|02/g, (tok: string): string => {
+            if (tok === "2006") return yyyy;
+            if (tok === "01") return mm;
+            if (tok === "02") return dd;
+            return tok;
+        });
+    });
+    if (hasUnsupportedSyntax || rendered.includes("{") || rendered.includes("}")) {
+        return null;
+    }
+    const normalized = normalizeDailyHPath(rendered);
+    return normalized || null;
+}
 
-        const notConflict = "AND content NOT LIKE '%(冲突%' AND content NOT LIKE '%conflict%' AND content NOT LIKE '%(Conflicted%' AND hpath NOT LIKE '%(冲突%' AND hpath NOT LIKE '%conflict%' AND hpath NOT LIKE '%(Conflicted%'";
-        const dateFilter = `(ial LIKE '%custom-dailynote-${yyyymmdd}%' OR ial LIKE '%custom-dailynote-${ymd}%' OR ial LIKE '%custom-dailynote="${yyyymmdd}"%' OR ial LIKE '%custom-dailynote="${ymd}"%' OR hpath LIKE '%/${ymd}%' OR hpath LIKE '%/${yyyymmdd}%' OR hpath LIKE '%/${yyyy}/${mm}/${dd}%' OR hpath LIKE '%/${yyyy}/${mm}/${ymd}%' OR hpath LIKE '%/${yyyy}年${mm}月${dd}日%')`;
-
-        // 第一步：若指定了目标笔记本，优先在该笔记本内探查
-        let nb = notebook?.trim() || "";
-        if (nb) {
-            const sqlNb = `SELECT id FROM blocks WHERE type='d' AND box='${nb.replace(/'/g, "''")}' AND ${dateFilter} ${notConflict} ORDER BY created ASC LIMIT 1`;
-            const resNb = await lvKernelPost("/api/query/sql", { stmt: sqlNb });
-            if (resNb.code === 0 && Array.isArray(resNb.data) && resNb.data[0]?.id) {
-                const foundId = String(resNb.data[0].id);
-                inMemoryTodayDailyNoteDocId = { date: yyyymmdd, docId: foundId };
-                return foundId;
+function peekCurrentDailyNotebookSetting(): string {
+    const conf = getQuickWorkspaceConfig();
+    const explicit = conf.lifeLogNotebookId?.trim() || conf.diaryNotebookId?.trim() || conf.quickNoteNotebookId?.trim();
+    if (explicit) return explicit;
+    try {
+        if (typeof window !== "undefined") {
+            const w = window as any;
+            const stored = w.siyuan?.storage?.["local-dailynoteid"]
+                || (w.siyuan?.config?.note as any)?.dailyNote?.notebook
+                || (w.siyuan?.config?.general as any)?.dailyNote?.notebook;
+            if (stored && typeof stored === "string" && stored.trim()) {
+                return stored.trim();
+            }
+            const ls = getSafeLocalStorage();
+            const lsId = ls?.getItem("local-dailynoteid");
+            if (lsId && typeof lsId === "string" && lsId.trim()) {
+                return lsId.trim();
             }
         }
-
-        // 第二步（防冲突铁律）：全库探查是否已有今日日记（无论在哪个笔记本，只要用户/云端已创建，绝对复用，严禁新建）
-        const sqlGlobal = `SELECT id FROM blocks WHERE type='d' AND ${dateFilter} ${notConflict} ORDER BY created ASC LIMIT 1`;
-        const resGlobal = await lvKernelPost("/api/query/sql", { stmt: sqlGlobal });
-        if (resGlobal.code === 0 && Array.isArray(resGlobal.data) && resGlobal.data[0]?.id) {
-            const foundId = String(resGlobal.data[0].id);
-            inMemoryTodayDailyNoteDocId = { date: yyyymmdd, docId: foundId };
-            return foundId;
-        }
-    } catch { /* soft */ }
-    return null;
+    } catch { /* ignore */ }
+    return "";
 }
 
-export async function appendMarkdownToDailyNote(markdown: string, notebook?: string): Promise<{ ok: boolean; msg?: string; docId?: string; blockId?: string; ids?: string[] }> {
+function pickEarliestDailyNoteDocId(ids: unknown[]): string {
+    if (!Array.isArray(ids) || ids.length === 0) return "";
+    const valid = ids
+        .filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0)
+        .map((id: string): string => id.trim());
+    if (valid.length === 0) return "";
+    if (valid.length === 1) return valid[0]!;
+    const siyuanIdRe = /^(\d{14})-[a-z0-9]+$/i;
+    const indexed = valid.map((id: string, index: number): { id: string; ts: string | null; index: number } => {
+        const m = id.match(siyuanIdRe);
+        return { id, ts: m && m[1] ? m[1] : null, index };
+    });
+    indexed.sort((a, b): number => {
+        if (a.ts && b.ts) {
+            if (a.ts !== b.ts) return a.ts < b.ts ? -1 : 1;
+        } else if (a.ts && !b.ts) {
+            return -1;
+        } else if (!a.ts && b.ts) {
+            return 1;
+        }
+        return a.index - b.index;
+    });
+    return indexed[0]!.id;
+}
+
+async function normalizeDailyNotebookTarget(notebook?: string, postFn?: LvDailyNotePostFn): Promise<string> {
     let nb = notebook?.trim() || "";
     // 专属本硬熔断拦截防线：严格禁止向插件专属本写入或创建日记
     if (nb) {
         try {
-            const openNbs = await listOpenNotebooks();
-            const curNb = openNbs.find(n => n.id === nb);
+            const openNbs = await listOpenNotebooks(false, postFn);
+            const curNb = openNbs.find((n: { id: string; name: string }): boolean => n.id === nb);
             if (curNb && /管家|人脉|题库|闪卡|拾遗|生态|空间|exam|contacts|home|checkin|glean/i.test(curNb.name)) {
                 console.warn("[LvKit HardGuard] 拦截到向插件专属笔记本创建日记的非法调用，强制纠偏至主日记本:", curNb.name);
                 nb = "";
             }
         } catch { /* soft */ }
     }
+    return nb;
+}
 
-    // 1. 深度只读探查：全库是否已经存在今日日记正身（避开冲突副本）
-    let existingDocId = await findTodayDailyNoteDocId(nb);
-    if (existingDocId) {
-        const aRes = await lvKernelPost("/api/block/appendBlock", { data: markdown, dataType: "markdown", parentID: existingDocId });
-        if (aRes.code === 0) {
-            const listed = extractAppendIdsList(aRes.data);
-            return { ok: true, docId: listed.docId || existingDocId, blockId: listed.blockId, ids: listed.ids };
+async function findTodayDailyNoteDocIdByFileTree(
+    notebook: string,
+    d: Date = new Date(),
+    opts?: { postFn?: LvDailyNotePostFn; strictSprig?: boolean }
+): Promise<DailyNoteProbeResult> {
+    const targetNb = String(notebook || "").trim();
+    if (!targetNb) {
+        return { status: "unknown", reason: "missing-notebook-id" };
+    }
+    const post = opts?.postFn ?? lvKernelPost;
+
+    let pathTemplate = "";
+    try {
+        const confRes = await post("/api/notebook/getNotebookConf", { notebook: targetNb });
+        if (!confRes || confRes.code !== 0 || !confRes.data || typeof confRes.data !== "object") {
+            return { status: "unknown", reason: `getNotebookConf-failed(code=${String(confRes?.code ?? "unknown")})` };
         }
-        // 若写入失败可能是由于文档被外部删除，清空缓存重试探测
-        inMemoryTodayDailyNoteDocId = null;
-        existingDocId = await findTodayDailyNoteDocId(nb);
+        const dataObj = confRes.data as { conf?: { dailyNoteSavePath?: unknown }; dailyNoteSavePath?: unknown };
+        const rawTpl = dataObj.conf?.dailyNoteSavePath ?? dataObj.dailyNoteSavePath;
+        if (typeof rawTpl === "string" && rawTpl.trim()) {
+            pathTemplate = rawTpl.trim();
+        }
+    } catch {
+        return { status: "unknown", reason: "getNotebookConf-error" };
+    }
+    if (!pathTemplate) {
+        return { status: "unknown", reason: "empty-dailyNoteSavePath" };
     }
 
-    // 2. 若全库尚无今日日记，进入单例并发保护锁，防止多任务同一秒内并发调用 createDailyNote
-    if (!existingDocId) {
-        if (!dailyNoteCreatingPromise) {
-            dailyNoteCreatingPromise = (async () => {
-                try {
-                    // 进入锁后再复查一次（可能排在前面的并发请求刚刚建完）
-                    const doubleCheck = await findTodayDailyNoteDocId(nb);
-                    if (doubleCheck) return doubleCheck;
+    let renderedHPath = "";
+    let sprigExplicitFailure = false;
+    try {
+        const sprigRes = await post("/api/template/renderSprig", { template: pathTemplate });
+        if (sprigRes && sprigRes.code === 0 && typeof sprigRes.data === "string") {
+            const candidate = sprigRes.data.trim();
+            if (candidate.startsWith("/") && !candidate.includes("{{") && !candidate.includes("}}")) {
+                renderedHPath = normalizeDailyHPath(candidate);
+            }
+        } else if (opts?.strictSprig && sprigRes && typeof sprigRes.code === "number" && sprigRes.code !== 0) {
+            sprigExplicitFailure = true;
+        }
+    } catch { /* fallback to local date parser */ }
 
-                    // 优先让思源内核按原生默认日记本与配置创建（无参 {} 遵循思源原生设置中的默认笔记本与模板）
-                    const cResDefault = await lvKernelPost("/api/filetree/createDailyNote", {});
-                    if (cResDefault.code === 0 && cResDefault.data?.id) {
-                        return String(cResDefault.data.id);
+    if (sprigExplicitFailure) {
+        return { status: "unknown", reason: "renderSprig-failed" };
+    }
+    if (!renderedHPath) {
+        const fallback = renderDailyNoteSavePathFallback(pathTemplate, d);
+        if (fallback === null) {
+            return { status: "unknown", reason: "unsupported-template" };
+        }
+        renderedHPath = fallback;
+    }
+    if (!renderedHPath) {
+        return { status: "unknown", reason: "unresolved-dailyNoteSavePath" };
+    }
+
+    const { ymd } = formatTodayDateParts(d);
+    try {
+        const treeRes = await post("/api/filetree/getIDsByHPath", {
+            notebook: targetNb,
+            path: renderedHPath,
+        });
+        if (!treeRes || treeRes.code !== 0 || !Array.isArray(treeRes.data)) {
+            return { status: "unknown", reason: `getIDsByHPath-failed(code=${String(treeRes?.code ?? "unknown")})` };
+        }
+        if (treeRes.data.length === 0) {
+            return { status: "confirmed-missing", notebookId: targetNb, ymd };
+        }
+        const picked = pickEarliestDailyNoteDocId(treeRes.data as unknown[]);
+        if (picked) {
+            return { status: "found", docId: picked };
+        }
+        return { status: "unknown", reason: "invalid-hpath-data" };
+    } catch {
+        return { status: "unknown", reason: "getIDsByHPath-error" };
+    }
+}
+
+/**
+ * 三态探测今日日记文档（found | confirmed-missing | unknown）：
+ * 仅当 SQL（code===0 且空数组）与实时文件树 getIDsByHPath（code===0 且空数组）均明确确认缺失时返回 confirmed-missing；
+ * 任一探查失败、超时或路径模板无法解析时返回 unknown（fail-closed，严禁盲建）。
+ */
+export async function findTodayDailyNoteProbe(
+    notebook?: string,
+    opts?: LvDailyNoteResolveOptions
+): Promise<DailyNoteProbeResult> {
+    try {
+        const getNow = opts?.getNow ?? (() => new Date());
+        const d = opts?.date ? new Date(opts.date.getTime()) : new Date(getNow().getTime());
+        const { yyyy, mm, dd, yyyymmdd, ymd } = formatTodayDateParts(d);
+        const nb = notebook?.trim() || "";
+        const post = opts?.postFn ?? lvKernelPost;
+        const cacheOpts = { cacheScope: opts?.cacheScope, now: getNow() };
+
+        // 内存高速命中防线：规避 SQLite WAL 写入延迟与毫秒级高并发重复请求（严格校验日期一致且所属笔记本未漂移）
+        if (ymd === getLocalYmd(getNow())) {
+            const cachedDocId = getValidCachedTodayDailyNoteDocId(ymd, nb, opts?.cacheScope);
+            if (cachedDocId) {
+                return { status: "found", docId: cachedDocId };
+            }
+        }
+
+        const notConflict = "AND content NOT LIKE '%(冲突%' AND content NOT LIKE '%conflict%' AND content NOT LIKE '%(Conflicted%' AND hpath NOT LIKE '%(冲突%' AND hpath NOT LIKE '%conflict%' AND hpath NOT LIKE '%(Conflicted%'";
+        const dateFilter = `(ial LIKE '%custom-dailynote-${yyyymmdd}%' OR ial LIKE '%custom-dailynote-${ymd}%' OR ial LIKE '%custom-dailynote="${yyyymmdd}"%' OR ial LIKE '%custom-dailynote="${ymd}"%' OR hpath LIKE '%/${ymd}%' OR hpath LIKE '%/${yyyymmdd}%' OR hpath LIKE '%/${yyyy}/${mm}/${dd}%' OR hpath LIKE '%/${yyyy}/${mm}/${ymd}%' OR hpath LIKE '%/${yyyy}年${mm}月${dd}日%')`;
+
+        let sqlConfirmedEmpty = true;
+        let sqlFailureReason = "";
+
+        // 第一步：若指定了目标笔记本，优先在该笔记本内探查
+        if (nb) {
+            try {
+                const sqlNb = `SELECT id FROM blocks WHERE type='d' AND box='${nb.replace(/'/g, "''")}' AND ${dateFilter} ${notConflict} ORDER BY created ASC LIMIT 1`;
+                const resNb = await post("/api/query/sql", { stmt: sqlNb });
+                if (!resNb || resNb.code !== 0 || !Array.isArray(resNb.data)) {
+                    sqlConfirmedEmpty = false;
+                    sqlFailureReason = `sql-nb-failed(code=${String(resNb?.code ?? "unknown")})`;
+                } else if (resNb.data[0]?.id) {
+                    const foundId = String(resNb.data[0].id).trim();
+                    if (foundId) {
+                        commitTodayDailyNoteCache(foundId, ymd, nb, cacheOpts);
+                        return { status: "found", docId: foundId };
                     }
+                    sqlConfirmedEmpty = false;
+                    sqlFailureReason = "sql-nb-empty-id";
+                } else if (resNb.data.length > 0) {
+                    sqlConfirmedEmpty = false;
+                    sqlFailureReason = "sql-nb-invalid-row";
+                }
+            } catch {
+                sqlConfirmedEmpty = false;
+                sqlFailureReason = "sql-nb-error";
+            }
+        }
 
-                    // 回退：若无参创建失败且有指定/推导的笔记本，尝试显式传参
-                    if (!nb) nb = await resolveDailyNotebookId();
-                    if (nb) {
-                        const createPayload: Record<string, unknown> = {
-                            app: (window as any)?.siyuan?.app?.id || "siyuan",
-                            notebook: nb,
-                        };
-                        const cRes = await lvKernelPost("/api/filetree/createDailyNote", createPayload);
-                        if (cRes.code === 0 && cRes.data?.id) {
-                            return String(cRes.data.id);
+        // 第二步（防冲突铁律）：全库探查是否已有今日日记（无论在哪个笔记本，只要用户/云端已创建，绝对复用，严禁新建）
+        if (!(opts?.strictNotebook && nb)) {
+            try {
+                const sqlGlobal = `SELECT id, box FROM blocks WHERE type='d' AND ${dateFilter} ${notConflict} ORDER BY created ASC LIMIT 1`;
+                const resGlobal = await post("/api/query/sql", { stmt: sqlGlobal });
+                if (!resGlobal || resGlobal.code !== 0 || !Array.isArray(resGlobal.data)) {
+                    sqlConfirmedEmpty = false;
+                    if (!sqlFailureReason) {
+                        sqlFailureReason = `sql-global-failed(code=${String(resGlobal?.code ?? "unknown")})`;
+                    }
+                } else if (resGlobal.data[0]?.id) {
+                    const foundId = String(resGlobal.data[0].id).trim();
+                    if (foundId) {
+                        const foundBox = String(resGlobal.data[0]?.box || "").trim() || nb || peekCurrentDailyNotebookSetting();
+                        commitTodayDailyNoteCache(foundId, ymd, foundBox, cacheOpts);
+                        return { status: "found", docId: foundId };
+                    }
+                    sqlConfirmedEmpty = false;
+                    if (!sqlFailureReason) sqlFailureReason = "sql-global-empty-id";
+                } else if (resGlobal.data.length > 0) {
+                    sqlConfirmedEmpty = false;
+                    if (!sqlFailureReason) sqlFailureReason = "sql-global-invalid-row";
+                }
+            } catch {
+                sqlConfirmedEmpty = false;
+                if (!sqlFailureReason) sqlFailureReason = "sql-global-error";
+            }
+        }
+
+        // 第三步（实时内存文件树防线）：SQL 未命中时，通过 getNotebookConf -> renderSprig/日期解析 -> getIDsByHPath 实时复核文件树
+        const treeTargetNb = nb || await resolveDailyNotebookId(post);
+        if (!treeTargetNb) {
+            return { status: "unknown", reason: sqlFailureReason || "missing-target-notebook" };
+        }
+        const treeProbe = await findTodayDailyNoteDocIdByFileTree(treeTargetNb, d, {
+            postFn: post,
+            strictSprig: opts?.strictSprig,
+        });
+        if (treeProbe.status === "found") {
+            commitTodayDailyNoteCache(treeProbe.docId, ymd, treeTargetNb, {
+                cacheScope: opts?.cacheScope,
+                now: getNow(),
+            });
+            return treeProbe;
+        }
+        if (!sqlConfirmedEmpty) {
+            return { status: "unknown", reason: sqlFailureReason || "sql-not-confirmed-empty" };
+        }
+        if (treeProbe.status === "unknown") {
+            return treeProbe;
+        }
+        return {
+            status: "confirmed-missing",
+            notebookId: treeProbe.notebookId,
+            ymd: treeProbe.ymd,
+        };
+    } catch {
+        return { status: "unknown", reason: "probe-exception" };
+    }
+}
+
+/**
+ * 探测今日日记文档 ID（多级只读探针模式 + 实时文件树复核，避让冲突副本，全库既有日记绝对优先，绝不主动盲建文档）
+ */
+export async function findTodayDailyNoteDocId(
+    notebook?: string,
+    opts?: LvDailyNoteResolveOptions
+): Promise<string | null> {
+    const nb = notebook?.trim() || "";
+    const getNow = opts?.getNow ?? (() => new Date());
+    const todayYmd = getLocalYmd(getNow());
+    const cachedDocId = getValidCachedTodayDailyNoteDocId(todayYmd, nb, opts?.cacheScope);
+    if (cachedDocId) {
+        return cachedDocId;
+    }
+    const probe = await findTodayDailyNoteProbe(nb, opts);
+    return probe.status === "found" ? probe.docId : null;
+}
+
+/**
+ * 统一查找或创建今日日记文档 ID（SQL 探查 + 实时文件树三态复核 + dailyNoteCreatingMap 单飞互斥锁；unknown 状态 fail-closed 返回 null）
+ */
+export async function findOrCreateTodayDailyNoteDocId(
+    notebook?: string,
+    opts?: LvDailyNoteFindOrCreateOptions
+): Promise<string | null> {
+    const getNow = opts?.getNow ?? (() => new Date());
+    const post = opts?.postFn ?? lvKernelPost;
+    const bucket = getDailyNoteBucket(opts?.cacheScope);
+    const entryYmd = getLocalYmd(getNow());
+    const nb = opts?.skipNormalize
+        ? (notebook?.trim() || "")
+        : await normalizeDailyNotebookTarget(notebook, post);
+    const postNormYmd = getLocalYmd(getNow());
+    let expectedNotebookId = opts?.expectedNotebookId?.trim() || "";
+    let expectedYmd = opts?.expectedYmd?.trim() || "";
+
+    if (postNormYmd !== entryYmd || (expectedYmd && expectedYmd !== postNormYmd)) {
+        console.warn("[LvKit] 建档准备期间日期已跨午夜，拒绝盲建:", expectedYmd || entryYmd, "->", postNormYmd);
+        return null;
+    }
+
+    const cachedDocId = getValidCachedTodayDailyNoteDocId(postNormYmd, nb, opts?.cacheScope);
+    if (cachedDocId) {
+        return cachedDocId;
+    }
+
+    if (!opts?.skipPreLockProbe) {
+        const preProbe = await findTodayDailyNoteProbe(nb, opts);
+        if (preProbe.status === "found") {
+            return preProbe.docId;
+        }
+        if (preProbe.status === "unknown") {
+            console.warn("[LvKit] 今日日记探查状态未知，拒绝盲建:", preProbe.reason);
+            return null;
+        }
+        if (!expectedNotebookId) expectedNotebookId = preProbe.notebookId;
+        if (!expectedYmd) expectedYmd = preProbe.ymd;
+    }
+
+    const syncNb = nb || expectedNotebookId || peekCurrentDailyNotebookSetting();
+    const targetNbForFlight = syncNb || await resolveDailyNotebookId(post);
+    const lockDate = new Date(getNow().getTime());
+    const { ymd: lockYmd } = formatTodayDateParts(lockDate);
+    if (!targetNbForFlight) {
+        console.warn("[LvKit] 单飞锁前未解析到目标笔记本，拒绝盲建");
+        return null;
+    }
+    if (lockYmd !== postNormYmd || (expectedYmd && expectedYmd !== lockYmd)) {
+        console.warn("[LvKit] 单飞锁前日期已跨日，拒绝向未核验日期建档:", expectedYmd || postNormYmd, "->", lockYmd);
+        return null;
+    }
+    if (expectedNotebookId && expectedNotebookId !== targetNbForFlight) {
+        console.warn("[LvKit] 单飞锁前目标笔记本已切换，拒绝向未核验目标建档:", expectedNotebookId, "->", targetNbForFlight);
+        return null;
+    }
+
+    // 单飞互斥锁按 `${lockYmd}::${boundNb}` 键控：不同日期/不同笔记本独立入表，互不覆盖、互不阻塞；次日绝不复用前一日在途 Promise
+    const boundNb = targetNbForFlight;
+    const flightKey = `${lockYmd}::${boundNb}`;
+    let activePromise = bucket.flightMap.get(flightKey);
+    if (!activePromise) {
+        const p: Promise<DailyNoteSingleFlightResult | null> = (async (): Promise<DailyNoteSingleFlightResult | null> => {
+            try {
+                if (expectedNotebookId && expectedNotebookId !== boundNb) {
+                    console.warn("[LvKit] 单飞锁内目标笔记本已切换，拒绝向未核验目标建档:", expectedNotebookId, "->", boundNb);
+                    return null;
+                }
+                if (expectedYmd && expectedYmd !== lockYmd) {
+                    console.warn("[LvKit] 单飞锁内日期已跨日，拒绝向未核验日期建档:", expectedYmd, "->", lockYmd);
+                    return null;
+                }
+
+                const doubleCheckProbe = await findTodayDailyNoteProbe(boundNb, { ...opts, date: lockDate });
+                if (doubleCheckProbe.status === "found") {
+                    if (getLocalYmd(getNow()) !== lockYmd || !doesDocIdMatchYmdIfDated(doubleCheckProbe.docId, lockYmd)) {
+                        clearDailyNoteCacheUnlessDifferentValidDay(lockYmd, doubleCheckProbe.docId, {
+                            cacheScope: opts?.cacheScope,
+                            now: getNow(),
+                        });
+                        return null;
+                    }
+                    commitTodayDailyNoteCache(doubleCheckProbe.docId, lockYmd, boundNb, {
+                        cacheScope: opts?.cacheScope,
+                        now: getNow(),
+                    });
+                    return {
+                        docId: doubleCheckProbe.docId,
+                        ymd: lockYmd,
+                        notebookId: boundNb,
+                    };
+                }
+                if (doubleCheckProbe.status !== "confirmed-missing") {
+                    console.warn("[LvKit] 单飞锁内今日日记核验状态未知，拒绝盲建:", doubleCheckProbe.reason);
+                    return null;
+                }
+
+                // 严格校验建档目标与已核验 (probe.notebookId, probe.ymd) 完全一致，且运行期默认配置未在探测窗口内漂移、未跨午夜
+                const curYmd = getLocalYmd(getNow());
+                if (
+                    !doubleCheckProbe.notebookId
+                    || doubleCheckProbe.notebookId !== boundNb
+                    || doubleCheckProbe.ymd !== lockYmd
+                    || doubleCheckProbe.ymd !== curYmd
+                ) {
+                    console.warn("[LvKit] 今日日记探查绑定目标不一致或已跨日，拒绝盲建:", doubleCheckProbe, { lockYmd, curYmd });
+                    return null;
+                }
+                if (!nb && !opts?.strictNotebook) {
+                    const liveSettingNb = peekCurrentDailyNotebookSetting();
+                    if (liveSettingNb && liveSettingNb !== doubleCheckProbe.notebookId) {
+                        console.warn(
+                            "[LvKit] 探测期间默认日记本设置发生漂移，拒绝向未核验目标建档:",
+                            doubleCheckProbe.notebookId,
+                            "->",
+                            liveSettingNb
+                        );
+                        return null;
+                    }
+                }
+
+                // 发 /api/filetree/createDailyNote 前再次校验 getLocalYmd() === lockYmd（已跨日则中止返回 null）
+                if (getLocalYmd(getNow()) !== lockYmd) {
+                    console.warn("[LvKit] 发起 createDailyNote 前检测到已跨午夜，中止建档:", lockYmd, "->", getLocalYmd(getNow()));
+                    return null;
+                }
+
+                // 只有当 SQL 与实时文件树均明确返回 confirmed-missing 时，才允许直接向已核验的 doubleCheckProbe.notebookId 建档
+                const targetNb = doubleCheckProbe.notebookId;
+                const createPayload: Record<string, unknown> = {
+                    app: (typeof window !== "undefined" ? (window as any)?.siyuan?.app?.id : "") || "siyuan",
+                    notebook: targetNb,
+                };
+                const cRes = await post("/api/filetree/createDailyNote", createPayload);
+                const createdId = cRes && cRes.code === 0 && cRes.data?.id ? String(cRes.data.id).trim() : "";
+                if (createdId) {
+                    if (!doesDocIdMatchYmdIfDated(createdId, lockYmd)) {
+                        clearDailyNoteCacheUnlessDifferentValidDay(lockYmd, createdId, {
+                            cacheScope: opts?.cacheScope,
+                            now: getNow(),
+                        });
+                        return null;
+                    }
+                    commitTodayDailyNoteCache(createdId, lockYmd, targetNb, {
+                        cacheScope: opts?.cacheScope,
+                        now: getNow(),
+                    });
+                    return {
+                        docId: createdId,
+                        ymd: lockYmd,
+                        notebookId: targetNb,
+                    };
+                }
+                if (getLocalYmd(getNow()) !== lockYmd) {
+                    clearDailyNoteCacheUnlessDifferentValidDay(lockYmd, undefined, {
+                        cacheScope: opts?.cacheScope,
+                        now: getNow(),
+                    });
+                    return null;
+                }
+                const afterCheck = await findTodayDailyNoteProbe(targetNb, { ...opts, date: lockDate });
+                if (
+                    afterCheck.status === "found"
+                    && getLocalYmd(getNow()) === lockYmd
+                    && doesDocIdMatchYmdIfDated(afterCheck.docId, lockYmd)
+                ) {
+                    commitTodayDailyNoteCache(afterCheck.docId, lockYmd, targetNb, {
+                        cacheScope: opts?.cacheScope,
+                        now: getNow(),
+                    });
+                    return {
+                        docId: afterCheck.docId,
+                        ymd: lockYmd,
+                        notebookId: targetNb,
+                    };
+                }
+            } catch (e) {
+                console.warn("[LvKit] createDailyNote 异常:", e);
+            }
+            return null;
+        })().finally((): void => {
+            if (bucket.flightMap.get(flightKey) === p) {
+                bucket.flightMap.delete(flightKey);
+            }
+        });
+        bucket.flightMap.set(flightKey, p);
+        activePromise = p;
+    }
+
+    const resolved = await activePromise;
+    if (!resolved || !resolved.docId) {
+        return null;
+    }
+    if (getLocalYmd(getNow()) !== resolved.ymd) {
+        // 回执时已跨午夜：严禁使用回执时刻日期覆写次日缓存，清空确保次日调用必须重新查询/核验
+        clearDailyNoteCacheUnlessDifferentValidDay(resolved.ymd, resolved.docId, {
+            cacheScope: opts?.cacheScope,
+            now: getNow(),
+        });
+        return resolved.ymd === postNormYmd ? resolved.docId : null;
+    }
+    commitTodayDailyNoteCache(resolved.docId, resolved.ymd, resolved.notebookId, {
+        cacheScope: opts?.cacheScope,
+        now: getNow(),
+    });
+    return resolved.docId;
+}
+
+export const XIAOLV_DIARY_ZONE_ATTR = "custom-lv-diary-zone";
+export const XIAOLV_DIARY_ZONE_HEADING = "#### 🐴 小驴记录";
+const XIAOLV_DIARY_ZONE_TITLE_TEXT = "🐴 小驴记录";
+const XIAOLV_DIARY_ZONE_CONFIG_KEY = "lv_diary_zone_config_v1";
+
+export interface XiaolvDiaryZoneConfig {
+    defaultFolded: boolean;
+    headingLevel: 3 | 4;
+}
+
+export interface EnsureXiaolvDiaryZoneOptions {
+    defaultFolded?: boolean;
+    headingLevel?: 3 | 4;
+    postFn?: (endpoint: string, payload: Record<string, unknown>) => Promise<{ code: number; msg?: string; data?: any }>;
+}
+
+export interface EnsureXiaolvDiaryZoneResult {
+    ok: boolean;
+    docId: string;
+    zoneHeadingId: string;
+    anchorBlockId: string;
+    insertPosition: "after";
+    created: boolean;
+    folded: boolean;
+    headingLevel: 3 | 4;
+}
+
+let inMemoryXiaolvDiaryZoneConfig: XiaolvDiaryZoneConfig = {
+    defaultFolded: true,
+    headingLevel: 4,
+};
+
+export function getXiaolvDiaryZoneConfig(): XiaolvDiaryZoneConfig {
+    const ls = getSafeLocalStorage();
+    if (ls) {
+        try {
+            const raw = ls.getItem(XIAOLV_DIARY_ZONE_CONFIG_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw) as Record<string, unknown>;
+                const headingLevel: 3 | 4 = parsed.headingLevel === 3 ? 3 : 4;
+                const defaultFolded = parsed.defaultFolded !== false;
+                inMemoryXiaolvDiaryZoneConfig = { defaultFolded, headingLevel };
+                return { ...inMemoryXiaolvDiaryZoneConfig };
+            }
+        } catch { /* ignore */ }
+    }
+    const qw = getQuickWorkspaceConfig();
+    if (qw.diaryZoneHeadingLevel || qw.diaryZoneDefaultFolded !== undefined) {
+        inMemoryXiaolvDiaryZoneConfig = {
+            defaultFolded: qw.diaryZoneDefaultFolded !== false,
+            headingLevel: qw.diaryZoneHeadingLevel === 3 ? 3 : 4,
+        };
+    }
+    return { ...inMemoryXiaolvDiaryZoneConfig };
+}
+
+export function setXiaolvDiaryZoneConfig(patch: {
+    defaultFolded?: boolean;
+    headingLevel?: 3 | 4;
+}): XiaolvDiaryZoneConfig {
+    const cur = getXiaolvDiaryZoneConfig();
+    const next: XiaolvDiaryZoneConfig = {
+        defaultFolded: patch.defaultFolded !== undefined ? Boolean(patch.defaultFolded) : cur.defaultFolded,
+        headingLevel: patch.headingLevel === 3 ? 3 : (patch.headingLevel === 4 ? 4 : cur.headingLevel),
+    };
+    inMemoryXiaolvDiaryZoneConfig = next;
+    const ls = getSafeLocalStorage();
+    if (ls) {
+        try {
+            ls.setItem(XIAOLV_DIARY_ZONE_CONFIG_KEY, JSON.stringify(next));
+        } catch { /* ignore */ }
+    }
+    saveQuickWorkspaceConfig({
+        diaryZoneDefaultFolded: next.defaultFolded,
+        diaryZoneHeadingLevel: next.headingLevel,
+    });
+    return { ...next };
+}
+
+const diaryZoneMutexMap = new Map<string, Promise<unknown>>();
+
+function runWithDiaryZoneLock<T>(docId: string, task: () => Promise<T>): Promise<T> {
+    const key = String(docId || "__default__");
+    const prev = diaryZoneMutexMap.get(key) || Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const chained = prev.catch(() => {}).then(() => gate);
+    diaryZoneMutexMap.set(key, chained);
+    return prev.catch(() => {}).then(async () => {
+        try {
+            return await task();
+        } finally {
+            release();
+            if (diaryZoneMutexMap.get(key) === chained) {
+                diaryZoneMutexMap.delete(key);
+            }
+        }
+    });
+}
+
+function parseKitIalMap(ial: unknown): Record<string, string> {
+    if (!ial) return {};
+    if (typeof ial === "object" && !Array.isArray(ial)) {
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(ial as Record<string, unknown>)) {
+            if (v !== undefined && v !== null) out[k] = String(v);
+        }
+        return out;
+    }
+    const raw = String(ial);
+    const out: Record<string, string> = {};
+    for (const m of raw.matchAll(/([a-zA-Z0-9-]+)="([^"]*)"/g)) {
+        const key = m[1];
+        if (!key) continue;
+        out[key] = (m[2] ?? "")
+            .replace(/&quot;/g, '"')
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&amp;/g, "&");
+    }
+    return out;
+}
+
+function parseZoneHeadingLevel(block: { subtype?: string; subType?: string; markdown?: string; content?: string } | null | undefined, fallback = 4): number {
+    const sub = String(block?.subType || block?.subtype || "").trim().toLowerCase();
+    const mSub = sub.match(/^h([1-6])$/);
+    if (mSub && mSub[1]) return Number(mSub[1]);
+    const md = String(block?.markdown || block?.content || "").trim();
+    const mMd = md.match(/^(#{1,6})\s+/);
+    if (mMd && mMd[1]) return mMd[1].length;
+    return fallback;
+}
+
+function normalizeDiaryZoneHeadingText(raw: string): string {
+    return String(raw || "")
+        .replace(/\{:[^}]*\}\s*$/g, "")
+        .replace(/<[^>]+>/g, "")
+        .replace(/^#{1,6}\s+/, "")
+        .replace(/\u200b/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+/**
+ * 在指定日记文档确保存在唯一「🐴 小驴记录」标题区（默认四级 #### 🐴 小驴记录 + 默认折叠 fold="1"）。
+ * 1. 先按块属性 custom-lv-diary-zone="1"（兼容标题文本 "🐴 小驴记录" 回退）查找既有标题块（尊重用户手动拖拽位置）；
+ * 2. 若不存在则在日记底部创建 #### 🐴 小驴记录 并按配置设置 fold="1"（内置按 docId 的并发单飞互斥锁）；
+ * 3. 返回 zoneHeadingId 与精确锚点 anchorBlockId（该区最后一条子记录或标题本身）。
+ */
+export async function ensureXiaolvDiaryZone(
+    docId: string,
+    opts?: EnsureXiaolvDiaryZoneOptions
+): Promise<EnsureXiaolvDiaryZoneResult> {
+    if (!docId || typeof docId !== "string" || !docId.trim()) {
+        throw new Error("[DIARY-ZONE-INVALID-DOC] docId is required");
+    }
+    const targetDocId = docId.trim();
+    const post = opts?.postFn || lvKernelPost;
+    const cfg = getXiaolvDiaryZoneConfig();
+    const headingLevel: 3 | 4 = opts?.headingLevel === 3 ? 3 : (opts?.headingLevel === 4 ? 4 : cfg.headingLevel);
+    const defaultFolded = opts?.defaultFolded !== undefined ? Boolean(opts.defaultFolded) : cfg.defaultFolded;
+
+    return runWithDiaryZoneLock(targetDocId, async () => {
+        let children: Array<{ id: string; type?: string; subtype?: string; subType?: string; content?: string; markdown?: string; ial?: string }> = [];
+        try {
+            const childRes = await post("/api/block/getChildBlocks", { id: targetDocId });
+            if (childRes?.code === 0 && Array.isArray(childRes.data)) {
+                children = childRes.data.filter((b: any) => b && typeof b.id === "string" && b.id.trim().length > 0);
+            }
+        } catch {
+            children = [];
+        }
+
+        let foundHeading: { id: string; type?: string; subtype?: string; subType?: string; content?: string; markdown?: string; ial?: string } | null = null;
+        let foundByFallbackText = false;
+
+        // 1a. Live child blocks lookup by custom-lv-diary-zone="1"
+        for (const ch of children) {
+            const ialMap = parseKitIalMap(ch.ial);
+            if (ialMap[XIAOLV_DIARY_ZONE_ATTR] === "1") {
+                foundHeading = ch;
+                break;
+            }
+            if (ch.type === "h" || /^h[1-6]$/i.test(String(ch.subType || ch.subtype || ""))) {
+                try {
+                    const attrRes = await post("/api/attr/getBlockAttrs", { id: ch.id });
+                    if (attrRes?.code === 0 && attrRes.data?.[XIAOLV_DIARY_ZONE_ATTR] === "1") {
+                        foundHeading = ch;
+                        break;
+                    }
+                } catch { /* soft */ }
+            }
+        }
+
+        // 1b. Live child blocks fallback lookup by heading text "🐴 小驴记录"
+        if (!foundHeading) {
+            for (const ch of children) {
+                const isHeading = ch.type === "h" || /^h[1-6]$/i.test(String(ch.subType || ch.subtype || ""));
+                if (!isHeading) continue;
+                const norm = normalizeDiaryZoneHeadingText(ch.content || ch.markdown || "");
+                if (norm === XIAOLV_DIARY_ZONE_TITLE_TEXT || norm === "小驴记录") {
+                    foundHeading = ch;
+                    foundByFallbackText = true;
+                    break;
+                }
+            }
+        }
+
+        // 1c. SQL fallback when getChildBlocks did not reveal it
+        if (!foundHeading) {
+            try {
+                const escId = escapeSql(targetDocId);
+                const byAttrRes = await post("/api/query/sql", {
+                    stmt: `SELECT b.id, b.type, b.subtype, b.content FROM attributes a JOIN blocks b ON a.block_id=b.id WHERE b.root_id='${escId}' AND a.name='${XIAOLV_DIARY_ZONE_ATTR}' AND a.value='1' ORDER BY b.sort ASC LIMIT 5`,
+                });
+                if (byAttrRes?.code === 0 && Array.isArray(byAttrRes.data)) {
+                    for (const row of byAttrRes.data) {
+                        const bid = String(row.id || "");
+                        if (!bid) continue;
+                        const domRes = await post("/api/block/getBlockDOM", { id: bid }).catch((): null => null);
+                        if (!domRes || (domRes.code === 0 && domRes.data?.id === bid)) {
+                            foundHeading = {
+                                id: bid,
+                                type: row.type ? String(row.type) : "h",
+                                subtype: row.subtype ? String(row.subtype) : `h${headingLevel}`,
+                                content: row.content ? String(row.content) : "",
+                            };
+                            break;
                         }
                     }
-                } catch (e) {
-                    console.warn("[LvKit] createDailyNote 异常:", e);
                 }
-                return "";
-            })().finally(() => {
-                dailyNoteCreatingPromise = null;
-            });
+                if (!foundHeading) {
+                    const byTextRes = await post("/api/query/sql", {
+                        stmt: `SELECT id, type, subtype, content FROM blocks WHERE root_id='${escId}' AND type='h' AND content LIKE '%🐴 小驴记录%' ORDER BY sort ASC LIMIT 5`,
+                    });
+                    if (byTextRes?.code === 0 && Array.isArray(byTextRes.data)) {
+                        for (const row of byTextRes.data) {
+                            const bid = String(row.id || "");
+                            if (!bid) continue;
+                            const domRes = await post("/api/block/getBlockDOM", { id: bid }).catch((): null => null);
+                            if (!domRes || (domRes.code === 0 && domRes.data?.id === bid)) {
+                                foundHeading = {
+                                    id: bid,
+                                    type: "h",
+                                    subtype: row.subtype ? String(row.subtype) : `h${headingLevel}`,
+                                    content: row.content ? String(row.content) : "",
+                                };
+                                foundByFallbackText = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch { /* soft */ }
         }
-        existingDocId = await dailyNoteCreatingPromise;
-        if (existingDocId) {
-            const d = new Date();
-            const yyyymmdd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-            inMemoryTodayDailyNoteDocId = { date: yyyymmdd, docId: existingDocId };
+
+        if (foundHeading) {
+            if (foundByFallbackText) {
+                const tagRes = await post("/api/attr/setBlockAttrs", {
+                    id: foundHeading.id,
+                    attrs: { [XIAOLV_DIARY_ZONE_ATTR]: "1" },
+                });
+                if (tagRes && typeof tagRes.code === "number" && tagRes.code !== 0) {
+                    throw new Error(`[DIARY-ZONE-API] setBlockAttrs failed on ${foundHeading.id}: ${tagRes.msg || tagRes.code}`);
+                }
+            }
+            let folded = false;
+            try {
+                const attrRes = await post("/api/attr/getBlockAttrs", { id: foundHeading.id });
+                folded = attrRes?.data?.fold === "1";
+            } catch {
+                folded = false;
+            }
+            const actualLevelNum = parseZoneHeadingLevel(foundHeading, headingLevel);
+            const resolvedLevel: 3 | 4 = actualLevelNum === 3 ? 3 : 4;
+
+            let anchorBlockId = foundHeading.id;
+            const zoneIdx = children.findIndex((c) => c.id === foundHeading!.id);
+            if (zoneIdx >= 0) {
+                let lastInZoneId: string | null = null;
+                for (let i = zoneIdx + 1; i < children.length; i++) {
+                    const ch = children[i];
+                    if (ch && (ch.type === "h" || /^h[1-6]$/i.test(String(ch.subType || ch.subtype || "")))) {
+                        const lvl = parseZoneHeadingLevel(ch, 6);
+                        if (lvl <= actualLevelNum) {
+                            break;
+                        }
+                    }
+                    if (ch?.id) lastInZoneId = ch.id;
+                }
+                if (lastInZoneId) anchorBlockId = lastInZoneId;
+            }
+
+            return {
+                ok: true,
+                docId: targetDocId,
+                zoneHeadingId: foundHeading.id,
+                anchorBlockId,
+                insertPosition: "after",
+                created: false,
+                folded,
+                headingLevel: resolvedLevel,
+            };
+        }
+
+        // 2. Create heading at bottom of diary
+        const headingPrefix = "#".repeat(headingLevel);
+        const headingMd = `${headingPrefix} ${XIAOLV_DIARY_ZONE_TITLE_TEXT}\n{: ${XIAOLV_DIARY_ZONE_ATTR}="1" }`;
+        const appendRes = await post("/api/block/appendBlock", {
+            parentID: targetDocId,
+            dataType: "markdown",
+            data: headingMd,
+        });
+        if (!appendRes || appendRes.code !== 0) {
+            throw new Error(`[DIARY-ZONE-CREATE-FAILED] appendBlock failed on ${targetDocId}: ${appendRes?.msg || appendRes?.code || "unknown"}`);
+        }
+        const zoneHeadingId = extractAppendIds(appendRes.data).blockId;
+        if (!zoneHeadingId) {
+            throw new Error(`[DIARY-ZONE-CREATE-FAILED] appendBlock returned no zoneHeadingId for ${targetDocId}`);
+        }
+
+        const attrsToSet: Record<string, string> = {
+            [XIAOLV_DIARY_ZONE_ATTR]: "1",
+        };
+        if (defaultFolded) {
+            attrsToSet.fold = "1";
+        }
+        const setRes = await post("/api/attr/setBlockAttrs", {
+            id: zoneHeadingId,
+            attrs: attrsToSet,
+        });
+        if (setRes && typeof setRes.code === "number" && setRes.code !== 0) {
+            throw new Error(`[DIARY-ZONE-API] setBlockAttrs failed on ${zoneHeadingId}: ${setRes.msg || setRes.code}`);
+        }
+
+        return {
+            ok: true,
+            docId: targetDocId,
+            zoneHeadingId,
+            anchorBlockId: zoneHeadingId,
+            insertPosition: "after",
+            created: true,
+            folded: defaultFolded,
+            headingLevel,
+        };
+    });
+}
+
+export interface XiaolvLifeLogEntry {
+    time?: string;
+    date?: string;
+    type: string;
+    icon?: string;
+    body: string;
+    tags?: string[];
+    refDocId?: string;
+    refDocTitle?: string;
+    source?: string;
+    module?: string;
+    eventId?: string;
+    target?: string;
+    amount?: string | number;
+    quantity?: string | number;
+    odometer?: string | number;
+    extraAttrs?: Record<string, string>;
+    notebook?: string;
+    docId?: string;
+    useDiaryZone?: boolean;
+}
+
+export interface ParsedXiaolvLifeLog {
+    blockId: string;
+    docId?: string;
+    time: string;
+    date: string;
+    type: string;
+    body: string;
+    tags: string[];
+    refDocId?: string;
+    refDocTitle?: string;
+    source: string;
+    module: string;
+    eventId?: string;
+    target?: string;
+    amount?: string;
+    quantity?: string;
+    odometer?: string;
+    rawContent: string;
+    attrs: Record<string, string>;
+    isLegacy: boolean;
+}
+
+function normalizeKitLifeLogType(rawType: string): string {
+    return String(rawType || "日常记录")
+        .replace(/[\r\n\s]+/g, " ")
+        .replace(/[：:]/g, "-")
+        .trim() || "日常记录";
+}
+
+function escapeKitIalValue(v: string): string {
+    return String(v ?? "").replace(/[\r\n]+/g, " ").replace(/"/g, "&quot;");
+}
+
+function validateKitCustomAttrMap(attrs: Record<string, string>): Record<string, string> {
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(attrs)) {
+        if (!/^custom-[a-z][a-z0-9-]*$/.test(k)) {
+            throw new Error(`[DIARY-ATTR-INVALID] Illegal custom attribute name "${k}"`);
+        }
+        if (v !== undefined && v !== null) {
+            clean[k] = String(v);
+        }
+    }
+    return clean;
+}
+
+export function buildXiaolvLifeLogAttrs(entry: XiaolvLifeLogEntry): Record<string, string> {
+    const pad = (v: number) => String(v).padStart(2, "0");
+    const now = new Date();
+    const dateStr = (entry.date || `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`).slice(0, 10);
+    const timeStr = entry.time || `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const cleanType = normalizeKitLifeLogType(entry.type);
+    const cleanSource = String(entry.source || "lv-launchpad").trim() || "lv-launchpad";
+    const cleanModule = String(entry.module || "lifelog").trim() || "lifelog";
+    const eventId = String(
+        entry.eventId ||
+        `ll-${cleanSource.replace(/[^a-zA-Z0-9_-]/g, "")}-${cleanModule.replace(/[^a-zA-Z0-9_-]/g, "")}-${dateStr.replace(/-/g, "")}-${timeStr.replace(/:/g, "")}-${Math.random().toString(36).slice(2, 8)}`
+    ).trim();
+    const attrs: Record<string, string> = {
+        "custom-lifelog-type": cleanType,
+        "custom-lv-lifelog": "1",
+        "custom-lv-source": cleanSource,
+        "custom-lv-module": cleanModule,
+        "custom-lv-event-id": eventId,
+        "custom-lv-date": dateStr,
+    };
+    if (entry.target !== undefined && String(entry.target).trim() !== "") {
+        attrs["custom-lv-target"] = String(entry.target).trim();
+    }
+    if (entry.amount !== undefined && String(entry.amount).trim() !== "") {
+        attrs["custom-lv-amount"] = String(entry.amount).trim();
+    }
+    if (entry.quantity !== undefined && String(entry.quantity).trim() !== "") {
+        attrs["custom-lv-quantity"] = String(entry.quantity).trim();
+    }
+    if (entry.odometer !== undefined && String(entry.odometer).trim() !== "") {
+        attrs["custom-lv-odometer"] = String(entry.odometer).trim();
+    }
+    if (entry.extraAttrs) {
+        for (const [k, v] of Object.entries(entry.extraAttrs)) {
+            attrs[k] = v;
+        }
+    }
+    return validateKitCustomAttrMap(attrs);
+}
+
+export function formatXiaolvLifeLogText(entry: XiaolvLifeLogEntry): string {
+    const pad = (v: number) => String(v).padStart(2, "0");
+    const now = new Date();
+    const timeStr = entry.time || `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const cleanType = normalizeKitLifeLogType(entry.type);
+    const cleanIcon = entry.icon ? String(entry.icon).trim() : "";
+    const typeLabel = cleanIcon && !cleanType.startsWith(cleanIcon) ? `${cleanIcon} ${cleanType}` : cleanType;
+    const cleanBody = String(entry.body || "已记录").replace(/[\r\n\s]+/g, " ").trim() || "已记录";
+    const tagsPart = entry.tags?.length
+        ? ` ${entry.tags.map((t) => String(t).trim()).filter(Boolean).map((t) => (t.startsWith("#") ? t : `#${t}`)).join(" ")}`
+        : "";
+    const refPart = entry.refDocId
+        ? ` ((${entry.refDocId} "${(entry.refDocTitle || "查看台账").replace(/"/g, "'")}"))`
+        : "";
+    return `${timeStr} ${typeLabel}：${cleanBody}${tagsPart}${refPart}`;
+}
+
+export function formatXiaolvLifeLogMarkdown(entry: XiaolvLifeLogEntry): string {
+    const text = formatXiaolvLifeLogText(entry);
+    const attrs = buildXiaolvLifeLogAttrs(entry);
+    const ialStr = Object.entries(attrs)
+        .map(([k, v]) => `${k}="${escapeKitIalValue(v)}"`)
+        .join(" ");
+    return `${text}\n{: ${ialStr} }`;
+}
+
+export function parseXiaolvLifeLogBlock(block: {
+    id?: string;
+    blockId?: string;
+    content?: string;
+    markdown?: string;
+    dom?: string;
+    root_id?: string;
+    rootID?: string;
+    created?: string;
+    updated?: string;
+    ial?: string | Record<string, string>;
+    attrs?: Record<string, string>;
+} | null | undefined): ParsedXiaolvLifeLog | null {
+    if (!block || typeof block !== "object") return null;
+
+    const attrs: Record<string, string> = {
+        ...parseKitIalMap(block.ial),
+        ...(block.attrs || {}),
+    };
+    if (block.dom) {
+        const domOpen = block.dom.match(/<div[^>]*data-node-id="[^"]*"[^>]*>/i)?.[0] || block.dom;
+        for (const m of domOpen.matchAll(/(custom-[a-z][a-z0-9-]*)="([^"]*)"/g)) {
+            const key = m[1];
+            if (!key || attrs[key]) continue;
+            attrs[key] = (m[2] ?? "")
+                .replace(/&quot;/g, '"')
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/&amp;/g, "&");
+        }
+    }
+    if (block.markdown) {
+        const mdIalMatch = block.markdown.match(/\{:([^}]*)\}\s*$/);
+        if (mdIalMatch && mdIalMatch[1]) {
+            const mdAttrs = parseKitIalMap(mdIalMatch[1]);
+            for (const [k, v] of Object.entries(mdAttrs)) {
+                if (!attrs[k]) attrs[k] = v;
+            }
         }
     }
 
-    // 3. 若文档获取成功，统一调用公开稳定接口 appendBlock 追加 Markdown
-    if (existingDocId) {
-        const aRes = await lvKernelPost("/api/block/appendBlock", { data: markdown, dataType: "markdown", parentID: existingDocId });
+    let rawText = "";
+    if (typeof block.markdown === "string" && block.markdown.trim()) {
+        rawText = block.markdown.replace(/\{:[^}]*\}\s*$/g, "").trim();
+    } else if (typeof block.content === "string" && block.content.trim()) {
+        rawText = block.content.trim();
+    } else if (typeof block.dom === "string" && block.dom.trim()) {
+        const matches = [...block.dom.matchAll(/<div[^>]*contenteditable="true"[^>]*>([\s\S]*?)<\/div>/gi)];
+        rawText = matches
+            .map((m) => (m[1] ?? "").replace(/<[^>]+>/g, ""))
+            .join("\n")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, '"')
+            .replace(/\u200b/g, "")
+            .trim();
+    }
+    rawText = rawText.replace(/^[-*+]\s+/, "").trim();
+    if (!rawText) return null;
+
+    const hasUnifiedFlag = attrs["custom-lv-lifelog"] === "1";
+    const hasLegacyType = Boolean(attrs["custom-lifelog-type"]);
+    const hasEnvelopeEvent = attrs["custom-lv-type"] === "event-log";
+    const lineMatch = rawText.match(/^(\d{2}:\d{2})\s+([^：:]+)[：:]\s*([\s\S]+)$/);
+
+    if (!hasUnifiedFlag && !hasLegacyType && !hasEnvelopeEvent && !lineMatch) {
+        return null;
+    }
+
+    const time = lineMatch?.[1] || "";
+    const parsedType = lineMatch?.[2]?.trim() || attrs["custom-lifelog-type"] || attrs["custom-lv-action"] || "日常记录";
+    let bodyAndRest = lineMatch?.[3]?.trim() || rawText;
+
+    let refDocId: string | undefined;
+    let refDocTitle: string | undefined;
+    const refMatch = bodyAndRest.match(/\s*\(\(([a-zA-Z0-9-]+)(?:\s+["']([^"']*)["'])?\)\)\s*$/);
+    if (refMatch) {
+        refDocId = refMatch[1];
+        refDocTitle = refMatch[2] || undefined;
+        bodyAndRest = bodyAndRest.slice(0, refMatch.index).trim();
+    }
+
+    const tags: string[] = [];
+    const bodyWithoutTags = bodyAndRest
+        .replace(/(?:^|\s)#([^\s#]+)/g, (_m, tag: string) => {
+            const cleanTag = tag.replace(/#$/, "").trim();
+            if (cleanTag && !tags.includes(cleanTag)) tags.push(cleanTag);
+            return "";
+        })
+        .replace(/\s+/g, " ")
+        .trim();
+
+    let dateStr = attrs["custom-lv-date"] || attrs["custom-lv-biz-date"] || "";
+    if (!dateStr && block.created) {
+        const c = String(block.created).replace(/\D/g, "");
+        if (c.length >= 8) {
+            dateStr = `${c.slice(0, 4)}-${c.slice(4, 6)}-${c.slice(6, 8)}`;
+        }
+    }
+
+    return {
+        blockId: String(block.blockId || block.id || ""),
+        docId: block.root_id || block.rootID,
+        time,
+        date: dateStr,
+        type: attrs["custom-lifelog-type"] || parsedType,
+        body: bodyWithoutTags || bodyAndRest,
+        tags,
+        refDocId,
+        refDocTitle,
+        source: attrs["custom-lv-source"] || "legacy",
+        module: attrs["custom-lv-module"] || "lifelog",
+        eventId: attrs["custom-lv-event-id"],
+        target: attrs["custom-lv-target"],
+        amount: attrs["custom-lv-amount"],
+        quantity: attrs["custom-lv-quantity"],
+        odometer: attrs["custom-lv-odometer"],
+        rawContent: rawText,
+        attrs,
+        isLegacy: !hasUnifiedFlag,
+    };
+}
+
+export async function appendMarkdownToDailyNote(
+    markdown: string,
+    notebook?: string,
+    opts?: { useDiaryZone?: boolean; attrs?: Record<string, string> }
+): Promise<{ ok: boolean; msg?: string; docId?: string; blockId?: string; ids?: string[]; zoneHeadingId?: string }> {
+    const nb = await normalizeDailyNotebookTarget(notebook);
+
+    const writeIntoDoc = async (docId: string): Promise<{ ok: boolean; msg?: string; docId?: string; blockId?: string; ids?: string[]; zoneHeadingId?: string }> => {
+        if (opts?.useDiaryZone !== false) {
+            const zone = await ensureXiaolvDiaryZone(docId);
+            const iRes = await lvKernelPost("/api/block/insertBlock", {
+                previousID: zone.anchorBlockId,
+                parentID: docId,
+                dataType: "markdown",
+                data: markdown,
+            });
+            if (iRes.code === 0) {
+                const listed = extractAppendIdsList(iRes.data);
+                if (listed.blockId && opts?.attrs && Object.keys(opts.attrs).length > 0) {
+                    const attrRes = await lvKernelPost("/api/attr/setBlockAttrs", {
+                        id: listed.blockId,
+                        attrs: opts.attrs,
+                    });
+                    if (attrRes && typeof attrRes.code === "number" && attrRes.code !== 0) {
+                        return { ok: false, msg: attrRes.msg || "写入块属性失败", docId, zoneHeadingId: zone.zoneHeadingId };
+                    }
+                }
+                return {
+                    ok: true,
+                    docId: listed.docId || docId,
+                    blockId: listed.blockId,
+                    ids: listed.ids,
+                    zoneHeadingId: zone.zoneHeadingId,
+                };
+            }
+            return { ok: false, msg: iRes.msg || "插入日记分区块失败", docId, zoneHeadingId: zone.zoneHeadingId };
+        }
+        const aRes = await lvKernelPost("/api/block/appendBlock", { data: markdown, dataType: "markdown", parentID: docId });
         if (aRes.code === 0) {
             const listed = extractAppendIdsList(aRes.data);
-            return { ok: true, docId: listed.docId || existingDocId, blockId: listed.blockId, ids: listed.ids };
+            if (listed.blockId && opts?.attrs && Object.keys(opts.attrs).length > 0) {
+                await lvKernelPost("/api/attr/setBlockAttrs", { id: listed.blockId, attrs: opts.attrs });
+            }
+            return { ok: true, docId: listed.docId || docId, blockId: listed.blockId, ids: listed.ids };
         }
         return { ok: false, msg: aRes.msg || "追加块失败" };
+    };
+
+    // 1. 深度只读探查：全库是否已经存在今日日记正身（避开冲突副本）
+    const initialProbe = await findTodayDailyNoteProbe(nb);
+    let existingDocId: string | null = initialProbe.status === "found" ? initialProbe.docId : null;
+    let confirmedMissingProbe: { notebookId: string; ymd: string } | null =
+        initialProbe.status === "confirmed-missing"
+            ? { notebookId: initialProbe.notebookId, ymd: initialProbe.ymd }
+            : null;
+    if (existingDocId) {
+        try {
+            const wr = await writeIntoDoc(existingDocId);
+            if (wr.ok) return wr;
+        } catch {
+            // 若写入失败可能是由于文档被外部删除，清空缓存重试探测
+        }
+        invalidateTodayDailyNoteCache();
+        const retryProbe = await findTodayDailyNoteProbe(nb);
+        if (retryProbe.status === "found") {
+            existingDocId = retryProbe.docId;
+        } else if (retryProbe.status === "unknown") {
+            return { ok: false, msg: `无法确认今日日记状态（${retryProbe.reason}），已中止自动创建以防重复` };
+        } else {
+            existingDocId = null;
+            confirmedMissingProbe = { notebookId: retryProbe.notebookId, ymd: retryProbe.ymd };
+        }
+    } else if (initialProbe.status === "unknown") {
+        return { ok: false, msg: `无法确认今日日记状态（${initialProbe.reason}），已中止自动创建以防重复` };
+    }
+
+    // 2. 若全库明确查空 (confirmed-missing)，进入单例并发保护锁 + 实时文件树二次复核，防止多任务同一秒内并发调用 createDailyNote
+    if (!existingDocId) {
+        existingDocId = await findOrCreateTodayDailyNoteDocId(nb, {
+            skipPreLockProbe: true,
+            expectedNotebookId: confirmedMissingProbe?.notebookId,
+            expectedYmd: confirmedMissingProbe?.ymd,
+        });
+    }
+
+    // 3. 若文档获取成功，统一写入当日日记折叠区（或显式关闭分区时 appendBlock）
+    if (existingDocId) {
+        return await writeIntoDoc(existingDocId);
     }
 
     return { ok: false, msg: "无法定位或创建今日日记文档" };
 }
 
 /**
- * 结构化追加单条符合全生态 LifeLog 规范的时间线段落至今日日记
+ * 统一标准 LifeLog 写入今日日记（自动落入「#### 🐴 小驴记录」折叠区并附带全生态结构化属性）
+ */
+export async function appendXiaolvLifeLogToDailyNote(
+    entry: XiaolvLifeLogEntry,
+    opts?: { postFn?: (endpoint: string, payload: Record<string, unknown>) => Promise<{ code: number; msg?: string; data?: any }> }
+): Promise<{
+    ok: boolean;
+    blockId?: string;
+    docId?: string;
+    ids?: string[];
+    zoneHeadingId?: string;
+    attrs: Record<string, string>;
+    text: string;
+    deduplicated?: boolean;
+    msg?: string;
+}> {
+    const attrs = buildXiaolvLifeLogAttrs(entry);
+    const text = formatXiaolvLifeLogText(entry);
+    const md = formatXiaolvLifeLogMarkdown({
+        ...entry,
+        eventId: attrs["custom-lv-event-id"],
+        date: attrs["custom-lv-date"],
+    });
+    const post = opts?.postFn || lvKernelPost;
+
+    if (entry.eventId) {
+        try {
+            const docCond = entry.docId ? `b.root_id='${escapeSql(entry.docId)}' AND ` : "";
+            const dupRes = await post("/api/query/sql", {
+                stmt: `SELECT b.id, b.root_id FROM attributes a JOIN blocks b ON a.block_id=b.id WHERE ${docCond}a.name='custom-lv-event-id' AND a.value='${escapeSql(entry.eventId)}' LIMIT 3`,
+            });
+            if (dupRes?.code === 0 && Array.isArray(dupRes.data)) {
+                for (const row of dupRes.data) {
+                    const bid = String(row.id || "");
+                    if (!bid) continue;
+                    const domRes = await post("/api/block/getBlockDOM", { id: bid }).catch((): null => null);
+                    if (!domRes || (domRes.code === 0 && domRes.data?.id === bid)) {
+                        return {
+                            ok: true,
+                            docId: row.root_id ? String(row.root_id) : entry.docId,
+                            blockId: bid,
+                            attrs,
+                            text,
+                            deduplicated: true,
+                        };
+                    }
+                }
+            }
+        } catch { /* soft */ }
+    }
+
+    if (entry.docId?.trim()) {
+        const docId = entry.docId.trim();
+        let zoneHeadingId: string | undefined;
+        let txRes: { code: number; msg?: string; data?: any };
+        if (entry.useDiaryZone !== false) {
+            const zone = await ensureXiaolvDiaryZone(docId, { postFn: opts?.postFn });
+            zoneHeadingId = zone.zoneHeadingId;
+            txRes = await post("/api/block/insertBlock", {
+                previousID: zone.anchorBlockId,
+                parentID: docId,
+                dataType: "markdown",
+                data: md,
+            });
+        } else {
+            txRes = await post("/api/block/appendBlock", {
+                parentID: docId,
+                dataType: "markdown",
+                data: md,
+            });
+        }
+        if (txRes?.code === 0) {
+            const listed = extractAppendIdsList(txRes.data);
+            if (listed.blockId) {
+                const attrRes = await post("/api/attr/setBlockAttrs", { id: listed.blockId, attrs });
+                if (attrRes && typeof attrRes.code === "number" && attrRes.code !== 0) {
+                    return { ok: false, docId, zoneHeadingId, attrs, text, msg: attrRes.msg || "写入块属性失败" };
+                }
+            }
+            return {
+                ok: true,
+                docId: listed.docId || docId,
+                blockId: listed.blockId,
+                ids: listed.ids,
+                zoneHeadingId,
+                attrs,
+                text,
+            };
+        }
+        return { ok: false, docId, zoneHeadingId, attrs, text, msg: txRes?.msg || "写入 LifeLog 失败" };
+    }
+
+    const res = await appendMarkdownToDailyNote(md, entry.notebook, {
+        useDiaryZone: entry.useDiaryZone,
+        attrs,
+    });
+    return {
+        ...res,
+        attrs,
+        text,
+    };
+}
+
+/**
+ * 跨插件统一 LifeLog 查询接口（兼容新版 custom-lv-lifelog="1" 与旧版 custom-lifelog-type）
+ */
+export async function queryXiaolvLifeLogs(filter?: {
+    date?: string;
+    source?: string;
+    module?: string;
+    type?: string;
+    target?: string;
+    docId?: string;
+    limit?: number;
+    postFn?: (endpoint: string, payload: Record<string, unknown>) => Promise<{ code: number; msg?: string; data?: any }>;
+}): Promise<ParsedXiaolvLifeLog[]> {
+    const post = filter?.postFn || lvKernelPost;
+    const limit = Math.max(1, Math.min(2000, Number(filter?.limit || 100)));
+    const conditions: string[] = [
+        `(a.name = 'custom-lv-lifelog' OR a.name = 'custom-lifelog-type' OR (a.name = 'custom-lv-type' AND a.value = 'event-log'))`,
+    ];
+    if (filter?.docId) {
+        conditions.push(`b.root_id = '${escapeSql(filter.docId)}'`);
+    }
+    const stmt = `SELECT DISTINCT b.id, b.root_id, b.content, b.markdown, b.ial, b.created, b.updated
+FROM attributes a
+JOIN blocks b ON a.block_id = b.id
+WHERE ${conditions.join(" AND ")}
+ORDER BY b.created DESC, b.id DESC
+LIMIT ${Math.min(2000, limit * 4)}`;
+
+    const res = await post("/api/query/sql", { stmt });
+    if (res?.code !== 0 || !Array.isArray(res.data)) return [];
+
+    const normDateFilter = filter?.date ? String(filter.date).replace(/\D/g, "").slice(0, 8) : "";
+    const normDateHyphen = normDateFilter.length === 8
+        ? `${normDateFilter.slice(0, 4)}-${normDateFilter.slice(4, 6)}-${normDateFilter.slice(6, 8)}`
+        : (filter?.date || "");
+
+    const seenIds = new Set<string>();
+    const results: ParsedXiaolvLifeLog[] = [];
+    for (const row of res.data) {
+        const blockId = String(row.id || "");
+        if (!blockId || seenIds.has(blockId)) continue;
+        seenIds.add(blockId);
+
+        let attrs: Record<string, string> = parseKitIalMap(row.ial);
+        if (Object.keys(attrs).length === 0) {
+            try {
+                const attrRes = await post("/api/attr/getBlockAttrs", { id: blockId });
+                if (attrRes?.code === 0 && attrRes.data) attrs = attrRes.data;
+            } catch { /* soft */ }
+        }
+
+        const parsed = parseXiaolvLifeLogBlock({
+            id: blockId,
+            root_id: row.root_id ? String(row.root_id) : undefined,
+            content: row.content ? String(row.content) : undefined,
+            markdown: row.markdown ? String(row.markdown) : undefined,
+            ial: row.ial ? String(row.ial) : undefined,
+            created: row.created ? String(row.created) : undefined,
+            updated: row.updated ? String(row.updated) : undefined,
+            attrs,
+        });
+        if (!parsed) continue;
+
+        if (normDateHyphen) {
+            const pDateNorm = (parsed.date || "").replace(/\D/g, "").slice(0, 8);
+            if (pDateNorm !== normDateFilter && parsed.date !== normDateHyphen) continue;
+        }
+        if (filter?.source && parsed.source !== filter.source) continue;
+        if (filter?.module && parsed.module !== filter.module) continue;
+        if (filter?.type && parsed.type !== filter.type) continue;
+        if (filter?.target && parsed.target !== filter.target) continue;
+
+        results.push(parsed);
+        if (results.length >= limit) break;
+    }
+
+    return results;
+}
+
+/**
+ * 极速记事写入今日日记（统一接入「#### 🐴 小驴记录」折叠区）
+ */
+export async function appendQuickNoteToDailyNote(
+    textOrOpts: string | { text: string; notebook?: string; tags?: string[]; source?: string; module?: string },
+    notebook?: string
+): Promise<{ ok: boolean; msg?: string; docId?: string; blockId?: string; ids?: string[]; zoneHeadingId?: string }> {
+    if (typeof textOrOpts === "string") {
+        return appendMarkdownToDailyNote(textOrOpts, notebook);
+    }
+    const md = textOrOpts.text;
+    return appendMarkdownToDailyNote(md, textOrOpts.notebook ?? notebook);
+}
+
+/**
+ * 结构化追加单条符合全生态 LifeLog 规范的时间线段落至今日日记（已无缝升级为统一标准协议 + 折叠小驴区）
  */
 export async function appendLifeLogEntryToDailyNote(
-    entry: { time?: string; type: string; body: string; tags?: string[]; refDocId?: string; refDocTitle?: string },
+    entry: XiaolvLifeLogEntry,
     notebook?: string
-): Promise<{ ok: boolean; blockId?: string; docId?: string; msg?: string }> {
-    const pad = (v: number) => String(v).padStart(2, "0");
-    const now = new Date();
-    const timeStr = entry.time || `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const cleanType = (entry.type || "日常记录").replace(/[\r\n\s]+/g, " ").replace(/[：:]/g, "-").trim();
-    const cleanBody = (entry.body || "已记录").replace(/[\r\n\s]+/g, " ").trim();
-    const tagsPart = entry.tags?.length ? ` ${entry.tags.map(t => t.startsWith("#") ? t : `#${t}`).join(" ")}` : "";
-    const refPart = entry.refDocId ? ` ((${entry.refDocId} "${(entry.refDocTitle || "查看台账").replace(/"/g, "'")}"))` : "";
-    const line = `${timeStr} ${cleanType}：${cleanBody}${tagsPart}${refPart}\n{: custom-lifelog-type="${cleanType}" }`;
-    return appendMarkdownToDailyNote(line, notebook);
+): Promise<{ ok: boolean; blockId?: string; docId?: string; msg?: string; zoneHeadingId?: string }> {
+    return appendXiaolvLifeLogToDailyNote({
+        ...entry,
+        notebook: entry.notebook ?? notebook,
+    });
 }
 
 function mountQuickModal(opts: {
@@ -17003,6 +20273,8 @@ function mountQuickModal(opts: {
     bodyHtml: string;
     primaryLabel: string;
     secondaryLabel?: string;
+    showCharCount?: boolean;
+    onBeforeClose?: () => void;
     onSave: (saveBtn: HTMLButtonElement | null, cleanup: () => void, continueMode: boolean) => Promise<void>;
 }): HTMLElement | null {
     if (typeof document === "undefined") return null;
@@ -17018,11 +20290,13 @@ function mountQuickModal(opts: {
     const secondaryBtnHtml = opts.secondaryLabel
         ? `<button type="button" class="lv-qw-btn lv-qw-btn-secondary" title="Ctrl+Shift+Enter">${escapeHtml(opts.secondaryLabel)}</button>`
         : "";
-    mask.innerHTML = `<div class="lv-qw-card"><div class="lv-qw-head"><div class="lv-qw-title-wrap"><span class="lv-qw-icon">${opts.icon}</span><span class="lv-qw-title">${escapeHtml(opts.title)}</span>${opts.badgeHtml}</div><button type="button" class="lv-qw-close" aria-label="关闭">✕</button></div><div class="lv-qw-body">${opts.bodyHtml}</div><div class="lv-qw-foot"><div class="lv-qw-tip-wrap"><span class="lv-qw-tip">${opts.secondaryLabel ? (isMobileFrontend() ? `点「${escapeHtml(opts.secondaryLabel)}」可连续记录` : "Ctrl+Enter/S 保存 · Ctrl+Shift+Enter 续记 · Esc") : (isMobileFrontend() ? "点「保存」入库 · 点 ✕ 关闭" : "Ctrl+Enter/S 保存 · Esc 取消")}</span><span class="lv-qw-char-count">0 字</span></div><div class="lv-qw-actions"><button type="button" class="lv-qw-btn lv-qw-btn-cancel">取消</button>${secondaryBtnHtml}<button type="button" class="lv-qw-btn lv-qw-btn-primary">${escapeHtml(opts.primaryLabel)}</button></div></div></div>`;
+    const charCountHtml = opts.showCharCount ? `<span class="lv-qw-char-count">0 字</span>` : "";
+    mask.innerHTML = `<div class="lv-qw-card"><div class="lv-qw-head"><div class="lv-qw-title-wrap"><span class="lv-qw-icon">${opts.icon}</span><span class="lv-qw-title">${escapeHtml(opts.title)}</span>${opts.badgeHtml}</div><button type="button" class="lv-qw-close" aria-label="关闭">✕</button></div><div class="lv-qw-body">${opts.bodyHtml}</div><div class="lv-qw-foot"><div class="lv-qw-tip-wrap"><span class="lv-qw-tip">${opts.secondaryLabel ? (isMobileFrontend() ? `点「${escapeHtml(opts.secondaryLabel)}」可连续记录` : "Ctrl+Enter/S 保存 · Ctrl+Shift+Enter 续记 · Esc") : (isMobileFrontend() ? "点「保存」入库 · 点 ✕ 关闭" : "Ctrl+Enter/S 保存 · Esc 取消")}</span>${charCountHtml}</div><div class="lv-qw-actions"><button type="button" class="lv-qw-btn lv-qw-btn-cancel">取消</button>${secondaryBtnHtml}<button type="button" class="lv-qw-btn lv-qw-btn-primary">${escapeHtml(opts.primaryLabel)}</button></div></div></div>`;
 
     let isSaving = false;
     let vvCleanup: (() => void) | undefined;
     const cleanup = () => {
+        try { opts.onBeforeClose?.(); } catch { /* ignore */ }
         if (vvCleanup) { try { vvCleanup(); } catch { /* ignore */ } vvCleanup = undefined; }
         try { lvSurfaceStack.pop("lv-quick-workspace-modal"); } catch { /* ignore */ }
         try { mask.remove(); } catch { /* ignore */ }
@@ -17066,6 +20340,7 @@ function mountQuickModal(opts: {
             if (inlineInput) return; // 让内联分类输入自己先处理 Esc
             e.preventDefault(); e.stopPropagation(); cleanup();
         } else if ((e.ctrlKey || e.metaKey) && (e.key === "Enter" || e.key === "s" || e.key === "S")) {
+            if (e.isComposing || e.keyCode === 229) return;
             e.preventDefault(); e.stopPropagation();
             void runSave(Boolean(e.shiftKey && opts.secondaryLabel));
         }
@@ -17150,6 +20425,43 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
 
     let textarea: HTMLTextAreaElement | null = null;
     let quickNoteSavedCount = 0;
+    let qnDraftTimer: number | null = null;
+    let qnDraftDirty = false;
+    const cancelQnDraftSave = () => {
+        if (qnDraftTimer !== null) {
+            try { clearTimeout(qnDraftTimer); } catch { /* ignore */ }
+            qnDraftTimer = null;
+        }
+        qnDraftDirty = false;
+    };
+    const flushQnDraftSave = () => {
+        if (qnDraftTimer !== null) {
+            try { clearTimeout(qnDraftTimer); } catch { /* ignore */ }
+            qnDraftTimer = null;
+        }
+        if (!qnDraftDirty || !textarea) return;
+        qnDraftDirty = false;
+        try {
+            if (textarea.value) {
+                ls?.setItem(QUICK_NOTE_DRAFT_KEY, textarea.value);
+                ls?.setItem(QUICK_NOTE_DRAFT_AT_KEY, String(Date.now()));
+            } else {
+                ls?.removeItem(QUICK_NOTE_DRAFT_KEY);
+                ls?.removeItem(QUICK_NOTE_DRAFT_AT_KEY);
+            }
+        } catch { /* ignore */ }
+    };
+    const scheduleQnDraftSave = () => {
+        qnDraftDirty = true;
+        if (qnDraftTimer !== null) {
+            try { clearTimeout(qnDraftTimer); } catch { /* ignore */ }
+        }
+        const sched = typeof window !== "undefined" && typeof window.setTimeout === "function" ? window.setTimeout : setTimeout;
+        qnDraftTimer = Number(sched(() => {
+            qnDraftTimer = null;
+            flushQnDraftSave();
+        }, 300));
+    };
     // 今日记事历史条（共享基建）：条数 + 最近一条 + 块级撤销
     const renderQuickStrip = (): string => buildTodayWriteStripHtml(readTodayWriteEntries(quickNoteTodayKey()));
     const quickHistoryStripHtml = renderQuickStrip();
@@ -17164,6 +20476,7 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
     const mask = mountQuickModal({
         icon: "⚡",
         title: "一键记事",
+        showCharCount: true,
         badgeHtml: `<button type="button" class="lv-qw-badge lv-qw-badge-btn" title="点击切换存储目标（今日日记 / 当前文档 / 指定文档）">${escapeHtml(getBadgeLabel())}</button>`,
         bodyHtml: `
             <div class="lv-qw-nb-row" style="${targetMode === "daily" ? "" : "display:none;"}">
@@ -17207,7 +20520,9 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
         `,
         primaryLabel: "保存入库",
         secondaryLabel: "保存并继续",
+        onBeforeClose: flushQnDraftSave,
         onSave: async (saveBtn, cleanup, continueMode) => {
+            flushQnDraftSave();
             const val = textarea?.value?.trim() || "";
             if (!val && attachments.length === 0) {
                 lvNotify.capsule({ source: "一键记事", message: "请输入记事内容或添加附件", duration: 1800, archive: false });
@@ -17298,6 +20613,7 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
                 }
 
                 if (res.ok) {
+                    cancelQnDraftSave();
                     try { ls?.removeItem(QUICK_NOTE_DRAFT_KEY); ls?.removeItem(QUICK_NOTE_DRAFT_AT_KEY); } catch {}
                     const qLine = (val.split(/\r?\n/)[0] || (attachments[0]?.name ? `[附件] ${attachments[0].name}` : "记事")).replace(/[\r\n\t]+/g, " ").trim().slice(0, 30);
                     pushTodayWriteEntry(quickNoteTodayKey(), qLine, res.blockId);
@@ -17319,6 +20635,7 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
                     if (continueMode) {
                         quickNoteSavedCount += 1;
                         if (textarea) { textarea.value = ""; textarea.dispatchEvent(new Event("input")); textarea.focus(); }
+                        cancelQnDraftSave();
                         const draftHintEl = mask?.querySelector<HTMLElement>(".lv-qw-draft-hint");
                         if (draftHintEl) draftHintEl.style.display = "none";
                         const qRecEl = mask?.querySelector<HTMLElement>(".lv-qw-recent-strip");
@@ -17614,8 +20931,10 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
         });
     }
     mask.querySelector(".lv-qw-draft-clear")?.addEventListener("click", () => {
+        cancelQnDraftSave();
         try { ls?.removeItem(QUICK_NOTE_DRAFT_KEY); ls?.removeItem(QUICK_NOTE_DRAFT_AT_KEY); } catch { /* ignore */ }
         if (textarea) { textarea.value = ""; textarea.dispatchEvent(new Event("input")); }
+        cancelQnDraftSave();
         if (draftHint) draftHint.style.display = "none";
         textarea?.focus();
     });
@@ -17661,6 +20980,7 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
         try { ls?.setItem(QUICK_NOTE_DRAFT_KEY, textarea.value); } catch { /* ignore */ }
     });
     textarea?.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.key === "Tab" && !e.shiftKey) {
             e.preventDefault();
             const s = textarea!.selectionStart ?? textarea!.value.length;
@@ -17683,7 +21003,7 @@ export function openQuickNoteDialog(initialPrefix = ""): void {
             }
         }
     });
-    textarea?.addEventListener("input", () => { try { ls?.setItem(QUICK_NOTE_DRAFT_KEY, textarea!.value); ls?.setItem(QUICK_NOTE_DRAFT_AT_KEY, String(Date.now())); } catch { /* ignore */ } });
+    textarea?.addEventListener("input", scheduleQnDraftSave);
 }
 
 export function openLifeLogDialog(): void {
@@ -17739,10 +21059,48 @@ export function openLifeLogDialog(): void {
         : "";
 
     let textarea: HTMLTextAreaElement | null = null;
+    let llDraftTimer: number | null = null;
+    let llDraftDirty = false;
+    const cancelLlDraftSave = () => {
+        if (llDraftTimer !== null) {
+            try { clearTimeout(llDraftTimer); } catch { /* ignore */ }
+            llDraftTimer = null;
+        }
+        llDraftDirty = false;
+    };
+    const flushLlDraftSave = () => {
+        if (llDraftTimer !== null) {
+            try { clearTimeout(llDraftTimer); } catch { /* ignore */ }
+            llDraftTimer = null;
+        }
+        if (!llDraftDirty || !textarea) return;
+        llDraftDirty = false;
+        try {
+            if (textarea.value) {
+                ls?.setItem(LIFELOG_DRAFT_KEY, textarea.value);
+                ls?.setItem(LIFELOG_DRAFT_AT_KEY, String(Date.now()));
+            } else {
+                ls?.removeItem(LIFELOG_DRAFT_KEY);
+                ls?.removeItem(LIFELOG_DRAFT_AT_KEY);
+            }
+        } catch { /* ignore */ }
+    };
+    const scheduleLlDraftSave = () => {
+        llDraftDirty = true;
+        if (llDraftTimer !== null) {
+            try { clearTimeout(llDraftTimer); } catch { /* ignore */ }
+        }
+        const sched = typeof window !== "undefined" && typeof window.setTimeout === "function" ? window.setTimeout : setTimeout;
+        llDraftTimer = Number(sched(() => {
+            llDraftTimer = null;
+            flushLlDraftSave();
+        }, 300));
+    };
 
     const mask = mountQuickModal({
         icon: "📒",
         title: "LifeLog 流",
+        showCharCount: true,
         badgeHtml: `<button type="button" class="lv-qw-badge lv-qw-badge-btn lv-qw-ll-badge-target" title="点击切换存储目标（今日日记 / 当前文档 / 指定文档）">${escapeHtml(getBadgeLabel())}</button>`,
         bodyHtml: `
             <div class="lv-qw-nb-row" style="${targetMode === "daily" ? "" : "display:none;"}">
@@ -17797,7 +21155,9 @@ export function openLifeLogDialog(): void {
         `,
         primaryLabel: "记录到日记",
         secondaryLabel: "记完继续",
+        onBeforeClose: flushLlDraftSave,
         onSave: async (saveBtn, cleanup, continueMode) => {
+            flushLlDraftSave();
             const val = textarea?.value?.trim() || "";
             if (!val && attachments.length === 0) {
                 lvNotify.capsule({ source: "LifeLog", message: "请输入日志内容或添加附件", duration: 1800, archive: false });
@@ -17885,23 +21245,40 @@ export function openLifeLogDialog(): void {
                     }
                 }
 
-                const lineText = `${computeTimeStr()} ${selectedCat}：${val}`;
+                const timeStr = computeTimeStr();
+                const llEntry: XiaolvLifeLogEntry = {
+                    time: timeStr,
+                    type: selectedCat,
+                    body: val || "附件记录",
+                    source: "lv-launchpad",
+                    module: "lifelog",
+                    notebook: chosenNotebookId || conf.lifeLogNotebookId,
+                };
+                const llAttrs = buildXiaolvLifeLogAttrs(llEntry);
+                const lineText = `${timeStr} ${selectedCat}：${val}`;
+                const ialStr = Object.entries(llAttrs).map(([k, v]) => `${k}="${escapeKitIalValue(v)}"`).join(" ");
                 const attachBlock = attachMarkdownLines.length ? attachMarkdownLines.join("\n\n") : "";
                 const fullPayload = attachBlock
-                    ? `${lineText}\n\n${attachBlock}\n{: custom-lifelog-type="${selectedCat}" }\n`
-                    : `${lineText}\n{: custom-lifelog-type="${selectedCat}" }\n`;
+                    ? `${lineText}\n{: ${ialStr} }\n\n${attachBlock}\n`
+                    : `${lineText}\n{: ${ialStr} }\n`;
 
                 const parentID = targetMode === "current" && currentDoc ? currentDoc.id : (targetMode === "custom" && customDocId ? customDocId : "");
                 let res: { ok: boolean; msg?: string; docId?: string; blockId?: string; ids?: string[] };
                 if (parentID) {
                     const aRes = await lvKernelPost("/api/block/appendBlock", { data: fullPayload, dataType: "markdown", parentID });
                     const listed = extractAppendIdsList(aRes.data);
+                    if (listed.blockId) {
+                        await lvKernelPost("/api/attr/setBlockAttrs", { id: listed.blockId, attrs: llAttrs });
+                    }
                     res = { ok: aRes.code === 0, msg: aRes.msg, docId: listed.docId || parentID, blockId: listed.blockId, ids: listed.ids };
                 } else {
-                    res = await appendMarkdownToDailyNote(fullPayload, chosenNotebookId || conf.lifeLogNotebookId);
+                    res = await appendMarkdownToDailyNote(fullPayload, chosenNotebookId || conf.lifeLogNotebookId, {
+                        attrs: llAttrs,
+                    });
                 }
 
                 if (res.ok) {
+                    cancelLlDraftSave();
                     try { ls?.removeItem(LIFELOG_DRAFT_KEY); ls?.removeItem(LIFELOG_DRAFT_AT_KEY); } catch {}
                     const jumpId = res.blockId || res.docId;
                     const extraIds = (res.ids || []).filter((id) => id !== res.blockId);
@@ -17927,6 +21304,7 @@ export function openLifeLogDialog(): void {
 
                     if (continueMode) {
                         if (textarea) { textarea.value = ""; textarea.dispatchEvent(new Event("input")); textarea.focus(); }
+                        cancelLlDraftSave();
                         const draftHintEl = mask?.querySelector<HTMLElement>(".lv-qw-draft-hint");
                         if (draftHintEl) draftHintEl.style.display = "none";
                         const recEl = mask?.querySelector<HTMLElement>(".lv-qw-recent-strip");
@@ -18277,8 +21655,10 @@ export function openLifeLogDialog(): void {
     });
 
     mask.querySelector(".lv-qw-draft-clear")?.addEventListener("click", () => {
+        cancelLlDraftSave();
         try { ls?.removeItem(LIFELOG_DRAFT_KEY); ls?.removeItem(LIFELOG_DRAFT_AT_KEY); } catch { /* ignore */ }
         if (textarea) { textarea.value = ""; textarea.dispatchEvent(new Event("input")); }
+        cancelLlDraftSave();
         if (draftHint) draftHint.style.display = "none";
         textarea?.focus();
     });
@@ -18330,6 +21710,7 @@ export function openLifeLogDialog(): void {
 
     catContainer?.addEventListener("keydown", (e) => {
         const ke = e as KeyboardEvent;
+        if (ke.isComposing || ke.keyCode === 229) return;
         if (!catContainer.querySelector(".lv-qw-add-cat-input")) return;
         if (ke.key === "Enter") {
             ke.preventDefault();
@@ -18394,6 +21775,7 @@ export function openLifeLogDialog(): void {
         hapticFeedback(6); updatePreview();
     });
     textarea?.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.key === "Tab" && !e.shiftKey) {
             e.preventDefault();
             const s = textarea!.selectionStart ?? textarea!.value.length;
@@ -18403,7 +21785,7 @@ export function openLifeLogDialog(): void {
             textarea!.dispatchEvent(new Event("input"));
         }
     });
-    textarea?.addEventListener("input", () => { try { ls?.setItem(LIFELOG_DRAFT_KEY, textarea!.value); ls?.setItem(LIFELOG_DRAFT_AT_KEY, String(Date.now())); } catch { /* ignore */ } updatePreview(); });
+    textarea?.addEventListener("input", () => { scheduleLlDraftSave(); updatePreview(); });
 }
 
 /* ========================================================================= */
@@ -18755,6 +22137,20 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
         }, 2200);
     };
 
+    const renderSectionById = (secId: string, panel: HTMLElement, toast: (msg?: string) => void) => {
+        const target = builtinSections.find((s) => s.id === secId);
+        if (target) target.render(panel, toast);
+    };
+
+    const buildDblClickOptionsHtml = (selectedId: string): string => {
+        const actions = lvBlockAssistant.getEnabledActions(true).filter((a) => a.installed !== false && !a.destructive && a.id !== "delete-block");
+        const optionsHtml = [
+            `<option value="none" ${selectedId === "none" ? "selected" : ""}>🚫 关闭双击（仅单击展开菜单）</option>`,
+            ...actions.map((a) => `<option value="${escapeHtml(a.id)}" ${a.id === selectedId ? "selected" : ""}>${escapeHtml(a.glyph || "⚡")} ${escapeHtml(a.label)}</option>`),
+        ];
+        return optionsHtml.join("");
+    };
+
     const builtinSections: LvConfigSectionDef[] = [
         {
             id: "topbar",
@@ -18763,42 +22159,103 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
             render: (panel, toast) => {
                 const hub = getLaunchpadHub();
                 const allItems = hub.getItems();
+                const baEnabled = lvBlockAssistant.isEnabled();
+                const dblClickId = lvBlockAssistant.getDoubleClickActionId();
                 panel.innerHTML = `
                     <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text,#0f172a);">
                         👋 <strong>顶栏与罗盘主权管理</strong>：自主决定哪些生态插件<strong>常驻在思源顶栏</strong>，哪些<strong>仅在罗盘坞内收敛</strong>，哪些<strong>彻底隐藏</strong>（仅保留快捷键/穿透搜索唤醒）。
                     </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">🧩 启用块助手（编辑器右缘浮标与 Alt+B 菜单）</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">关闭后立即移除页面胶囊与浮层，且 Alt+B 不再弹出；装任意 1 个小驴插件即可完整使用</span>
+                            </div>
+                            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0;font-size:12px;font-weight:600;color:var(--lv-lp-text);">
+                                <input type="checkbox" class="lv-cfg-block-assistant-toggle" ${baEnabled ? "checked" : ""} />
+                                <span class="lv-cfg-block-assistant-state">${baEnabled ? "已启用" : "已停用"}</span>
+                            </label>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12px;color:var(--lv-lp-text);display:block;">双击胶囊/快捷入口触发动作</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">双击块助手胶囊时直接执行的高频动作（仅含当前已启用动作）</span>
+                            </div>
+                            <select class="lv-cfg-ba-dblclick-select" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0;max-width:220px;">
+                                ${buildDblClickOptionsHtml(dblClickId)}
+                            </select>
+                        </div>
+                    </div>
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;flex-wrap:wrap;">
-                        <div style="font-weight:700;font-size:12.5px;color:var(--lv-lp-accent,#2563eb);">📌 生态插件列表与驻留形态</div>
-                        <div style="display:flex;gap:6px;">
+                        <div style="font-weight:700;font-size:12.5px;color:var(--lv-lp-accent,#2563eb);">📌 生态插件列表、排序与驻留形态</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <button type="button" class="lv-qw-tag-chip lv-cfg-reset-order-btn" style="padding:3px 9px;font-size:11px;color:var(--lv-lp-text-sub);">↺ 恢复默认顺序</button>
                             <button type="button" class="lv-qw-tag-chip lv-cfg-all-pinned-btn" style="padding:3px 9px;font-size:11px;color:var(--lv-lp-accent);">📌 全部平铺到顶栏</button>
                             <button type="button" class="lv-qw-tag-chip lv-cfg-all-docked-btn" style="padding:3px 9px;font-size:11px;color:var(--lv-lp-accent);">📥 全部收敛到罗盘</button>
                         </div>
                     </div>
                     <div class="lv-cfg-plugins-list" style="display:flex;flex-direction:column;gap:6px;">
-                        ${allItems.map((p) => {
+                        ${allItems.map((p, idx) => {
                             const pId = escapeHtml(p.id);
                             const pTitle = escapeHtml((p.fullName && !p.fullName.includes("<")) ? p.fullName : (p.name || p.id));
                             const pColor = resolveSafeBrandColor(p.id, p.color);
                             const pSvg = renderPluginLitheSvg(p.id, 16);
+                            const isFirst = idx === 0;
+                            const isLast = idx === allItems.length - 1;
                             return `
-                                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
-                                    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-                                        <span style="color:${pColor};display:inline-flex;align-items:center;">${pSvg}</span>
+                                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));flex-wrap:wrap;">
+                                    <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 160px;">
+                                        <span style="color:${pColor};display:inline-flex;align-items:center;flex-shrink:0;">${pSvg}</span>
                                         <div style="display:flex;flex-direction:column;gap:1px;min-width:0;">
                                             <strong style="font-size:13px;color:var(--lv-lp-text);">${pTitle}</strong>
                                             <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.desc || "")}</span>
                                         </div>
                                     </div>
-                                    <select class="lv-cfg-state-select" data-plugin-id="${pId}" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0;">
-                                        <option value="docked" ${p.state === "docked" ? "selected" : ""}>📥 仅在罗盘坞内 (顶栏隐藏)</option>
-                                        <option value="pinned" ${p.state === "pinned" ? "selected" : ""}>📌 置顶在外 (顶栏+坞内同时显示)</option>
-                                        <option value="hidden" ${p.state === "hidden" ? "selected" : ""}>👁️ 彻底隐藏 (仅快捷键唤醒)</option>
-                                    </select>
+                                    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                                        <button type="button" class="lv-qw-tag-chip lv-cfg-order-up-btn" data-order-id="${pId}" title="上移磁贴" aria-label="上移" ${isFirst ? "disabled" : ""} style="padding:3px 7px;font-size:11px;min-width:26px;opacity:${isFirst ? "0.4" : "1"};">↑</button>
+                                        <button type="button" class="lv-qw-tag-chip lv-cfg-order-down-btn" data-order-id="${pId}" title="下移磁贴" aria-label="下移" ${isLast ? "disabled" : ""} style="padding:3px 7px;font-size:11px;min-width:26px;opacity:${isLast ? "0.4" : "1"};">↓</button>
+                                        <select class="lv-cfg-state-select" data-plugin-id="${pId}" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0;max-width:155px;">
+                                            <option value="docked" ${p.state === "docked" ? "selected" : ""}>📥 仅在罗盘坞内 (顶栏隐藏)</option>
+                                            <option value="pinned" ${p.state === "pinned" ? "selected" : ""}>📌 置顶在外 (顶栏+坞内同时显示)</option>
+                                            <option value="hidden" ${p.state === "hidden" ? "selected" : ""}>👁️ 彻底隐藏 (仅快捷键唤醒)</option>
+                                        </select>
+                                    </div>
                                 </div>
                             `;
                         }).join("")}
                     </div>
                 `;
+
+                const baToggle = panel.querySelector<HTMLInputElement>(".lv-cfg-block-assistant-toggle");
+                const baStateLabel = panel.querySelector<HTMLElement>(".lv-cfg-block-assistant-state");
+                const syncBaStateUi = (enabled: boolean) => {
+                    if (baToggle) baToggle.checked = enabled;
+                    if (baStateLabel) baStateLabel.textContent = enabled ? "已启用" : "已停用";
+                };
+                baToggle?.addEventListener("change", () => {
+                    const next = Boolean(baToggle.checked);
+                    lvBlockAssistant.setEnabled(next);
+                    syncBaStateUi(next);
+                    toast(next ? "✓ 已启用块助手" : "✓ 已停用并清理块助手");
+                });
+                if (typeof window !== "undefined") {
+                    const onBaToggle = (ev: Event) => {
+                        if (!panel.isConnected) {
+                            window.removeEventListener("lv-block-assistant-toggle", onBaToggle);
+                            return;
+                        }
+                        const detailEnabled = (ev as CustomEvent<{ enabled?: boolean }>)?.detail?.enabled;
+                        syncBaStateUi(typeof detailEnabled === "boolean" ? detailEnabled : lvBlockAssistant.isEnabled());
+                    };
+                    window.addEventListener("lv-block-assistant-toggle", onBaToggle);
+                }
+
+                const dblClickSel = panel.querySelector<HTMLSelectElement>(".lv-cfg-ba-dblclick-select");
+                dblClickSel?.addEventListener("change", () => {
+                    const nextId = lvBlockAssistant.setDoubleClickActionId(dblClickSel.value);
+                    dblClickSel.value = nextId;
+                    toast(nextId === "none" ? "✓ 已关闭胶囊双击触发" : "✓ 双击触发动作已保存");
+                });
 
                 panel.querySelectorAll<HTMLSelectElement>(".lv-cfg-state-select").forEach((sel) => {
                     sel.addEventListener("change", () => {
@@ -18812,18 +22269,107 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
                     });
                 });
 
+                panel.querySelectorAll<HTMLButtonElement>(".lv-cfg-order-up-btn").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        const pid = btn.getAttribute("data-order-id");
+                        if (pid && hub.movePluginOrder?.(pid, "up")) {
+                            renderSectionById("topbar", panel, toast);
+                            toast("✓ 磁贴已上移");
+                        }
+                    });
+                });
+
+                panel.querySelectorAll<HTMLButtonElement>(".lv-cfg-order-down-btn").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        const pid = btn.getAttribute("data-order-id");
+                        if (pid && hub.movePluginOrder?.(pid, "down")) {
+                            renderSectionById("topbar", panel, toast);
+                            toast("✓ 磁贴已下移");
+                        }
+                    });
+                });
+
+                panel.querySelector(".lv-cfg-reset-order-btn")?.addEventListener("click", () => {
+                    hub.resetPluginOrder?.();
+                    renderSectionById("topbar", panel, toast);
+                    toast("✓ 已恢复默认顺序");
+                });
+
                 panel.querySelector(".lv-cfg-all-pinned-btn")?.addEventListener("click", () => {
                     hub.getItems().forEach((p) => hub.setPluginState(p.id, "pinned"));
                     syncTopBarConvergence();
-                    builtinSections[0]?.render(panel, toast);
+                    renderSectionById("topbar", panel, toast);
                     toast("✓ 已全部平铺至顶栏");
                 });
 
                 panel.querySelector(".lv-cfg-all-docked-btn")?.addEventListener("click", () => {
                     hub.getItems().forEach((p) => hub.setPluginState(p.id, "docked"));
                     syncTopBarConvergence();
-                    builtinSections[0]?.render(panel, toast);
+                    renderSectionById("topbar", panel, toast);
                     toast("✓ 已全部收敛至罗盘");
+                });
+            },
+        },
+        {
+            id: "block-assistant",
+            title: "块助手",
+            icon: "🧩",
+            render: (panel, toast) => {
+                const baEnabled = lvBlockAssistant.isEnabled();
+                const dblClickId = lvBlockAssistant.getDoubleClickActionId();
+                panel.innerHTML = `
+                    <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text,#0f172a);">
+                        🧩 <strong>全能块助手（1–8 任意插件原生底座）</strong>：装任意 1 个小驴插件即可享用完整思源本体块增强（默认「🔄 转换块类型」+ 聚焦/引用/折叠/克隆），并按已装插件动态装配专属跨插件流转。
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">启用块助手（悬浮胶囊与 Alt+B 菜单）</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">关闭后立即卸载页面胶囊且 Alt+B 不再弹出</span>
+                            </div>
+                            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0;font-size:12px;font-weight:600;color:var(--lv-lp-text);">
+                                <input type="checkbox" class="lv-cfg-block-assistant-toggle" ${baEnabled ? "checked" : ""} />
+                                <span class="lv-cfg-block-assistant-state">${baEnabled ? "已启用" : "已停用"}</span>
+                            </label>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">双击胶囊/快捷入口触发动作</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">默认「🔄 转换块类型」，支持改为任意已启用动作或关闭双击</span>
+                            </div>
+                            <select class="lv-cfg-ba-dblclick-select" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text,#0f172a);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;max-width:240px;">
+                                ${buildDblClickOptionsHtml(dblClickId)}
+                            </select>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">动作资产库与 5 槽常驻排序</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub,#64748b);">自定义启用动作、置顶常驻槽位与声明式快捷指令</span>
+                            </div>
+                            <button type="button" class="lv-qw-tag-chip lv-cfg-open-ba-store-btn" style="padding:5px 12px;font-size:12px;font-weight:600;color:var(--lv-lp-accent,#2563eb);background:var(--lv-lp-accent-soft,rgba(37,99,235,0.1));">📦 打开块助手资产库</button>
+                        </div>
+                    </div>
+                `;
+                const baToggle = panel.querySelector<HTMLInputElement>(".lv-cfg-block-assistant-toggle");
+                const baStateLabel = panel.querySelector<HTMLElement>(".lv-cfg-block-assistant-state");
+                baToggle?.addEventListener("change", () => {
+                    const next = Boolean(baToggle.checked);
+                    lvBlockAssistant.setEnabled(next);
+                    if (baStateLabel) baStateLabel.textContent = next ? "已启用" : "已停用";
+                    toast(next ? "✓ 已启用块助手" : "✓ 已停用并清理块助手");
+                });
+                const dblClickSel = panel.querySelector<HTMLSelectElement>(".lv-cfg-ba-dblclick-select");
+                dblClickSel?.addEventListener("change", () => {
+                    const nextId = lvBlockAssistant.setDoubleClickActionId(dblClickSel.value);
+                    dblClickSel.value = nextId;
+                    toast(nextId === "none" ? "✓ 已关闭胶囊双击触发" : "✓ 双击触发动作已保存");
+                });
+                panel.querySelector(".lv-cfg-open-ba-store-btn")?.addEventListener("click", () => {
+                    lvBlockAssistant.openStoreDialog({
+                        onConfigChange: () => {
+                            if (panel.isConnected) renderSectionById("block-assistant", panel, toast);
+                        },
+                    });
                 });
             },
         },
@@ -18833,6 +22379,7 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
             icon: "⚡",
             render: (panel, toast) => {
                 const conf = getQuickWorkspaceConfig();
+                const zoneCfg = getXiaolvDiaryZoneConfig();
                 const curMode = getMobileEntryMode();
                 const cats = conf.lifeLogCategories || DEFAULT_LIFELOG_CATEGORIES;
                 const quickPresets = ["日记", "工作", "家庭", "思考", "记录", "读书", "复盘", "灵感", "健康"];
@@ -18860,6 +22407,26 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
                             <select class="lv-cfg-nb-select" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;max-width:240px;">
                                 <option value="">✨ 自动识别默认日记本</option>
                                 ${conf.lifeLogNotebookId ? `<option value="${escapeHtml(conf.lifeLogNotebookId)}" selected>📔 已选笔记本</option>` : ""}
+                            </select>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">📔 日记小驴记录区默认折叠</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub);">开启后各插件写入当日日记的记录自动收敛在折叠的「🐴 小驴记录」区，不干扰手写日记</span>
+                            </div>
+                            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0;font-size:12px;font-weight:600;color:var(--lv-lp-text);">
+                                <input type="checkbox" class="lv-cfg-diary-zone-fold-toggle" ${zoneCfg.defaultFolded ? "checked" : ""} />
+                                <span class="lv-cfg-diary-zone-fold-state">${zoneCfg.defaultFolded ? "默认折叠" : "默认展开"}</span>
+                            </label>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
+                            <div>
+                                <strong style="font-size:12.5px;color:var(--lv-lp-text);display:block;">标题级别：四级(默认)/三级</strong>
+                                <span style="font-size:11px;color:var(--lv-lp-text-sub);">当日日记「🐴 小驴记录」分区的标题层级（已移动位置或既有分区保持原位置不重复创建）</span>
+                            </div>
+                            <select class="lv-cfg-diary-zone-level-select" style="background:var(--lv-lp-card-bg,#fff);border:1px solid var(--lv-lp-border-strong,rgba(15,23,42,0.14));color:var(--lv-lp-text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;max-width:240px;">
+                                <option value="4" ${zoneCfg.headingLevel === 4 ? "selected" : ""}>四级标题 #### 🐴 小驴记录（默认）</option>
+                                <option value="3" ${zoneCfg.headingLevel === 3 ? "selected" : ""}>三级标题 ### 🐴 小驴记录</option>
                             </select>
                         </div>
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px dashed var(--lv-lp-border,rgba(15,23,42,0.08));">
@@ -18907,9 +22474,24 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
                             currentList.push(cat);
                             catsInput.value = currentList.join(", ");
                             saveCats();
-                            builtinSections[1]?.render(panel, toast);
+                            renderSectionById("workspace", panel, toast);
                         }
                     });
+                });
+
+                const dzFoldToggle = panel.querySelector<HTMLInputElement>(".lv-cfg-diary-zone-fold-toggle");
+                const dzFoldState = panel.querySelector<HTMLElement>(".lv-cfg-diary-zone-fold-state");
+                dzFoldToggle?.addEventListener("change", () => {
+                    const folded = Boolean(dzFoldToggle.checked);
+                    setXiaolvDiaryZoneConfig({ defaultFolded: folded });
+                    if (dzFoldState) dzFoldState.textContent = folded ? "默认折叠" : "默认展开";
+                    toast(folded ? "✓ 日记小驴记录区已设为默认折叠" : "✓ 日记小驴记录区已设为默认展开");
+                });
+
+                panel.querySelector<HTMLSelectElement>(".lv-cfg-diary-zone-level-select")?.addEventListener("change", (e) => {
+                    const lvl = Number((e.target as HTMLSelectElement).value) === 3 ? 3 : 4;
+                    setXiaolvDiaryZoneConfig({ headingLevel: lvl });
+                    toast(`✓ 小驴记录区标题级别已设为${lvl === 3 ? "三级" : "四级"}`);
                 });
 
                 const nbSel = panel.querySelector<HTMLSelectElement>(".lv-cfg-nb-select");
@@ -18949,23 +22531,23 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
         },
         {
             id: "appearance",
-            title: "外观与动效",
+            title: "动态与庆祝",
             icon: "🎨",
             render: (panel) => {
                 panel.innerHTML = `
                     <div style="background:var(--lv-lp-accent-soft,rgba(37,99,235,0.08));border:1px solid rgba(37,99,235,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text,#0f172a);margin-bottom:8px;">
-                        🎨 <strong>DL2 质感与护眼系统</strong>：自主调节庆祝特效、扫光与微光强度。小驴全生态色彩体系已与思源第三方主题彻底隔离，不论切换何种主题均保持高反差与可读性。
+                        🎨 <strong>全生态动态与庆祝效果</strong>：集中管理减弱动态效果与关闭庆祝撒花，对本机全部小驴插件生效，各单插件不再重复设置。
                     </div>
                     <div class="lv-cfg-uiprefs-mount"></div>
                 `;
                 const mountEl = panel.querySelector<HTMLElement>(".lv-cfg-uiprefs-mount");
                 const uiPrefsApi = (typeof window !== "undefined" && (window as any).LvUiPrefs) || null;
                 if (mountEl && uiPrefsApi && typeof uiPrefsApi.createLvUiPrefsSection === "function") {
-                    mountEl.appendChild(uiPrefsApi.createLvUiPrefsSection());
+                    mountEl.appendChild(uiPrefsApi.createLvUiPrefsSection({ scope: "ecosystem" }));
                 } else if (mountEl) {
                     mountEl.innerHTML = `
                         <div style="padding:16px;border-radius:8px;background:var(--lv-lp-panel-bg);border:1px solid var(--lv-lp-border);font-size:12px;color:var(--lv-lp-text-sub);">
-                            已接入全生态统一偏好键（lv_ui_prefs_v1），支持全动效/精简/关闭三档控制与庆祝效果自主配置。
+                            已接入全生态统一偏好键（lv_ui_prefs_v1），支持动效总档（完整/精简/关闭）与庆祝效果自主配置。
                         </div>
                     `;
                 }
@@ -18976,12 +22558,13 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
             title: "AI 调度中枢",
             icon: "🤖",
             render: (panel, toast) => {
+                try { getAiHub().getConfig(); } catch {}
                 const loadFn = (typeof window !== "undefined" && (window as any).loadAiRouterConfig) || null;
                 const saveFn = (typeof window !== "undefined" && (window as any).saveAiRouterConfig) || null;
                 const aiCfg = typeof loadFn === "function" ? loadFn() : {
                     enableSiyuan: true,
                     enableRuleFallback: true,
-                    publicFree: { enabled: true },
+                    publicFree: { enabled: false },
                     ollama: { enabled: true, baseUrl: "http://127.0.0.1:11434" },
                 };
                 const prefProvider = aiCfg.preferredProvider || "auto";
@@ -18989,7 +22572,7 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
                 panel.innerHTML = `
                     <div class="lv-ai-hub-container">
                         <div style="background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--lv-lp-text);">
-                            🤖 <strong>全生态统一 AI 调度中枢</strong>：在此配置一次，闪卡拟题、考试分析、打卡解析、罗盘对账等 8 大官方插件<strong>全域即刻生效</strong>。默认五级自适应瀑布降级（思源内核 ➔ 用户Key ➔ 本地Ollama ➔ 免费通道 ➔ 离线规则）。
+                            🤖 <strong>全生态统一 AI 调度中枢</strong>：在此配置一次，闪卡拟题、考试分析、打卡解析、罗盘对账等 8 大官方插件<strong>全域即刻生效</strong>。默认五级智能阶梯切换（思源智能体 ➔ 自配密钥 ➔ 本地 Ollama ➔ 免费通道 ➔ 离线规则）。
                         </div>
                         ${buildAiWaterfallFlowchartHtml(prefProvider)}
                         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:8px;background:var(--lv-lp-panel-bg,#f8fafc);border:1px solid var(--lv-lp-border,rgba(15,23,42,0.08));flex-wrap:wrap;gap:8px;">
@@ -19015,13 +22598,61 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
                     const cur = loadFn();
                     const pref = panel.querySelector<HTMLSelectElement>(".lv-cfg-ai-pref-provider")?.value || "auto";
                     const cUrl = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-url")?.value.trim() || undefined;
-                    const cKey = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-key")?.value.trim() || undefined;
+                    const keyInput = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-key");
+                    const cKey = keyInput?.value.trim() || "";
                     const cModel = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-custom-model")?.value.trim() || undefined;
                     const oUrl = panel.querySelector<HTMLInputElement>(".lv-cfg-ai-ollama-url")?.value.trim() || undefined;
+                    const publicFreeEnabled = Boolean(panel.querySelector<HTMLInputElement>(".lv-cfg-ai-public-free-toggle")?.checked);
 
+                    if (cKey) {
+                        const saveSecretFn = (typeof window !== "undefined" && (window as any).saveTier2SecretToHost) || null;
+                        const savePromise = typeof saveSecretFn === "function"
+                            ? Promise.resolve(saveSecretFn(cKey))
+                            : persistSecretToSiyuanSlot(cKey);
+                        void savePromise.then((res: any) => {
+                            if (res?.ok) {
+                                try {
+                                    if (typeof localStorage !== "undefined") {
+                                        const rawStored = localStorage.getItem("lv_ai_router_config_v1");
+                                        if (rawStored) {
+                                            const parsedStored = JSON.parse(rawStored);
+                                            if (parsedStored?.userCustom && "apiKey" in parsedStored.userCustom) {
+                                                delete parsedStored.userCustom.apiKey;
+                                                parsedStored.userCustom.hasSecret = true;
+                                                localStorage.setItem("lv_ai_router_config_v1", JSON.stringify(parsedStored));
+                                            }
+                                        }
+                                    }
+                                } catch { /* ignore */ }
+                                const latest = loadFn();
+                                if (latest?.userCustom) delete latest.userCustom.apiKey;
+                                latest.userCustom = {
+                                    ...(latest.userCustom || {}),
+                                    hasSecret: true,
+                                    secretSlot: "lv_ai_secret_tier2_apikey",
+                                };
+                                saveFn(latest);
+                                if (keyInput) {
+                                    keyInput.value = "";
+                                    keyInput.placeholder = "•••••••• (已安全存入思源密钥库，留空保持不变)";
+                                    keyInput.setAttribute("data-has-secret", "true");
+                                }
+                            }
+                        }).catch(() => { /* ignore */ });
+                    }
+
+                    const prevHasSecret = Boolean(typeof window !== "undefined" && (window as any).hasTier2SecretConfigured?.());
                     cur.preferredProvider = pref === "auto" ? undefined : (pref as any);
-                    cur.userCustom = { ...(cur.userCustom || {}), baseUrl: cUrl, apiKey: cKey, model: cModel };
+                    cur.userCustom = {
+                        ...(cur.userCustom || {}),
+                        baseUrl: cUrl,
+                        model: cModel,
+                        hasSecret: prevHasSecret,
+                        secretSlot: "lv_ai_secret_tier2_apikey",
+                    };
+                    delete cur.userCustom.apiKey;
                     cur.ollama = { ...(cur.ollama || {}), baseUrl: oUrl };
+                    cur.publicFree = { ...(cur.publicFree || {}), enabled: publicFreeEnabled };
                     saveFn(cur);
                 };
 
@@ -19101,7 +22732,7 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
                         hapticFeedback(10);
                         toast(`已开启专注模式至 ${until.toTimeString().slice(0, 5)}`);
                     }
-                    builtinSections[4]?.render(panel, toast);
+                    renderSectionById("notice", panel, toast);
                     refreshEntryBadgeDot();
                 });
 
@@ -19111,7 +22742,7 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
                         if (cat) {
                             lvNotify.clearCategoryMute(cat);
                             toast(`已恢复「${cat}」正常提醒`);
-                            builtinSections[4]?.render(panel, toast);
+                            renderSectionById("notice", panel, toast);
                         }
                     });
                 });
@@ -19119,20 +22750,20 @@ export function openQuickWorkspaceConfig(initialTab = "topbar"): void {
                 panel.querySelector(".lv-cfg-clear-all-mute-btn")?.addEventListener("click", () => {
                     mutedCats.forEach(mc => lvNotify.clearCategoryMute(mc.category));
                     toast("已清空全部免打扰设置");
-                    builtinSections[4]?.render(panel, toast);
+                    renderSectionById("notice", panel, toast);
                 });
 
                 panel.querySelector(".lv-cfg-mark-all-read-btn")?.addEventListener("click", () => {
                     lvNotify.markAllRead();
                     toast("已全部标为已读");
-                    builtinSections[4]?.render(panel, toast);
+                    renderSectionById("notice", panel, toast);
                     refreshEntryBadgeDot();
                 });
 
                 panel.querySelector(".lv-cfg-clear-history-btn")?.addEventListener("click", () => {
                     lvNotify.clearHistory();
                     toast("已清空通知历史记录");
-                    builtinSections[4]?.render(panel, toast);
+                    renderSectionById("notice", panel, toast);
                     refreshEntryBadgeDot();
                 });
             },
@@ -19449,6 +23080,9 @@ export const lvHostBridge = {
     lvAiPost,
     createLvAiProgressTracker,
     getLvAiPresetStages,
+    mountLvAiThinkingCard,
+    openLvAiWaitOverlay,
+    withLvAiWait,
     isLvSyncLockError,
     lvWithSyncRetry,
     openJoinQqGroup,
@@ -19491,6 +23125,7 @@ export interface UniversalBlockAction {
     requiresPlugin?: string;
     enabledByDefault?: boolean;
     isPinnedByDefault?: boolean;
+    readOnlySafe?: boolean;
     isAvailable?: (snapshot: any) => boolean;
     execute: (blockID: string, snapshot?: any, batchIDs?: string[]) => void | Promise<void>;
 }
@@ -19499,6 +23134,7 @@ export interface BlockActionStoreConfig {
     version: number;
     enabledActionIds: string[];
     pinnedActionIds: string[];
+    doubleClickActionId?: string;
     customSortOrder?: string[];
     updatedAt?: number;
 }
@@ -19509,16 +23145,50 @@ export interface CustomBlockActionDef {
     subtitle?: string;
     glyph: string;
     group: string;
-    actionType: "prefix-suffix" | "attr" | "script";
+    actionType: "prefix-suffix" | "attr";
     prefix?: string;
     suffix?: string;
     attrKey?: string;
     attrValue?: string;
-    script?: string;
     createdAt?: number;
 }
 
 const CUSTOM_ACTIONS_STORAGE_KEY = "lv_block_assistant_custom_actions_v1";
+const BLOCK_ASSISTANT_MASTER_STORAGE_KEY = "lv_block_assistant_enabled_v1";
+
+let cachedBlockAssistantEnabled: boolean | null = null;
+let cachedStoreConfig: BlockActionStoreConfig | null = null;
+
+function invalidateBlockAssistantConfigCache(key?: string | null): void {
+    if (!key || key === BLOCK_ASSISTANT_MASTER_STORAGE_KEY) {
+        cachedBlockAssistantEnabled = null;
+    }
+    if (!key || key === BLOCK_ACTION_STORE_STORAGE_KEY || key === BLOCK_ACTION_LEGACY_STORE_STORAGE_KEY) {
+        cachedStoreConfig = null;
+    }
+}
+
+function readBlockAssistantEnabled(): boolean {
+    if (cachedBlockAssistantEnabled !== null) {
+        return cachedBlockAssistantEnabled;
+    }
+    try {
+        if (typeof localStorage === "undefined") return true;
+        const val = localStorage.getItem(BLOCK_ASSISTANT_MASTER_STORAGE_KEY) !== "false";
+        cachedBlockAssistantEnabled = val;
+        return val;
+    } catch { return true; }
+}
+
+function writeBlockAssistantEnabled(enabled: boolean): void {
+    const normalized = Boolean(enabled);
+    cachedBlockAssistantEnabled = normalized;
+    try {
+        if (typeof localStorage !== "undefined") {
+            localStorage.setItem(BLOCK_ASSISTANT_MASTER_STORAGE_KEY, normalized ? "true" : "false");
+        }
+    } catch { /* ignore */ }
+}
 
 function readCustomActionsFromStorage(): CustomBlockActionDef[] {
     try {
@@ -19528,7 +23198,9 @@ function readCustomActionsFromStorage(): CustomBlockActionDef[] {
         // hub 初始化即抛 TypeError。与 readStoreConfigFromStorage 对齐做形态收敛。
         if (!raw) return [];
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? (parsed as CustomBlockActionDef[]) : [];
+        if (!Array.isArray(parsed)) return [];
+        // Wave 1C 安全清退：彻底剔除旧版高危 script 自定义动作
+        return parsed.filter((d: any) => d && (d.actionType === "prefix-suffix" || d.actionType === "attr")) as CustomBlockActionDef[];
     } catch { return []; }
 }
 
@@ -19542,16 +23214,26 @@ function writeCustomActionsToStorage(defs: CustomBlockActionDef[]): void {
 
 export interface UniversalBlockAssistantHub {
     version: string;
+    hotkey: string;
     leaderPlugin: string | null;
+    isEnabled: () => boolean;
+    setEnabled: (enabled: boolean) => void;
+    dispose: () => void;
     register: (action: UniversalBlockAction) => () => void;
     getActions: (force?: boolean) => UniversalBlockAction[];
-    getEnabledActions: (force?: boolean) => UniversalBlockAction[];
-    getPinnedActions: (force?: boolean) => UniversalBlockAction[];
+    getEnabledActions: (force?: boolean, snapshot?: BlockSnapshot | string | null) => UniversalBlockAction[];
+    getPinnedActions: (force?: boolean, snapshot?: BlockSnapshot | string | null) => UniversalBlockAction[];
+    getAvailableActions?: (blockIDOrSnapshot: BlockSnapshot | string, force?: boolean) => UniversalBlockAction[];
+    getBlockSnapshot?: (blockID: string, el?: HTMLElement | null) => BlockSnapshot;
     ensureLeader: (pluginId: string, openMenuFn?: (blockID: string, anchor: HTMLElement) => void) => () => void;
     openMenu: (blockID: string, anchor: HTMLElement) => void;
     getStoreConfig: () => BlockActionStoreConfig;
     saveStoreConfig: (config: BlockActionStoreConfig) => void;
     resetStoreConfig: () => BlockActionStoreConfig;
+    getDoubleClickActionId?: () => string;
+    setDoubleClickActionId?: (actionId: string) => string;
+    executeDoubleClickAction?: (blockID: string, snapshot?: BlockSnapshot | null) => Promise<{ ok: boolean; status: string; actionId: string }>;
+    onDisable?: (cb: () => void) => () => void;
     openStoreDialog: (options?: { onConfigChange?: (config: BlockActionStoreConfig) => void }) => void;
     scanPlugins: (force?: boolean) => UniversalBlockAction[];
     getScanCacheStatus?: () => {
@@ -19563,55 +23245,145 @@ export interface UniversalBlockAssistantHub {
 }
 
 const BLOCK_ACTION_STORE_STORAGE_KEY = "lv_block_assistant_store_v1";
+const BLOCK_ACTION_LEGACY_STORE_STORAGE_KEY = "lv_block_action_store_v1";
+export const DEFAULT_BLOCK_ASSISTANT_ACTION_ID = "morph-block-type";
+export const DEFAULT_DOUBLE_CLICK_ACTION_ID = "morph-block-type";
+export const DOUBLE_CLICK_ACTION_DISABLED = "none";
 
 const DEFAULT_PINNED_ACTION_IDS: string[] = [
-    "edit-card-qa",     // 编辑问答 (Alt+Q)
-    "copy-block-ref",   // 复制块引用
-    "focus-block",      // 聚焦当前块
-    "morph-block-type", // 转换块类型
-    "make-cloze",       // 挖空制卡
+    "morph-block-type",   // 默认主动作 & 常驻第 1 位：转换块类型
+    "focus-block",        // 聚焦当前块
+    "copy-block-ref",     // 复制块引用
+    "toggle-fold-block",  // 折叠 / 展开子分支
+    "native-clone-block", // 原地克隆副本
 ];
 
 const DEFAULT_ENABLED_ACTION_IDS: string[] = [
-    // 学习记忆
-    "edit-card-qa", "make-cloze", "make-occlusion", "add-to-deck", "to-exam-question", "exam-ai-generate",
-    // 思源原生
-    "focus-block", "copy-embed-ref", "toggle-fold-block", "morph-block-type", "native-clone-block", "native-move-up", "native-move-down",
+    // 思源原生增强（1–8 任意组合原生底座打底）
+    "morph-block-type", "focus-block", "copy-embed-ref", "toggle-fold-block", "toggle-block-fold",
+    "native-clone-block", "duplicate-block", "native-move-up", "native-move-down",
+    "insert-block-above", "insert-block-below", "cut-block", "delete-block",
     // 复制引用
-    "copy-block-ref", "copy-plain-text", "copy-block-id",
-    // 阅读研读与知识资产
+    "copy-block-content", "copy-block-ref", "copy-plain-text", "copy-block-id",
+    // 学习记忆（按已安装插件动态显隐）
+    "edit-card-qa", "make-cloze", "make-occlusion", "add-to-deck", "to-exam-question", "exam-ai-generate",
+    // 阅读研读与知识资产（按已安装插件动态显隐）
     "to-glean-library", "ghostreader-explain", "capture-quote-common", "contacts-interaction",
-    // 时间打卡与备忘
-    "bind-checkin-item", "add-memo", "speedswitch-workbench",
-    // 精选块级增强与排版
+    // 时间打卡与备忘（按已安装插件动态显隐）
+    "bind-checkin-item", "add-memo", "copy-code-for-snippet",
+    // 精选块级增强与排版（Wave 1C 已清退 7 项高危空壳）
     "community-mindmap", "plugin-pangu-spacing", "plugin-convert-punctuation", "plugin-database-attr", "plugin-wordcount",
-    "plugin-dailynote-append", "plugin-table-format", "plugin-code-run", "plugin-image-tools", "plugin-toc-locate", "plugin-mermaid-zoom"
+    "plugin-table-format", "plugin-toc-locate", "plugin-mermaid-zoom"
 ];
 
+const RETIRED_BLOCK_ACTION_ID_SET = new Set([
+    "plugin-code-run",
+    "plugin-calendar-event",
+    "plugin-kanban-card",
+    "plugin-card-toolbox-qa",
+    "plugin-dailynote-append",
+    "plugin-image-tools",
+    "custom-actions-script",
+]);
+
+function normalizeBlockActionId(raw: unknown): string {
+    const id = String(raw ?? "").trim();
+    if (id === "speedswitch-workbench") return "copy-code-for-snippet";
+    if (id === "add-checkin-item") return "bind-checkin-item";
+    return id;
+}
+
+function normalizeDoubleClickActionId(raw: unknown): string {
+    const s = String(raw ?? "").trim();
+    if (!s) return DEFAULT_DOUBLE_CLICK_ACTION_ID;
+    if (s === DOUBLE_CLICK_ACTION_DISABLED || s === "off" || s === "disabled") {
+        return DOUBLE_CLICK_ACTION_DISABLED;
+    }
+    const id = normalizeBlockActionId(s);
+    if (!id || RETIRED_BLOCK_ACTION_ID_SET.has(id) || id === "delete-block") {
+        return DEFAULT_DOUBLE_CLICK_ACTION_ID;
+    }
+    return id;
+}
+
+function normalizeStoreActionIds(ids: unknown[]): string[] {
+    const out: string[] = [];
+    for (const raw of ids) {
+        const id = normalizeBlockActionId(raw);
+        if (!id || RETIRED_BLOCK_ACTION_ID_SET.has(id) || out.includes(id)) continue;
+        out.push(id);
+    }
+    return out;
+}
+
+function cloneStoreConfig(cfg: BlockActionStoreConfig): BlockActionStoreConfig {
+    return {
+        ...cfg,
+        enabledActionIds: [...cfg.enabledActionIds],
+        pinnedActionIds: [...cfg.pinnedActionIds],
+    };
+}
+
 function readStoreConfigFromStorage(): BlockActionStoreConfig {
+    if (cachedStoreConfig !== null) {
+        return cloneStoreConfig(cachedStoreConfig);
+    }
+    const def = (): BlockActionStoreConfig => ({
+        version: 1,
+        enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS],
+        pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS],
+        doubleClickActionId: DEFAULT_DOUBLE_CLICK_ACTION_ID,
+    });
     try {
         if (typeof localStorage === "undefined") {
-            return { version: 1, enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS], pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS] };
+            return def();
         }
-        const raw = localStorage.getItem(BLOCK_ACTION_STORE_STORAGE_KEY);
+        const raw =
+            localStorage.getItem(BLOCK_ACTION_STORE_STORAGE_KEY) ||
+            localStorage.getItem(BLOCK_ACTION_LEGACY_STORE_STORAGE_KEY);
         if (!raw) {
-            return { version: 1, enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS], pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS] };
+            const fallback = def();
+            cachedStoreConfig = cloneStoreConfig(fallback);
+            return fallback;
         }
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.enabledActionIds) && Array.isArray(parsed.pinnedActionIds)) {
-            return parsed;
+            const normalized: BlockActionStoreConfig = {
+                ...parsed,
+                enabledActionIds: normalizeStoreActionIds(parsed.enabledActionIds),
+                pinnedActionIds: normalizeStoreActionIds(parsed.pinnedActionIds),
+                doubleClickActionId: normalizeDoubleClickActionId(parsed.doubleClickActionId),
+            };
+            cachedStoreConfig = cloneStoreConfig(normalized);
+            return normalized;
         }
     } catch { /* ignore */ }
-    return { version: 1, enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS], pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS] };
+    const fallback = def();
+    if (typeof localStorage !== "undefined") {
+        cachedStoreConfig = cloneStoreConfig(fallback);
+    }
+    return fallback;
 }
 
 function writeStoreConfigToStorage(cfg: BlockActionStoreConfig): void {
     try {
+        const prev = readStoreConfigFromStorage();
+        const normalized: BlockActionStoreConfig = {
+            ...cfg,
+            version: typeof cfg.version === "number" ? cfg.version : 1,
+            enabledActionIds: normalizeStoreActionIds(Array.isArray(cfg.enabledActionIds) ? cfg.enabledActionIds : prev.enabledActionIds),
+            pinnedActionIds: normalizeStoreActionIds(Array.isArray(cfg.pinnedActionIds) ? cfg.pinnedActionIds : prev.pinnedActionIds),
+            doubleClickActionId:
+                cfg.doubleClickActionId !== undefined
+                    ? normalizeDoubleClickActionId(cfg.doubleClickActionId)
+                    : (prev.doubleClickActionId || DEFAULT_DOUBLE_CLICK_ACTION_ID),
+            updatedAt: Date.now(),
+        };
+        cachedStoreConfig = cloneStoreConfig(normalized);
         if (typeof localStorage !== "undefined") {
-            cfg.updatedAt = Date.now();
-            localStorage.setItem(BLOCK_ACTION_STORE_STORAGE_KEY, JSON.stringify(cfg));
+            localStorage.setItem(BLOCK_ACTION_STORE_STORAGE_KEY, JSON.stringify(normalized));
             if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("lv-block-action-store-updated", { detail: cfg }));
+                window.dispatchEvent(new CustomEvent("lv-block-action-store-updated", { detail: normalized }));
             }
         }
     } catch { /* ignore */ }
@@ -19622,6 +23394,273 @@ let blockAssistantLeader: string | null = null;
 let blockAssistantOpenFn: ((blockID: string, anchor: HTMLElement) => void) | null = null;
 const blockAssistantOpenFns = new Map<string, (blockID: string, anchor: HTMLElement) => void>();
 const blockAssistantOwners = new Set<string>();
+const blockAssistantDisableHooks = new Set<() => void>();
+
+function buildNoticeKitHubContextInput(context: any, piiPolicy: string = "standard", maxChars = 12000): string {
+    const applyMask = (s: string) => {
+        if (!s || piiPolicy === "none") return s;
+        let out = String(s);
+        out = out.replace(/\b(sk-[a-zA-Z0-9_-]{20,}|ghp_[a-zA-Z0-9]{30,}|Bearer\s+[a-zA-Z0-9._-]{20,})\b/g, "[KEY_REDACTED]");
+        out = out.replace(/\b([1-9]\d{5})(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(\d{3}[\dXx])\b/g, "$1********$2");
+        out = out.replace(/(?<!\d)(1[3-9]\d)(\d{4})(\d{4})(?!\d)/g, "$1****$3");
+        out = out.replace(/(?<!\d)([4-6]\d{3})\s?(\d{4})\s?(\d{4})\s?(\d{4,7})(?!\d)/g, "$1 **** **** [BANK_CARD]");
+        return out;
+    };
+    const headParts: string[] = [];
+    const tailParts: string[] = [];
+    const heading = typeof context?.parentOutlineHeading === "string" ? context.parentOutlineHeading.trim() : "";
+    if (heading) headParts.push(`[大纲] ${applyMask(heading).slice(0, 300)}`);
+    const prev = typeof context?.siblingContext?.prev === "string" ? context.siblingContext.prev.trim() : "";
+    if (prev) headParts.push(`[上文] ${applyMask(prev).slice(0, 400)}`);
+    const next = typeof context?.siblingContext?.next === "string" ? context.siblingContext.next.trim() : "";
+    if (next) tailParts.push(`[下文] ${applyMask(next).slice(0, 400)}`);
+    if (Array.isArray(context?.referenceLinks) && context.referenceLinks.length > 0) {
+        const refs = context.referenceLinks
+            .slice(0, 8)
+            .map((r: unknown) => applyMask(String(r || "").trim()))
+            .filter(Boolean);
+        if (refs.length > 0) tailParts.push(`[引用] ${refs.join(" | ").slice(0, 600)}`);
+    }
+    const overhead = [...headParts, ...tailParts].reduce((acc, s) => acc + s.length + 2, 0);
+    const focusRaw = applyMask(String(context?.focusBlockContent || ""));
+    const focusBudget = Math.max(128, maxChars - overhead);
+    const focus = focusRaw.length <= focusBudget
+        ? focusRaw
+        : `${focusRaw.slice(0, Math.max(0, focusBudget - 1))}…`;
+    const joined = [...headParts, ...(focus ? [focus] : []), ...tailParts].join("\n\n");
+    if (joined.length <= maxChars) return joined;
+    return `${joined.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function mapNoticeKitPreferredTier(preferredTier?: string): string | undefined {
+    if (!preferredTier) return undefined;
+    if (preferredTier === "siyuan_editor" || preferredTier === "siyuan_legacy" || preferredTier === "siyuan") return "siyuan";
+    if (preferredTier === "user_custom" || preferredTier === "ollama" || preferredTier === "public_free" || preferredTier === "rule_fallback") {
+        return preferredTier;
+    }
+    return undefined;
+}
+
+function ensureNoticeKitAiHubMounted(): any {
+    const g = typeof globalThis !== "undefined" ? (globalThis as any) : null;
+    const w = typeof window !== "undefined" ? (window as any) : null;
+    if (w?.__LV_AI_HUB__) return w.__LV_AI_HUB__;
+    if (g?.__LV_AI_HUB__) {
+        if (w) w.__LV_AI_HUB__ = g.__LV_AI_HUB__;
+        return g.__LV_AI_HUB__;
+    }
+    try {
+        if (typeof w?.ensureSharedAiHubMounted === "function") {
+            const hub = w.ensureSharedAiHubMounted();
+            if (hub) return hub;
+        }
+        if (typeof w?.getSharedAiRouter === "function") {
+            const router = w.getSharedAiRouter();
+            const hub = router?.getHubDelegate?.();
+            if (hub) {
+                if (w) w.__LV_AI_HUB__ = hub;
+                if (g) g.__LV_AI_HUB__ = hub;
+                return hub;
+            }
+        }
+    } catch { /* fallback to built-in adapter */ }
+
+    const stats = { activeRequests: 0, totalRequests: 0, fallbackCount: 0 };
+    const runTask = async (hubPayload: any): Promise<any> => {
+        stats.activeRequests++;
+        stats.totalRequests++;
+        try {
+            const piiPolicy = hubPayload?.piiPolicy || "standard";
+            const text = buildNoticeKitHubContextInput(hubPayload?.context, piiPolicy, 12000);
+            const preferredProvider = mapNoticeKitPreferredTier(hubPayload?.preferredTier);
+            if (hubPayload?.signal?.aborted) {
+                return {
+                    templateId: "T6",
+                    headline: "已取消，未发起写回",
+                    state: "done",
+                    outcome: { cancelReason: hubPayload?.cancelReasonHint || "user", completeness: 0 },
+                    controls: { canStop: false, canBackground: false, canRetry: true },
+                    evidence: [],
+                    blocks: [],
+                    actions: [],
+                    meta: {
+                        provider: preferredProvider === "siyuan" ? "siyuan_editor" : (preferredProvider || "siyuan_editor"),
+                        model: "aborted",
+                        promptId: hubPayload?.promptId || "legacy",
+                        promptVersion: hubPayload?.promptVersion || 1,
+                        generatedAt: new Date().toISOString(),
+                        sourceHash: "",
+                        aiSourceAttr: "editor",
+                        offlineDegraded: false,
+                        savedToDisk: false,
+                        errorReason: "aborted",
+                    },
+                };
+            }
+            const router = typeof w?.getSharedAiRouter === "function" ? w.getSharedAiRouter() : null;
+            if (router && typeof router.chat === "function") {
+                const allowPublicFree = hubPayload?.allowFreePool === true;
+                const chatRes = await router.chat({
+                    messages: [{ role: "user", content: text }],
+                    taskType: hubPayload?.taskType === "block_skill" ? "chat" : (hubPayload?.taskType || "chat"),
+                    preferredProvider,
+                    preferredTier: hubPayload?.preferredTier,
+                    allowPublicFree,
+                    signal: hubPayload?.signal,
+                    onChunk: hubPayload?.onChunk,
+                });
+                if (hubPayload?.signal?.aborted || chatRes?.error === "aborted") {
+                    return {
+                        templateId: "T6",
+                        headline: "已取消，未发起写回",
+                        state: "done",
+                        outcome: { cancelReason: hubPayload?.cancelReasonHint || "user", completeness: 0 },
+                        controls: { canStop: false, canBackground: false, canRetry: true },
+                        evidence: [],
+                        blocks: [],
+                        actions: [],
+                        meta: {
+                            provider: chatRes?.provider === "siyuan" ? "siyuan_editor" : (chatRes?.provider || "siyuan_editor"),
+                            model: chatRes?.model || "aborted",
+                            promptId: hubPayload?.promptId || "legacy",
+                            promptVersion: hubPayload?.promptVersion || 1,
+                            generatedAt: new Date().toISOString(),
+                            sourceHash: "",
+                            aiSourceAttr: "editor",
+                            offlineDegraded: false,
+                            savedToDisk: false,
+                            errorReason: "aborted",
+                        },
+                    };
+                }
+                const isReal = Boolean(chatRes?.ok && !chatRes?.isFallback && chatRes?.provider !== "rule_fallback");
+                if (!isReal) stats.fallbackCount++;
+                return {
+                    templateId: "T6",
+                    headline: (isReal ? (chatRes.content || "AI 已完成") : `离线/未配置 (${chatRes?.error || "未配置模型"})`).slice(0, 40),
+                    state: isReal ? "done" : "failedFallback",
+                    controls: { canStop: false, canBackground: false, canRetry: !isReal },
+                    evidence: [],
+                    blocks: chatRes?.content ? [{ type: "markdown", text: chatRes.content }] : [],
+                    actions: isReal ? [] : [{ id: "copy", label: "仅复制初稿（未保存）", kind: "copy", needsConfirm: false }],
+                    meta: {
+                        provider: chatRes?.provider === "siyuan" ? "siyuan_editor" : (chatRes?.provider || "rule_fallback"),
+                        model: chatRes?.model || "local-heuristic-engine",
+                        promptId: hubPayload?.promptId || "legacy",
+                        promptVersion: hubPayload?.promptVersion || 1,
+                        generatedAt: new Date().toISOString(),
+                        sourceHash: "",
+                        aiSourceAttr: "editor",
+                        offlineDegraded: !isReal,
+                        savedToDisk: false,
+                        errorReason: isReal ? undefined : (chatRes?.error || "offline_or_unconfigured"),
+                    },
+                };
+            }
+            const reply = await lvEditorChatFallback(text, hubPayload?.signal, true);
+            if (hubPayload?.signal?.aborted) {
+                return {
+                    templateId: "T6",
+                    headline: "已取消，未发起写回",
+                    state: "done",
+                    outcome: { cancelReason: hubPayload?.cancelReasonHint || "user", completeness: 0 },
+                    controls: { canStop: false, canBackground: false, canRetry: true },
+                    evidence: [],
+                    blocks: [],
+                    actions: [],
+                    meta: {
+                        provider: "siyuan_editor",
+                        model: "aborted",
+                        promptId: hubPayload?.promptId || "legacy",
+                        promptVersion: hubPayload?.promptVersion || 1,
+                        generatedAt: new Date().toISOString(),
+                        sourceHash: "",
+                        aiSourceAttr: "editor",
+                        offlineDegraded: false,
+                        savedToDisk: false,
+                        errorReason: "aborted",
+                    },
+                };
+            }
+            if (reply) {
+                return {
+                    templateId: "T6",
+                    headline: reply.slice(0, 40),
+                    state: "done",
+                    controls: { canStop: false, canBackground: false, canRetry: false },
+                    evidence: [],
+                    blocks: [{ type: "markdown", text: reply }],
+                    actions: [],
+                    meta: {
+                        provider: "siyuan_editor",
+                        model: "siyuan-editor-chat",
+                        promptId: hubPayload?.promptId || "legacy",
+                        promptVersion: hubPayload?.promptVersion || 1,
+                        generatedAt: new Date().toISOString(),
+                        sourceHash: "",
+                        aiSourceAttr: "editor",
+                        offlineDegraded: false,
+                        savedToDisk: false,
+                    },
+                };
+            }
+            stats.fallbackCount++;
+            return {
+                templateId: "T6",
+                headline: "未配置可用在线 AI 模型",
+                state: "failedFallback",
+                controls: { canStop: false, canBackground: false, canRetry: true },
+                evidence: [],
+                blocks: [],
+                actions: [],
+                meta: {
+                    provider: "rule_fallback",
+                    model: "none",
+                    promptId: hubPayload?.promptId || "legacy",
+                    promptVersion: hubPayload?.promptVersion || 1,
+                    generatedAt: new Date().toISOString(),
+                    sourceHash: "",
+                    aiSourceAttr: "editor",
+                    offlineDegraded: true,
+                    savedToDisk: false,
+                    errorReason: "offline_or_unconfigured",
+                },
+            };
+        } finally {
+            stats.activeRequests = Math.max(0, stats.activeRequests - 1);
+        }
+    };
+    const api = {
+        protocol: 200,
+        runTask,
+        runBlockSkill: async (skillOpts: any) => runTask({
+            requestId: `blk-${skillOpts?.blockId || "0"}-${Date.now()}`,
+            generationNonce: 1,
+            sourcePlugin: skillOpts?.sourcePlugin || "lv-block-assistant",
+            capability: skillOpts?.capability || "L3",
+            taskType: "block_skill",
+            promptId: `block-skill:${skillOpts?.skillId || "default"}`,
+            promptVersion: 1,
+            context: {
+                focusBlockContent: skillOpts?.focusBlockContent || "",
+                docAttributes: { blockId: skillOpts?.blockId, blockType: skillOpts?.blockType },
+            },
+            piiPolicy: "standard",
+            allowFreePool: false,
+            signal: skillOpts?.signal,
+            onChunk: skillOpts?.onChunk,
+        }),
+        probeAllTiers: async () => {
+            const router = typeof w?.getSharedAiRouter === "function" ? w.getSharedAiRouter() : null;
+            return router?.testAllTiers ? router.testAllTiers() : {};
+        },
+        getStats: () => ({ ...stats }),
+        updateOptions: () => {},
+    };
+    if (w) w.__LV_AI_HUB__ = api;
+    if (g) g.__LV_AI_HUB__ = api;
+    return api;
+}
 
 /** 纯净提取块文本（彻底排除 .protyle-attr 属性栏与胶囊按钮的文字污染） */
 /**
@@ -19667,39 +23706,276 @@ export function sanitizeHPath(rawPath: string, fallback = "/未命名"): string 
 
 export function getCleanBlockText(el: HTMLElement | null | undefined): string {
     if (!el) return "";
+    const stripZws = (s: string) => s.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
     const edit = el.querySelector<HTMLElement>(':scope > [contenteditable="true"]')
         || el.querySelector<HTMLElement>('[contenteditable="true"]');
     if (edit) {
         const clone = edit.cloneNode(true) as HTMLElement;
-        clone.querySelectorAll(".protyle-attr, .protyle-action, .protyle-gutters, .lv-card-badge-pill").forEach(n => n.remove());
-        return (clone.textContent || "").trim();
+        clone.querySelectorAll(".protyle-attr, .protyle-action, .protyle-gutters, .lv-card-badge-pill, .protyle-action__drag, .protyle-action__menu").forEach(n => n.remove());
+        return stripZws(clone.textContent || "");
     }
     const clone = el.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll(".protyle-attr, .protyle-action, .protyle-gutters, .lv-card-badge-pill").forEach(n => n.remove());
-    return (clone.textContent || "").trim();
+    clone.querySelectorAll(".protyle-attr, .protyle-action, .protyle-gutters, .lv-card-badge-pill, .protyle-action__drag, .protyle-action__menu").forEach(n => n.remove());
+    return stripZws(clone.textContent || "");
+}
+
+const LV_BLOCK_ASSIST_EXCLUDED_SUBTREE_CLASSES = [
+    "protyle-breadcrumb",
+    "protyle-title",
+    "lv-review",
+    "lv-cards-root",
+    "lv-card-content",
+    "lv-peek-body",
+    "lv-detail-preview",
+] as const;
+
+const LV_BLOCK_ASSIST_NON_EDITABLE_PLUGIN_CLASSES = [
+    "lv-review",
+    "lv-cards-root",
+    "lv-card-content",
+    "lv-peek-body",
+    "lv-detail-preview",
+] as const;
+
+function hasClassInAncestors(el: Element | null | undefined, classNames: readonly string[]): boolean {
+    let cur: Element | null | undefined = el;
+    while (cur) {
+        const cls = (cur.className && typeof cur.className === "string") ? cur.className.split(/\s+/) : [];
+        for (const c of classNames) {
+            if (cls.includes(c)) return true;
+        }
+        cur = cur.parentElement;
+    }
+    return false;
+}
+
+function isInsidePluginReviewOrPreviewSubtree(el: Element | null | undefined): boolean {
+    if (!el) return false;
+    try {
+        if (typeof el.closest === "function" && el.closest(".lv-review, .lv-cards-root, .lv-card-content, .lv-peek-body, .lv-detail-preview")) {
+            return true;
+        }
+    } catch { /* ignore */ }
+    return hasClassInAncestors(el, LV_BLOCK_ASSIST_NON_EDITABLE_PLUGIN_CLASSES);
+}
+
+function isExcludedBlockAssistElement(el: Element | null | undefined): boolean {
+    if (!el) return false;
+    try {
+        if (typeof el.closest === "function" && el.closest(".protyle-breadcrumb, .protyle-title, .lv-review, .lv-cards-root, .lv-card-content, .lv-peek-body, .lv-detail-preview")) {
+            return true;
+        }
+    } catch { /* ignore */ }
+    return hasClassInAncestors(el, LV_BLOCK_ASSIST_EXCLUDED_SUBTREE_CLASSES);
+}
+
+export interface BlockSnapshot {
+    blockId: string;
+    docId?: string;
+    blockKind?: string;
+    rawType?: string;
+    subtype?: string;
+    cleanText?: string;
+    hasText?: boolean;
+    hasSelection?: boolean;
+    hasImage?: boolean;
+    hasSvg?: boolean;
+    hasMermaid?: boolean;
+    isDocument?: boolean;
+    isCard?: boolean;
+    isAv?: boolean;
+    hasAv?: boolean;
+    hasCloze?: boolean;
+    hasQaPattern?: boolean;
+    isReadOnly?: boolean;
+}
+
+export const READ_ONLY_SAFE_BLOCK_ACTION_IDS: ReadonlySet<string> = new Set([
+    "focus-block",
+    "copy-block-content",
+    "copy-embed-ref",
+    "copy-block-ref",
+    "copy-plain-text",
+    "copy-block-id",
+    "copy-code-for-snippet",
+    "ghostreader-explain",
+    "plugin-wordcount",
+    "plugin-toc-locate",
+    "plugin-mermaid-zoom",
+]);
+
+export function isReadOnlySafeBlockAction(action: { id?: string; readOnlySafe?: boolean } | string | null | undefined): boolean {
+    if (!action) return false;
+    if (typeof action === "string") return READ_ONLY_SAFE_BLOCK_ACTION_IDS.has(action);
+    if (action.readOnlySafe === true) return true;
+    return Boolean(action.id && READ_ONLY_SAFE_BLOCK_ACTION_IDS.has(action.id));
+}
+
+export function isBlockOrProtyleReadOnly(blockID?: string, el?: HTMLElement | null): boolean {
+    try {
+        const w = typeof window !== "undefined" ? (window as any) : null;
+        if (w?.siyuan?.isReadOnly === true || w?.isReadOnly === true) return true;
+        const targetEl = el || (blockID ? queryBlockElementById(blockID) : null);
+        const protyle = (targetEl?.closest?.(".protyle") as HTMLElement | null) || queryActiveProtyle();
+        if (protyle) {
+            if ((protyle as any).disabled === true) return true;
+            if ((protyle as any)?.model?.editor?.protyle?.disabled === true) return true;
+            if (protyle.getAttribute?.("data-readonly") === "true" || protyle.classList?.contains?.("protyle--readonly")) return true;
+        }
+        const isReadOnlyAttr = (node: HTMLElement | null | undefined): boolean => {
+            if (!node) return false;
+            for (const attr of ["custom-sy-readonly", "custom-siyuan-readonly"]) {
+                const ro = node.getAttribute?.(attr);
+                if (ro === "true" || ro === "1") return true;
+            }
+            return false;
+        };
+        const wysiwyg = (targetEl?.closest?.(".protyle-wysiwyg") as HTMLElement | null)
+            || (protyle?.querySelector?.(".protyle-wysiwyg") as HTMLElement | null);
+        if (wysiwyg) {
+            if (wysiwyg.getAttribute?.("contenteditable") === "false") return true;
+            if (isReadOnlyAttr(wysiwyg)) return true;
+        }
+        const titleEl = protyle?.querySelector?.(".protyle-title") as HTMLElement | null;
+        for (const node of [targetEl, protyle, titleEl]) {
+            if (isReadOnlyAttr(node)) return true;
+        }
+        if (targetEl?.getAttribute?.("contenteditable") === "false") return true;
+    } catch { /* ignore */ }
+    return false;
+}
+
+const FLASHCARD_BLOCK_ATTR_NAMES = [
+    "custom-riff-decks",
+    "custom-riff-title",
+    "custom-lv-question",
+    "custom-lv-answer",
+    "custom-card-answer",
+    "custom-riff-answer",
+] as const;
+
+export function isFlashcardBlockElement(el: HTMLElement | null | undefined): boolean {
+    if (!el || typeof el.hasAttribute !== "function") return false;
+    for (const attr of FLASHCARD_BLOCK_ATTR_NAMES) {
+        if (el.hasAttribute(attr)) {
+            const val = el.getAttribute?.(attr);
+            if (val !== null && val !== undefined && String(val).trim() !== "") {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+export function buildBlockSnapshot(blockID: string, el?: HTMLElement | null): BlockSnapshot {
+    const targetEl = el || queryBlockElementById(blockID);
+    const rawType = targetEl?.getAttribute?.("data-type") || "";
+    const subtype = targetEl?.getAttribute?.("data-subtype") || "";
+    const blockKind = rawType === "NodeHeading" ? "heading"
+        : rawType === "NodeCodeBlock" ? "code"
+        : rawType === "NodeMathBlock" ? "math"
+        : rawType === "NodeTable" ? "table"
+        : rawType === "NodeAttributeView" ? "av"
+        : rawType === "NodeList" || rawType === "NodeListItem" ? (subtype === "t" ? "task" : subtype === "o" ? "ordered-list" : "list")
+        : rawType === "NodeBlockquote" ? "quote"
+        : rawType === "NodeSuperBlock" ? "superblock"
+        : rawType === "NodeDocument" ? "document"
+        : "paragraph";
+    const text = getCleanBlockText(targetEl);
+    const hasImage = Boolean(targetEl?.querySelector?.("img"));
+    const hasSvg = Boolean(targetEl?.querySelector?.("svg"));
+    const hasMermaid = Boolean(/^(mermaid|echarts|graphviz|plantuml)$/i.test(subtype) || targetEl?.querySelector?.('[data-subtype="mermaid"], .language-mermaid'));
+    const isCard = isFlashcardBlockElement(targetEl);
+    const protyle = (targetEl?.closest?.(".protyle") as HTMLElement | null) || queryActiveProtyle();
+    const docId = protyle?.querySelector?.(".protyle-wysiwyg")?.getAttribute?.("data-doc-id") || undefined;
+    return {
+        blockId: blockID,
+        docId,
+        blockKind,
+        rawType,
+        subtype,
+        cleanText: text,
+        hasText: text.length > 0,
+        hasImage,
+        hasSvg,
+        hasMermaid,
+        isDocument: rawType === "NodeDocument",
+        isCard,
+        isAv: blockKind === "av",
+        isReadOnly: isBlockOrProtyleReadOnly(blockID, targetEl),
+    };
+}
+
+export function isActionAllowedForSnapshot(action: UniversalBlockAction, snapshot?: BlockSnapshot | null): boolean {
+    if (!action) return false;
+    if (snapshot?.isReadOnly && !isReadOnlySafeBlockAction(action)) {
+        return false;
+    }
+    if (typeof action.isAvailable === "function" && snapshot) {
+        try {
+            return Boolean(action.isAvailable(snapshot));
+        } catch {
+            return false;
+        }
+    }
+    return true;
 }
 
 /**
- * 按块 ID 精确查询真实块元素（2026-11-21 走查修复，bug⑥ 根治）。
- * 思源面包屑 span.protyle-breadcrumb__item 会复制块的 data-node-id 且文档序先于真实块，
- * 裸 `document.querySelector('[data-node-id=…]')` 会命中空面包屑，导致字数统计恒 0、
- * 看板锚点空文本、morph/fold 拿错元素等系统性误判。
- * 查询顺序：编辑器域(.protyle-wysiwyg) → 预览/导出域(.b3-typography) → 全局兜底（排除面包屑与文档标题）。
+ * 按块 ID 精确查询真实块元素（双分屏严格优先激活窗 + 排除面包屑/文档标题与插件复习预览区）。
  */
 export function queryBlockElementById(blockID: string): HTMLElement | null {
-    if (typeof document === "undefined" || typeof document.querySelector !== "function" || !blockID) return null;
+    if (typeof document === "undefined" || typeof document.querySelectorAll !== "function" || !blockID) return null;
     try {
-        const scoped = document.querySelector<HTMLElement>(
-            `.protyle-wysiwyg [data-node-id="${blockID}"], .b3-typography [data-node-id="${blockID}"]`,
-        );
-        if (scoped) return scoped;
-        const all = document.querySelectorAll<HTMLElement>(`[data-node-id="${blockID}"]`);
-        let fallback: HTMLElement | null = null;
-        for (const el of all) {
-            if (!fallback) fallback = el;
-            if (!el.closest(".protyle-breadcrumb, .protyle-title")) return el;
+        const pickFirstValid = (nodes: Iterable<HTMLElement> | null | undefined): HTMLElement | null => {
+            if (!nodes) return null;
+            for (const el of nodes) {
+                if (!isExcludedBlockAssistElement(el)) return el;
+            }
+            return null;
+        };
+
+        // 1. 双分屏严格优先激活窗 (.layout__wnd--active .protyle:not(.fn__none))
+        if (typeof document.querySelector === "function") {
+            const activeProtyle = document.querySelector<HTMLElement>(".layout__wnd--active .protyle:not(.fn__none)")
+                || document.querySelector<HTMLElement>(".layout__wnd--active .protyle");
+            if (activeProtyle && typeof activeProtyle.querySelectorAll === "function") {
+                const inActiveWysiwyg = pickFirstValid(
+                    activeProtyle.querySelectorAll<HTMLElement>(`.protyle-wysiwyg [data-node-id="${blockID}"]`)
+                );
+                if (inActiveWysiwyg) return inActiveWysiwyg;
+                const inActiveProtyle = pickFirstValid(
+                    activeProtyle.querySelectorAll<HTMLElement>(`[data-node-id="${blockID}"]`)
+                );
+                if (inActiveProtyle) return inActiveProtyle;
+            }
         }
-        return fallback;
+
+        // 2. 退回可见编辑器域 (.protyle:not(.fn__none) .protyle-wysiwyg) 与预览域 (.b3-typography)
+        const inVisibleProtyle = pickFirstValid(
+            document.querySelectorAll<HTMLElement>(`.protyle:not(.fn__none) .protyle-wysiwyg [data-node-id="${blockID}"]`)
+        );
+        if (inVisibleProtyle) return inVisibleProtyle;
+
+        const inWysiwyg = pickFirstValid(
+            document.querySelectorAll<HTMLElement>(`.protyle-wysiwyg [data-node-id="${blockID}"]`)
+        );
+        if (inWysiwyg) return inWysiwyg;
+
+        const inTypography = pickFirstValid(
+            document.querySelectorAll<HTMLElement>(`.b3-typography [data-node-id="${blockID}"]`)
+        );
+        if (inTypography) return inTypography;
+
+        // 3. 全局兜底（排除面包屑/标题及复习/预览卡片子树）
+        const all = document.querySelectorAll<HTMLElement>(`[data-node-id="${blockID}"]`);
+        const valid = pickFirstValid(all);
+        if (valid) return valid;
+
+        for (const el of all) {
+            if (!isInsidePluginReviewOrPreviewSubtree(el)) return el;
+        }
+        return null;
     } catch {
         return null;
     }
@@ -19717,7 +23993,7 @@ export async function getPureBlockMarkdown(blockID: string, fallbackEl?: HTMLEle
     if (fallbackEl) {
         return getCleanBlockText(fallbackEl);
     }
-    const el = (typeof document !== "undefined") ? (document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) || queryBlockElementById(blockID)) : null;
+    const el = queryBlockElementById(blockID);
     return getCleanBlockText(el as HTMLElement);
 }
 
@@ -19889,12 +24165,25 @@ export const BLOCK_MORPH_TARGETS: readonly BlockMorphTarget[] = [
         description: "LaTeX 块级居中数学公式 ($$)",
         formatMarkdown: (c) => "$$\n" + c + "\n$$",
     },
+    {
+        id: "superblock",
+        name: "超级块",
+        glyph: "⊞",
+        shortcut: "S",
+        category: "container",
+        description: "将块包装为超级块布局容器 ({{{ ... }}})",
+        formatMarkdown: (c) => `{{{\n${c}\n}}}`,
+    },
 ];
 
-/** 深度抽取块内容的核心正文 Markdown，安全剥离外层各种块级包装（列表/待办/标题/引述/提示/代码/公式/IAL） */
+/** 深度抽取块内容的核心正文 Markdown，安全剥离外层各种块级包装（列表/待办/标题/引述/提示/代码/公式/超级块/IAL） */
 export function extractCoreMarkdown(rawMd: string): string {
     if (!rawMd || typeof rawMd !== "string") return "";
     let text = rawMd.replace(/\{:[^}]*\}\s*$/g, "").trim();
+
+    // 0. 超级块外壳剥离
+    const superMatch = text.match(/^\{\{\{(?:row|col)?\s*\r?\n([\s\S]*?)\r?\n\}\}\}$/);
+    if (superMatch) return extractCoreMarkdown((superMatch[1] ?? "").trim());
 
     // 1. 代码块外壳剥离
     const codeMatch = text.match(/^```[^\r\n]*\r?\n([\s\S]*?)\r?\n?```$/);
@@ -19930,6 +24219,7 @@ export function detectCurrentBlockType(el: HTMLElement | null, rawMd?: string): 
     if (el) {
         const type = el.getAttribute("data-type");
         const subtype = el.getAttribute("data-subtype");
+        if (type === "NodeSuperBlock") return "superblock";
         if (type === "NodeHeading") {
             if (subtype && /^h[1-6]$/i.test(subtype)) return subtype.toLowerCase();
             return "h1";
@@ -19953,6 +24243,7 @@ export function detectCurrentBlockType(el: HTMLElement | null, rawMd?: string): 
     }
     if (rawMd) {
         const clean = rawMd.replace(/\{:[^}]*\}\s*$/g, "").trim();
+        if (/^\{\{\{(?:row|col)?\s*\r?\n/.test(clean)) return "superblock";
         if (/^```/.test(clean)) return "code";
         if (/^\$\$/.test(clean)) return "math";
         if (/^>\s*\[!/i.test(clean)) return "callout";
@@ -19991,10 +24282,11 @@ export async function morphBlockTypeTo(
     });
 
     try {
-        const el = (typeof document !== "undefined")
-            ? ((document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`)
-                || queryBlockElementById(blockID)) as HTMLElement | null)
-            : null;
+        const el = queryBlockElementById(blockID);
+        if (isBlockOrProtyleReadOnly(blockID, el)) {
+            showMsg("当前文档处于只读状态，已拦截块类型转换", 2000, "info");
+            return false;
+        }
 
         const listItem = el?.closest?.('[data-type="NodeListItem"]');
         const listEl = el?.closest?.('[data-type="NodeList"]');
@@ -20175,18 +24467,13 @@ export function openBlockTypeMorphPicker(
 
     const root = document.createElement("div");
     root.id = "lv-block-type-picker-root";
-
-    // 遮罩层
-    const mask = document.createElement("div");
-    mask.style.cssText = `
+    // Wave 1C 外置无遮罩非模态：容器 pointer-events: none，左侧思源块 100% 透传可点选
+    root.style.cssText = `
         position: fixed;
         inset: 0;
         z-index: 99998;
-        background: ${isMobile ? "rgba(15, 23, 42, 0.35)" : "transparent"};
-        backdrop-filter: ${isMobile ? "blur(3px)" : "none"};
-        -webkit-backdrop-filter: ${isMobile ? "blur(3px)" : "none"};
+        pointer-events: none;
     `;
-    root.appendChild(mask);
 
     // 弹窗本体
     const picker = document.createElement("div");
@@ -20196,12 +24483,13 @@ export function openBlockTypeMorphPicker(
     picker.style.cssText = `
         position: fixed;
         z-index: 99999;
+        pointer-events: auto;
         width: ${isMobile ? "min(92vw, 360px)" : "340px"};
         max-height: min(85vh, 520px);
         background: var(--b3-theme-surface, #ffffff);
         border: 1px solid var(--b3-theme-surface-lighter, rgba(140, 140, 140, 0.22));
         border-radius: 10px;
-        box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 12px 30px -6px rgba(24, 24, 27, 0.16), 0 2px 8px rgba(24, 24, 27, 0.06);
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -20285,18 +24573,21 @@ export function openBlockTypeMorphPicker(
     `;
     picker.appendChild(body);
 
+    const onOutsidePointerDown = (e: Event) => {
+        const target = e.target as Node | null;
+        if (target && picker.contains(target)) return;
+        close();
+    };
+
     const close = () => {
         try {
             root.remove();
         } catch { /* ignore */ }
         window.removeEventListener("keydown", onGlobalKeyDown, true);
+        document.removeEventListener("pointerdown", onOutsidePointerDown, true);
     };
 
-    mask.addEventListener("pointerdown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        close();
-    });
+    document.addEventListener("pointerdown", onOutsidePointerDown, true);
 
     const handleSelect = async (targetId: string) => {
         close();
@@ -20464,6 +24755,7 @@ export function openBlockTypeMorphPicker(
     });
 
     const onGlobalKeyDown = (e: KeyboardEvent) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
@@ -20559,6 +24851,64 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
         return w.__LV_BLOCK_ASSISTANT_HUB__;
     }
 
+    const EDITOR_ZERO_TOUCH_ANCESTOR_SELECTOR = ".protyle-wysiwyg, [data-node-id], .protyle-attr, [contenteditable='true']";
+
+    const isInsideEditorZeroTouchSubtree = (el: Element | null | undefined): boolean => {
+        if (!el) return false;
+        const htmlEl = el as HTMLElement;
+        if (typeof htmlEl.closest === "function") {
+            try {
+                if (htmlEl.closest(EDITOR_ZERO_TOUCH_ANCESTOR_SELECTOR)) return true;
+            } catch { /* ignore */ }
+        }
+        const body = typeof document !== "undefined" ? document.body : null;
+        let cur: HTMLElement | null = htmlEl;
+        let depth = 0;
+        while (cur && cur !== body && depth < 64) {
+            if (
+                cur.classList?.contains?.("protyle-wysiwyg") ||
+                cur.classList?.contains?.("protyle-attr") ||
+                cur.hasAttribute?.("data-node-id") ||
+                cur.getAttribute?.("contenteditable") === "true"
+            ) {
+                return true;
+            }
+            cur = cur.parentElement;
+            depth++;
+        }
+        return false;
+    };
+
+    const isDetachedBodyPortalNode = (el: Element | null | undefined): el is HTMLElement => {
+        if (!el || typeof document === "undefined" || !document.body) return false;
+        const htmlEl = el as HTMLElement;
+        if (htmlEl.parentElement !== document.body) return false;
+        return !isInsideEditorZeroTouchSubtree(htmlEl);
+    };
+
+    const removeDetachedBodyPortalById = (id: string): void => {
+        if (typeof document === "undefined" || !document.body) return;
+        try {
+            const el = document.getElementById(id);
+            if (isDetachedBodyPortalNode(el)) {
+                el.remove();
+            }
+        } catch { /* ignore */ }
+    };
+
+    const removeDetachedBodyPortalsBySelector = (selector: string): void => {
+        if (typeof document === "undefined" || !document.body || typeof document.querySelectorAll !== "function") return;
+        try {
+            document.querySelectorAll(selector)?.forEach((el) => {
+                try {
+                    if (isDetachedBodyPortalNode(el)) {
+                        el.remove();
+                    }
+                } catch { /* ignore */ }
+            });
+        } catch { /* ignore */ }
+    };
+
     /** 安全复制到剪贴板（兼容内网 HTTP / 非安全上下文 / 移动端设备） */
     const lvSafeCopyToClipboard = async (text: string): Promise<boolean> => {
         try {
@@ -20582,6 +24932,34 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             }
         } catch { /* ignore */ }
         return false;
+    };
+
+    const fetchCleanBlockMarkdownForAction = async (
+        blockID: string,
+        snapshot?: BlockSnapshot | null,
+        stripInlineIds = false
+    ): Promise<string> => {
+        try {
+            const resKram = await lvKernelPost("/api/block/getBlockKramdown", { id: blockID });
+            const rawKram = resKram?.data?.kramdown;
+            if (typeof rawKram === "string" && rawKram.trim()) {
+                let cleaned = rawKram.replace(/\{:[^}]*\}\s*$/g, "").trim();
+                if (stripInlineIds) {
+                    cleaned = cleaned
+                        .replace(/\{:([^}]*)\}/g, (_m, inner: string) => {
+                            const kept = String(inner || "").replace(/\bid="[^"]*"/g, "").trim();
+                            return kept ? `{: ${kept}}` : "";
+                        })
+                        .trim();
+                }
+                if (cleaned) return cleaned;
+            }
+        } catch { /* ignore */ }
+        if (snapshot && typeof snapshot.cleanText === "string" && snapshot.cleanText.trim()) {
+            return snapshot.cleanText.trim();
+        }
+        const el = queryBlockElementById(blockID) as HTMLElement | null;
+        return getCleanBlockText(el);
     };
 
     const initCuratedActions = () => {
@@ -20642,17 +25020,22 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 id: "toggle-fold-block",
                 group: "native",
                 label: "折叠 / 展开子分支",
-                subtitle: "快速收起或展开该块下属的大纲与子节点",
+                subtitle: "仅对标题与列表块可用，严禁向引述/段落写入脏 fold 属性",
                 glyph: "📂",
                 sourceType: "native",
                 sourcePlugin: "思源原生",
                 singleOnly: true,
                 installed: true,
-                preferredBlockKinds: ["heading", "list", "quote"],
-                isAvailable: (s) => !s?.isDocument && (s?.blockKind === "heading" || s?.blockKind === "list" || s?.blockKind === "task" || s?.blockKind === "quote"),
+                preferredBlockKinds: ["heading", "list"],
+                excludedBlockKinds: ["quote", "paragraph", "code", "table", "math"],
+                isAvailable: (s) => !s?.isDocument && !s?.isReadOnly && (s?.blockKind === "heading" || s?.blockKind === "list" || s?.blockKind === "task" || s?.blockKind === "ordered-list"),
                 execute: async (blockID) => {
                     try {
-                        const el = document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) || queryBlockElementById(blockID);
+                        const el = queryBlockElementById(blockID);
+                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+                            showMessage("当前文档处于只读状态，已拦截折叠修改", 1800, "info", "块助手");
+                            return;
+                        }
                         const cur = el?.getAttribute("data-fold") === "1" || el?.getAttribute("fold") === "1";
                         const next = cur ? "0" : "1";
                         await lvKernelPost("/api/attr/setBlockAttrs", { id: blockID, attrs: { fold: next } });
@@ -20671,16 +25054,22 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             {
                 id: "morph-block-type",
                 group: "native",
-                label: "快捷转换块类型",
-                subtitle: "转换为标题、列表、待办、引述或代码块",
+                label: "转换块类型",
+                subtitle: "一键在段落/标题 H1–H6/无序·有序·待办列表/引述/代码块/超级块间切换",
                 glyph: "🔄",
                 sourceType: "native",
                 sourcePlugin: "思源原生",
                 singleOnly: true,
                 installed: true,
-                preferredBlockKinds: ["paragraph", "task", "heading", "list", "quote", "code", "math"],
+                preferredBlockKinds: ["paragraph", "task", "heading", "list", "quote", "math", "superblock"],
+                excludedBlockKinds: ["table", "code"],
+                isAvailable: (s) => !s?.isDocument && !s?.isReadOnly && s?.blockKind !== "table" && s?.blockKind !== "code",
                 execute: async (blockID) => {
                     const el = queryBlockElementById(blockID) as HTMLElement | null;
+                    if (isBlockOrProtyleReadOnly(blockID, el)) {
+                        showMessage("当前文档处于只读状态，已拦截块类型转换", 1800, "info", "块助手");
+                        return;
+                    }
                     openBlockTypeMorphPicker(blockID, el, async (targetType) => {
                         await morphBlockTypeTo(blockID, targetType);
                     });
@@ -20696,16 +25085,22 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 	                sourcePlugin: "思源原生",
 	                singleOnly: true,
 	                installed: true,
+	                isAvailable: (s) => !s?.isReadOnly,
 	                execute: async (blockID) => {
 	                    try {
-	                        const el = document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) as HTMLElement | null;
+	                        const el = queryBlockElementById(blockID);
+	                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+	                            showMessage("当前文档处于只读状态，已拦截块移动", 1800, "info", "块助手");
+	                            return;
+	                        }
 	                        const prev = el?.previousElementSibling as HTMLElement | null;
 	                        const prevId = prev?.getAttribute("data-node-id");
 	                        if (el && prev && prevId) {
 	                            const prevPrevId = prev.previousElementSibling?.getAttribute("data-node-id") || "";
 	                            const parentEl = el.parentElement?.closest("[data-node-id]") as HTMLElement | null;
 	                            const docEl = el.closest(".protyle")?.querySelector(".protyle-title") as HTMLElement | null;
-	                            const parentId = parentEl?.getAttribute("data-node-id") || docEl?.getAttribute("data-node-id") || "";
+	                            const wysiwygDocId = el.closest(".protyle-wysiwyg")?.getAttribute("data-doc-id") || "";
+	                            const parentId = parentEl?.getAttribute("data-node-id") || docEl?.getAttribute("data-node-id") || wysiwygDocId;
 	                            prev.before(el);
 	                            el.scrollIntoView({ behavior: "smooth", block: "nearest" });
 	                            await lvKernelPost("/api/block/moveBlock", { id: blockID, previousID: prevPrevId, parentID: parentId });
@@ -20728,15 +25123,21 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 	                sourcePlugin: "思源原生",
 	                singleOnly: true,
 	                installed: true,
+	                isAvailable: (s) => !s?.isReadOnly,
 	                execute: async (blockID) => {
 	                    try {
-	                        const el = document.querySelector(`.protyle-wysiwyg [data-node-id="${blockID}"]`) as HTMLElement | null;
+	                        const el = queryBlockElementById(blockID);
+	                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+	                            showMessage("当前文档处于只读状态，已拦截块移动", 1800, "info", "块助手");
+	                            return;
+	                        }
 	                        const next = el?.nextElementSibling as HTMLElement | null;
 	                        const nextId = next?.getAttribute("data-node-id");
 	                        if (el && next && nextId) {
 	                            const parentEl = el.parentElement?.closest("[data-node-id]") as HTMLElement | null;
 	                            const docEl = el.closest(".protyle")?.querySelector(".protyle-title") as HTMLElement | null;
-	                            const parentId = parentEl?.getAttribute("data-node-id") || docEl?.getAttribute("data-node-id") || "";
+	                            const wysiwygDocId = el.closest(".protyle-wysiwyg")?.getAttribute("data-doc-id") || "";
+	                            const parentId = parentEl?.getAttribute("data-node-id") || docEl?.getAttribute("data-node-id") || wysiwygDocId;
 	                            next.after(el);
 	                            el.scrollIntoView({ behavior: "smooth", block: "nearest" });
 	                            await lvKernelPost("/api/block/moveBlock", { id: blockID, previousID: nextId, parentID: parentId });
@@ -20753,14 +25154,34 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 id: "native-clone-block",
                 group: "organization",
                 label: "原地克隆副本",
-                subtitle: "紧随当前块下方复制插入一个完全相同的副本",
+                subtitle: "紧随当前块下方通过 dom 路径复制插入相同副本",
                 glyph: "📑",
                 sourceType: "native",
                 sourcePlugin: "思源原生",
                 singleOnly: true,
                 installed: true,
+                isAvailable: (s) => !s?.isReadOnly,
                 execute: async (blockID) => {
                     try {
+                        if (isBlockOrProtyleReadOnly(blockID)) {
+                            showMessage("当前文档处于只读状态，已拦截克隆写入", 1800, "info", "块助手");
+                            return;
+                        }
+                        let domData = "";
+                        try {
+                            const resDom = await lvKernelPost("/api/block/getBlockDOM", { id: blockID });
+                            const rawDom = resDom?.data?.dom;
+                            if (typeof rawDom === "string" && rawDom.trim()) {
+                                domData = rawDom.replace(/\s+data-node-id=(?:"[^"]*"|'[^']*')/gi, "");
+                            }
+                        } catch { /* ignore */ }
+                        if (domData) {
+                            const insRes = await lvKernelPost("/api/block/insertBlock", { dataType: "dom", data: domData, previousID: blockID });
+                            if (insRes.code === 0) {
+                                showMessage("已原地克隆副本 (dom)", 1800, "info", "块助手");
+                                return;
+                            }
+                        }
                         let md = "";
                         try {
                             const resKram = await lvKernelPost("/api/block/getBlockKramdown", { id: blockID });
@@ -20832,6 +25253,10 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                         const t = getCleanBlockText(el);
                         if (t) texts.push(t);
                     }
+                    if (texts.length === 0) {
+                        showMessage("当前块无纯文本内容可复制（图片块请使用块引用或遮挡制卡）", 2200, "info", "块助手");
+                        return;
+                    }
                     const ok = await lvSafeCopyToClipboard(texts.join("\n\n"));
                     if (ok) {
                         showMessage(ids.length > 1 ? `已批量复制 ${texts.length} 个块的纯文本` : "已复制纯文本", 2000, "info", "块助手");
@@ -20860,25 +25285,265 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                     }
                 },
             },
+            {
+                id: "copy-block-content",
+                group: "clipboard",
+                label: "复制内容",
+                subtitle: "获取干净 Markdown（剥离尾行 IAL）写入剪贴板，只读文档安全可用",
+                glyph: "📄",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                readOnlySafe: true,
+                installed: true,
+                isAvailable: (s) => !s?.isDocument,
+                execute: async (blockID, snapshot) => {
+                    try {
+                        const content = await fetchCleanBlockMarkdownForAction(blockID, snapshot);
+                        if (!content) {
+                            showMessage("当前块无内容可复制", 1800, "info", "块助手");
+                            return;
+                        }
+                        const ok = await lvSafeCopyToClipboard(content);
+                        if (ok) {
+                            showMessage("已复制块内容", 1800, "info", "块助手");
+                        } else {
+                            showMessage("复制失败", 2000, "error", "块助手");
+                        }
+                    } catch (e: any) {
+                        showMessage(`复制内容失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
+            {
+                id: "cut-block",
+                group: "organization",
+                label: "剪切块",
+                subtitle: "先安全复制干净 Markdown 至剪贴板，确认成功后才移除当前块",
+                glyph: "✂️",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                readOnlySafe: false,
+                installed: true,
+                isAvailable: (s) => !s?.isDocument && !s?.isReadOnly,
+                execute: async (blockID, snapshot) => {
+                    try {
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+                            showMessage("当前文档处于只读状态，已拦截剪切操作", 1800, "info", "块助手");
+                            return;
+                        }
+                        const content = await fetchCleanBlockMarkdownForAction(blockID, snapshot, true);
+                        if (!content) {
+                            showMessage("未能提取块内容，已保留原块", 2000, "info", "块助手");
+                            return;
+                        }
+                        const copied = await lvSafeCopyToClipboard(content);
+                        if (!copied) {
+                            showMessage("剪切失败：剪贴板写入未成功，已保留原块", 2200, "error", "块助手");
+                            return;
+                        }
+                        cancelPendingCapsuleSchedule();
+                        unmountSharedCapsule(false);
+                        removeDetachedBodyPortalsBySelector(".lv-bam");
+                        await lvKernelPost("/api/block/deleteBlock", { id: blockID });
+                        showMessage("已剪切当前块", 1800, "info", "块助手");
+                    } catch (e: any) {
+                        showMessage(`剪切失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
+            {
+                id: "duplicate-block",
+                group: "organization",
+                label: "制作副本",
+                subtitle: "剥离旧块 ID 属性并在下方插入干净 Markdown 副本",
+                glyph: "📑",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                readOnlySafe: false,
+                installed: true,
+                isAvailable: (s) => !s?.isDocument && !s?.isReadOnly,
+                execute: async (blockID, snapshot) => {
+                    try {
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+                            showMessage("当前文档处于只读状态，已拦截制作副本", 1800, "info", "块助手");
+                            return;
+                        }
+                        const md = await fetchCleanBlockMarkdownForAction(blockID, snapshot, true);
+                        if (!md) {
+                            showMessage("未能提取块内容进行复制", 2000, "error", "块助手");
+                            return;
+                        }
+                        await lvKernelPost("/api/block/insertBlock", {
+                            dataType: "markdown",
+                            data: md,
+                            previousID: blockID,
+                        });
+                        showMessage("已制作块副本", 1800, "info", "块助手");
+                    } catch (e: any) {
+                        showMessage(`制作副本失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
+            {
+                id: "insert-block-above",
+                group: "native",
+                label: "上方插入块",
+                subtitle: "在当前块正上方插入一个空白段落块",
+                glyph: "⤴️",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                readOnlySafe: false,
+                installed: true,
+                isAvailable: (s) => !s?.isDocument && !s?.isReadOnly,
+                execute: async (blockID) => {
+                    try {
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+                            showMessage("当前文档处于只读状态，已拦截插入块", 1800, "info", "块助手");
+                            return;
+                        }
+                        await lvKernelPost("/api/block/insertBlock", {
+                            dataType: "markdown",
+                            data: "",
+                            nextID: blockID,
+                        });
+                        showMessage("已在上方插入新块", 1600, "info", "块助手");
+                    } catch (e: any) {
+                        showMessage(`上方插入失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
+            {
+                id: "insert-block-below",
+                group: "native",
+                label: "下方插入块",
+                subtitle: "在当前块正下方插入一个空白段落块",
+                glyph: "⤵️",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                readOnlySafe: false,
+                installed: true,
+                isAvailable: (s) => !s?.isDocument && !s?.isReadOnly,
+                execute: async (blockID) => {
+                    try {
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+                            showMessage("当前文档处于只读状态，已拦截插入块", 1800, "info", "块助手");
+                            return;
+                        }
+                        await lvKernelPost("/api/block/insertBlock", {
+                            dataType: "markdown",
+                            data: "",
+                            previousID: blockID,
+                        });
+                        showMessage("已在下方插入新块", 1600, "info", "块助手");
+                    } catch (e: any) {
+                        showMessage(`下方插入失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
+            {
+                id: "toggle-block-fold",
+                group: "native",
+                label: "折叠 / 展开",
+                subtitle: "通过官方内核折叠/展开标题、列表、引述、超级块与代码块",
+                glyph: "📂",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                readOnlySafe: false,
+                installed: true,
+                preferredBlockKinds: ["heading", "list", "task", "ordered-list", "quote", "superblock", "code"],
+                isAvailable: (s) => !s?.isDocument && !s?.isReadOnly && ["heading", "list", "task", "ordered-list", "quote", "superblock", "code"].includes(s?.blockKind || "paragraph"),
+                execute: async (blockID) => {
+                    try {
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+                            showMessage("当前文档处于只读状态，已拦截折叠修改", 1800, "info", "块助手");
+                            return;
+                        }
+                        let isFolded = el?.getAttribute("fold") === "1" || el?.getAttribute("data-fold") === "1";
+                        try {
+                            const attrsRes = await lvKernelPost("/api/attr/getBlockAttrs", { id: blockID });
+                            if (attrsRes?.data && typeof attrsRes.data.fold === "string") {
+                                isFolded = attrsRes.data.fold === "1";
+                            }
+                        } catch { /* ignore */ }
+                        if (isFolded) {
+                            await lvKernelPost("/api/block/unfoldBlock", { id: blockID });
+                            showMessage("已展开当前块", 1600, "info", "块助手");
+                        } else {
+                            await lvKernelPost("/api/block/foldBlock", { id: blockID });
+                            showMessage("已折叠当前块", 1600, "info", "块助手");
+                        }
+                    } catch (e: any) {
+                        showMessage(`折叠切换失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
+            {
+                id: "delete-block",
+                group: "native",
+                label: "删除块",
+                subtitle: "安全隐藏悬浮胶囊并调用内核接口删除当前块（只读文档拦截）",
+                glyph: "🗑️",
+                sourceType: "native",
+                sourcePlugin: "思源原生",
+                singleOnly: true,
+                readOnlySafe: false,
+                destructive: true,
+                installed: true,
+                isAvailable: (s) => !s?.isDocument && !s?.isReadOnly,
+                execute: async (blockID) => {
+                    try {
+                        const el = queryBlockElementById(blockID) as HTMLElement | null;
+                        if (isBlockOrProtyleReadOnly(blockID, el)) {
+                            showMessage("当前文档处于只读状态，已拦截删除块", 1800, "info", "块助手");
+                            return;
+                        }
+                        cancelPendingCapsuleSchedule();
+                        unmountSharedCapsule(false);
+                        removeDetachedBodyPortalsBySelector(".lv-bam");
+                        await lvKernelPost("/api/block/deleteBlock", { id: blockID });
+                        showMessage("已删除当前块", 1600, "info", "块助手");
+                    } catch (e: any) {
+                        showMessage(`删除块失败: ${e?.message || "未知"}`, 2000, "error", "块助手");
+                    }
+                },
+            },
 
             // ── 学习与记忆（小驴闪卡与考试） ─────────────────────────────
 	            {
 	                id: "edit-card-qa",
 	                group: "study",
-	                label: "编辑问答（问题 · 答案）",
-	                subtitle: "零污染属性提问 · 主动回忆大工作台",
+	                label: "闪卡制卡 / 属性问答",
+	                subtitle: "过 card-entry-gate 校验；属性问答专归闪卡 Alt+Q",
 	                glyph: "✏️",
 	                sourceType: "ecosystem",
 	                sourcePlugin: "小驴闪卡",
 	                sourcePluginId: "siyuan-lv-cards",
 	                requiresPlugin: "siyuan-lv-cards",
 	                featured: true,
-	                badgeText: "推荐 · Alt+Q",
+	                badgeText: "闪卡 · Alt+Q",
 	                singleOnly: true,
 	                preferredBlockKinds: ["paragraph", "quote"],
 	                execute: async (blockID) => {
 	                    const win = window as any;
 	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
+	                    if (cards && typeof cards.validateCardEntry === "function") {
+	                        const gate = await cards.validateCardEntry({ blockId: blockID, type: "edit-card-qa" });
+	                        if (gate && gate.ok === false) {
+	                            showMessage(gate.reason || "已由 card-entry-gate 拦截无效制卡", 2200, "info", "块助手");
+	                            return;
+	                        }
+	                    }
 	                    if (cards && typeof cards.openCardQuestionDialog === "function") {
 	                        cards.openCardQuestionDialog(blockID);
 	                        return;
@@ -20891,16 +25556,25 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 	                id: "make-cloze",
 	                group: "study",
 	                label: "挖空制卡",
-	                subtitle: "基于正文选中文本一键制作填空闪卡",
+	                subtitle: "仅存在选区文本时显出，过 card-entry-gate",
 	                glyph: "🎯",
 	                sourceType: "ecosystem",
 	                sourcePlugin: "小驴闪卡",
 	                sourcePluginId: "siyuan-lv-cards",
 	                requiresPlugin: "siyuan-lv-cards",
 	                singleOnly: true,
+	                excludedBlockKinds: ["code", "math", "table"],
+	                isAvailable: (s) => !s?.isDocument && Boolean(s?.hasSelection) && s?.blockKind !== "code" && s?.blockKind !== "math" && s?.blockKind !== "table",
 	                execute: async (blockID) => {
 	                    const win = window as any;
 	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
+	                    if (cards && typeof cards.validateCardEntry === "function") {
+	                        const gate = await cards.validateCardEntry({ blockId: blockID, type: "make-cloze" });
+	                        if (gate && gate.ok === false) {
+	                            showMessage(gate.reason || "已由 card-entry-gate 拦截无效制卡", 2200, "info", "块助手");
+	                            return;
+	                        }
+	                    }
 	                    if (cards && typeof cards.makeClozeCard === "function") {
 	                        cards.makeClozeCard(blockID);
 	                        return;
@@ -20913,16 +25587,24 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 	                id: "make-occlusion",
 	                group: "study",
 	                label: "制作遮挡卡",
-	                subtitle: "在图片区域标记并生成遮挡记忆卡",
+	                subtitle: "仅含图片块显出，过 card-entry-gate",
 	                glyph: "🖼️",
 	                sourceType: "ecosystem",
 	                sourcePlugin: "小驴闪卡",
 	                sourcePluginId: "siyuan-lv-cards",
 	                requiresPlugin: "siyuan-lv-cards",
 	                singleOnly: true,
+	                isAvailable: (s) => Boolean(s?.hasImage),
 	                execute: async (blockID) => {
 	                    const win = window as any;
 	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
+	                    if (cards && typeof cards.validateCardEntry === "function") {
+	                        const gate = await cards.validateCardEntry({ blockId: blockID, type: "make-occlusion" });
+	                        if (gate && gate.ok === false) {
+	                            showMessage(gate.reason || "已由 card-entry-gate 拦截无效制卡", 2200, "info", "块助手");
+	                            return;
+	                        }
+	                    }
 	                    if (cards && typeof cards.openOcclusionFlow === "function") {
 	                        cards.openOcclusionFlow(blockID);
 	                        return;
@@ -20935,7 +25617,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 		                id: "add-to-deck",
 		                group: "study",
 		                label: "加入卡组",
-		                subtitle: "收录入指定卡包并开启间隔重复复习",
+		                subtitle: "收录入指定卡组并开启间隔重复复习",
 		                glyph: "📚",
 		                sourceType: "ecosystem",
 		                sourcePlugin: "小驴闪卡",
@@ -20947,6 +25629,13 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 	                    const win = window as any;
 	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
 	                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
+	                    if (cards && typeof cards.validateCardEntry === "function") {
+	                        const gate = await cards.validateCardEntry({ blockId: blockID, type: "add-to-deck" });
+	                        if (gate && gate.ok === false) {
+	                            showMessage(gate.reason || "已由 card-entry-gate 拦截废卡入组", 2200, "info", "块助手");
+	                            return;
+	                        }
+	                    }
 	                    if (cards && typeof cards.openDeckPicker === "function") {
 	                        cards.openDeckPicker(ids);
 	                        return;
@@ -21054,42 +25743,222 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 	            {
 	                id: "ghostreader-explain",
 	                group: "reading",
-	                label: "Ghostreader 伴读解读",
-	                subtitle: "启动小驴拾遗 AI 行内伴读深度拆解当前段落",
+	                label: "AI 伴读解读",
+	                subtitle: "消费 Wave 1B lv-ai-hub.runBlockSkill 深度拆解当前段落",
 	                glyph: "✨",
 	                sourceType: "ecosystem",
 	                sourcePlugin: "小驴拾遗",
 	                sourcePluginId: "siyuan-glean",
 	                requiresPlugin: "siyuan-glean",
 	                singleOnly: true,
+	                readOnlySafe: true,
 	                execute: async (blockID) => {
 	                    const win = window as any;
-	                    const glean = win.siyuanGlean || win.xiaolvGlean || win.lvGlean;
 	                    const el = queryBlockElementById(blockID) as HTMLElement | null;
 	                    const text = getCleanBlockText(el);
-	                    if (glean && typeof glean.openGhostreader === "function" && text) {
-	                        try {
-	                            glean.openGhostreader({ blockId: blockID, text, action: "explain" });
-	                            showMessage("已启动小驴拾遗 Ghostreader 伴读", 2000, "info", "块助手");
-	                            return;
-	                        } catch { /* fallback */ }
-	                    }
-	                    if (typeof window !== "undefined" && text) {
-	                        window.dispatchEvent(new CustomEvent("siyuan-glean:ghostreader", {
-	                            detail: { blockId: blockID, text, action: "explain" }
-	                        }));
-	                        showMessage("已向小驴拾遗发送伴读解读请求", 2000, "info", "块助手");
+	                    let closedByUser = false;
+	                    let activeThinkingHandle: LvAiThinkingCardHandle | null = null;
+	                    const stopActiveThinking = () => {
+	                        if (activeThinkingHandle) {
+	                            try { activeThinkingHandle.destroy(); } catch { /* ignore */ }
+	                            activeThinkingHandle = null;
+	                        }
+	                    };
+	                    const showBlockAiResultCard = (opts: {
+	                        title: string;
+	                        statusText: string;
+	                        bodyText: string;
+	                        isFallbackOrEmpty: boolean;
+	                        onCancel?: (() => void) | null;
+	                    }): { card: HTMLElement; bodyEl: HTMLElement | null; statusEl: HTMLElement | null } | null => {
+	                        if (typeof document === "undefined" || !document.body) return null;
+	                        stopActiveThinking();
+	                        removeDetachedBodyPortalById("lv-block-ai-result-card");
+	                        const card = document.createElement("div");
+	                        card.id = "lv-block-ai-result-card";
+	                        card.className = "lv-block-ai-result-card";
+	                        card.setAttribute("role", "dialog");
+	                        card.style.cssText = "position:fixed;right:24px;bottom:72px;z-index:99998;width:min(92vw,420px);max-height:70vh;display:flex;flex-direction:column;background:var(--b3-theme-surface,#fff);color:var(--b3-theme-on-surface,#0f172a);border:1px solid var(--b3-theme-surface-lighter,rgba(15,23,42,0.16));border-radius:14px;box-shadow:0 20px 50px rgba(15,23,42,0.28);overflow:hidden;font-family:var(--b3-font-family,sans-serif);";
+	                        card.innerHTML = `
+	                          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--b3-theme-surface-lighter,rgba(15,23,42,0.08));background:color-mix(in srgb,var(--b3-theme-primary,#2563eb) 8%,var(--b3-theme-surface));">
+	                            <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+	                              <span style="font-size:14px;">✨</span>
+	                              <strong style="font-size:13.5px;white-space:nowrap;">${escapeHtml(opts.title)}</strong>
+	                              <span class="lv-bai-status" style="font-size:10.5px;padding:1px 7px;border-radius:999px;background:${opts.isFallbackOrEmpty ? "rgba(245,158,11,0.14)" : "rgba(16,185,129,0.14)"};color:${opts.isFallbackOrEmpty ? "#b45309" : "#047857"};font-weight:600;white-space:nowrap;">${escapeHtml(opts.statusText)}</span>
+	                            </div>
+	                            <button type="button" class="lv-bai-close-btn" aria-label="关闭" style="border:none;background:transparent;cursor:pointer;font-size:15px;color:var(--b3-theme-on-surface-light,#64748b);width:26px;height:26px;border-radius:50%;">✕</button>
+	                          </div>
+	                          <div class="lv-bai-body" style="padding:12px 14px;overflow-y:auto;font-size:12.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word;">${escapeHtml(opts.bodyText)}</div>
+	                          <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid var(--b3-theme-surface-lighter,rgba(15,23,42,0.08));">
+	                            ${opts.onCancel ? `<button type="button" class="lv-bai-cancel-btn b3-button b3-button--outline" style="padding:4px 10px;font-size:11.5px;border-radius:7px;cursor:pointer;">⏹ 取消生成</button>` : ""}
+	                            ${opts.isFallbackOrEmpty ? `<button type="button" class="lv-bai-settings-btn b3-button b3-button--outline" style="padding:4px 10px;font-size:11.5px;border-radius:7px;cursor:pointer;">⚙ 配置 AI 模型</button>` : ""}
+	                            ${opts.bodyText && !opts.onCancel ? `<button type="button" class="lv-bai-copy-btn b3-button b3-button--outline" style="padding:4px 10px;font-size:11.5px;border-radius:7px;cursor:pointer;">📋 复制内容</button>` : ""}
+	                            <button type="button" class="lv-bai-done-btn b3-button" style="padding:4px 12px;font-size:11.5px;border-radius:7px;cursor:pointer;background:var(--b3-theme-primary,#2563eb);color:#fff;border:none;">关闭</button>
+	                          </div>
+	                        `;
+	                        const closeCard = () => {
+	                            closedByUser = true;
+	                            stopActiveThinking();
+	                            try { opts.onCancel?.(); } catch { /* ignore */ }
+	                            try { card.remove(); } catch { /* ignore */ }
+	                        };
+	                        card.querySelector(".lv-bai-close-btn")?.addEventListener("click", closeCard);
+	                        card.querySelector(".lv-bai-done-btn")?.addEventListener("click", closeCard);
+	                        card.querySelector(".lv-bai-cancel-btn")?.addEventListener("click", () => {
+	                            try { opts.onCancel?.(); } catch { /* ignore */ }
+	                        });
+	                        card.querySelector(".lv-bai-copy-btn")?.addEventListener("click", () => {
+	                            void lvSafeCopyToClipboard(opts.bodyText).then((ok) => {
+	                                if (ok) showMessage("已复制 AI 伴读内容", 1600, "info", "块助手");
+	                            });
+	                        });
+	                        card.querySelector(".lv-bai-settings-btn")?.addEventListener("click", () => {
+	                            closeCard();
+	                            openQuickWorkspaceConfig("ai");
+	                        });
+	                        document.body.appendChild(card);
+	                        return {
+	                            card,
+	                            bodyEl: card.querySelector<HTMLElement>(".lv-bai-body"),
+	                            statusEl: card.querySelector<HTMLElement>(".lv-bai-status"),
+	                        };
+	                    };
+
+	                    if (!text) {
+	                        showBlockAiResultCard({
+	                            title: "AI 伴读解读",
+	                            statusText: "无正文内容",
+	                            bodyText: "当前选中的块暂未提取到可解读的正文文本（如纯图片或空块），请在包含文字的段落或标题块中使用「AI 伴读解读」。",
+	                            isFallbackOrEmpty: true,
+	                        });
 	                        return;
 	                    }
-	                    const hub = getBlockAssistantHub();
-	                    hub.openMenu(blockID, el || document.body);
+
+	                    const aiHub = win.__LV_AI_HUB__
+	                        || (typeof globalThis !== "undefined" ? (globalThis as any).__LV_AI_HUB__ : null)
+	                        || ensureNoticeKitAiHubMounted();
+
+	                    if (!aiHub || typeof aiHub.runBlockSkill !== "function") {
+	                        showBlockAiResultCard({
+	                            title: "AI 伴读解读",
+	                            statusText: "未配置中枢",
+	                            bodyText: "尚未检测到可用的在线 AI 模型配置。请前往「小驴罗盘 → ⚙ 设置 → 🤖 AI 调度中枢」配置思源智能体、自填密钥或本地 Ollama。",
+	                            isFallbackOrEmpty: true,
+	                        });
+	                        return;
+	                    }
+
+	                    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+	                    let cancelledViaButton = false;
+	                    let streamedBody = "";
+	                    const cancelGeneration = () => {
+	                        cancelledViaButton = true;
+	                        stopActiveThinking();
+	                        try { controller?.abort(new DOMException("User cancelled", "AbortError")); } catch { controller?.abort(); }
+	                        if (!closedByUser) {
+	                            showBlockAiResultCard({
+	                                title: "AI 伴读解读",
+	                                statusText: "已取消",
+	                                bodyText: "已取消本次 AI 伴读生成，未发起任何文档修改。",
+	                                isFallbackOrEmpty: true,
+	                            });
+	                        }
+	                    };
+
+	                    const loadingCardView = showBlockAiResultCard({
+	                        title: "AI 伴读解读",
+	                        statusText: "伴读分析中",
+	                        bodyText: "",
+	                        isFallbackOrEmpty: false,
+	                        onCancel: cancelGeneration,
+	                    });
+	                    if (loadingCardView?.bodyEl) {
+	                        activeThinkingHandle = mountLvAiThinkingCard(loadingCardView.bodyEl, {
+	                            scenario: "socratic",
+	                            compact: true,
+	                            title: "✨ 正在通过全生态 AI 调度中枢拆解当前段落",
+	                            cancelLabel: false,
+	                            signal: controller ? controller.signal : undefined,
+	                            onCancel: cancelGeneration,
+	                        });
+	                    }
+
+	                    try {
+	                        const cardRes = await aiHub.runBlockSkill({
+	                            blockId: blockID,
+	                            blockType: el?.getAttribute("data-type") || "NodeParagraph",
+	                            skillId: "ghostreader-explain",
+	                            focusBlockContent: text,
+	                            sourcePlugin: "siyuan-glean",
+	                            signal: controller ? controller.signal : (undefined as any),
+	                            onChunk: (chunk: string) => {
+	                                if (!chunk || closedByUser || cancelledViaButton || controller?.signal?.aborted) return;
+	                                stopActiveThinking();
+	                                streamedBody += chunk;
+	                                if (loadingCardView?.statusEl) loadingCardView.statusEl.textContent = "流式生成中";
+	                                if (loadingCardView?.bodyEl) loadingCardView.bodyEl.textContent = streamedBody;
+	                            },
+	                        });
+	                        stopActiveThinking();
+	                        if (closedByUser || cancelledViaButton || controller?.signal?.aborted || cardRes?.outcome?.cancelReason || cardRes?.meta?.errorReason === "aborted") {
+	                            if (!closedByUser && !cancelledViaButton) {
+	                                showBlockAiResultCard({
+	                                    title: "AI 伴读解读",
+	                                    statusText: "已取消",
+	                                    bodyText: "已取消本次 AI 伴读生成，未发起任何文档修改。",
+	                                    isFallbackOrEmpty: true,
+	                                });
+	                            }
+	                            return;
+	                        }
+	                        const mdBlock = Array.isArray(cardRes?.blocks)
+	                            ? cardRes.blocks.find((b: any) => b && typeof b.text === "string" && b.text.trim())
+	                            : null;
+	                        const contentText = (mdBlock?.text || streamedBody || cardRes?.headline || "").trim();
+	                        if (cardRes?.state === "done" && contentText) {
+	                            const modelInfo = cardRes?.meta?.model || cardRes?.meta?.provider || "AI 已完成";
+	                            showBlockAiResultCard({
+	                                title: "AI 伴读解读",
+	                                statusText: String(modelInfo),
+	                                bodyText: contentText,
+	                                isFallbackOrEmpty: false,
+	                            });
+	                        } else {
+	                            const guideMsg = "当前未配置可用在线 AI 模型（或处于离线状态），以下为未落盘的本地启发式参考提要：\n\n"
+	                                + (contentText || "暂未生成解读内容，请在「AI 调度中枢」完成模型配置后重试。");
+	                            showBlockAiResultCard({
+	                                title: "AI 伴读解读",
+	                                statusText: "未配置/离线",
+	                                bodyText: guideMsg,
+	                                isFallbackOrEmpty: true,
+	                            });
+	                        }
+	                    } catch (err: any) {
+	                        stopActiveThinking();
+	                        if (closedByUser) return;
+	                        if (cancelledViaButton || controller?.signal?.aborted) {
+	                            showBlockAiResultCard({
+	                                title: "AI 伴读解读",
+	                                statusText: "已取消",
+	                                bodyText: "已取消本次 AI 伴读生成，未发起任何文档修改。",
+	                                isFallbackOrEmpty: true,
+	                            });
+	                            return;
+	                        }
+	                        showBlockAiResultCard({
+	                            title: "AI 伴读解读",
+	                            statusText: "调用失败",
+	                            bodyText: `AI 伴读未能完成（${err?.message || "请检查模型配置或网络连接"}）。可点击下方「⚙ 配置 AI 模型」检查渠道设置。`,
+	                            isFallbackOrEmpty: true,
+	                        });
+	                    }
 	                },
 	            },
             {
                 id: "capture-quote-common",
                 group: "reading",
                 label: "存为金句资产",
-                subtitle: "沉淀为常用模块台账，可在罗盘随时引用",
+                subtitle: "调用 common.captureQuote 沉淀为常用模块台账",
                 glyph: "💡",
                 sourceType: "ecosystem",
                 sourcePlugin: "小驴常用",
@@ -21101,10 +25970,10 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                     const common = win.xiaolvCommon || win.lvCommon;
                     const el = queryBlockElementById(blockID) as HTMLElement | null;
                     const text = getCleanBlockText(el);
-                    if (common && typeof common.saveQuote === "function" && text) {
+                    if (common && typeof common.captureQuote === "function" && text) {
                         try {
-                            await common.saveQuote({ quote: text, sourceBlockId: blockID });
-                            showMessage("已将金句存入小驴常用语资产库", 2200, "info", "块助手");
+                            await common.captureQuote({ quote: text, sourceBlockId: blockID });
+                            showMessage("已通过 captureQuote 将金句存入小驴常用语资产库", 2200, "info", "块助手");
                             return;
                         } catch { /* fallback */ }
                     }
@@ -21116,7 +25985,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 id: "contacts-interaction",
                 group: "reading",
                 label: "记一笔人脉互动",
-                subtitle: "关联至人脉档案追加交往与跟进记录",
+                subtitle: "搜索联系人并经用户显式确认后记入互动记录",
                 glyph: "👤",
                 sourceType: "ecosystem",
                 sourcePlugin: "小驴人脉",
@@ -21132,15 +26001,24 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                             const kw = text.slice(0, 24).replace(/[\r\n\t]/g, " ").trim();
                             const candidates = await contacts.searchPeople(kw);
                             if (candidates && candidates.length > 0 && typeof contacts.recordInteraction === "function") {
+                                const firstCandidate = candidates[0];
+                                const confirmed = await lvConfirm(
+                                    "确认记入人脉互动",
+                                    `是否为「${firstCandidate.name}」记入一条关联互动记录？（严禁未经确认静默写入）`
+                                );
+                                if (!confirmed) {
+                                    showMessage("已取消写入人脉互动", 1600, "info", "块助手");
+                                    return;
+                                }
                                 const pad = (n: number) => String(n).padStart(2, "0");
                                 const d = new Date();
                                 const todayStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-                                await contacts.recordInteraction([candidates[0].docId], {
+                                await contacts.recordInteraction([firstCandidate.docId], {
                                     ref: `((${blockID}))`,
                                     note: text.slice(0, 120),
                                     date: todayStr,
                                 });
-                                showMessage(`小驴人脉：已为「${candidates[0].name}」记入一笔互动记录`, 2400, "info", "块助手");
+                                showMessage(`小驴人脉：已为「${firstCandidate.name}」记入一笔互动记录`, 2400, "info", "块助手");
                                 return;
                             }
                         } catch { /* fallback */ }
@@ -21171,7 +26049,8 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                     if (checkin && typeof checkin.createItemFromBlock === "function" && text) {
                         try {
                             const name = (text.split("\n")[0] || "").trim().slice(0, 40) || "笔记打卡";
-                            await checkin.createItemFromBlock({ blockId: blockID, name, icon: "⏱️" });
+                            const isTask = Boolean(el?.closest('[data-type="NodeListItem"][data-subtype="t"]') || el?.classList.contains("protyle-action--task"));
+                            await checkin.createItemFromBlock({ blockId: blockID, name, icon: "⏱️", priority: isTask ? "pinned" : "normal" });
                             showMessage(`已成功绑定打卡项「${name}」`, 2200, "info", "块助手");
                             return;
                         } catch { /* fallback */ }
@@ -21184,7 +26063,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 id: "add-memo",
                 group: "time",
                 label: "记为日常备忘",
-                subtitle: "沉淀为小驴管家日程，在工作台及时提醒",
+                subtitle: "沉淀为小驴管家日程（单写，首行 <= 60 字）",
                 glyph: "⏰",
                 sourceType: "ecosystem",
                 sourcePlugin: "小驴管家",
@@ -21199,7 +26078,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                     const text = getCleanBlockText(el);
                     if (home && typeof home.addMemo === "function" && text) {
                         try {
-                            const title = (text.split("\n")[0] || "").trim().slice(0, 50);
+                            const title = (text.split("\n")[0] || "").trim().slice(0, 60);
                             const pad = (n: number) => String(n).padStart(2, "0");
                             const d = new Date();
                             const todayStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -21213,16 +26092,17 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 },
             },
             {
-                id: "speedswitch-workbench",
+                id: "copy-code-for-snippet",
                 group: "native",
-                label: "存为雷切代码片段",
-                subtitle: "提取当前代码块正文，提炼存入雷切代码片段库",
+                label: "复制代码供雷切",
+                subtitle: "仅对代码块显隐，本地复制代码片段（不触碰 /api/snippet/*）",
                 glyph: "⚡",
                 sourceType: "ecosystem",
                 sourcePlugin: "小驴雷切",
                 sourcePluginId: "siyuan-speed-switch",
                 requiresPlugin: "siyuan-speed-switch",
                 preferredBlockKinds: ["code"],
+                isAvailable: (s) => s?.blockKind === "code",
                 execute: async (blockID) => {
                     const el = queryBlockElementById(blockID) as HTMLElement | null;
                     const code = getCleanBlockText(el);
@@ -21232,12 +26112,12 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                     }
                     const ok = await lvSafeCopyToClipboard(code);
                     if (ok) {
-                        showMessage("已提取代码块正文至剪贴板，可在雷切中即时创建代码片段", 2400, "info", "块助手");
+                        showMessage("已本地复制代码块正文，可在雷切中按需粘贴", 2400, "info", "块助手");
                     }
                 },
             },
 
-            // ── 热门第三方社区插件标杆收录 ─────────────────────────────
+            // ── 热门第三方社区插件标杆收录（Wave 1C 已清退 7 项高危空壳）─────────────
             {
                 id: "community-mindmap",
                 group: "community",
@@ -21250,8 +26130,13 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 requiresPlugin: "mindmap",
                 singleOnly: true,
                 preferredBlockKinds: ["list", "heading"],
+                isAvailable: (s) => !s?.isReadOnly && (s?.blockKind === "list" || s?.blockKind === "heading"),
                 execute: async (blockID) => {
                     try {
+                        if (isBlockOrProtyleReadOnly(blockID)) {
+                            showMessage("当前文档处于只读状态，已拦截导图切换", 1800, "info", "块助手");
+                            return;
+                        }
                         const res = await lvKernelPost("/api/attr/getBlockAttrs", { id: blockID });
                         const cur = res?.data?.["custom-sy-list-mindmap"];
                         const next = cur === "true" ? "false" : "true";
@@ -21273,16 +26158,20 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 		                sourcePluginId: "siyuan-plugin-enhanced-editing",
 		                requiresPlugin: "enhanced-editing",
 		                supportsBatch: true,
-		                excludedBlockKinds: ["code", "math"],
-		                isAvailable: (s) => s?.blockKind !== "code" && s?.blockKind !== "math",
+		                excludedBlockKinds: ["code", "math", "table"],
+		                isAvailable: (s) => !s?.isReadOnly && s?.blockKind !== "code" && s?.blockKind !== "math" && s?.blockKind !== "table" && !s?.hasImage,
 			                execute: async (blockID, _s, batchIDs) => {
+		                    if (isBlockOrProtyleReadOnly(blockID)) {
+		                        showMessage("当前文档处于只读状态，已拦截排版改写", 1800, "info", "块助手");
+		                        return;
+		                    }
 		                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
 		                    let modifiedCount = 0;
 		                    try {
 		                        for (const id of ids) {
 		                            const el = queryBlockElementById(id) as HTMLElement | null;
 		                            const type = el?.getAttribute("data-type");
-		                            if (type === "NodeCodeBlock" || type === "NodeMathBlock" || type === "NodeHTMLBlock") continue;
+		                            if (type === "NodeCodeBlock" || type === "NodeMathBlock" || type === "NodeHTMLBlock" || type === "NodeTable") continue;
 		                            const md = await getPureBlockMarkdown(id, el);
 		                            if (!md) continue;
 		                            const spaced = safeTransformBlockMarkdown(md, (text) =>
@@ -21318,16 +26207,20 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 			                sourcePluginId: "siyuan-plugin-enhanced-editing",
 			                requiresPlugin: "enhanced-editing",
 			                supportsBatch: true,
-			                excludedBlockKinds: ["code", "math"],
-			                isAvailable: (s) => s?.blockKind !== "code" && s?.blockKind !== "math",
+			                excludedBlockKinds: ["code", "math", "table"],
+			                isAvailable: (s) => !s?.isReadOnly && s?.blockKind !== "code" && s?.blockKind !== "math" && s?.blockKind !== "table" && !s?.hasImage,
 			                execute: async (blockID, _s, batchIDs) => {
+		                    if (isBlockOrProtyleReadOnly(blockID)) {
+		                        showMessage("当前文档处于只读状态，已拦截标点改写", 1800, "info", "块助手");
+		                        return;
+		                    }
 		                    const ids = batchIDs && batchIDs.length > 1 ? batchIDs : [blockID];
 		                    let modifiedCount = 0;
 		                    try {
 		                        for (const id of ids) {
 		                            const el = queryBlockElementById(id) as HTMLElement | null;
 		                            const type = el?.getAttribute("data-type");
-		                            if (type === "NodeCodeBlock" || type === "NodeMathBlock" || type === "NodeHTMLBlock") continue;
+		                            if (type === "NodeCodeBlock" || type === "NodeMathBlock" || type === "NodeHTMLBlock" || type === "NodeTable") continue;
 		                            const md = await getPureBlockMarkdown(id, el);
 		                            if (!md) continue;
 		                            const corrected = safeTransformBlockMarkdown(md, (text) =>
@@ -21355,24 +26248,6 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 		                },
             },
             {
-                id: "plugin-calendar-event",
-                group: "time",
-                label: "关联至日历日程",
-                subtitle: "以该块内容与思源锚点在日历中建立关联事项",
-                glyph: "📅",
-                sourceType: "community",
-                sourcePlugin: "日历插件",
-                sourcePluginId: "siyuan-calendar",
-                requiresPlugin: "calendar",
-                execute: (blockID) => {
-                    const el = queryBlockElementById(blockID) as HTMLElement | null;
-                    const text = getCleanBlockText(el).slice(0, 30);
-                    const ref = text ? `((${blockID} '${text}'))` : `((${blockID}))`;
-                    navigator.clipboard.writeText(ref).catch(() => {});
-                    showMessage(`已复制块锚点 ${ref}，可在日历中粘贴为日程关联`, 2400, "info", "块助手");
-                },
-            },
-            {
                 id: "plugin-database-attr",
                 group: "organization",
                 label: "编辑结构化属性",
@@ -21382,67 +26257,18 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 sourcePlugin: "属性增强",
                 sourcePluginId: "siyuan-database",
                 requiresPlugin: "database",
+                isAvailable: (s) => !s?.isReadOnly && (s?.blockKind === "av" || Boolean(s?.isAv || s?.hasAv)),
                 execute: async (blockID) => {
                     try {
+                        const targetEl = queryBlockElementById(blockID);
                         const res = await lvKernelPost("/api/attr/getBlockAttrs", { id: blockID });
                         const keys = Object.keys(res?.data || {});
-                        const el = document.querySelector(`[data-node-id="${blockID}"] .protyle-attr`) as HTMLElement | null;
+                        const el = targetEl?.querySelector?.(".protyle-attr") as HTMLElement | null;
                         if (el) el.click();
                         showMessage(`当前块包含 ${keys.length} 项属性（已聚焦属性栏）`, 2200, "info", "块助手");
                     } catch {
                         showMessage("查询属性失败", 2000, "error", "块助手");
                     }
-                },
-            },
-	            {
-	                id: "plugin-card-toolbox-qa",
-	                group: "study",
-	                label: "闪卡工具箱问答属性",
-	                subtitle: "写入 custom-riff-title 属性，双向兼容闪卡工具箱",
-	                glyph: "🎴",
-	                sourceType: "community",
-	                sourcePlugin: "闪卡工具箱",
-	                sourcePluginId: "sy-flashcard-toolbox-plugin",
-	                requiresPlugin: "flashcard-toolbox",
-	                execute: async (blockID) => {
-	                    const win = window as any;
-	                    const cards = win.xiaolvCards || win.lvCards || win.siyuanCards;
-	                    if (cards && typeof cards.openCardQuestionDialog === "function") {
-	                        cards.openCardQuestionDialog(blockID);
-	                        return;
-	                    }
-	                    try {
-	                        const el = queryBlockElementById(blockID) as HTMLElement | null;
-	                        const text = (getCleanBlockText(el).split("\n")[0] || "").trim().slice(0, 50);
-	                        if (text) {
-	                            await lvKernelPost("/api/attr/setBlockAttrs", {
-	                                id: blockID,
-	                                attrs: { "custom-riff-title": text }
-	                            });
-	                            showMessage(`已将开头「${text.slice(0, 16)}...」设为问答属性 (custom-riff-title)`, 2400, "info", "块助手");
-	                            return;
-	                        }
-	                    } catch { /* fallback */ }
-	                    const hub = getBlockAssistantHub();
-	                    hub.openMenu(blockID, queryBlockElementById(blockID) as HTMLElement || document.body);
-	                },
-	            },
-            {
-                id: "plugin-kanban-card",
-                group: "organization",
-                label: "放入看板泳道",
-                subtitle: "将当前块作为独立任务卡片推送至看板",
-                glyph: "📊",
-                sourceType: "community",
-                sourcePlugin: "看板插件",
-                sourcePluginId: "siyuan-kanban",
-                requiresPlugin: "kanban",
-                execute: (blockID) => {
-                    const el = queryBlockElementById(blockID) as HTMLElement | null;
-                    const text = getCleanBlockText(el).slice(0, 30);
-                    const ref = text ? `((${blockID} '${text}'))` : `((${blockID}))`;
-                    navigator.clipboard.writeText(ref).catch(() => {});
-                    showMessage(`已复制卡片锚点 ${ref} 供看板粘贴引用`, 2000, "info", "块助手");
                 },
             },
             {
@@ -21474,30 +26300,6 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 },
             },
             {
-                id: "plugin-dailynote-append",
-                group: "time",
-                label: "追加至今日日记",
-                subtitle: "将当前块的引用或摘要追加记录至今日日记文档",
-                glyph: "📔",
-                sourceType: "community",
-                sourcePlugin: "日记插件",
-                sourcePluginId: "siyuan-plugin-dailynote",
-                requiresPlugin: "dailynote",
-                execute: async (blockID) => {
-                    try {
-                        const el = queryBlockElementById(blockID) as HTMLElement | null;
-                        const text = (getCleanBlockText(el).split("\n")[0] || "").trim().slice(0, 30);
-                        const ref = text ? `((${blockID} '${text}'))` : `((${blockID}))`;
-                        const timeStr = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-                        const line = `- ⏰ ${timeStr} 关联记录：${ref}`;
-                        await navigator.clipboard.writeText(line);
-                        showMessage(`已生成日记引用项并复制至剪贴板: ${line}`, 2500, "info", "块助手");
-                    } catch {
-                        showMessage(`已提取块锚点 ((${blockID})) 供日记记录`, 2000, "info", "块助手");
-                    }
-                },
-            },
-            {
                 id: "plugin-table-format",
                 group: "organization",
                 label: "格式化表格排版",
@@ -21508,10 +26310,14 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 sourcePluginId: "siyuan-plugin-markdown-table",
                 requiresPlugin: "table",
                 preferredBlockKinds: ["table"],
-                isAvailable: (s) => s?.blockKind === "table",
+                isAvailable: (s) => !s?.isReadOnly && s?.blockKind === "table",
                 execute: async (_blockID) => {
                     try {
                         const el = queryBlockElementById(_blockID);
+                        if (isBlockOrProtyleReadOnly(_blockID, el)) {
+                            showMessage("当前文档处于只读状态，已拦截表格修改", 1800, "info", "块助手");
+                            return;
+                        }
                         const table = el?.querySelector("table");
                         if (!table) {
                             showMessage("当前块不是表格", 1800, "info", "块助手");
@@ -21546,74 +26352,6 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 },
             },
             {
-                id: "plugin-code-run",
-                group: "native",
-                label: "一键执行代码块",
-                subtitle: "通过代码运行插件直接运行当前代码片段",
-                glyph: "▶️",
-                sourceType: "community",
-                sourcePlugin: "代码运行",
-                sourcePluginId: "siyuan-plugin-code-runner",
-                requiresPlugin: "code-runner",
-                preferredBlockKinds: ["code"],
-                isAvailable: (s) => s?.blockKind === "code",
-                execute: async (blockID) => {
-                    const el = queryBlockElementById(blockID) as HTMLElement | null;
-                    if (!el) return;
-                    const runBtn = el.querySelector(".protyle-action__run, button[title*='运行'], [data-type='run']") as HTMLElement | null;
-                    if (runBtn) {
-                        runBtn.click();
-                        showMessage("已触发代码执行", 1600, "info", "块助手");
-                        return;
-                    }
-                    const codeEl = el.querySelector("code, .hljs, [contenteditable='true']");
-                    const codeText = codeEl?.textContent || "";
-                    if (!codeText.trim()) {
-                        showMessage("未找到可执行的代码内容", 2000, "info", "块助手");
-                        return;
-                    }
-                    const langTag = el.querySelector(".protyle-action__language, [data-type='language']")?.textContent?.trim() || "";
-                    const isJs = /^(javascript|js|typescript|ts)$/i.test(langTag) || (!langTag && /console\.log|const\s+|let\s+|function\s+/.test(codeText));
-                    if (isJs) {
-                        try {
-                            const res = (new Function(codeText))();
-                            showMessage(`代码执行输出: ${String(res ?? "执行完毕")}`, 2600, "info", "块助手");
-                        } catch (err: any) {
-                            showMessage(`代码执行异常: ${err?.message || String(err)}`, 2600, "error", "块助手");
-                        }
-                    } else {
-                        try {
-                            await navigator.clipboard.writeText(codeText);
-                            showMessage(`已复制 ${langTag || "代码"} 片段至剪贴板（非 JS 沙箱）`, 2200, "info", "块助手");
-                        } catch {
-                            showMessage(`请通过代码运行插件执行 ${langTag || ""} 代码`, 2200, "info", "块助手");
-                        }
-                    }
-                },
-            },
-            {
-                id: "plugin-image-tools",
-                group: "reading",
-                label: "图片工具箱与 OCR",
-                subtitle: "查看图片高清大图、色彩拾取与快速文本识别",
-                glyph: "👁️",
-                sourceType: "community",
-                sourcePlugin: "图片工具箱",
-                sourcePluginId: "siyuan-plugin-image-toolkit",
-                requiresPlugin: "image-toolkit",
-                isAvailable: (s) => Boolean(s?.hasImage),
-                execute: async (blockID) => {
-                    const el = queryBlockElementById(blockID) as HTMLElement | null;
-                    const img = el?.querySelector("img") as HTMLImageElement | null;
-                    if (img) {
-                        img.click();
-                        showMessage("已展开图片预览", 1600, "info", "块助手");
-                    } else {
-                        showMessage("当前块内未包含图片", 1800, "info", "块助手");
-                    }
-                },
-            },
-            {
                 id: "plugin-toc-locate",
                 group: "native",
                 label: "在大纲树中高亮定位",
@@ -21641,12 +26379,35 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 id: "plugin-mermaid-zoom",
                 group: "organization",
                 label: "查看与导出图表",
-                subtitle: "以高清矢量模式浏览并导出当前 Mermaid 关系图",
+                subtitle: "以高清矢量模式浏览并导出当前 Mermaid / 图表代码块",
                 glyph: "📊",
                 sourceType: "community",
                 sourcePlugin: "图表增强",
                 sourcePluginId: "siyuan-mermaid",
                 requiresPlugin: "mermaid",
+                isAvailable: (s) => {
+                    if (s?.blockKind === "math") return false;
+                    if (s?.hasMermaid) return true;
+                    const blockId = s?.blockId || s?.id;
+                    if (blockId && typeof document !== "undefined") {
+                        const el = queryBlockElementById(String(blockId));
+                        if (el) {
+                            const dt = el.getAttribute("data-type");
+                            if (dt === "NodeMathBlock") return false;
+                            const subtype = (el.getAttribute("data-subtype") || "").toLowerCase();
+                            if (/^(mermaid|echarts|graphviz|plantuml)$/i.test(subtype)) return true;
+                            if (dt === "NodeCodeBlock") {
+                                const langText = (el.querySelector(".protyle-action__language")?.textContent || el.textContent || "").trim().toLowerCase();
+                                if (/^(mermaid|echarts|graphviz|plantuml)\b/.test(langText)) return true;
+                            }
+                            if (el.querySelector('[data-subtype="mermaid"], [data-subtype="echarts"], [data-subtype="graphviz"], [data-subtype="plantuml"], .language-mermaid, .language-echarts, .language-graphviz, .language-plantuml')) {
+                                return true;
+                            }
+                        }
+                    }
+                    if (s?.hasSvg && s?.blockKind === "code") return true;
+                    return false;
+                },
                 execute: async (blockID) => {
                     const el = queryBlockElementById(blockID) as HTMLElement | null;
                     const svg = el?.querySelector("svg") as SVGElement | null;
@@ -21670,6 +26431,9 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
     initCuratedActions();
 
     const registerCustomAction = (def: CustomBlockActionDef): UniversalBlockAction => {
+        if ((def as any).actionType === "script") {
+            throw new Error("Wave 1C 已清退自定义 JS 脚本动作，仅支持声明式前后缀与属性写");
+        }
         const action: UniversalBlockAction = {
             id: def.id,
             group: def.group || "community",
@@ -21679,14 +26443,16 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             sourceType: "custom",
             sourcePlugin: "自定义动作",
             installed: true,
+            isAvailable: (s) => !s?.isReadOnly,
             execute: async (blockID) => {
                 try {
+                    if (isBlockOrProtyleReadOnly(blockID)) {
+                        showMessage("当前文档处于只读状态，已拦截自定义写入", 1800, "info", "块助手");
+                        return;
+                    }
 	                    if (def.actionType === "prefix-suffix") {
 	                        const el = queryBlockElementById(blockID) as HTMLElement | null;
 	                        const md = await getPureBlockMarkdown(blockID, el);
-	                        // 任务项标记必须整体作为 lead 剥离（- [ ] / * [x] / + [ ] 全标记符）——
-	                        // 此前只识别星号复选框，"- [ ] 待办"会走 [-*+] 分支只剥 "- "，
-	                        // 前后缀插入后复选框与标记符分离，内核重解析时任务项静默退化为普通列表项。
 	                        const matchPrefix = md.match(/^(\#{1,6}\s+|\>\s+|[-*+]\s*\[[ xX]\]\s+|[-*+]\s+)/);
 	                        const lead = matchPrefix ? matchPrefix[1] : "";
 	                        const body = lead ? md.slice(lead.length) : md;
@@ -21695,14 +26461,12 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 	                        showMessage("已执行自定义前后缀排版", 1800, "info", "块助手");
 		                    } else if (def.actionType === "attr" && def.attrKey) {
 	                        const rawKey = def.attrKey.trim();
-	                        const safeKey = /^(custom-|memo$|bookmark$|name$|alias$|style$)/.test(rawKey) ? rawKey : `custom-${rawKey}`;
+	                        const safeKey = /^(custom-[a-z][a-z0-9-]*|memo$|bookmark$|name$|alias$|style$)/.test(rawKey)
+	                            ? rawKey
+	                            : `custom-${rawKey.toLowerCase().replace(/[^a-z0-9-]+/g, "-")}`;
 	                        await lvKernelPost("/api/attr/setBlockAttrs", { id: blockID, attrs: { [safeKey]: def.attrValue || "1" } });
 	                        showMessage(`已写入自定义块属性 ${safeKey}`, 1800, "info", "块助手");
-	                    } else if (def.actionType === "script" && def.script) {
-                        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-                        const fn = new AsyncFunction("blockID", "lvKernelPost", "showMessage", def.script);
-                        await fn(blockID, lvKernelPost, showMessage);
-                    }
+	                    }
                 } catch (e: any) {
                     showMessage(`执行自定义动作失败: ${e?.message || "未知"}`, 2200, "error", "块助手");
                 }
@@ -21721,47 +26485,91 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
     const PLUGIN_SCAN_TTL_MS = 5000;
     let lastPluginScanTime = 0;
     let lastPluginScanFingerprint = "";
+    let lastRuntimeOwnersFingerprint = "";
     let pluginScanCount = 0;
 
-    const getPluginsFingerprint = (plugins: any[]): string => {
-        if (!Array.isArray(plugins)) return "";
-        return plugins.map(p => String(p?.name || p?.id || "")).join("|");
+    const L1_AND_NATIVE_CONTEXT_ACTION_IDS = new Set([
+        "plugin-pangu-spacing",
+        "plugin-convert-punctuation",
+        "plugin-wordcount",
+        "plugin-table-format",
+        "plugin-toc-locate",
+        "plugin-mermaid-zoom",
+        "plugin-database-attr",
+    ]);
+
+    const collectRuntimePluginEnv = () => {
+        const w = typeof window !== "undefined" ? (window as any) : null;
+        const plugins = w?.siyuan?.ws?.app?.plugins;
+        const installedPluginIds = new Set<string>();
+        if (Array.isArray(plugins)) {
+            for (const p of plugins) {
+                const pid = String(p?.name || p?.id || "").trim();
+                if (pid) installedPluginIds.add(pid);
+            }
+        }
+        for (const ownerId of blockAssistantOwners) {
+            const pid = String(ownerId || "").trim();
+            if (pid) installedPluginIds.add(pid);
+        }
+        if (w) {
+            try {
+                const lpReg = getSharedLaunchpadRegistry();
+                for (const id of lpReg.keys()) {
+                    const norm = String(id || "").trim().toLowerCase();
+                    if (norm && norm !== "siyuan-exoskeleton" && norm !== "exoskeleton" && norm !== "siyuan-quickgate" && norm !== "quickgate") {
+                        installedPluginIds.add(String(id).trim());
+                    }
+                }
+            } catch { /* ignore */ }
+            if (w.xiaolvCards || w.lvCards || w.siyuanCards) installedPluginIds.add("siyuan-lv-cards");
+            if (w.siyuanExam || w.xiaolvExam || w.lvExam) installedPluginIds.add("siyuan-exam");
+            if (w.siyuanGlean || w.xiaolvGlean || w.lvGlean) installedPluginIds.add("siyuan-glean");
+            if (w.xiaolvCommon || w.lvCommon) installedPluginIds.add("xiaolv-common");
+            if (w.siyuanContacts || w.xiaolvContacts || w.lvContacts) installedPluginIds.add("siyuan-contacts");
+            if (w.siyuanCheckin || w.xiaolvCheckin || w.lvCheckin) installedPluginIds.add("siyuan-checkin");
+            if (w.siyuanHome || w.xiaolvHome || w.lvHome) installedPluginIds.add("siyuan-home");
+            if (w.siyuanSpeedSwitch || w.xiaolvSpeedSwitch || w.lvSpeedSwitch) installedPluginIds.add("siyuan-speed-switch");
+        }
+        const hasKnownPluginEnv = Array.isArray(plugins) || installedPluginIds.size > 0;
+        const appFingerprint = Array.isArray(plugins)
+            ? plugins.map((p: any) => String(p?.name || p?.id || "")).join("|")
+            : "";
+        const ownersFingerprint = Array.from(installedPluginIds).sort().join(",");
+        return { w, plugins, installedPluginIds, hasKnownPluginEnv, appFingerprint, ownersFingerprint };
     };
 
     /** 扫描宿主中所有已加载的插件并进行能力反射（支持 5s 有界 TTL 缓存与失效机制） */
     const scanPlugins = (force = false): UniversalBlockAction[] => {
         try {
-            const w = typeof window !== "undefined" ? (window as any) : null;
-            const plugins = w?.siyuan?.ws?.app?.plugins;
-            const installedPluginIds = new Set<string>();
-
-            const currentFingerprint = getPluginsFingerprint(plugins);
+            const { plugins, installedPluginIds, hasKnownPluginEnv, appFingerprint, ownersFingerprint } = collectRuntimePluginEnv();
             const now = Date.now();
 
             // 缓存命中守卫：未强制刷新 + TTL 未过期 + 插件集合指纹未变
-            if (!force && lastPluginScanTime > 0 && (now - lastPluginScanTime < PLUGIN_SCAN_TTL_MS) && currentFingerprint === lastPluginScanFingerprint) {
+            if (
+                !force &&
+                lastPluginScanTime > 0 &&
+                (now - lastPluginScanTime < PLUGIN_SCAN_TTL_MS) &&
+                appFingerprint === lastPluginScanFingerprint &&
+                ownersFingerprint === lastRuntimeOwnersFingerprint
+            ) {
                 return Array.from(sharedBlockActions.values());
             }
 
-            if (Array.isArray(plugins)) {
-                for (const p of plugins) {
-                    const pid = String(p.name || p.id || "");
-                    if (pid) installedPluginIds.add(pid);
-                }
-            }
-
-            // 更新已知目录动作的 installed 状态
+            // 更新已知目录动作的 installed 状态（1–8 任意组合原生底座：L1 与思源原生始终就绪；生态跨插件按已安装动态显隐）
             for (const action of sharedBlockActions.values()) {
-                if (action.sourceType === "native") {
+                if (action.sourceType === "native" || action.sourceType === "custom" || L1_AND_NATIVE_CONTEXT_ACTION_IDS.has(action.id)) {
                     action.installed = true;
                 } else if (action.sourceType === "ecosystem") {
                     const req = action.requiresPlugin || action.sourcePluginId;
-                    action.installed = req ? installedPluginIds.has(req) : true;
+                    action.installed = !hasKnownPluginEnv ? true : (req ? installedPluginIds.has(req) : true);
                 } else if (action.sourceType === "community") {
                     const req = action.requiresPlugin || action.sourcePluginId || "";
-                    if (req) {
+                    if (req && Array.isArray(plugins)) {
                         const regex = new RegExp(req.replace(/siyuan-plugin-|sy-/g, ""), "i");
                         action.installed = Array.from(installedPluginIds).some(p => regex.test(p));
+                    } else {
+                        action.installed = true;
                     }
                 }
             }
@@ -21833,7 +26641,8 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             }
             // 成功扫描完成后才更新缓存状态与时间戳
             lastPluginScanTime = now;
-            lastPluginScanFingerprint = currentFingerprint;
+            lastPluginScanFingerprint = appFingerprint;
+            lastRuntimeOwnersFingerprint = ownersFingerprint;
             pluginScanCount++;
         } catch { /* 扫描异常保持 lastPluginScanTime 不更新，允许下次调用自愈重试 */ }
 
@@ -21845,15 +26654,13 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
     /** 弹窗构建：全能块助手资产库 (Block Action Store) - 现代 Bento 质感架构 */
     const openStoreDialog = (options?: { onConfigChange?: (config: BlockActionStoreConfig) => void }): void => {
         if (typeof document === "undefined") return;
-        const existing = document.getElementById("lv-block-action-store-mask");
-        if (existing) {
-            try { existing.remove(); } catch { /* ignore */ }
-        }
+        removeDetachedBodyPortalById("lv-block-action-store-mask");
 
         scanPlugins(true); // 打开资产库工作台时强制突破缓存刷新
         let cfg = readStoreConfigFromStorage();
         let enabledSet = new Set(cfg.enabledActionIds);
         let pinnedList = [...cfg.pinnedActionIds];
+        let doubleClickActionId = normalizeDoubleClickActionId(cfg.doubleClickActionId);
         let currentTab: string = "ready";
         let statusFilter: "all" | "enabled" | "disabled" | "pinned" = "all";
         let keyword: string = "";
@@ -21924,9 +26731,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             position: fixed;
             inset: 0;
             z-index: 99999;
-            background: rgba(15, 23, 42, 0.55);
-            backdrop-filter: blur(18px) saturate(180%);
-            -webkit-backdrop-filter: blur(18px) saturate(180%);
+            background: rgba(24, 24, 27, 0.34);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -21960,11 +26765,13 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 12px;
             background: linear-gradient(135deg, color-mix(in srgb, var(--b3-theme-primary, #6366f1) 9%, var(--b3-theme-surface)) 0%, var(--b3-theme-surface) 100%);
         `;
+        const masterEnabledInit = readBlockAssistantEnabled();
         header.innerHTML = `
-            <div>
-                <div style="font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            <div style="min-width:0;">
+                <div style="font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <span>📦 块助手资产库</span>
                     <span style="font-size: 11px; padding: 2px 9px; border-radius: 9999px; background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 15%, transparent); color: var(--b3-theme-primary, #6366f1); font-weight: 600; letter-spacing: 0.3px;">Block Action Store</span>
                 </div>
@@ -21972,8 +26779,89 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                     精选块级专属能力 · 自由装配 1~5 项优先常驻槽 · 一键剔除无关杂项
                 </div>
             </div>
-            <button class="lv-store-close-btn" style="border: none; background: transparent; cursor: pointer; font-size: 18px; line-height: 1; color: var(--b3-theme-on-surface-light, #94a3b8); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.15s ease;" title="关闭 (Esc)">✕</button>
+            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+                <label class="lv-store-master-toggle" style="display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:9999px;border:1px solid var(--b3-theme-surface-lighter, rgba(148,163,184,0.32));background:var(--b3-theme-surface,#fff);cursor:pointer;font-size:12px;font-weight:600;color:var(--b3-theme-on-surface,#1e293b);user-select:none;" title="开启或彻底停用编辑器块助手胶囊与 Alt+B 菜单">
+                    <input type="checkbox" class="lv-store-master-checkbox" ${masterEnabledInit ? "checked" : ""} />
+                    <span>启用块助手</span>
+                    <span class="lv-store-master-state" style="font-size:11px;opacity:0.75;">(${masterEnabledInit ? "已启用" : "已停用"})</span>
+                </label>
+                <button class="lv-store-close-btn" style="border: none; background: transparent; cursor: pointer; font-size: 18px; line-height: 1; color: var(--b3-theme-on-surface-light, #94a3b8); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.15s ease;" title="关闭 (Esc)">✕</button>
+            </div>
         `;
+        const storeMasterCheckbox = header.querySelector<HTMLInputElement>(".lv-store-master-checkbox");
+        const storeMasterState = header.querySelector<HTMLElement>(".lv-store-master-state");
+        const syncStoreMasterUi = (enabled: boolean) => {
+            if (storeMasterCheckbox) storeMasterCheckbox.checked = enabled;
+            if (storeMasterState) storeMasterState.textContent = enabled ? "(已启用)" : "(已停用)";
+        };
+        storeMasterCheckbox?.addEventListener("change", () => {
+            const next = Boolean(storeMasterCheckbox.checked);
+            setBlockAssistantEnabledInternal(next, { keepStoreDialog: true });
+            syncStoreMasterUi(next);
+            showMessage(next ? "已启用全生态块助手" : "已停用全生态块助手（Alt+B 与右缘胶囊已关闭）", 2000, "info", "块助手");
+        });
+        const onStoreToggleSync = (ev: Event) => {
+            if (!mask.isConnected) {
+                if (typeof window !== "undefined") window.removeEventListener("lv-block-assistant-toggle", onStoreToggleSync);
+                return;
+            }
+            const detailEnabled = (ev as CustomEvent<{ enabled?: boolean }>)?.detail?.enabled;
+            syncStoreMasterUi(typeof detailEnabled === "boolean" ? detailEnabled : readBlockAssistantEnabled());
+        };
+        if (typeof window !== "undefined") {
+            window.addEventListener("lv-block-assistant-toggle", onStoreToggleSync);
+        }
+
+        // 顶部双击触发动作定制条
+        const dblClickBar = document.createElement("div");
+        dblClickBar.className = "lv-store-dblclick-bar";
+        dblClickBar.style.cssText = `
+            padding: 9px 24px;
+            border-bottom: 1px solid var(--b3-theme-surface-lighter, rgba(0,0,0,0.06));
+            background: color-mix(in srgb, var(--b3-theme-primary, #6366f1) 4%, var(--b3-theme-surface));
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        `;
+        dblClickBar.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <span style="font-size:14px;">⚡</span>
+                <span style="font-size:12.5px;font-weight:600;color:var(--b3-theme-on-surface);">双击胶囊/快捷入口触发动作</span>
+                <span style="font-size:11px;color:var(--b3-theme-on-surface-light,#64748b);">单击展开菜单，双击直达此高频动作（仅含当前可用动作）</span>
+            </div>
+            <select class="lv-store-dblclick-select" style="padding:5px 10px;border-radius:7px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.34));background:var(--b3-theme-surface,#fff);color:var(--b3-theme-on-surface,#1e293b);font-size:12px;cursor:pointer;min-width:210px;max-width:280px;"></select>
+        `;
+        const dblClickSelect = dblClickBar.querySelector<HTMLSelectElement>(".lv-store-dblclick-select");
+        const renderDoubleClickSelect = () => {
+            if (!dblClickSelect) return;
+            const available = allActions.filter((a) => a.installed !== false && enabledSet.has(a.id) && !a.destructive && a.id !== "delete-block");
+            if (doubleClickActionId !== DOUBLE_CLICK_ACTION_DISABLED && !available.some((a) => a.id === doubleClickActionId)) {
+                const fallbackAct = available.find((a) => a.id === DEFAULT_DOUBLE_CLICK_ACTION_ID) || available[0];
+                doubleClickActionId = fallbackAct ? fallbackAct.id : DOUBLE_CLICK_ACTION_DISABLED;
+            }
+            const optsHtml = [
+                `<option value="${DOUBLE_CLICK_ACTION_DISABLED}" ${doubleClickActionId === DOUBLE_CLICK_ACTION_DISABLED ? "selected" : ""}>🚫 关闭双击（仅单击展开菜单）</option>`,
+                ...available.map((a) => `<option value="${escapeHtml(a.id)}" ${a.id === doubleClickActionId ? "selected" : ""}>${escapeHtml(a.glyph || "⚡")} ${escapeHtml(a.label)}</option>`),
+            ];
+            dblClickSelect.innerHTML = optsHtml.join("");
+            dblClickSelect.value = doubleClickActionId;
+        };
+        dblClickSelect?.addEventListener("change", () => {
+            doubleClickActionId = normalizeDoubleClickActionId(dblClickSelect.value);
+            const curSaved = readStoreConfigFromStorage();
+            writeStoreConfigToStorage({
+                ...curSaved,
+                doubleClickActionId,
+            });
+            showMessage(
+                doubleClickActionId === DOUBLE_CLICK_ACTION_DISABLED ? "已关闭块助手双击触发" : "已更新块助手双击触发动作",
+                1800,
+                "info",
+                "块助手"
+            );
+        });
 
         // ⭐ 顶部优先常驻快捷槽面板 (Top Priority Bento 5-Slot Dock)
         const pinnedDock = document.createElement("div");
@@ -22226,7 +27114,6 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 <select class="lv-custom-type" style="padding: 6px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;">
                     <option value="prefix-suffix">前后缀拼接</option>
                     <option value="attr">写入块属性</option>
-                    <option value="script">自定义 JS 脚本</option>
                 </select>
                 <div class="lv-custom-param-box" style="display: flex; gap: 6px;">
                     <input type="text" class="lv-custom-prefix" placeholder="前缀 (如: * [ ] )" style="flex: 1; padding: 6px 9px; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25)); background: var(--b3-theme-surface); color: inherit; font-size: 12px;" />
@@ -22603,6 +27490,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 summaryEl.innerHTML = `已启用 ${enabledSet.size} 项 · 常驻优先 ${pinnedList.length}/5 槽${fullBadge}`;
             }
             renderPinnedDock();
+            renderDoubleClickSelect();
             renderTabs();
         };
 
@@ -22649,6 +27537,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 
         // 组装模态框
         modal.appendChild(header);
+        modal.appendChild(dblClickBar);
         modal.appendChild(pinnedDock);
         filterBar.appendChild(searchRow);
         filterBar.appendChild(scenarioToolbar);
@@ -22672,8 +27561,11 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 
         // 关闭事件
         const closeModal = () => {
-            if (typeof window !== "undefined" && window.visualViewport) {
-                window.visualViewport.removeEventListener("resize", onVisualViewportResize);
+            if (typeof window !== "undefined") {
+                if (window.visualViewport) {
+                    window.visualViewport.removeEventListener("resize", onVisualViewportResize);
+                }
+                window.removeEventListener("lv-block-assistant-toggle", onStoreToggleSync);
             }
             if (typeof document !== "undefined") {
                 document.removeEventListener("keydown", onDialogKeyDown, true);
@@ -22780,7 +27672,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             },
             org: {
                 label: "结构排版",
-                enabled: ["copy-embed-ref", "toggle-fold-block", "native-move-up", "native-move-down", "native-clone-block", "community-mindmap", "plugin-kanban-card", "plugin-table-format"],
+                enabled: ["copy-embed-ref", "toggle-fold-block", "native-move-up", "native-move-down", "native-clone-block", "community-mindmap", "plugin-table-format"],
                 pinned: ["copy-embed-ref", "native-move-up", "native-move-down"],
             },
             minimal: {
@@ -22868,26 +27760,24 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                         enabledSet = new Set(newEnabled);
                         pinnedList = [...newPinned].slice(0, 5);
                         if (Array.isArray(parsed.customActions) && parsed.customActions.length > 0) {
-                            const scriptActions = parsed.customActions.filter((c: any) => c && c.actionType === "script");
-                            if (scriptActions.length > 0) {
-                                const okScript = await lvConfirm(
-                                    "导入含脚本的自定义动作",
-                                    `该配置包含 ${scriptActions.length} 个脚本型自定义动作（导入后将在块操作时执行其 JS 代码）：\n${scriptActions.slice(0, 5).map((c: any) => `· ${String(c.label || c.id)}`).join("\n")}${scriptActions.length > 5 ? "\n…" : ""}\n\n请仅导入来源可信的配置。是否继续？`,
-                                );
-                                if (!okScript) {
-                                    showMessage("已取消导入（含脚本动作）", 2200, "info", "块助手");
-                                    return;
-                                }
-                            }
                             const cur = readCustomActionsFromStorage();
                             const curIds = new Set(cur.map(c => c.id));
+                            let skippedScripts = 0;
                             for (const c of parsed.customActions) {
-                                if (c && c.id && c.label && !curIds.has(c.id)) {
+                                if (!c || !c.id || !c.label) continue;
+                                if (c.actionType === "script") {
+                                    skippedScripts++;
+                                    continue;
+                                }
+                                if ((c.actionType === "prefix-suffix" || c.actionType === "attr") && !curIds.has(c.id)) {
                                     cur.push(c);
                                     registerCustomAction(c);
                                 }
                             }
                             writeCustomActionsToStorage(cur);
+                            if (skippedScripts > 0) {
+                                showMessage(`已自动过滤 ${skippedScripts} 个高危 JS 脚本动作（Wave 1C 已清退）`, 2400, "info", "块助手");
+                            }
                         }
                         updateSummary();
                         renderGrid();
@@ -22926,10 +27816,6 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                     <input type="text" class="lv-custom-attr-key" placeholder="属性名 (如: custom-tag)" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25));background:var(--b3-theme-surface);color:inherit;font-size:12px;" />
                     <input type="text" class="lv-custom-attr-val" placeholder="属性值 (如: 重要)" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25));background:var(--b3-theme-surface);color:inherit;font-size:12px;" />
                 `;
-            } else if (val === "script") {
-                paramBox.innerHTML = `
-                    <input type="text" class="lv-custom-script" placeholder="JS: 如 showMessage('当前块: ' + blockID)" style="width:100%;padding:6px 9px;border-radius:6px;border:1px solid var(--b3-theme-surface-lighter, rgba(148, 163, 184, 0.25));background:var(--b3-theme-surface);color:inherit;font-size:12px;" />
-                `;
             }
         });
 
@@ -22940,9 +27826,12 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             const suffix = (customDrawer.querySelector(".lv-custom-suffix") as HTMLInputElement)?.value || "";
             const attrKey = (customDrawer.querySelector(".lv-custom-attr-key") as HTMLInputElement)?.value || "";
             const attrValue = (customDrawer.querySelector(".lv-custom-attr-val") as HTMLInputElement)?.value || "";
-            const script = (customDrawer.querySelector(".lv-custom-script") as HTMLInputElement)?.value || "";
 
-            const activeEl = document.querySelector(".protyle-wysiwyg [data-node-id]:focus-within, .protyle-wysiwyg--select[data-node-id], .protyle-wysiwyg > [data-node-id]");
+            const activeProtyle = queryActiveProtyle();
+            const activeEl = (activeProtyle?.querySelector(".protyle-wysiwyg [data-node-id]:focus-within")
+                || activeProtyle?.querySelector(".protyle-wysiwyg--select[data-node-id]")
+                || activeProtyle?.querySelector(".protyle-wysiwyg > [data-node-id]")
+                || document.querySelector(".protyle-wysiwyg [data-node-id]:focus-within, .protyle-wysiwyg--select[data-node-id], .protyle-wysiwyg > [data-node-id]")) as HTMLElement | null;
             const testBlockId = activeEl?.getAttribute("data-node-id") || "";
             if (!testBlockId) {
                 showMessage("未在当前编辑器中找到活动块供试运行", 2000, "info", "块助手");
@@ -22959,15 +27848,6 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                         return;
                     }
                     showMessage(`[试运行模拟] 将在块上写入属性 ${attrKey}="${attrValue || "1"}"`, 2600, "info", "块助手");
-                } else if (testActionType === "script") {
-                    if (!script.trim()) {
-                        showMessage("请输入 JS 脚本代码", 2000, "info", "块助手");
-                        return;
-                    }
-                    const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-                    const fn = new AsyncFunction("blockID", "lvKernelPost", "showMessage", script);
-                    await fn(testBlockId, lvKernelPost, showMessage);
-                    showMessage("自定义脚本试运行执行完成！", 2000, "info", "块助手");
                 }
             } catch (err: any) {
                 showMessage(`试运行报错: ${err?.message || String(err)}`, 2600, "error", "块助手");
@@ -22979,7 +27859,8 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             const glyph = (customDrawer.querySelector(".lv-custom-glyph") as HTMLInputElement)?.value?.trim() || "⚡";
             const subtitle = (customDrawer.querySelector(".lv-custom-subtitle") as HTMLInputElement)?.value?.trim() || "自定义块动作";
             const group = (customDrawer.querySelector(".lv-custom-group") as HTMLSelectElement)?.value || "organization";
-            const actionType = customTypeSelect.value as any;
+            const rawType = customTypeSelect.value;
+            const actionType: "prefix-suffix" | "attr" = rawType === "attr" ? "attr" : "prefix-suffix";
 
             if (!name) {
                 showMessage("请输入自定义动作名称", 2000, "info", "块助手");
@@ -22987,7 +27868,11 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             }
 
             const rawAttrKey = ((customDrawer.querySelector(".lv-custom-attr-key") as HTMLInputElement)?.value || "").trim();
-            const safeAttrKey = rawAttrKey ? (/^(custom-|memo$|bookmark$|name$|alias$|style$)/.test(rawAttrKey) ? rawAttrKey : `custom-${rawAttrKey}`) : "";
+            const safeAttrKey = rawAttrKey
+                ? (/^(custom-[a-z][a-z0-9-]*|memo$|bookmark$|name$|alias$|style$)/.test(rawAttrKey)
+                    ? rawAttrKey
+                    : `custom-${rawAttrKey.toLowerCase().replace(/[^a-z0-9-]+/g, "-")}`)
+                : "";
             const def: CustomBlockActionDef = {
                 id: `custom-act-${Date.now()}`,
                 label: name,
@@ -22999,7 +27884,6 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 suffix: (customDrawer.querySelector(".lv-custom-suffix") as HTMLInputElement)?.value,
                 attrKey: safeAttrKey,
                 attrValue: (customDrawer.querySelector(".lv-custom-attr-val") as HTMLInputElement)?.value,
-                script: (customDrawer.querySelector(".lv-custom-script") as HTMLInputElement)?.value,
                 createdAt: Date.now(),
             };
 
@@ -23027,6 +27911,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
         footer.querySelector(".lv-store-reset-btn")?.addEventListener("click", () => {
             enabledSet = new Set(DEFAULT_ENABLED_ACTION_IDS);
             pinnedList = [...DEFAULT_PINNED_ACTION_IDS];
+            doubleClickActionId = DEFAULT_DOUBLE_CLICK_ACTION_ID;
             activePresetKey = "all-star";
             updatePresetButtons("all-star");
             try {
@@ -23045,6 +27930,7 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 version: 1,
                 enabledActionIds: Array.from(enabledSet),
                 pinnedActionIds: pinnedList,
+                doubleClickActionId,
             };
             writeStoreConfigToStorage(newCfg);
             options?.onConfigChange?.(newCfg);
@@ -23059,13 +27945,808 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
 
         document.body.appendChild(mask);
         renderPinnedDock();
+        renderDoubleClickSelect();
         renderTabs();
         renderGrid();
     };
 
+    const isCardsLeaderActive = (): boolean => {
+        return blockAssistantLeader === "siyuan-lv-cards" || blockAssistantOpenFns.has("siyuan-lv-cards");
+    };
+
+    // ── 共享轻量单例悬浮胶囊（1–8 任意插件独立可用，与小驴闪卡完全互斥不双胶囊）──
+    const SHARED_CAPSULE_ID = "lv-shared-block-capsule";
+    const CAPSULE_DEBOUNCE_MS = 120;
+    const CAPSULE_TYPING_SILENCE_MS = 480;
+    let sharedCapsuleEl: HTMLElement | null = null;
+    let sharedCapsuleTriggerBtn: HTMLButtonElement | null = null;
+    let sharedCapsuleTriggerIconEl: HTMLElement | null = null;
+    let sharedCapsuleTriggerTextEl: HTMLElement | null = null;
+    let sharedCapsuleQuickBtns: HTMLButtonElement[] = [];
+    let sharedCapsuleRenderedSignature = "";
+    let sharedCapsuleBlockId: string | null = null;
+    let sharedCapsuleBlockEl: HTMLElement | null = null;
+    let sharedCapsuleWired = false;
+    let sharedCapsuleClickTimer: ReturnType<typeof setTimeout> | null = null;
+    let sharedCapsuleDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let sharedCapsuleRafId: number | null = null;
+    let pendingCapsuleTarget: HTMLElement | null = null;
+    let hasPendingCapsuleTarget = false;
+    let lastCapsuleTypingAt = 0;
+    let sharedCapsuleListenersCleanup: (() => void) | null = null;
+
+    const cleanupLegacyBlockAssistantDomResidues = (opts?: { keepStoreDialog?: boolean }) => {
+        if (typeof document === "undefined" || !document.body) return;
+        // 严格 Zero-Touch 红线：仅移除可证明为 document.body 直接脱离式门户的插件自有节点，
+        // 绝不扫描或改写 .protyle-wysiwyg / [data-node-id] / .protyle-attr / [contenteditable="true"] 子树内任何节点、class 或属性。
+        removeDetachedBodyPortalById(SHARED_CAPSULE_ID);
+        removeDetachedBodyPortalById("lv-block-assistant-portal");
+        removeDetachedBodyPortalById("lv-block-type-picker-root");
+        if (!opts?.keepStoreDialog) {
+            removeDetachedBodyPortalById("lv-block-action-store-mask");
+        }
+        removeDetachedBodyPortalById("lv-block-ai-result-card");
+        removeDetachedBodyPortalsBySelector(
+            ".lv-shared-ba-capsule, .lv-bam, .lv-bam-mobile-mask, .lv-card-badge-pill"
+        );
+    };
+
+    const clearCapsuleClickTimer = () => {
+        if (sharedCapsuleClickTimer !== null) {
+            clearTimeout(sharedCapsuleClickTimer);
+            sharedCapsuleClickTimer = null;
+        }
+    };
+
+    const cancelPendingCapsuleSchedule = () => {
+        if (sharedCapsuleDebounceTimer !== null) {
+            clearTimeout(sharedCapsuleDebounceTimer);
+            sharedCapsuleDebounceTimer = null;
+        }
+        if (sharedCapsuleRafId !== null) {
+            try {
+                if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(sharedCapsuleRafId);
+                else clearTimeout(sharedCapsuleRafId as any);
+            } catch { /* ignore */ }
+            sharedCapsuleRafId = null;
+        }
+        hasPendingCapsuleTarget = false;
+        pendingCapsuleTarget = null;
+    };
+
+    const unmountSharedCapsule = (destroyNode = false) => {
+        clearCapsuleClickTimer();
+        if (sharedCapsuleEl) {
+            try {
+                if (!isInsideEditorZeroTouchSubtree(sharedCapsuleEl)) {
+                    sharedCapsuleEl.remove();
+                }
+            } catch { /* ignore */ }
+            if (destroyNode) {
+                sharedCapsuleEl = null;
+                sharedCapsuleTriggerBtn = null;
+                sharedCapsuleTriggerIconEl = null;
+                sharedCapsuleTriggerTextEl = null;
+                sharedCapsuleQuickBtns = [];
+                sharedCapsuleRenderedSignature = "";
+            }
+        }
+        if (destroyNode && typeof document !== "undefined") {
+            removeDetachedBodyPortalById(SHARED_CAPSULE_ID);
+        }
+        sharedCapsuleBlockId = null;
+        sharedCapsuleBlockEl = null;
+    };
+
+    const teardownSharedCapsuleController = () => {
+        cancelPendingCapsuleSchedule();
+        unmountSharedCapsule(true);
+        if (sharedCapsuleListenersCleanup) {
+            try { sharedCapsuleListenersCleanup(); } catch { /* ignore */ }
+            sharedCapsuleListenersCleanup = null;
+        }
+        sharedCapsuleWired = false;
+    };
+
+    const isElementConnectedAndVisible = (el: HTMLElement | null | undefined): boolean => {
+        if (!el) return false;
+        if (el.isConnected === false) return false;
+        if (typeof el.closest === "function" && el.closest(".fn__none")) return false;
+        if (typeof document !== "undefined" && document.body) {
+            let cur: HTMLElement | null = el;
+            let steps = 0;
+            while (cur && steps < 64) {
+                if (cur.isConnected === false) return false;
+                if (cur.classList?.contains?.("fn__none")) return false;
+                if (cur === document.body) return true;
+                cur = cur.parentElement;
+                steps++;
+            }
+            if (cur !== document.body) return false;
+        }
+        return true;
+    };
+
+    const getNormalizedRect = (rect: { top?: number; bottom?: number; left?: number; right?: number; width?: number; height?: number } | null | undefined) => {
+        if (!rect) return null;
+        const width = typeof rect.width === "number" ? rect.width : (typeof rect.right === "number" && typeof rect.left === "number" ? rect.right - rect.left : 0);
+        const height = typeof rect.height === "number" ? rect.height : (typeof rect.bottom === "number" && typeof rect.top === "number" ? rect.bottom - rect.top : 0);
+        const top = typeof rect.top === "number" ? rect.top : 0;
+        const bottom = typeof rect.bottom === "number" ? rect.bottom : top + height;
+        const left = typeof rect.left === "number" ? rect.left : 0;
+        const right = typeof rect.right === "number" ? rect.right : left + width;
+        return { width, height, top, bottom, left, right };
+    };
+
+    const isRectVisibleInViewport = (rect: { top?: number; bottom?: number; left?: number; right?: number; width?: number; height?: number } | null | undefined): boolean => {
+        const r = getNormalizedRect(rect);
+        if (!r) return false;
+        const winH = typeof window !== "undefined" ? (window.innerHeight || 900) : 900;
+        return r.width > 0 && r.height > 0 && r.bottom > 24 && r.top < winH - 24;
+    };
+
+    const isValidSharedCapsuleBlock = (
+        el: HTMLElement | null | undefined,
+        opts?: { checkRect?: boolean }
+    ): el is HTMLElement => {
+        if (!el || typeof el.getAttribute !== "function") return false;
+        if (!isElementConnectedAndVisible(el)) return false;
+        const bid = el.getAttribute("data-node-id");
+        if (!bid) return false;
+        if (el.getAttribute("data-type") === "NodeDocument") return false;
+        if (el.id === SHARED_CAPSULE_ID || el.classList?.contains?.("lv-shared-ba-capsule")) return false;
+        if (isExcludedBlockAssistElement(el) || isInsidePluginReviewOrPreviewSubtree(el)) return false;
+        if (el.classList?.contains?.("protyle-title") || el.querySelector?.(":scope > .protyle-title__input")) return false;
+        if (opts?.checkRect && typeof el.getBoundingClientRect === "function") {
+            try {
+                if (!isRectVisibleInViewport(el.getBoundingClientRect())) return false;
+            } catch {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const getDoubleClickActionIdInternal = (): string => {
+        return normalizeDoubleClickActionId(readStoreConfigFromStorage().doubleClickActionId);
+    };
+
+    const executeDoubleClickActionInternal = async (
+        blockID: string,
+        snapshotOrEl?: BlockSnapshot | HTMLElement | null
+    ): Promise<{ ok: boolean; status: string; actionId: string }> => {
+        const actionId = getDoubleClickActionIdInternal();
+        if (!readBlockAssistantEnabled()) {
+            return { ok: false, status: "master_switch_disabled", actionId };
+        }
+        if (!actionId || actionId === DOUBLE_CLICK_ACTION_DISABLED) {
+            return { ok: false, status: "double_click_disabled", actionId: DOUBLE_CLICK_ACTION_DISABLED };
+        }
+        const snap = (snapshotOrEl && typeof (snapshotOrEl as BlockSnapshot).blockId === "string")
+            ? (snapshotOrEl as BlockSnapshot)
+            : buildBlockSnapshot(blockID, (snapshotOrEl as HTMLElement | null) || undefined);
+        scanPlugins();
+        const act = sharedBlockActions.get(actionId);
+        if (!act || act.installed === false) {
+            return { ok: false, status: "action_unavailable_or_uninstalled", actionId };
+        }
+        if (snap.isReadOnly && !isReadOnlySafeBlockAction(act)) {
+            showMessage("当前文档处于只读状态，已拦截写入操作", 1800, "info", "块助手");
+            return { ok: false, status: "readonly_blocked", actionId };
+        }
+        if (!isActionAllowedForSnapshot(act, snap)) {
+            showMessage(`当前块不支持「${act.label}」`, 1800, "info", "块助手");
+            return { ok: false, status: "context_filtered_unavailable", actionId };
+        }
+        await act.execute(blockID, snap);
+        return { ok: true, status: "executed", actionId };
+    };
+
+    const ensureSharedCapsuleNode = () => {
+        if (sharedCapsuleEl) return sharedCapsuleEl;
+        if (typeof document !== "undefined") {
+            removeDetachedBodyPortalById(SHARED_CAPSULE_ID);
+        }
+        const capsule = document.createElement("div");
+        capsule.id = SHARED_CAPSULE_ID;
+        capsule.className = "lv-shared-ba-capsule";
+        capsule.setAttribute("data-lv-shared-capsule", "true");
+
+        const triggerBtn = document.createElement("button");
+        triggerBtn.type = "button";
+        triggerBtn.className = "lv-shared-ba-capsule__trigger";
+        triggerBtn.setAttribute("data-role", "capsule-trigger");
+
+        const iconSpan = document.createElement("span");
+        iconSpan.textContent = "🧩";
+        const labelSpan = document.createElement("span");
+        labelSpan.textContent = "块助手";
+        triggerBtn.appendChild(iconSpan);
+        triggerBtn.appendChild(labelSpan);
+
+        const openMenuForCurrentCapsule = () => {
+            if (!readBlockAssistantEnabled() || isCardsLeaderActive()) return;
+            const curId = sharedCapsuleBlockId;
+            const curEl = sharedCapsuleBlockEl;
+            if (!curId || !curEl || !isValidSharedCapsuleBlock(curEl, { checkRect: true })) {
+                unmountSharedCapsule(false);
+                return;
+            }
+            hub.openMenu(curId, curEl);
+        };
+
+        triggerBtn.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        triggerBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const curDblId = getDoubleClickActionIdInternal();
+            if (curDblId === DOUBLE_CLICK_ACTION_DISABLED) {
+                clearCapsuleClickTimer();
+                openMenuForCurrentCapsule();
+                return;
+            }
+            if ((e as MouseEvent).detail && (e as MouseEvent).detail >= 2) {
+                clearCapsuleClickTimer();
+                return;
+            }
+            clearCapsuleClickTimer();
+            sharedCapsuleClickTimer = setTimeout(() => {
+                sharedCapsuleClickTimer = null;
+                openMenuForCurrentCapsule();
+            }, 180);
+        });
+
+        triggerBtn.addEventListener("dblclick", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            clearCapsuleClickTimer();
+            removeDetachedBodyPortalsBySelector(".lv-bam");
+            const curId = sharedCapsuleBlockId;
+            const curEl = sharedCapsuleBlockEl;
+            if (!curId || !curEl || !isValidSharedCapsuleBlock(curEl, { checkRect: true })) {
+                unmountSharedCapsule(false);
+                return;
+            }
+            const freshSnap = buildBlockSnapshot(curId, curEl);
+            void executeDoubleClickActionInternal(curId, freshSnap);
+        });
+
+        capsule.appendChild(triggerBtn);
+        sharedCapsuleEl = capsule;
+        sharedCapsuleTriggerBtn = triggerBtn;
+        sharedCapsuleTriggerIconEl = iconSpan;
+        sharedCapsuleTriggerTextEl = labelSpan;
+        sharedCapsuleQuickBtns = [];
+        sharedCapsuleRenderedSignature = "";
+        return capsule;
+    };
+
+    const mountSharedCapsuleForBlock = (blockEl: HTMLElement) => {
+        if (
+            typeof document === "undefined" ||
+            !document.body ||
+            !readBlockAssistantEnabled() ||
+            isIsolatedSettingsOrChildWindow() ||
+            isCardsLeaderActive() ||
+            (blockAssistantOwners.size === 0 && !blockAssistantLeader) ||
+            !isValidSharedCapsuleBlock(blockEl)
+        ) {
+            unmountSharedCapsule(false);
+            return;
+        }
+        const blockID = blockEl.getAttribute("data-node-id") || "";
+        if (!blockID) {
+            unmountSharedCapsule(false);
+            return;
+        }
+        if (sharedCapsuleBlockId === blockID && sharedCapsuleBlockEl === blockEl && sharedCapsuleEl?.isConnected && sharedCapsuleEl.parentElement === document.body) {
+            return;
+        }
+
+        let normRect: { width: number; height: number; top: number; bottom: number; left: number; right: number } | null = null;
+        try {
+            if (typeof blockEl.getBoundingClientRect === "function") {
+                normRect = getNormalizedRect(blockEl.getBoundingClientRect());
+                if (!isRectVisibleInViewport(normRect)) {
+                    unmountSharedCapsule(false);
+                    return;
+                }
+            }
+        } catch {
+            unmountSharedCapsule(false);
+            return;
+        }
+
+        ensureStyles();
+        clearCapsuleClickTimer();
+
+        const snap = buildBlockSnapshot(blockID, blockEl);
+        const pinned = hub.getPinnedActions(false, snap).filter((a) => a.installed !== false).slice(0, 3);
+        const dblId = getDoubleClickActionIdInternal();
+        const dblAction = dblId !== DOUBLE_CLICK_ACTION_DISABLED ? sharedBlockActions.get(dblId) : null;
+        const dblHint = dblAction && dblAction.installed !== false ? `双击：${dblAction.label}` : "双击已关闭";
+
+        const capsule = ensureSharedCapsuleNode();
+        sharedCapsuleBlockId = blockID;
+        sharedCapsuleBlockEl = blockEl;
+
+        capsule.setAttribute("data-block-id", blockID);
+        capsule.setAttribute("data-readonly", snap.isReadOnly ? "true" : "false");
+        capsule.setAttribute("data-is-card", snap.isCard ? "true" : "false");
+
+        const nextSignature = `${snap.isReadOnly ? "1" : "0"}|${snap.isCard ? "1" : "0"}|${dblHint}|${pinned.map((a) => a.id).join(",")}`;
+        if (sharedCapsuleRenderedSignature !== nextSignature) {
+            sharedCapsuleRenderedSignature = nextSignature;
+            if (sharedCapsuleTriggerBtn) {
+                const roleHint = snap.isCard ? "闪卡块助手菜单" : "块助手菜单";
+                sharedCapsuleTriggerBtn.setAttribute("title", `单击展开${roleHint} · ${dblHint}`);
+            }
+            if (sharedCapsuleTriggerIconEl) {
+                sharedCapsuleTriggerIconEl.textContent = snap.isCard ? "✦" : "🧩";
+            }
+            if (sharedCapsuleTriggerTextEl) {
+                sharedCapsuleTriggerTextEl.textContent = snap.isReadOnly
+                    ? (snap.isCard ? "只读闪卡" : "只读助手")
+                    : (snap.isCard ? "闪卡" : "块助手");
+            }
+            for (const oldBtn of sharedCapsuleQuickBtns) {
+                try { oldBtn.remove(); } catch { /* ignore */ }
+            }
+            sharedCapsuleQuickBtns = [];
+            for (const pAct of pinned) {
+                const qBtn = document.createElement("button");
+                qBtn.type = "button";
+                qBtn.className = "lv-shared-ba-capsule__quick-btn";
+                qBtn.setAttribute("data-action-id", pAct.id);
+                qBtn.setAttribute("title", pAct.label);
+                qBtn.textContent = pAct.glyph || "⚡";
+                qBtn.addEventListener("mousedown", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+                qBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    clearCapsuleClickTimer();
+                    const curId = sharedCapsuleBlockId;
+                    const curEl = sharedCapsuleBlockEl;
+                    if (!curId || !curEl || !isValidSharedCapsuleBlock(curEl, { checkRect: true })) {
+                        unmountSharedCapsule(false);
+                        return;
+                    }
+                    const freshSnap = buildBlockSnapshot(curId, curEl);
+                    const liveAct = sharedBlockActions.get(pAct.id) || pAct;
+                    if (freshSnap.isReadOnly && !isReadOnlySafeBlockAction(liveAct)) {
+                        showMessage("当前文档处于只读状态，已拦截写入操作", 1800, "info", "块助手");
+                        return;
+                    }
+                    if (!isActionAllowedForSnapshot(liveAct, freshSnap)) {
+                        showMessage(`当前块不支持「${liveAct.label}」`, 1800, "info", "块助手");
+                        return;
+                    }
+                    void Promise.resolve(liveAct.execute(curId, freshSnap)).catch(() => { /* ignore */ });
+                });
+                capsule.appendChild(qBtn);
+                sharedCapsuleQuickBtns.push(qBtn);
+            }
+        }
+
+        if (!capsule.isConnected || capsule.parentElement !== document.body) {
+            document.body.appendChild(capsule);
+        }
+
+        let top = 72;
+        let left = 240;
+        const winW = typeof window !== "undefined" ? (window.innerWidth || 1200) : 1200;
+        const winH = typeof window !== "undefined" ? (window.innerHeight || 900) : 900;
+        const capsuleW = Math.max(40, Number((capsule as any).offsetWidth) || 168);
+        const capsuleH = Math.max(20, Number((capsule as any).offsetHeight) || 28);
+        const maxLeft = Math.max(8, winW - capsuleW - 8);
+        const maxTop = Math.max(8, winH - capsuleH - 8);
+        const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
+
+        if (normRect) {
+            let isCoarsePointer = false;
+            try {
+                isCoarsePointer = typeof window !== "undefined" && typeof window.matchMedia === "function"
+                    ? Boolean(window.matchMedia("(pointer: coarse)")?.matches)
+                    : false;
+            } catch { /* ignore */ }
+            const isMobileOrNarrow = winW <= 768 || isCoarsePointer;
+            left = clamp(normRect.right - capsuleW, 8, maxLeft);
+            if (isMobileOrNarrow) {
+                const aboveTop = normRect.top - capsuleH - 6;
+                top = aboveTop >= 8 ? aboveTop : Math.max(8, normRect.top - 2);
+            } else {
+                top = normRect.top - 2;
+            }
+        }
+        left = clamp(left, 8, maxLeft);
+        top = clamp(top, 8, maxTop);
+        capsule.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+    };
+
+    // wireSharedCapsuleController / syncSharedCapsuleState
+    const syncSharedCapsuleState = () => {
+        if (
+            typeof document === "undefined" ||
+            !readBlockAssistantEnabled() ||
+            isIsolatedSettingsOrChildWindow() ||
+            isCardsLeaderActive() ||
+            (blockAssistantOwners.size === 0 && !blockAssistantLeader)
+        ) {
+            teardownSharedCapsuleController();
+            return;
+        }
+        if (sharedCapsuleWired) return;
+        if (typeof document.addEventListener !== "function") return;
+
+        cleanupLegacyBlockAssistantDomResidues({ keepStoreDialog: true });
+
+        const isInTypingSilence = (): boolean =>
+            lastCapsuleTypingAt > 0 && (Date.now() - lastCapsuleTypingAt) < CAPSULE_TYPING_SILENCE_MS;
+
+        const resolveTargetBlock = (rawEl: Element | null | undefined): HTMLElement | null => {
+            if (!rawEl || typeof rawEl.closest !== "function") return null;
+            if (rawEl.closest("#lv-shared-block-capsule, .lv-bam, #lv-block-action-store-mask, #lv-block-type-picker-root")) {
+                return sharedCapsuleBlockEl && isValidSharedCapsuleBlock(sharedCapsuleBlockEl) ? sharedCapsuleBlockEl : null;
+            }
+            if (isExcludedBlockAssistElement(rawEl) || isInsidePluginReviewOrPreviewSubtree(rawEl)) {
+                return null;
+            }
+            const candidate = (rawEl.closest(".protyle-wysiwyg [data-node-id]") || rawEl.closest("[data-node-id]")) as HTMLElement | null;
+            return isValidSharedCapsuleBlock(candidate) ? candidate : null;
+        };
+
+        const isCapsuleMounted = () => Boolean(sharedCapsuleEl?.isConnected && sharedCapsuleEl.parentElement === document.body);
+
+        const hideCapsuleImmediately = () => {
+            cancelPendingCapsuleSchedule();
+            if (isCapsuleMounted() || sharedCapsuleBlockEl || sharedCapsuleBlockId) {
+                unmountSharedCapsule(false);
+            }
+        };
+
+        const markTypingActivityAndHideCapsule = () => {
+            lastCapsuleTypingAt = Date.now();
+            hideCapsuleImmediately();
+        };
+
+        const scheduleSharedCapsuleUpdate = (target: HTMLElement | null) => {
+            if (isInTypingSilence()) return;
+            if (target) {
+                if (target === sharedCapsuleBlockEl && isCapsuleMounted()) {
+                    if (hasPendingCapsuleTarget && pendingCapsuleTarget !== target) {
+                        cancelPendingCapsuleSchedule();
+                    }
+                    return;
+                }
+            } else {
+                if (!sharedCapsuleBlockEl && !isCapsuleMounted()) {
+                    if (hasPendingCapsuleTarget && pendingCapsuleTarget !== null) {
+                        cancelPendingCapsuleSchedule();
+                    }
+                    return;
+                }
+            }
+            if (hasPendingCapsuleTarget && pendingCapsuleTarget === target) {
+                return;
+            }
+            cancelPendingCapsuleSchedule();
+            hasPendingCapsuleTarget = true;
+            pendingCapsuleTarget = target;
+
+            const scheduleTimer = typeof window !== "undefined" && typeof window.setTimeout === "function"
+                ? window.setTimeout
+                : setTimeout;
+            sharedCapsuleDebounceTimer = scheduleTimer(() => {
+                sharedCapsuleDebounceTimer = null;
+                if (!hasPendingCapsuleTarget || isInTypingSilence()) {
+                    hasPendingCapsuleTarget = false;
+                    pendingCapsuleTarget = null;
+                    return;
+                }
+                if (pendingCapsuleTarget && !isValidSharedCapsuleBlock(pendingCapsuleTarget)) {
+                    hasPendingCapsuleTarget = false;
+                    pendingCapsuleTarget = null;
+                    unmountSharedCapsule(false);
+                    return;
+                }
+                const commitFrame = () => {
+                    sharedCapsuleRafId = null;
+                    if (!hasPendingCapsuleTarget || isInTypingSilence()) {
+                        hasPendingCapsuleTarget = false;
+                        pendingCapsuleTarget = null;
+                        return;
+                    }
+                    const nextTarget = pendingCapsuleTarget;
+                    hasPendingCapsuleTarget = false;
+                    pendingCapsuleTarget = null;
+                    if (!nextTarget || !isValidSharedCapsuleBlock(nextTarget)) {
+                        unmountSharedCapsule(false);
+                    } else if (nextTarget !== sharedCapsuleBlockEl || !isCapsuleMounted()) {
+                        mountSharedCapsuleForBlock(nextTarget);
+                    }
+                };
+                if (typeof requestAnimationFrame === "function") {
+                    sharedCapsuleRafId = requestAnimationFrame(commitFrame);
+                } else {
+                    commitFrame();
+                }
+            }, CAPSULE_DEBOUNCE_MS);
+        };
+
+        const onMouseOver = (e: Event) => {
+            if (isInTypingSilence()) return;
+            const rawTarget = (e as MouseEvent).target as Element | null;
+            if (rawTarget?.closest?.("#lv-shared-block-capsule, .lv-bam")) {
+                if (hasPendingCapsuleTarget && pendingCapsuleTarget === null) {
+                    cancelPendingCapsuleSchedule();
+                }
+                return;
+            }
+            const target = resolveTargetBlock(rawTarget);
+            scheduleSharedCapsuleUpdate(target);
+        };
+        const onMouseLeave = () => {
+            scheduleSharedCapsuleUpdate(null);
+        };
+        const onFocusIn = (e: Event) => {
+            if (isInTypingSilence()) return;
+            const target = resolveTargetBlock((e as FocusEvent).target as Element | null);
+            if (target) scheduleSharedCapsuleUpdate(target);
+        };
+        const onSelectionChange = () => {
+            if (isInTypingSilence()) return;
+            try {
+                const sel = typeof document.getSelection === "function" ? document.getSelection() : null;
+                if (!sel || sel.rangeCount === 0) return;
+                const node = sel.anchorNode as (Node & { parentElement?: Element | null }) | null;
+                const anchorEl = node && (node.nodeType === 1 ? (node as unknown as Element) : node.parentElement);
+                const target = resolveTargetBlock(anchorEl);
+                if (target) scheduleSharedCapsuleUpdate(target);
+            } catch { /* ignore */ }
+        };
+        const onKeyDown = (e: Event) => {
+            const ke = e as KeyboardEvent;
+            const key = ke.key || "";
+            if (key === "Escape") {
+                markTypingActivityAndHideCapsule();
+                return;
+            }
+            const isPureModifier = key === "Shift" || key === "Control" || key === "Alt" || key === "Meta" || key === "CapsLock";
+            const isEditOrNavKey = key === "Backspace" || key === "Delete" || key === "Enter" ||
+                key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
+            const isEditShortcut = (ke.ctrlKey || ke.metaKey) && !isPureModifier && /^(x|v|z|y|backspace|delete|enter)$/i.test(key);
+            if (isEditOrNavKey || isEditShortcut || (!isPureModifier && !ke.ctrlKey && !ke.metaKey && !ke.altKey)) {
+                markTypingActivityAndHideCapsule();
+            }
+        };
+        const onTypingOrEdit = () => {
+            markTypingActivityAndHideCapsule();
+        };
+        const onScrollOrTouchMove = (e: Event) => {
+            const rawTarget = e.target as Element | null;
+            if (rawTarget && typeof rawTarget.closest === "function" && rawTarget.closest(".lv-bam, #lv-block-action-store-mask, #lv-block-type-picker-root")) {
+                return;
+            }
+            hideCapsuleImmediately();
+        };
+        const onViewportResize = () => {
+            hideCapsuleImmediately();
+        };
+        const onConfigUpdated = () => {
+            sharedCapsuleRenderedSignature = "";
+            const cur = sharedCapsuleBlockEl;
+            if (cur && cur.isConnected) {
+                sharedCapsuleBlockId = null;
+                mountSharedCapsuleForBlock(cur);
+            }
+        };
+        const onStorage = (e: Event) => {
+            const se = e as StorageEvent;
+            invalidateBlockAssistantConfigCache(se?.key);
+            if (!readBlockAssistantEnabled()) {
+                teardownSharedCapsuleController();
+                return;
+            }
+            onConfigUpdated();
+        };
+
+        document.addEventListener("mouseover", onMouseOver, { passive: true } as any);
+        document.addEventListener("mouseleave", onMouseLeave, { passive: true } as any);
+        document.addEventListener("focusin", onFocusIn, { passive: true } as any);
+        document.addEventListener("selectionchange", onSelectionChange, { passive: true } as any);
+        document.addEventListener("keydown", onKeyDown, { capture: true, passive: true } as any);
+        document.addEventListener("beforeinput", onTypingOrEdit, { capture: true, passive: true } as any);
+        document.addEventListener("input", onTypingOrEdit, { capture: true, passive: true } as any);
+        document.addEventListener("compositionstart", onTypingOrEdit, { capture: true, passive: true } as any);
+        document.addEventListener("cut", onTypingOrEdit, { capture: true, passive: true } as any);
+        document.addEventListener("paste", onTypingOrEdit, { capture: true, passive: true } as any);
+        document.addEventListener("scroll", onScrollOrTouchMove, { capture: true, passive: true } as any);
+        document.addEventListener("touchmove", onScrollOrTouchMove, { capture: true, passive: true } as any);
+        if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+            window.addEventListener("scroll", onScrollOrTouchMove, { passive: true } as any);
+            window.addEventListener("resize", onViewportResize, { passive: true } as any);
+            window.addEventListener("lv-block-action-store-updated", onConfigUpdated);
+            window.addEventListener("lv-block-action-config-changed", onConfigUpdated);
+            window.addEventListener("storage", onStorage);
+        }
+
+        sharedCapsuleListenersCleanup = () => {
+            document.removeEventListener("mouseover", onMouseOver as any);
+            document.removeEventListener("mouseleave", onMouseLeave as any);
+            document.removeEventListener("focusin", onFocusIn as any);
+            document.removeEventListener("selectionchange", onSelectionChange as any);
+            document.removeEventListener("keydown", onKeyDown as any, true);
+            document.removeEventListener("beforeinput", onTypingOrEdit as any, true);
+            document.removeEventListener("input", onTypingOrEdit as any, true);
+            document.removeEventListener("compositionstart", onTypingOrEdit as any, true);
+            document.removeEventListener("cut", onTypingOrEdit as any, true);
+            document.removeEventListener("paste", onTypingOrEdit as any, true);
+            document.removeEventListener("scroll", onScrollOrTouchMove as any, true);
+            document.removeEventListener("touchmove", onScrollOrTouchMove as any, true);
+            if (typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+                window.removeEventListener("scroll", onScrollOrTouchMove as any);
+                window.removeEventListener("resize", onViewportResize as any);
+                window.removeEventListener("lv-block-action-store-updated", onConfigUpdated);
+                window.removeEventListener("lv-block-action-config-changed", onConfigUpdated);
+                window.removeEventListener("storage", onStorage);
+            }
+        };
+        sharedCapsuleWired = true;
+    };
+
+    const disposeBlockAssistantUi = (opts?: { keepStoreDialog?: boolean }) => {
+        teardownSharedCapsuleController();
+        if (typeof document !== "undefined") {
+            cleanupLegacyBlockAssistantDomResidues(opts);
+        }
+        for (const hook of Array.from(blockAssistantDisableHooks)) {
+            try { hook(); } catch { /* ignore */ }
+        }
+    };
+
+    const setBlockAssistantEnabledInternal = (next: boolean, opts?: { keepStoreDialog?: boolean }): void => {
+        const enabled = Boolean(next);
+        writeBlockAssistantEnabled(enabled);
+        if (!enabled) {
+            disposeBlockAssistantUi(opts);
+        } else {
+            syncSharedCapsuleState();
+        }
+        try {
+            if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+                window.dispatchEvent(new CustomEvent("lv-block-assistant-toggle", { detail: { enabled } }));
+            }
+        } catch { /* ignore */ }
+    };
+
+    const builtinFallbackOpenMenuFn = (blockID: string, anchor: HTMLElement): void => {
+        if (!readBlockAssistantEnabled() || typeof document === "undefined" || !document.body) return;
+        if (anchor && isInsidePluginReviewOrPreviewSubtree(anchor)) return;
+        const targetEl = anchor && typeof anchor.getAttribute === "function" && anchor.getAttribute("data-node-id")
+            ? anchor
+            : (queryBlockElementById(blockID) || anchor);
+        if (targetEl && isInsidePluginReviewOrPreviewSubtree(targetEl)) return;
+
+        removeDetachedBodyPortalsBySelector(".lv-bam");
+
+        const snapshot = buildBlockSnapshot(blockID, targetEl as HTMLElement | null);
+        const pinnedActions = hub.getPinnedActions(false, snapshot).filter((a) => a.installed !== false);
+        const pinnedIdSet = new Set(pinnedActions.map((a) => a.id));
+        const otherActions = hub.getEnabledActions(false, snapshot).filter((a) => a.installed !== false && !pinnedIdSet.has(a.id));
+        const actions = [...pinnedActions, ...otherActions];
+        const menu = document.createElement("div");
+        menu.className = "lv-bam";
+        menu.setAttribute("role", "menu");
+        menu.setAttribute("data-block-id", blockID);
+        menu.setAttribute("data-readonly", snapshot.isReadOnly ? "true" : "false");
+        menu.style.cssText = "position:fixed;z-index:99997;min-width:220px;max-width:300px;max-height:60vh;overflow-y:auto;padding:6px;border-radius:10px;background:var(--b3-theme-surface,#fff);color:var(--b3-theme-on-surface,#0f172a);border:1px solid var(--b3-theme-surface-lighter,rgba(15,23,42,0.14));box-shadow:0 16px 40px rgba(15,23,42,0.22);display:flex;flex-direction:column;gap:2px;font-family:var(--b3-font-family,sans-serif);";
+
+        let top = 80;
+        let left = 80;
+        try {
+            if (targetEl && typeof targetEl.getBoundingClientRect === "function") {
+                const rect = targetEl.getBoundingClientRect();
+                top = Math.max(12, Math.min((window?.innerHeight || 800) - 240, rect.bottom + 6));
+                left = Math.max(12, Math.min((window?.innerWidth || 1200) - 260, rect.left));
+            }
+        } catch { /* ignore */ }
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
+
+        const header = document.createElement("div");
+        header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:4px 8px 6px;border-bottom:1px solid var(--b3-theme-surface-lighter,rgba(15,23,42,0.08));font-size:11.5px;font-weight:700;";
+        header.innerHTML = `<span>🧩 块助手</span>${snapshot.isReadOnly ? `<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(245,158,11,0.15);color:#b45309;">只读</span>` : ""}`;
+        menu.appendChild(header);
+
+        const closeMenu = () => {
+            try { menu.remove(); } catch { /* ignore */ }
+            if (typeof document !== "undefined") {
+                document.removeEventListener("keydown", onEsc, true);
+                document.removeEventListener("mousedown", onOutside, true);
+            }
+        };
+        const onEsc = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeMenu();
+            }
+        };
+        const onOutside = (e: MouseEvent) => {
+            if (e.target && typeof menu.contains === "function" && !menu.contains(e.target as Node)) {
+                closeMenu();
+            }
+        };
+
+        for (const act of actions) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = act.destructive ? "lv-bam-item lv-bam-item--danger" : "lv-bam-item";
+            btn.setAttribute("data-action-id", act.id);
+            if (act.destructive) btn.setAttribute("data-danger", "true");
+            if (pinnedIdSet.has(act.id)) btn.setAttribute("data-pinned", "true");
+            const itemColor = act.destructive ? "var(--b3-theme-error,#ef4444)" : "inherit";
+            btn.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px 8px;border:none;background:transparent;color:${itemColor};border-radius:6px;cursor:pointer;text-align:left;font-size:12px;width:100%;box-sizing:border-box;`;
+            btn.innerHTML = `<span>${escapeHtml(act.glyph || "⚡")}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(act.label)}</span>`;
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                closeMenu();
+                void Promise.resolve(act.execute(blockID, snapshot)).catch(() => { /* ignore */ });
+            });
+            menu.appendChild(btn);
+        }
+
+        const storeFooterBtn = document.createElement("button");
+        storeFooterBtn.type = "button";
+        storeFooterBtn.className = "lv-bam-store-btn";
+        storeFooterBtn.style.cssText = "margin-top:4px;padding:5px 8px;border:none;border-top:1px solid var(--b3-theme-surface-lighter,rgba(15,23,42,0.08));background:transparent;color:var(--b3-theme-on-surface-light,#64748b);cursor:pointer;text-align:left;font-size:11px;width:100%;box-sizing:border-box;";
+        storeFooterBtn.textContent = "⚙️ 定制动作与双击快捷操作…";
+        storeFooterBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            closeMenu();
+            hub.openStoreDialog();
+        });
+        menu.appendChild(storeFooterBtn);
+
+        if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+            document.addEventListener("keydown", onEsc, true);
+            document.addEventListener("mousedown", onOutside, true);
+        }
+        document.body.appendChild(menu);
+    };
+
+    const resolveBlockSnapshot = (blockIDOrSnapshot?: BlockSnapshot | string | null): BlockSnapshot | null => {
+        if (!blockIDOrSnapshot) return null;
+        if (typeof blockIDOrSnapshot === "string") {
+            return buildBlockSnapshot(blockIDOrSnapshot);
+        }
+        return blockIDOrSnapshot;
+    };
+
     const hub: UniversalBlockAssistantHub = {
-        version: "2.0.0",
+        version: "4.0.0",
+        hotkey: "Alt+B",
         get leaderPlugin() { return blockAssistantLeader; },
+        isEnabled(): boolean {
+            return readBlockAssistantEnabled();
+        },
+        setEnabled(next: boolean): void {
+            setBlockAssistantEnabledInternal(next);
+        },
+        dispose(): void {
+            disposeBlockAssistantUi();
+        },
+        onDisable(cb: () => void): () => void {
+            if (typeof cb !== "function") return () => {};
+            blockAssistantDisableHooks.add(cb);
+            return () => {
+                blockAssistantDisableHooks.delete(cb);
+            };
+        },
         register(action: UniversalBlockAction): () => void {
             sharedBlockActions.set(action.id, action);
             return () => {
@@ -23076,41 +28757,82 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
             scanPlugins(force);
             return Array.from(sharedBlockActions.values());
         },
-        getEnabledActions(force = false): UniversalBlockAction[] {
+        getEnabledActions(force = false, snapshotOrBlockId?: BlockSnapshot | string | null): UniversalBlockAction[] {
             scanPlugins(force);
             const cfg = readStoreConfigFromStorage();
             const enabledSet = new Set(cfg.enabledActionIds);
-            return Array.from(sharedBlockActions.values()).filter(a => enabledSet.has(a.id));
+            const snap = resolveBlockSnapshot(snapshotOrBlockId);
+            return Array.from(sharedBlockActions.values())
+                .filter((a) => a.installed !== false && enabledSet.has(a.id) && isActionAllowedForSnapshot(a, snap));
         },
-        getPinnedActions(force = false): UniversalBlockAction[] {
+        getPinnedActions(force = false, snapshotOrBlockId?: BlockSnapshot | string | null): UniversalBlockAction[] {
             scanPlugins(force);
             const cfg = readStoreConfigFromStorage();
+            const snap = resolveBlockSnapshot(snapshotOrBlockId);
             return cfg.pinnedActionIds
                 .map(id => sharedBlockActions.get(id))
-                .filter((a): a is UniversalBlockAction => Boolean(a));
+                .filter((a): a is UniversalBlockAction => Boolean(a))
+                .filter((a) => a.installed !== false && isActionAllowedForSnapshot(a, snap));
+        },
+        getAvailableActions(blockIDOrSnapshot: BlockSnapshot | string, force = false): UniversalBlockAction[] {
+            scanPlugins(force);
+            const snap = resolveBlockSnapshot(blockIDOrSnapshot);
+            return Array.from(sharedBlockActions.values())
+                .filter((a) => a.installed !== false && isActionAllowedForSnapshot(a, snap));
+        },
+        getBlockSnapshot(blockID: string, el?: HTMLElement | null): BlockSnapshot {
+            return buildBlockSnapshot(blockID, el);
         },
         ensureLeader(pluginId: string, openMenuFn?: (blockID: string, anchor: HTMLElement) => void): () => void {
             blockAssistantOwners.add(pluginId);
             if (openMenuFn) {
                 blockAssistantOpenFns.set(pluginId, openMenuFn);
             }
-            if (!blockAssistantLeader) {
+            const curHasCustom = blockAssistantLeader ? blockAssistantOpenFns.has(blockAssistantLeader) : false;
+            if (!blockAssistantLeader || (openMenuFn && !curHasCustom)) {
                 blockAssistantLeader = pluginId;
-                if (openMenuFn) blockAssistantOpenFn = openMenuFn;
+                blockAssistantOpenFn = openMenuFn || builtinFallbackOpenMenuFn;
             }
+            scanPlugins(true);
+            syncSharedCapsuleState();
             return () => {
                 blockAssistantOwners.delete(pluginId);
                 blockAssistantOpenFns.delete(pluginId);
                 if (blockAssistantLeader === pluginId) {
-                    const nextLeader = blockAssistantOwners.values().next().value || null;
+                    let nextLeader: string | null = null;
+                    for (const owner of blockAssistantOwners) {
+                        if (blockAssistantOpenFns.has(owner)) {
+                            nextLeader = owner;
+                            break;
+                        }
+                    }
+                    if (!nextLeader) {
+                        nextLeader = blockAssistantOwners.values().next().value || null;
+                    }
+                    if (!nextLeader) {
+                        const reg = getSharedLaunchpadRegistry();
+                        for (const id of reg.keys()) {
+                            const norm = String(id || "").trim().toLowerCase();
+                            if (norm && norm !== "siyuan-exoskeleton" && norm !== "exoskeleton" && norm !== "siyuan-quickgate" && norm !== "quickgate") {
+                                nextLeader = id;
+                                blockAssistantOwners.add(id);
+                                break;
+                            }
+                        }
+                    }
                     blockAssistantLeader = nextLeader;
-                    blockAssistantOpenFn = nextLeader ? (blockAssistantOpenFns.get(nextLeader) || null) : null;
+                    blockAssistantOpenFn = nextLeader ? (blockAssistantOpenFns.get(nextLeader) || builtinFallbackOpenMenuFn) : null;
                 }
+                scanPlugins(true);
+                syncSharedCapsuleState();
             };
         },
         openMenu(blockID: string, anchor: HTMLElement): void {
-            if (blockAssistantOpenFn) {
-                blockAssistantOpenFn(blockID, anchor);
+            if (!readBlockAssistantEnabled()) return;
+            if (anchor && isInsidePluginReviewOrPreviewSubtree(anchor)) return;
+            const fn = blockAssistantOpenFn || (blockAssistantLeader ? builtinFallbackOpenMenuFn : null);
+            if (fn) {
+                fn(blockID, anchor);
             }
         },
         getStoreConfig(): BlockActionStoreConfig {
@@ -23124,9 +28846,25 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
                 version: 1,
                 enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS],
                 pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS],
+                doubleClickActionId: DEFAULT_DOUBLE_CLICK_ACTION_ID,
             };
             writeStoreConfigToStorage(def);
             return def;
+        },
+        getDoubleClickActionId(): string {
+            return getDoubleClickActionIdInternal();
+        },
+        setDoubleClickActionId(actionId: string): string {
+            const cur = readStoreConfigFromStorage();
+            const normalized = normalizeDoubleClickActionId(actionId);
+            writeStoreConfigToStorage({
+                ...cur,
+                doubleClickActionId: normalized,
+            });
+            return normalized;
+        },
+        executeDoubleClickAction(blockID: string, snapshot?: BlockSnapshot | null) {
+            return executeDoubleClickActionInternal(blockID, snapshot || null);
         },
         openStoreDialog,
         scanPlugins,
@@ -23151,32 +28889,95 @@ function getBlockAssistantHub(): UniversalBlockAssistantHub {
         (window as any).LvBlockAssistant = {
             registerAction: (action: UniversalBlockAction) => hub.register(action),
             getActions: (force?: boolean) => hub.getActions(force),
-            getEnabledActions: (force?: boolean) => hub.getEnabledActions(force),
-            getPinnedActions: (force?: boolean) => hub.getPinnedActions(force),
+            getEnabledActions: (force?: boolean, snapshot?: BlockSnapshot | string | null) => hub.getEnabledActions(force, snapshot),
+            getPinnedActions: (force?: boolean, snapshot?: BlockSnapshot | string | null) => hub.getPinnedActions(force, snapshot),
+            getAvailableActions: (blockIDOrSnapshot: BlockSnapshot | string, force?: boolean) => hub.getAvailableActions?.(blockIDOrSnapshot, force) || [],
+            getBlockSnapshot: (blockID: string, el?: HTMLElement | null) => hub.getBlockSnapshot?.(blockID, el) || buildBlockSnapshot(blockID, el),
             openMenu: (blockID: string, anchor: HTMLElement) => hub.openMenu(blockID, anchor),
             executeAction: async (actionId: string, blockID: string, snapshot?: any) => {
-                const act = hub.getActions().find(a => a.id === actionId);
-                if (act && typeof act.execute === "function") {
-                    await act.execute(blockID, snapshot);
+                const snap = resolveBlockSnapshot(snapshot || blockID);
+                const act = hub.getActions().find(a => a.id === normalizeBlockActionId(actionId));
+                if (!act || act.installed === false || !isActionAllowedForSnapshot(act, snap)) {
+                    if (snap?.isReadOnly) {
+                        showMessage("当前文档处于只读状态，已拦截写入操作", 1800, "info", "块助手");
+                    }
+                    return;
+                }
+                if (typeof act.execute === "function") {
+                    await act.execute(blockID, snap);
                 }
             },
             ensureLeader: (pluginId: string, openMenuFn?: (blockID: string, anchor: HTMLElement) => void) => hub.ensureLeader(pluginId, openMenuFn),
             openStoreDialog: (opts?: any) => hub.openStoreDialog(opts),
             getStoreConfig: () => hub.getStoreConfig(),
             saveStoreConfig: (cfg: BlockActionStoreConfig) => hub.saveStoreConfig(cfg),
+            getDoubleClickActionId: () => hub.getDoubleClickActionId?.() || DEFAULT_DOUBLE_CLICK_ACTION_ID,
+            setDoubleClickActionId: (actionId: string) => hub.setDoubleClickActionId?.(actionId) || normalizeDoubleClickActionId(actionId),
+            executeDoubleClickAction: (blockID: string, snapshot?: BlockSnapshot | null) => executeDoubleClickActionInternal(blockID, snapshot || null),
+            getSharedCapsuleStatus: () => ({
+                wired: sharedCapsuleWired,
+                mounted: Boolean(sharedCapsuleEl?.isConnected),
+                activeBlockId: sharedCapsuleBlockId,
+                cardsLeaderActive: isCardsLeaderActive(),
+            }),
             scanPlugins: (force?: boolean) => hub.scanPlugins(force),
             scanInstalledPlugins: (force?: boolean) => hub.scanPlugins(force),
             getScanCacheStatus: () => (hub as any).getScanCacheStatus?.(),
-            openTypePicker: (blockID: string, anchor?: HTMLElement) => openBlockTypeMorphPicker(blockID, anchor),
+            openTypePicker: (blockID: string, anchor?: HTMLElement | null) => openBlockTypeMorphPicker(blockID, anchor),
             morphType: (blockID: string, targetType: string) => morphBlockTypeTo(blockID, targetType),
             morphTargets: BLOCK_MORPH_TARGETS,
+            hotkey: "Alt+B",
+            isEnabled: () => hub.isEnabled(),
+            setEnabled: (next: boolean) => hub.setEnabled(next),
+            dispose: () => hub.dispose(),
+            onDisable: (cb: () => void) => hub.onDisable ? hub.onDisable(cb) : () => {},
             version: hub.version,
         };
     }
+    cleanupLegacyBlockAssistantDomResidues();
     return hub;
 }
 
 export const lvBlockAssistant = {
+    hotkey: "Alt+B" as const,
+    isEnabled(): boolean {
+        try {
+            return getBlockAssistantHub().isEnabled();
+        } catch {
+            return readBlockAssistantEnabled();
+        }
+    },
+    setEnabled(next: boolean): void {
+        try {
+            getBlockAssistantHub().setEnabled(next);
+            return;
+        } catch { /* ignore */ }
+        const enabled = Boolean(next);
+        writeBlockAssistantEnabled(enabled);
+        try {
+            if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+                window.dispatchEvent(new CustomEvent("lv-block-assistant-toggle", { detail: { enabled } }));
+            }
+        } catch { /* ignore */ }
+    },
+    dispose(): void {
+        try {
+            getBlockAssistantHub().dispose();
+        } catch { /* ignore */ }
+    },
+    onDisable(cb: () => void): () => void {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.onDisable === "function") {
+                return hub.onDisable(cb);
+            }
+        } catch { /* ignore */ }
+        if (typeof cb === "function") {
+            blockAssistantDisableHooks.add(cb);
+            return () => { blockAssistantDisableHooks.delete(cb); };
+        }
+        return () => {};
+    },
     /** 向全生态块助手注册业务动作 */
     registerAction(action: UniversalBlockAction): () => void {
         try {
@@ -23195,32 +28996,50 @@ export const lvBlockAssistant = {
         } catch { /* ignore */ }
         return Array.from(sharedBlockActions.values());
     },
-    /** 获取可用的动作列表（经过用户块助手库 enabled 过滤） */
-    getEnabledActions(force = false): UniversalBlockAction[] {
+    /** 获取可用的动作列表（经过用户块助手库 enabled 过滤；传入块ID或快照时自动执行只读与类型过滤） */
+    getEnabledActions(force = false, snapshot?: BlockSnapshot | string | null): UniversalBlockAction[] {
         try {
             const hub = getBlockAssistantHub();
             if (hub && typeof hub.getEnabledActions === "function") {
-                return hub.getEnabledActions(force);
+                return hub.getEnabledActions(force, snapshot);
             }
         } catch { /* ignore */ }
         const cfg = readStoreConfigFromStorage();
         const enabledSet = new Set(cfg.enabledActionIds);
+        const snap = typeof snapshot === "string" ? buildBlockSnapshot(snapshot) : (snapshot || null);
         const all: UniversalBlockAction[] = lvBlockAssistant.getActions(force);
-        return all.filter((a: UniversalBlockAction) => enabledSet.has(a.id));
+        return all.filter((a: UniversalBlockAction) => enabledSet.has(a.id) && isActionAllowedForSnapshot(a, snap));
     },
     /** 获取用户置顶在常驻快捷栏的动作 (最多5个) */
-    getPinnedActions(force = false): UniversalBlockAction[] {
+    getPinnedActions(force = false, snapshot?: BlockSnapshot | string | null): UniversalBlockAction[] {
         try {
             const hub = getBlockAssistantHub();
             if (hub && typeof hub.getPinnedActions === "function") {
-                return hub.getPinnedActions(force);
+                return hub.getPinnedActions(force, snapshot);
             }
         } catch { /* ignore */ }
         const cfg = readStoreConfigFromStorage();
+        const snap = typeof snapshot === "string" ? buildBlockSnapshot(snapshot) : (snapshot || null);
         const all: UniversalBlockAction[] = lvBlockAssistant.getActions(force);
         return cfg.pinnedActionIds
             .map(id => all.find((a: UniversalBlockAction) => a.id === id))
-            .filter((a): a is UniversalBlockAction => Boolean(a));
+            .filter((a): a is UniversalBlockAction => Boolean(a))
+            .filter((a) => isActionAllowedForSnapshot(a, snap));
+    },
+    /** 按块ID或快照过滤可用动作（自动识别只读状态与块类型） */
+    getAvailableActions(blockIDOrSnapshot: BlockSnapshot | string, force = false): UniversalBlockAction[] {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.getAvailableActions === "function") {
+                return hub.getAvailableActions(blockIDOrSnapshot, force);
+            }
+        } catch { /* ignore */ }
+        const snap = typeof blockIDOrSnapshot === "string" ? buildBlockSnapshot(blockIDOrSnapshot) : blockIDOrSnapshot;
+        return lvBlockAssistant.getActions(force).filter((a) => isActionAllowedForSnapshot(a, snap));
+    },
+    /** 构建块上下文快照（含只读检测） */
+    getBlockSnapshot(blockID: string, el?: HTMLElement | null): BlockSnapshot {
+        return buildBlockSnapshot(blockID, el);
     },
     /** 插件启动时调用，参与 Leader 竞选；多插件共存时自动平滑仲裁 */
     ensureLeader(pluginId: string, openMenuFn?: (blockID: string, anchor: HTMLElement) => void): () => void {
@@ -23274,9 +29093,54 @@ export const lvBlockAssistant = {
             version: 1,
             enabledActionIds: [...DEFAULT_ENABLED_ACTION_IDS],
             pinnedActionIds: [...DEFAULT_PINNED_ACTION_IDS],
+            doubleClickActionId: DEFAULT_DOUBLE_CLICK_ACTION_ID,
         };
         writeStoreConfigToStorage(def);
         return def;
+    },
+    /** 读取胶囊/快捷入口双击触发动作 ID（默认 "morph-block-type"，"none" 表示关闭） */
+    getDoubleClickActionId(): string {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.getDoubleClickActionId === "function") {
+                return hub.getDoubleClickActionId();
+            }
+        } catch { /* ignore */ }
+        return normalizeDoubleClickActionId(readStoreConfigFromStorage().doubleClickActionId);
+    },
+    /** 设置胶囊/快捷入口双击触发动作 ID（支持 "none" 关闭双击） */
+    setDoubleClickActionId(actionId: string): string {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.setDoubleClickActionId === "function") {
+                return hub.setDoubleClickActionId(actionId);
+            }
+        } catch { /* ignore */ }
+        const cur = readStoreConfigFromStorage();
+        const normalized = normalizeDoubleClickActionId(actionId);
+        writeStoreConfigToStorage({ ...cur, doubleClickActionId: normalized });
+        return normalized;
+    },
+    /** 按当前块上下文与只读守卫执行双击定制动作 */
+    async executeDoubleClickAction(blockID: string, snapshot?: BlockSnapshot | null): Promise<{ ok: boolean; status: string; actionId: string }> {
+        try {
+            const hub = getBlockAssistantHub();
+            if (hub && typeof hub.executeDoubleClickAction === "function") {
+                return await hub.executeDoubleClickAction(blockID, snapshot || null);
+            }
+        } catch { /* ignore */ }
+        return { ok: false, status: "hub_unavailable", actionId: lvBlockAssistant.getDoubleClickActionId() };
+    },
+    /** 获取共享单例悬浮胶囊状态（用于诊断与双胶囊互斥验证） */
+    getSharedCapsuleStatus(): { wired: boolean; mounted: boolean; activeBlockId: string | null; cardsLeaderActive: boolean } {
+        try {
+            getBlockAssistantHub();
+            const g = typeof window !== "undefined" ? (window as any).LvBlockAssistant : null;
+            if (g && typeof g.getSharedCapsuleStatus === "function") {
+                return g.getSharedCapsuleStatus();
+            }
+        } catch { /* ignore */ }
+        return { wired: false, mounted: false, activeBlockId: null, cardsLeaderActive: false };
     },
     /** 打开「📦 块助手资产库 (Block Action Store)」交互配置工作台 */
     openStoreDialog(options?: { onConfigChange?: (config: BlockActionStoreConfig) => void }): void {
@@ -23324,3 +29188,76 @@ export const lvBlockAssistant = {
         return BLOCK_MORPH_TARGETS;
     },
 };
+
+function ensureBlockAssistantAltBFallback(): void {
+    if (typeof window === "undefined" || typeof document === "undefined" || typeof window.addEventListener !== "function") return;
+    const w = window as unknown as { __LV_BA_ALT_B_WIRED__?: boolean };
+    if (w.__LV_BA_ALT_B_WIRED__) return;
+    w.__LV_BA_ALT_B_WIRED__ = true;
+
+    window.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (!e || e.defaultPrevented) return;
+        if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const k = String(e.key || "").toLowerCase();
+        const code = String(e.code || "").toLowerCase();
+        if (k !== "b" && code !== "keyb") return;
+        if (!readBlockAssistantEnabled()) return;
+
+        const hub = getBlockAssistantHub();
+        if (!hub.leaderPlugin && blockAssistantOwners.size === 0) return;
+        // 若小驴闪卡已作为 Leader 通过宿主 addCommand('⌥B') 接管，或宿主原生反向链接正占用 ⌥B，绝不抢占/双重触发
+        if (hub.leaderPlugin === "siyuan-lv-cards") return;
+        try {
+            const wAny = window as any;
+            const hostBl = wAny?.siyuan?.config?.keymap?.editor?.general?.backlinks;
+            if (hostBl) {
+                const activeHotkey = typeof hostBl.custom === "string" ? hostBl.custom : hostBl.default;
+                if (activeHotkey === "⌥B") return;
+            }
+        } catch { /* ignore */ }
+
+        const evTarget = e.target as Element | null;
+        if (evTarget && isInsidePluginReviewOrPreviewSubtree(evTarget)) return;
+
+        let blockEl: HTMLElement | null = null;
+        const activeProtyle = queryActiveProtyle();
+        if (activeProtyle && typeof activeProtyle.querySelector === "function") {
+            blockEl = (activeProtyle.querySelector(".protyle-wysiwyg [data-node-id]:focus-within")
+                || activeProtyle.querySelector(".protyle-wysiwyg--select[data-node-id]")) as HTMLElement | null;
+        }
+        if (!blockEl && typeof window.getSelection === "function") {
+            try {
+                const anchorNode = window.getSelection()?.anchorNode as (Node & { parentElement?: Element | null }) | null;
+                const startEl = anchorNode && (anchorNode.nodeType === 1 ? (anchorNode as unknown as Element) : anchorNode.parentElement);
+                const candidate = startEl?.closest?.("[data-node-id]") as HTMLElement | null;
+                if (candidate && !isExcludedBlockAssistElement(candidate)) {
+                    blockEl = candidate;
+                }
+            } catch { /* ignore */ }
+        }
+        if (!blockEl && evTarget && typeof evTarget.closest === "function") {
+            const candidate = evTarget.closest("[data-node-id]") as HTMLElement | null;
+            if (candidate && !isExcludedBlockAssistElement(candidate)) {
+                blockEl = candidate;
+            }
+        }
+        const blockID = blockEl?.getAttribute?.("data-node-id") || "";
+        if (!blockID || !blockEl) return;
+
+        try { e.preventDefault?.(); } catch { /* ignore */ }
+        hub.openMenu(blockID, blockEl);
+    });
+}
+
+export function getDoubleClickActionId(): string {
+    return lvBlockAssistant.getDoubleClickActionId();
+}
+
+export function setDoubleClickActionId(actionId: string): string {
+    return lvBlockAssistant.setDoubleClickActionId(actionId);
+}
+
+if (typeof window !== "undefined") {
+    ensureNoticeKitAiHubMounted();
+    ensureBlockAssistantAltBFallback();
+}

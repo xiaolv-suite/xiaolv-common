@@ -1,6 +1,6 @@
 {
   "name": "xiaolv-common",
-  "version": "0.10.90",
+  "version": "0.10.91",
   "description": "SiYuan plugin: quick recall and reuse of common content anchored to real SiYuan blocks.",
   "main": "index.js",
   "scripts": {
@@ -35,8 +35,7 @@
     "plugin",
     "snippets",
     "common-phrases",
-    "小驴常用",
-    "小驴常用（内测版）"
+    "小驴常用"
   ],
   "author": "xiaolv-suite",
   "license": "MIT",
