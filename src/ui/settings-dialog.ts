@@ -1,7 +1,7 @@
 // 设置界面（自 index.ts 拆出，R19）：首次引导 / 完整设置 / 库选择器 / AI / 搜索 / 数据区 / 标签体检 / 导入策略。
 // 依赖经 SettingsUiContext 注入（不持有插件实例）；状态对象按引用共享，落盘由 persistSoon 节流。
-import {Dialog, confirm} from "siyuan";
-import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {Dialog} from "siyuan";
+import {adaptSecondaryDialogForMobile, attachSurfaceStack, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap, openConfirmDialog} from "./dialog-dom";
 import {CONFIG_VERSION, LibraryConfig, summarizeUsage} from "../model/storage";
 import {LIMITS} from "../constants";
 import {validateImport, ConflictPolicy, ImportIssue, ExportedItem} from "../model/transfer";
@@ -98,6 +98,7 @@ export function openSetupDialog(ctx: SettingsUiContext, opts?: SetupDialogOption
     activeSetupDialog = null;
     const t = ctx.t;
     const isMobileModal = isMobileDialogViewport();
+    let setupSurface: {onDestroy: () => void} | null = null;
     const dialog = new Dialog({
         title: t("setupTitle"),
         content: "",
@@ -106,9 +107,11 @@ export function openSetupDialog(ctx: SettingsUiContext, opts?: SetupDialogOption
         disableClose: false,
         ...({closedOnEsc: true} as Record<string, unknown>),
         destroyCallback: () => {
+            setupSurface?.onDestroy();
             if (activeSetupDialog === dialog) activeSetupDialog = null;
         },
     } as any);
+    setupSurface = attachSurfaceStack("xlc-setup-dialog", () => dialog);
     activeSetupDialog = dialog;
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-setup-root-host");
     mountPlatformDialogTitleWrap(dialog.element, t("setupTitle"));
@@ -187,7 +190,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
         dialog.element.addEventListener("keydown", onDialogKeydown);
         escCleanup = () => dialog.element?.removeEventListener?.("keydown", onDialogKeydown);
     }
-    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host");
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host", "xlc-settings-root-host", "xlc-gm-surface");
     if (isMobileModal && typeof window !== "undefined" && window.visualViewport) {
         const vv = window.visualViewport;
         let baseHeight = Math.max(window.innerHeight || 0, Math.round(vv.height || 0));
@@ -216,7 +219,7 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     if (!body) return;
     body.innerHTML = "";
     const root = document.createElement("div");
-    root.className = "xlc-form xlc-settings";
+    root.className = "xlc-form xlc-settings xlc-gm-surface";
     const intro = document.createElement("p");
     intro.className = "xlc-page-intro";
     intro.textContent = t("settingsIntro");
@@ -228,13 +231,13 @@ export function openSettingsDialog(ctx: SettingsUiContext): void {
     navBar.setAttribute("role", "tablist");
     navBar.setAttribute("aria-label", "设置分区导航");
     const navTabs = [
-        {id: "xlc-settings-lib", label: "📦 库配置"},
-        {id: "xlc-settings-ai", label: "🤖 AI模型"},
-        {id: "xlc-settings-prefs", label: "⚙️ 偏好设置"},
-        {id: "xlc-settings-search", label: "🔍 搜索配置"},
-        {id: "xlc-settings-health", label: "🏥 健康体检"},
-        {id: "xlc-settings-ext", label: "⚡ 外部联动"},
-        {id: "xlc-settings-data", label: "💾 数据导入导出"},
+        {id: "xlc-settings-lib", label: "库配置"},
+        {id: "xlc-settings-ai", label: "AI 模型"},
+        {id: "xlc-settings-prefs", label: "偏好设置"},
+        {id: "xlc-settings-search", label: "搜索配置"},
+        {id: "xlc-settings-health", label: "健康体检"},
+        {id: "xlc-settings-ext", label: "外部联动"},
+        {id: "xlc-settings-data", label: "导入导出"},
     ];
     // 激活态统一入口：点击导航与滚动感知（scroll-spy）共用，避免两处口径漂移。
     const setActiveNav = (id: string) => {
@@ -467,17 +470,25 @@ async function openPackExportDialog(ctx: SettingsUiContext): Promise<void> {
         .sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
 
     const isMobileModal = isMobileDialogViewport();
+    let surface: {onDestroy: () => void} | null = null;
     const dialog = new Dialog({
         title: t("packExportTitle"),
         content: "",
         width: isMobileModal ? "100vw" : "min(580px, 92vw)",
         height: isMobileModal ? "100dvh" : "min(680px, 90vh)", // 固定高：分类切换不顶跳（R146）
+        destroyCallback: () => {
+            surface?.onDestroy();
+        },
     });
+    surface = attachSurfaceStack("xlc-pack-export", () => dialog);
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("packExportTitle"));
     adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
-    if (!body) return;
+    if (!body) {
+        dialog.destroy();
+        return;
+    }
     body.innerHTML = "";
     const wrap = document.createElement("div");
     wrap.className = "xlc-form";
@@ -870,10 +881,17 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
             ctx.notify("info", t("clearClipboardEmpty"));
             return;
         }
-        confirm("⚠️ " + t("clearClipboardBtn"), t("clearClipboardConfirm"), () => {
-            ctx.state.clipboardHistory = [];
-            ctx.persistSoon();
-            ctx.notify("info", t("clearClipboardDone"));
+        openConfirmDialog({
+            title: "⚠️ " + t("clearClipboardBtn"),
+            message: t("clearClipboardConfirm"),
+            confirmText: t("clearClipboardBtn"),
+            cancelText: t("cancel") || "取消",
+            danger: true,
+            onConfirm: () => {
+                ctx.state.clipboardHistory = [];
+                ctx.persistSoon();
+                ctx.notify("info", t("clearClipboardDone"));
+            },
         });
     });
 
@@ -920,14 +938,21 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
     syncClearUsage();
     clearBtn.addEventListener("click", () => {
         if (!hasUsage()) return;
-        confirm("⚠️ " + t("clearUsageBtn"), t("clearUsageConfirm"), () => {
-            ctx.state.usage = {};
-            ctx.state.dailyUsage = {};
-            ctx.persistSoon();
-            ctx.refreshSearch?.();
-            syncClearUsage();
-            paintSummary();
-            ctx.notify("info", t("clearUsageDone"));
+        openConfirmDialog({
+            title: "⚠️ " + t("clearUsageBtn"),
+            message: t("clearUsageConfirm"),
+            confirmText: t("clearUsageBtn"),
+            cancelText: t("cancel") || "取消",
+            danger: true,
+            onConfirm: () => {
+                ctx.state.usage = {};
+                ctx.state.dailyUsage = {};
+                ctx.persistSoon();
+                ctx.refreshSearch?.();
+                syncClearUsage();
+                paintSummary();
+                ctx.notify("info", t("clearUsageDone"));
+            },
         });
     });
     foot.appendChild(clearBtn);
@@ -958,11 +983,18 @@ function buildInsertSection(ctx: SettingsUiContext, root: HTMLElement): void {
         if (countRememberedFields(ctx.state.variableMemory) === 0) return;
         const confirmTitle = "⚠️ " + (t("clearVariableMemoryBtn") || "清空变量记忆");
         const confirmBody = t("clearVariableMemoryConfirm") || "确定清空本机记住的所有变量历史填写值吗？条目模板本身不会受影响。";
-        confirm(confirmTitle, confirmBody, () => {
-            ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
-            ctx.persistSoon();
-            syncClearMem();
-            ctx.notify("info", t("clearVariableMemoryDone") || "已清空变量填写历史记忆");
+        openConfirmDialog({
+            title: confirmTitle,
+            message: confirmBody,
+            confirmText: t("clearVariableMemoryBtn") || "清空变量记忆",
+            cancelText: t("cancel") || "取消",
+            danger: true,
+            onConfirm: () => {
+                ctx.state.variableMemory = clearAllMemory(ctx.state.variableMemory);
+                ctx.persistSoon();
+                syncClearMem();
+                ctx.notify("info", t("clearVariableMemoryDone") || "已清空变量填写历史记忆");
+            },
         });
     });
     memRow.appendChild(clearMemBtn);
@@ -1254,7 +1286,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     let setupRevision = 0;
     let pickedDoc: {id: string; hPath: string} | null = null;
 
-    const stepsEl = buildStepsEl(1, t("setupStep1"));
+    let stepsEl = buildStepsEl(1, t("setupStep1"));
     root.appendChild(stepsEl);
     const hint = document.createElement("p");
     hint.className = "xlc-form-hint";
@@ -1784,7 +1816,12 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
         const confirmText = mode === "new-notebook"
             ? t("setupIndependentConfirmCreate", notebookName, title)
             : t("setupConfirmCreate", title);
-        confirm("⚠️ " + t("setupTitle"), confirmText, () => {
+        openConfirmDialog({
+            title: "⚠️ " + t("setupTitle"),
+            message: confirmText,
+            confirmText: t("create"),
+            cancelText: t("cancel") || "取消",
+            onConfirm: () => {
             if (creatingLibrary || setupRevision !== revision || modeSelect.value !== mode
                 || (mode === "new-doc" && nbSelect.value !== notebookId)
                 || (mode === "new-notebook" && independentNotebookInput.value.trim() !== notebookName)
@@ -1896,6 +1933,7 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
                 independentNotebookStatus.textContent = mode === "new-notebook" ? message : "";
                 ctx.notify("error", message);
             });
+        },
         });
     });
     nameRow.appendChild(createBtn);
@@ -2110,8 +2148,14 @@ function buildLibraryPickerSection(ctx: SettingsUiContext, root: HTMLElement, on
     function gotoStep(next: 1 | 2): void {
         setupRevision++;
         step = next;
-        stepsEl.remove();
-        root.insertBefore(buildStepsEl(step, step === 1 ? t("setupStep1") : t("setupStep2")), root.firstChild);
+        const nextStepsEl = buildStepsEl(step, step === 1 ? t("setupStep1") : t("setupStep2"));
+        if (typeof stepsEl.replaceWith === "function") {
+            stepsEl.replaceWith(nextStepsEl);
+        } else {
+            stepsEl.remove();
+            root.insertBefore(nextStepsEl, root.firstChild);
+        }
+        stepsEl = nextStepsEl;
         step1.style.display = step === 1 ? "" : "none";
         hint.style.display = step === 1 ? "" : "none";
         usageGuide.style.display = step === 1 && !showQuickStart ? "" : "none";
@@ -2247,11 +2291,18 @@ function buildAiSection(ctx: SettingsUiContext, root: HTMLElement): void {
             delBtn.title = `${t("delete")}：${ct.name}`;
             delBtn.addEventListener("click", () => {
                 // 危险操作对齐惯例：确认 + 回执（名称+指令一键即失，且不可恢复，R138）
-                confirm(t("delete") + " · " + t("customTransformSection"), t("ctDeleteConfirm", ct.name), () => {
-                    ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
-                    persistCt();
-                    repaintCt();
-                    ctx.notify("info", t("ctDeleted", ct.name));
+                openConfirmDialog({
+                    title: t("delete") + " · " + t("customTransformSection"),
+                    message: t("ctDeleteConfirm", ct.name),
+                    confirmText: t("delete"),
+                    cancelText: t("cancel") || "取消",
+                    danger: true,
+                    onConfirm: () => {
+                        ctx.state.ai.customTransforms = ctx.state.ai.customTransforms.filter((c) => c.id !== ct.id);
+                        persistCt();
+                        repaintCt();
+                        ctx.notify("info", t("ctDeleted", ct.name));
+                    },
                 });
             });
             row.appendChild(delBtn);
@@ -2420,16 +2471,23 @@ function buildSavedViewsSection(ctx: SettingsUiContext, root: HTMLElement, befor
             remove.textContent = t("savedViewsDelete");
             remove.setAttribute("aria-label", `${t("savedViewsDelete")}：${view.name}`);
             remove.addEventListener("click", () => {
-                confirm("⚠️ " + t("savedViewsDelete"), t("savedViewsDeleteConfirm", view.name), () => {
-                    if (ctx.deleteSavedDiscoveryView) {
-                        ctx.deleteSavedDiscoveryView(view.id);
-                    } else {
-                        ctx.state.search.savedDiscoveryViews = (ctx.state.search.savedDiscoveryViews ?? [])
-                            .filter((entry) => entry.id !== view.id);
-                        ctx.persistSoon();
-                    }
-                    ctx.notify("info", `${t("savedViewsDelete")}: ${view.name}`);
-                    render();
+                openConfirmDialog({
+                    title: "⚠️ " + t("savedViewsDelete"),
+                    message: t("savedViewsDeleteConfirm", view.name),
+                    confirmText: t("savedViewsDelete"),
+                    cancelText: t("cancel") || "取消",
+                    danger: true,
+                    onConfirm: () => {
+                        if (ctx.deleteSavedDiscoveryView) {
+                            ctx.deleteSavedDiscoveryView(view.id);
+                        } else {
+                            ctx.state.search.savedDiscoveryViews = (ctx.state.search.savedDiscoveryViews ?? [])
+                                .filter((entry) => entry.id !== view.id);
+                            ctx.persistSoon();
+                        }
+                        ctx.notify("info", `${t("savedViewsDelete")}: ${view.name}`);
+                        render();
+                    },
                 });
             });
             actions.appendChild(remove);
@@ -2941,14 +2999,21 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
     const clearRecentsBtn = mkBtn(ctx.state.recents.length ? t("clearRecents") : t("clearRecentsEmpty"), undefined, "settings.data.clearRecents");
     clearRecentsBtn.addEventListener("click", () => {
         if (ctx.state.recents.length === 0 || clearRecentsBtn.disabled) return;
-        confirm("⚠️ " + t("clearRecents"), t("clearRecentsConfirm"), () => {
-            ctx.state.recents = [];
-            ctx.persistSoon();
-            ctx.refreshSearch?.();
-            clearRecentsBtn.textContent = t("clearRecentsEmpty");
-            clearRecentsBtn.disabled = true;
-            ctx.notify("info", t("clearRecentsDone"));
-            setOperationStatus("success", t("clearRecentsDone"));
+        openConfirmDialog({
+            title: "⚠️ " + t("clearRecents"),
+            message: t("clearRecentsConfirm"),
+            confirmText: t("clearRecents"),
+            cancelText: t("cancel") || "取消",
+            danger: true,
+            onConfirm: () => {
+                ctx.state.recents = [];
+                ctx.persistSoon();
+                ctx.refreshSearch?.();
+                clearRecentsBtn.textContent = t("clearRecentsEmpty");
+                clearRecentsBtn.disabled = true;
+                ctx.notify("info", t("clearRecentsDone"));
+                setOperationStatus("success", t("clearRecentsDone"));
+            },
         });
     });
     clearRecentsBtn.disabled = ctx.state.recents.length === 0;
@@ -3216,18 +3281,38 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
                             .map(toExported);
                         const toDelete = plan.items.filter((pi) => pi.action === "delete");
 
+                        let succeeded = 0;
+                        let failed = 0;
                         if (toUpdate.length > 0) {
-                            await ctx.importMarkdownItems(toUpdate, "overwrite");
+                            const r = await ctx.importMarkdownItems(toUpdate, "overwrite");
+                            succeeded += r.overwritten + r.created + r.renamed + r.skipped;
+                            failed += r.failed;
                         }
                         if (toCreateOrFork.length > 0) {
-                            await ctx.importMarkdownItems(toCreateOrFork, "rename");
+                            const r = await ctx.importMarkdownItems(toCreateOrFork, "rename");
+                            succeeded += r.created + r.renamed + r.overwritten + r.skipped;
+                            failed += r.failed;
                         }
                         for (const del of toDelete) {
-                            await ctx.library.removeItem(del.id);
+                            try {
+                                const res = await ctx.library.removeItem(del.id);
+                                if (res.ok) succeeded++;
+                                else failed++;
+                            } catch {
+                                failed++;
+                            }
                         }
                         if (toUpdate.length > 0 || toCreateOrFork.length > 0 || toDelete.length > 0) {
                             ctx.refreshSearch?.();
-                            ctx.notify("info", `同步合并完成：处理 ${receipt.success} 项条目`);
+                            if (failed > 0) {
+                                const msg = `同步合并存在失败：成功 ${succeeded} 项，失败 ${failed} 项`;
+                                ctx.notify("error", msg);
+                                if (succeeded === 0) throw new Error(msg);
+                            } else {
+                                ctx.notify("info", `同步合并完成：成功处理 ${succeeded} 项条目`);
+                            }
+                        } else {
+                            ctx.notify("info", `同步比对完成：无待写入变更（保持 ${receipt.success} 项）`);
                         }
                     },
                 });
@@ -3493,24 +3578,40 @@ function buildDataSection(ctx: SettingsUiContext, root: HTMLElement): void {
 function openEspansoImportDialog(ctx: SettingsUiContext, onClose?: () => void): void {
     const t = ctx.t;
     const isMobileModal = isMobileDialogViewport();
+    let released = false;
+    let observer: MutationObserver | null = null;
+    let surface: {onDestroy: () => void} | null = null;
+    const release = (): void => {
+        if (released) return;
+        released = true;
+        surface?.onDestroy();
+        observer?.disconnect();
+        onClose?.();
+    };
     const dialog = new Dialog({
         title: t("espansoTitle"),
         content: "",
         width: isMobileModal ? "100vw" : "min(680px, 92vw)",
         height: isMobileModal ? "100dvh" : "min(680px, 86vh)",
+        destroyCallback: () => {
+            release();
+        },
     });
+    surface = attachSurfaceStack("xlc-espanso-import", () => dialog);
     const container = dialog.element.querySelector(".b3-dialog__container");
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("espansoTitle"));
     adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
     if (!body) {
-        onClose?.();
+        dialog.destroy();
         return;
     }
     body.innerHTML = "";
     const root = document.createElement("div");
     root.className = "xlc-form";
+    root.style.flex = "1 1 auto";
+    root.style.minHeight = "0";
 
     const hint = document.createElement("p");
     hint.className = "xlc-form-hint";
@@ -3521,6 +3622,8 @@ function openEspansoImportDialog(ctx: SettingsUiContext, onClose?: () => void): 
     ta.className = "b3-text-field";
     ta.dataset.xlcControl = "settings.espanso.text";
     ta.rows = 10;
+    ta.style.flex = "1 1 auto";
+    ta.style.minHeight = "180px";
     ta.placeholder = t("espansoPlaceholder");
     ta.setAttribute("spellcheck", "false");
     root.appendChild(ta);
@@ -3577,14 +3680,6 @@ function openEspansoImportDialog(ctx: SettingsUiContext, onClose?: () => void): 
     body.appendChild(root);
 
     // Dialog 的右上角关闭按钮由宿主销毁 DOM；观察移除确保入口按钮不会永久锁定。
-    let released = false;
-    const release = (): void => {
-        if (released) return;
-        released = true;
-        observer?.disconnect();
-        onClose?.();
-    };
-    let observer: MutationObserver | null = null;
     observer = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
         if (!dialog.element.isConnected) release();
     });
@@ -3670,6 +3765,7 @@ async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown" | 
     let controller = new AbortController();
     let closed = false;
     let thinkingHandle: ReturnType<typeof mountLvAiThinkingCard> | null = null;
+    let surface: {onDestroy: () => void} | null = null;
     const isMobileModal = isMobileDialogViewport();
     const dialog = new Dialog({
         title: t("tagAuditTitle"),
@@ -3678,11 +3774,13 @@ async function runTagAudit(ctx: SettingsUiContext): Promise<"empty" | "shown" | 
         height: isMobileModal ? "100dvh" : "min(600px, 84vh)", // 固定高：建议清单增长不顶跳（R146）
         destroyCallback: () => {
             closed = true;
+            surface?.onDestroy();
             controller.abort();
             thinkingHandle?.destroy();
             thinkingHandle = null;
         },
     });
+    surface = attachSurfaceStack("xlc-tag-audit", () => dialog);
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("tagAuditTitle"));
     adaptSecondaryDialogForMobile(dialog, t("close"));
@@ -3813,17 +3911,25 @@ export function openImportPolicyDialog(
 ): void {
     const t = ctx.t;
     const isMobileModal = isMobileDialogViewport();
+    let surface: {onDestroy: () => void} | null = null;
     const dialog = new Dialog({
         title: t("importPolicyTitle"),
         content: "",
         width: isMobileModal ? "100vw" : "min(540px, 92vw)",
         height: isMobileModal ? "100dvh" : "min(640px, 86vh)", // 固定高：策略卡片高度稳定（R146）
+        destroyCallback: () => {
+            surface?.onDestroy();
+        },
     });
+    surface = attachSurfaceStack("xlc-import-policy", () => dialog);
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("importPolicyTitle"));
     adaptSecondaryDialogForMobile(dialog, t("close"));
     const body = getDialogBody(dialog.element);
-    if (!body) return;
+    if (!body) {
+        dialog.destroy();
+        return;
+    }
     body.innerHTML = "";
     const wrap = document.createElement("div");
     wrap.className = "xlc-form";
@@ -3932,6 +4038,16 @@ export function openImportPolicyDialog(
             receiptHint.dataset.state = receipt.failed > 0 ? "error" : "success";
             receiptHint.textContent = message;
             ctx.notify(receipt.failed > 0 ? "error" : "info", message);
+            if (receipt.failed > 0) {
+                policyCards.forEach((card) => {
+                    card.disabled = false;
+                    card.removeAttribute("aria-busy");
+                });
+            } else {
+                policyCards.forEach((card) => {
+                    card.removeAttribute("aria-busy");
+                });
+            }
         } catch (err) {
             // 执行期失败≠校验失败：写入可能已部分完成，文案不得谎称「原始数据未改动」。
             const message = t("importRunFailed", toErrorMessage(err));

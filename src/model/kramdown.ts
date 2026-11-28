@@ -143,30 +143,145 @@ interface InlineCodeTick {
     length: number;
 }
 
+interface ListLevel {
+    markerIndent: number;
+    contentIndent: number;
+}
+
+function measureIndent(line: string): {columns: number; restIndex: number} {
+    let columns = 0;
+    let index = 0;
+    while (index < line.length) {
+        const ch = line[index];
+        if (ch === " ") {
+            columns += 1;
+            index += 1;
+        } else if (ch === "\t") {
+            columns += 4 - (columns % 4);
+            index += 1;
+        } else {
+            break;
+        }
+    }
+    return {columns, restIndex: index};
+}
+
+function matchFenceOpening(text: string): {marker: string; length: number} | null {
+    const match = text.match(/^(`{3,}|~{3,})(.*)$/);
+    if (!match) return null;
+    const marker = match[1]!;
+    const info = match[2] ?? "";
+    if (marker[0] === "`" && info.includes("`")) return null;
+    return {marker: marker[0]!, length: marker.length};
+}
+
+function parseListMarker(
+    rest: string,
+    markerIndent: number,
+): {contentIndent: number; afterMarker: string; isCodeStart: boolean} | null {
+    if (/^(?:[-*_][ \t]*){3,}$/.test(rest)) return null;
+    const match = rest.match(/^([-*+]|\d{1,9}[.)])(?:([ \t]+)(.*))?$/);
+    if (!match) return null;
+    const marker = match[1]!;
+    const spacing = match[2] ?? "";
+    const afterMarker = match[3] ?? "";
+    if (spacing === "" && afterMarker !== "") return null;
+    if (!afterMarker.trim()) {
+        return {contentIndent: markerIndent + marker.length + 1, afterMarker: "", isCodeStart: false};
+    }
+
+    const col = markerIndent + marker.length;
+    let spaceCols = 0;
+    for (const ch of spacing) {
+        spaceCols += ch === "\t" ? 4 - ((col + spaceCols) % 4) : 1;
+    }
+    if (spaceCols >= 5) {
+        return {contentIndent: markerIndent + marker.length + 1, afterMarker, isCodeStart: true};
+    }
+    return {contentIndent: markerIndent + marker.length + spaceCols, afterMarker, isCodeStart: false};
+}
+
 function findCodeLines(lines: string[]): boolean[] {
     const codeLines: boolean[] = [];
     let fence: {marker: string; length: number} | null = null;
+    let inIndentedCode = false;
+    let inParagraph = false;
+    const listStack: ListLevel[] = [];
 
     for (const line of lines) {
         if (fence) {
             codeLines.push(true);
             const closing = line.match(/^\s*(`+|~+)\s*$/)?.[1];
-            if (closing && closing.charAt(0) === fence.marker && closing.length >= fence.length) fence = null;
+            if (closing && closing.charAt(0) === fence.marker && closing.length >= fence.length) {
+                fence = null;
+                inParagraph = false;
+            }
             continue;
         }
         if (!line.trim()) {
             codeLines.push(false);
+            inParagraph = false;
             continue;
         }
-        if (/^(?: {4,}|\t)/.test(line)) {
+
+        const {columns, restIndex} = measureIndent(line);
+        const rest = line.slice(restIndex);
+
+        if (inIndentedCode) {
+            const activeIndent = listStack.length ? listStack[listStack.length - 1]!.contentIndent : 0;
+            if (columns >= activeIndent + 4) {
+                codeLines.push(true);
+                continue;
+            }
+            inIndentedCode = false;
+        }
+
+        while (listStack.length > 0 && listStack[listStack.length - 1]!.contentIndent > columns) {
+            listStack.pop();
+        }
+
+        const baseIndent = listStack.length ? listStack[listStack.length - 1]!.contentIndent : 0;
+        if (!inParagraph && columns >= baseIndent + 4) {
+            inIndentedCode = true;
+            inParagraph = false;
             codeLines.push(true);
             continue;
         }
-        const opening = line.match(/^\s*(`{3,}|~{3,})/)?.[1];
+
+        const opening = matchFenceOpening(rest);
         if (opening) {
-            fence = {marker: opening.charAt(0), length: opening.length};
+            fence = opening;
+            inParagraph = false;
             codeLines.push(true);
             continue;
+        }
+
+        const listMarker = parseListMarker(rest, columns);
+        if (listMarker) {
+            listStack.push({markerIndent: columns, contentIndent: listMarker.contentIndent});
+            if (listMarker.isCodeStart) {
+                inIndentedCode = true;
+                inParagraph = false;
+                codeLines.push(true);
+                continue;
+            }
+            const listFence = matchFenceOpening(listMarker.afterMarker);
+            if (listFence) {
+                fence = listFence;
+                inParagraph = false;
+                codeLines.push(true);
+                continue;
+            }
+            inParagraph = listMarker.afterMarker.trim().length > 0
+                && !/^(?:#{1,6}(?:[ \t]|$)|\{\{\{|\}\}\})/.test(listMarker.afterMarker);
+            codeLines.push(false);
+            continue;
+        }
+
+        if (/^(?:#{1,6}(?:[ \t]|$)|(?:[-*_][ \t]*){3,}$|\{\{\{|\}\}\})/.test(rest)) {
+            inParagraph = false;
+        } else {
+            inParagraph = true;
         }
         codeLines.push(false);
     }

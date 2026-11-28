@@ -11,7 +11,7 @@ import {autoParameterizeText} from "../model/template-wizard";
 import {applyPlaceholders, transformCase} from "../model/placeholders";
 import {escapeHtml} from "../model/clipboard";
 import {matchProfilePreset} from "../model/storage";
-import {openNativeAssetPicker} from "../libs/lv-notice-kit";
+import {lvSurfaceStack, openNativeAssetPicker} from "../libs/lv-notice-kit";
 
 const TYPE_BADGES: Partial<Record<ItemType, string>> = {
     text: "TXT", markdown: "MD", url: "URL", code: "CODE",
@@ -115,6 +115,14 @@ export function openVariableFillCard(options: VariableFillOptions): void {
     };
 
     const isMobileModal = isMobileDialogViewport();
+    const surfaceId = `xlc-varform-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    let closed = false;
+    let surfacePopped = false;
+    const popSurface = (): void => {
+        if (surfacePopped) return;
+        surfacePopped = true;
+        lvSurfaceStack.pop(surfaceId);
+    };
     const dialog = new Dialog({
         title: t("varFormTitle"),
         content: "",
@@ -123,6 +131,8 @@ export function openVariableFillCard(options: VariableFillOptions): void {
         // 所有关闭路径（Esc/scrim）统一走 onCancel：上层搜索弹窗焦点回归（R128）；
         // 按钮确认/取消已自行结算，不在此重复触发（R138 结算语义）
         destroyCallback: () => {
+            closed = true;
+            popSurface();
             if (liveDebounceTimer) {
                 clearTimeout(liveDebounceTimer);
                 liveDebounceTimer = null;
@@ -135,6 +145,19 @@ export function openVariableFillCard(options: VariableFillOptions): void {
                 container.style.removeProperty("--xlc-vv-height");
             }
             if (!settled) options.onCancel?.();
+        },
+    });
+    lvSurfaceStack.push({
+        id: surfaceId,
+        type: "dialog",
+        dismiss: () => {
+            if (closed) {
+                popSurface();
+                return false;
+            }
+            doCancel();
+            popSurface();
+            return "keep";
         },
     });
     // 原型屏 4：紧凑卡形态，卡头（徽标+标题+Esc 取消）即标题，隐藏宿主标题栏
@@ -4869,6 +4892,10 @@ export function buildVariableBar(t: (key: string, ...args: string[]) => string, 
         }
     });
     toolsSearch.addEventListener("keydown", (e) => {
+        if (e.isComposing || (e as KeyboardEvent).keyCode === 229) {
+            e.stopPropagation();
+            return;
+        }
         if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();

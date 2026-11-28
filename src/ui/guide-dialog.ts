@@ -1,5 +1,6 @@
 import {Dialog} from "siyuan";
 import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {lvSurfaceStack} from "../libs/lv-notice-kit";
 
 export interface GuideDialogDeps {
     t: (key: string, ...args: string[]) => string;
@@ -24,13 +25,39 @@ export function openStepByStepGuideDialog(deps: GuideDialogDeps): void {
     const isMobileModal = (deps.isMobile?.() ?? false) || isMobileDialogViewport();
     const dialogTitle = t("stepGuideTitle") || "新手实操使用指引";
 
+    const surfaceId = `xlc-step-guide-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    let closed = false;
+    let surfacePopped = false;
+    const popSurface = (): void => {
+        if (surfacePopped) return;
+        surfacePopped = true;
+        lvSurfaceStack.pop(surfaceId);
+    };
     const dialog = new Dialog({
         title: dialogTitle,
         content: "",
         width: isMobileModal ? "100vw" : "min(680px, 94vw)",
         height: isMobileModal ? "100dvh" : "min(680px, 92vh)",
+        destroyCallback: () => {
+            closed = true;
+            if (activeGuideDialog === dialog) activeGuideDialog = null;
+            popSurface();
+        },
     });
     activeGuideDialog = dialog;
+    lvSurfaceStack.push({
+        id: surfaceId,
+        type: "dialog",
+        dismiss: () => {
+            if (closed) {
+                popSurface();
+                return false;
+            }
+            dialog.destroy();
+            popSurface();
+            return "keep";
+        },
+    });
 
     mountPlatformDialogTitleWrap(dialog.element, dialogTitle, "实操引导", "iconXlcCommon");
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host", "xlc-guide-host");

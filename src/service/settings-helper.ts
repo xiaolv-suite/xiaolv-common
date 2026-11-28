@@ -1,6 +1,6 @@
 // 设置中心与编辑弹窗助手（SettingsHelper · S10）
 import {Dialog} from "siyuan";
-import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "../ui/dialog-dom";
+import {adaptSecondaryDialogForMobile, attachSurfaceStack, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "../ui/dialog-dom";
 import {CommonItem, cleanShortcode, isBlockId, isSafeHttpUrl} from "../model/item";
 import {LibraryConfig} from "../model/storage";
 import {SettingsUiContext} from "../ui/settings-dialog";
@@ -124,17 +124,20 @@ export class SettingsHelper {
         const isMobileModal = isMobileDialogViewport();
         const dialogTitle = `${t("edit")} · ${(item.title || t("unknownType")).slice(0, 24)}${item.title.length > 24 ? "…" : ""}`;
         let vvCleanup: (() => void) | undefined;
+        let surface: {onDestroy: () => void} | null = null;
         const dialog = new Dialog({
             title: dialogTitle,
             content: "",
             width: isMobileModal ? "100vw" : "min(620px, 92vw)",
             height: isMobileModal ? "100dvh" : "min(860px, 92vh)",
             destroyCallback: () => {
+                surface?.onDestroy();
                 this.activeEditDialogs.delete(dialog);
                 vvCleanup?.();
                 vvCleanup = undefined;
             },
         });
+        surface = attachSurfaceStack("xlc-edit-dialog", () => dialog);
         this.activeEditDialogs.add(dialog);
         dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
         if (isMobileModal && typeof window !== "undefined" && window.visualViewport) {

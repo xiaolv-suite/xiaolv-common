@@ -13,7 +13,7 @@ import {
 } from "../model/sync-diff";
 import {Dialog} from "siyuan";
 import {escapeHtml} from "../model/clipboard";
-import {adaptSecondaryDialogForMobile, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, attachSurfaceStack, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface SyncDiffModalProps {
     report: LibraryDiffReport;
@@ -353,10 +353,10 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
         try {
             const baseEntries = props.localEntries || props.report.diffs.map((d) => d.local).filter((e): e is SyncEntry => Boolean(e));
             const receipt = executeSyncMerge(baseEntries, currentPlan);
-            cachedReceipt = receipt;
             if (props.onConfirm) {
                 await props.onConfirm(receipt, currentPlan);
             }
+            cachedReceipt = receipt;
             return receipt;
         } finally {
             applying = false;
@@ -365,6 +365,9 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
 
     if (isBrowser) {
         let dialog: Dialog | null = null;
+        let confirmed = false;
+        let closed = false;
+        let surface: {onDestroy: () => void} | null = null;
         const isMobileModal = isMobileDialogViewport();
         try {
             dialog = new Dialog({
@@ -373,11 +376,16 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
                 width: isMobileModal ? "100vw" : "min(960px, 94vw)",
                 height: isMobileModal ? "100dvh" : "min(860px, 92vh)",
                 destroyCallback: () => {
-                    props.onCancel?.();
+                    closed = true;
+                    surface?.onDestroy();
+                    if (!confirmed) props.onCancel?.();
                 },
             });
         } catch {
             dialog = null;
+        }
+        if (dialog) {
+            surface = attachSurfaceStack("xlc-sync-diff", () => dialog, () => !applying);
         }
 
         const hostEl = dialog?.element;
@@ -484,24 +492,53 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
             }, 150);
         });
 
-        const cancelBtn = container.querySelector(".b3-button--cancel");
+        const cancelBtn = container.querySelector(".b3-button--cancel") as HTMLButtonElement | null;
+        const confirmBtn = container.querySelector(".xlc-btn-confirm") as HTMLButtonElement | null;
+        const applyAndClose = async (): Promise<void> => {
+            if (applying) return;
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = "正在执行同步合并…";
+            }
+            if (cancelBtn) {
+                cancelBtn.disabled = true;
+            }
+            try {
+                await performApply();
+                confirmed = true;
+                if (!closed) dialog?.destroy();
+            } catch (err) {
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    const actionableCount =
+                        currentPlan.summary.create +
+                        currentPlan.summary.update +
+                        currentPlan.summary.fork +
+                        currentPlan.summary.delete;
+                    confirmBtn.textContent = `确认执行合并 (${actionableCount} 项)`;
+                }
+                if (cancelBtn) {
+                    cancelBtn.disabled = false;
+                }
+                throw err;
+            }
+        };
+
         cancelBtn?.addEventListener("click", () => {
-            dialog?.destroy();
-            props.onCancel?.();
+            if (applying) return;
+            if (dialog) dialog.destroy();
+            else props.onCancel?.();
         });
 
-        const confirmBtn = container.querySelector(".xlc-btn-confirm");
-        confirmBtn?.addEventListener("click", async () => {
-            if (applying) return;
-            dialog?.destroy();
-            await performApply();
+        confirmBtn?.addEventListener("click", () => {
+            void applyAndClose().catch(() => {});
         });
 
         const footerToolbar = container.querySelector(".xlc-sync-diff-actions");
         footerToolbar?.addEventListener("keydown", (e: any) => {
-            const buttons = [cancelBtn, confirmBtn].filter((b): b is HTMLElement => Boolean(b && !(b as HTMLButtonElement).disabled));
+            const buttons = [cancelBtn, confirmBtn].filter((b): b is HTMLButtonElement => Boolean(b && !b.disabled));
             if (buttons.length <= 1) return;
-            const curIdx = buttons.indexOf(document.activeElement as HTMLElement);
+            const curIdx = buttons.indexOf(document.activeElement as HTMLButtonElement);
             if (curIdx === -1) return;
             if (e.key === "ArrowRight" || e.key === "ArrowDown") {
                 e.preventDefault();
@@ -523,8 +560,7 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
             if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                 if (e.repeat || applying) return;
                 e.preventDefault();
-                dialog?.destroy();
-                void performApply();
+                void applyAndClose().catch(() => {});
             }
         });
 
@@ -548,8 +584,8 @@ export function openSyncDiffModal(props: SyncDiffModalProps): SyncDiffModalInsta
             getCurrentPlan: () => currentPlan,
             applySync: performApply,
             close: () => {
-                dialog?.destroy();
-                props.onCancel?.();
+                if (dialog) dialog.destroy();
+                else props.onCancel?.();
             },
         };
     }

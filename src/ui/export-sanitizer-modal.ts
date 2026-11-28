@@ -3,7 +3,7 @@
 
 import type {SanitizerOptions, SanitizeMode} from "../model/export-sanitizer";
 import {escapeHtml} from "../model/clipboard";
-import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, attachSurfaceStack, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {Dialog} from "siyuan";
 
 export interface SanitizerModalProps {
@@ -257,6 +257,7 @@ export function openSanitizerOptionsDialog(
 ): Dialog | null {
     if (typeof Dialog === "undefined") return null;
     const isMobileModal = isMobileDialogViewport();
+    let surface: {onDestroy: () => void} | null = null;
     let dialog: Dialog;
     try {
         dialog = new Dialog({
@@ -264,16 +265,23 @@ export function openSanitizerOptionsDialog(
             content: "",
             width: isMobileModal ? "100vw" : "min(560px, 92vw)",
             height: isMobileModal ? "100dvh" : "min(640px, 86vh)",
+            destroyCallback: () => {
+                surface?.onDestroy();
+            },
         });
     } catch {
         return null;
     }
+    surface = attachSurfaceStack("xlc-export-sanitizer", () => dialog);
     const container = dialog.element.querySelector(".b3-dialog__container");
     container?.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, "导出安全脱敏选项");
     adaptSecondaryDialogForMobile(dialog, "关闭");
     const body = getDialogBody(dialog.element);
-    if (!body) return dialog;
+    if (!body) {
+        dialog.destroy();
+        return dialog;
+    }
     body.innerHTML = "";
 
     const modal = renderSanitizerOptionsModal({

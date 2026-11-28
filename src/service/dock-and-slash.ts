@@ -8,7 +8,8 @@ import {InsertMode} from "../model/actions";
 import {listAskFields} from "../model/variables";
 import {collectDefaults, rememberValues} from "../model/variable-memory";
 import type {VariableFillOptions} from "../ui/variable-form";
-import type {IMenuItem} from "siyuan";
+import * as siyuan from "siyuan";
+import {openTab, fetchSyncPost, type IMenuItem} from "siyuan";
 import {prefetchSourceHealth} from "./kernel-health";
 import type {XiaolvCommonPluginContext} from "./plugin-context";
 
@@ -282,6 +283,18 @@ export class DockAndSlashService {
     }
 
     syncLaunchpadRegistry(): void {
+        try {
+            this.plugin.launchpadCleaner?.();
+        } catch {}
+        this.plugin.launchpadCleaner = undefined;
+        try {
+            lvLaunchpad.registerHostApi({
+                openTab,
+                openMobileFileById: (siyuan as any).openMobileFileById,
+                fetchSyncPost,
+                app: (this.plugin as any).app,
+            });
+        } catch {}
         try {
             const count = this.plugin.library?.getIndex()?.items?.size;
             const badge = count !== undefined ? `${count} 项` : "已就绪";

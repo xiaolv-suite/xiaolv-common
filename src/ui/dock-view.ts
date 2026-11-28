@@ -20,6 +20,7 @@ import {renderSafePreview, renderDualMacroPreview} from "./preview-renderer";
 import {parseSnippetAnnotations} from "../model/item";
 import {buildHierarchyTree, HierarchyNode} from "../model/hierarchy";
 import {applyCustomOrder, reorderItem} from "../model/storage";
+import {createGmSvg} from "./gm-icons";
 
 function escapeDockHtml(raw: string): string {
     return String(raw ?? "")
@@ -114,7 +115,7 @@ export class DockView {
 
     private buildLayout(): void {
         this.container.innerHTML = "";
-        this.container.classList.add("xlc-dock");
+        this.container.classList.add("xlc-dock", "xlc-gm-surface");
 
         // 1. 顶栏
         const head = document.createElement("div");
@@ -122,7 +123,14 @@ export class DockView {
 
         const titleBox = document.createElement("div");
         titleBox.className = "xlc-dock-title";
-        titleBox.innerHTML = `<span class="xlc-dock-icon" aria-hidden="true">🐴</span><strong>${escapeDockHtml(this.deps.t("pluginName") || "小驴常用")}</strong>`;
+        const mark = document.createElement("span");
+        mark.className = "xlc-gm-rail-mark xlc-gm-rail-mark--sm";
+        if (typeof mark.setAttribute === "function") mark.setAttribute("aria-hidden", "true");
+        mark.textContent = "常";
+        const strongTitle = document.createElement("strong");
+        strongTitle.textContent = this.deps.t("pluginName") || "小驴常用";
+        titleBox.appendChild(mark);
+        titleBox.appendChild(strongTitle);
         head.appendChild(titleBox);
 
         const actions = document.createElement("div");
@@ -156,7 +164,7 @@ export class DockView {
         newBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
         newBtn.title = (this.deps.t("newItemAction") || "新建常用语") + " (Alt+Shift+N)";
         if (typeof newBtn.setAttribute === "function") newBtn.setAttribute("aria-label", newBtn.title);
-        newBtn.textContent = "＋";
+        newBtn.appendChild(createGmSvg("plus", "xlc-gm-svg xlc-gm-svg--sm"));
         newBtn.addEventListener("click", () => this.deps.newItem());
         actions.appendChild(newBtn);
 
@@ -165,7 +173,7 @@ export class DockView {
         refreshBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
         refreshBtn.title = this.deps.t("reindex") || "刷新内容库";
         if (typeof refreshBtn.setAttribute === "function") refreshBtn.setAttribute("aria-label", refreshBtn.title);
-        refreshBtn.textContent = "↺";
+        refreshBtn.appendChild(createGmSvg("refresh", "xlc-gm-svg xlc-gm-svg--sm"));
         refreshBtn.addEventListener("click", () => {
             if (this.deps.adoptLibraryBlocks) {
                 void this.deps.adoptLibraryBlocks().finally(() => void this.refresh());
@@ -182,7 +190,7 @@ export class DockView {
             libDocBtn.dataset.xlcDockAct = "open-lib-doc";
             libDocBtn.title = "在思源中打开常用库文档";
             if (typeof libDocBtn.setAttribute === "function") libDocBtn.setAttribute("aria-label", libDocBtn.title);
-            libDocBtn.textContent = "📄";
+            libDocBtn.appendChild(createGmSvg("block", "xlc-gm-svg xlc-gm-svg--sm"));
             libDocBtn.addEventListener("click", () => this.deps.openLibraryDoc?.());
             actions.appendChild(libDocBtn);
         }
@@ -193,7 +201,7 @@ export class DockView {
             gearBtn.className = "b3-button b3-button--text xlc-dock-btn-icon";
             gearBtn.title = this.deps.t("openSettings") || "打开小驴常用设置";
             if (typeof gearBtn.setAttribute === "function") gearBtn.setAttribute("aria-label", gearBtn.title);
-            gearBtn.textContent = "⚙";
+            gearBtn.appendChild(createGmSvg("settings", "xlc-gm-svg xlc-gm-svg--sm"));
             gearBtn.addEventListener("click", () => this.deps.openSettings?.());
             actions.appendChild(gearBtn);
         }
@@ -206,10 +214,14 @@ export class DockView {
         if (typeof groupToggleBtn.setAttribute === "function") {
             groupToggleBtn.setAttribute("aria-label", "切换组织模式：分类大纲或标签聚合");
         }
-        groupToggleBtn.textContent = this.groupBy === "category" ? "📁" : "🏷️";
+        const renderGroupToggleIcon = (): void => {
+            groupToggleBtn.textContent = "";
+            groupToggleBtn.appendChild(createGmSvg(this.groupBy === "category" ? "folder" : "tag", "xlc-gm-svg xlc-gm-svg--sm"));
+        };
+        renderGroupToggleIcon();
         groupToggleBtn.addEventListener("click", () => {
             this.groupBy = this.groupBy === "category" ? "tag" : "category";
-            groupToggleBtn.textContent = this.groupBy === "category" ? "📁" : "🏷️";
+            renderGroupToggleIcon();
             this.renderList();
         });
         actions.appendChild(groupToggleBtn);
@@ -225,7 +237,7 @@ export class DockView {
         if (typeof searchIcon.setAttribute === "function") {
             searchIcon.setAttribute("aria-hidden", "true");
         }
-        searchIcon.textContent = "🔍";
+        searchIcon.appendChild(createGmSvg("search", "xlc-gm-svg xlc-gm-svg--xs"));
         searchBox.appendChild(searchIcon);
 
         this.searchInput = document.createElement("input");

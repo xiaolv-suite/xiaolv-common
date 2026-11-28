@@ -6,7 +6,7 @@
 
 import {Dialog} from "siyuan";
 import {lvNotify} from "../libs/lv-notice-kit";
-import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, attachSurfaceStack, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface PinboardItem {
     id: string;
@@ -27,11 +27,16 @@ export function openPinboardDialog(
     items: PinboardItem[]
 ): Dialog {
     const isMobileModal = isMobileDialogViewport();
+    let surface: {onDestroy: () => void} | null = null;
     const dialog = new Dialog({
         title: title || "连环取用拼板",
         content: "",
         width: isMobileModal ? "100vw" : "min(640px, 92vw)",
+        destroyCallback: () => {
+            surface?.onDestroy();
+        },
     });
+    surface = attachSurfaceStack("xlc-pinboard", () => dialog);
     // 令牌作用域：与套件市场同源问题，缺 host 类时 --xlc-* 全部失效
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host", "xlc-form-host");
 
@@ -39,7 +44,10 @@ export function openPinboardDialog(
     adaptSecondaryDialogForMobile(dialog, deps.t("close") || "关闭");
 
     const body = getDialogBody(dialog.element);
-    if (!body) return dialog;
+    if (!body) {
+        dialog.destroy();
+        return dialog;
+    }
 
     const container = document.createElement("div");
     container.className = "xlc-pinboard-container";

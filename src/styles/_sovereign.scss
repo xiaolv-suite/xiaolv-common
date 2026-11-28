@@ -14,7 +14,24 @@
 .b3-dialog.xlc-sovereign-dialog {
   transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 
-    .b3-dialog__container:not(.xlc-dialog--fullscreen) {
+  .b3-dialog__container {
+    box-sizing: border-box !important;
+
+    > .resize__r { right: 0 !important; }
+    > .resize__l { left: 0 !important; }
+    > .resize__t { top: 0 !important; }
+    > .resize__d { bottom: 0 !important; }
+    > .resize__rd { right: 0 !important; bottom: 0 !important; }
+    > .resize__rt { right: 0 !important; top: 0 !important; }
+    > .resize__ld { left: 0 !important; bottom: 0 !important; }
+    > .resize__lt { left: 0 !important; top: 0 !important; }
+  }
+
+  .b3-dialog__container:is(.xlc-dialog--fullscreen, .xlc-sheet, .xlc-mobile-modal) > [class^="resize__"] {
+    display: none !important;
+  }
+
+  .b3-dialog__container:not(.xlc-dialog--fullscreen):not(.xlc-sheet):not(.xlc-mobile-modal) {
     max-width: calc(100vw - 20px) !important;
     box-sizing: border-box !important;
     border-radius: var(--xlc-radius-dialog, 16px) !important;
@@ -102,6 +119,7 @@
 .xlc-dialog-host,
 .xlc-dock,
 .xlc-form,
+.xlc-gm-surface,
 .xlc-root {
   &, *, *::before, *::after {
     box-sizing: border-box;

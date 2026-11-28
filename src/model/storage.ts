@@ -139,6 +139,8 @@ export interface SearchPrefs {
     miniCollapsed?: boolean;
     /** 剪贴板常驻专属面板折叠状态（默认展开 false，用户点击折叠后为 true） */
     clipPanelCollapsed?: boolean;
+    /** 首页中栏「最近剪贴板」速用区折叠状态（默认展开 false，用户点击折叠后为 true） */
+    homeRecentClipCollapsed?: boolean;
     /** 桌面四栏大视窗自定义列宽记忆（像素值） */
     columnWidths?: ColumnWidths;
 }
@@ -391,6 +393,7 @@ export function normalizeState(raw: unknown): PluginState {
             miniPosition: normalizeMiniPosition((obj.search as SearchPrefs)?.miniPosition),
             miniCollapsed: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).miniCollapsed === true),
             clipPanelCollapsed: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).clipPanelCollapsed === true),
+            homeRecentClipCollapsed: (obj.search !== null && typeof obj.search === "object" && (obj.search as SearchPrefs).homeRecentClipCollapsed === true),
             columnWidths: normalizeColumnWidths((obj.search as SearchPrefs)?.columnWidths),
         },
         // 插入偏好默认开（F1/F3）；显式 false 才关

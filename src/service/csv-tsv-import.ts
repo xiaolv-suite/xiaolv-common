@@ -427,7 +427,7 @@ export function parseCsvTsvItems(
             issues.push(`第 ${rowNum} 行「${title}」：正文行首含超级块标记 {{{ / }}}，导入时会被拒绝写入`);
         }
 
-        const id = csvTsvLogicalId(title, category, alias, content.slice(0, 60));
+        const id = csvTsvLogicalId(title, category, alias, content);
 
         items.push({
             id,

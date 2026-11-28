@@ -4,6 +4,7 @@
 
 import {Dialog} from "siyuan";
 import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {lvSurfaceStack} from "../libs/lv-notice-kit";
 import {
     STARTER_PACKS,
     StarterPackMeta,
@@ -82,10 +83,35 @@ export const ALL_HUB_PACKS: StarterPackMeta[] = [
 
 export function openStarterPacksHubDialog(deps: StarterPacksHubDeps): Dialog {
     const isMobileModal = isMobileDialogViewport();
+    const surfaceId = `xlc-starter-packs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    let closed = false;
+    let surfacePopped = false;
+    const popSurface = (): void => {
+        if (surfacePopped) return;
+        surfacePopped = true;
+        lvSurfaceStack.pop(surfaceId);
+    };
     const dialog = new Dialog({
         title: deps.t("starterPacksTitle") || "开箱即用套件市场 (Starter Packs Hub)",
         content: "",
         width: isMobileModal ? "100vw" : "min(720px, 94vw)",
+        destroyCallback: () => {
+            closed = true;
+            popSurface();
+        },
+    });
+    lvSurfaceStack.push({
+        id: surfaceId,
+        type: "dialog",
+        dismiss: () => {
+            if (closed) {
+                popSurface();
+                return false;
+            }
+            dialog.destroy();
+            popSurface();
+            return "keep";
+        },
     });
     // 令牌作用域（R431）：不加 host 类时 --xlc-* 全部失效，容器 padding 塌陷、关闭按钮贴出边缘
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host", "xlc-form-host");

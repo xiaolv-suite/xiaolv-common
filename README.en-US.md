@@ -9,14 +9,17 @@
 
 ---
 
-## 🚀 What's New in v0.10.91 (2026-11-26 Milestone Release)
+## 🚀 What's New in v0.10.92 (2026-11-27 Maintenance Release)
 
-- **Compact Topbar & Unmasked Non-Modal Floating**: Mini mode features a unified single-row compact drag bar, while the full desktop workbench opens unmasked and non-modal by default so you can keep typing and clicking across editor paragraphs;
-- **High-Density Cards & Instant Category Jump**: Compact mini rows display more items per screen, paired with scrollable category pills, left/right pager arrows, one-click category expansion, and instant jump filtering;
-- **Live Clipboard Hero & Four Dedicated Mini Tabs**: Home view surfaces the 3 latest clipboard entries with a one-click jump to the full `Clipboard` tab alongside dedicated `Home`, `Common`, `Clipboard`, and `Starred` tabs;
-- **Standalone Always-On-Top Desktop Float Window**: Pop out a standalone always-on-top window that stays visible above external apps even when SiYuan is minimized;
-- **Shared Ecosystem Hubs & Unified `.lv-ai-thinking` AI Experience**: Integrated with Launchpad, unified AI Router, Block Assistant 1–8 native base + custom double-click, Backup/Restore, and `#### 🐴 小驴记录` 4-level diary sync; all AI entry points render unified `.lv-ai-thinking` cards with `AbortSignal` cancellation;
-- **60fps Zero `:has()` / Zero Heavy-Blur Performance**: Eliminated CSS `:has()` selectors and `blur(>=15px)`, deferred clipboard auto-listen by 5s on startup with lazy `CaptureDialog`, debounced selection/column-resize persistence, and hardened multi-level daily note probing.
+- **Graphite-Mist Three-Screen Redesign**: Redesigned the Common panel, Quick Palette, and Capture form with aligned family pixel metrics, single header, `390×844` mobile sheet width, and native Dock SVG icons;
+- **Home Recent-Clipboard Strip & Walkthrough Polish**: Added home recent-clipboard strip; fixed Top-5 layout, Esc handling, light/dark contrast, quick-popover close listener, explicit cancel draft clear, and `aliasCheckTimer` cleanup on dialog destroy;
+- **Ecosystem `lv-kit` Alignment**: Synced zero-Protyle-DOM-residue fixes and Batch 1 A1–A4 updates with zero `:has(` and zero heavy blur.
+
+<details>
+<summary>View Historical Release Highlights (v0.10.91 and earlier)</summary>
+
+- **v0.10.91 (2026-11-26 Milestone Release)**: Compact topbar & unmasked floating, high-density cards, standalone always-on-top desktop float window, shared Launchpad/AI Router/Block Assistant hubs, `.lv-ai-thinking` AI wait UX, and zero `:has()` / zero heavy-blur 60fps polish.
+</details>
 
 ---
 
@@ -56,7 +59,7 @@ Traditional solutions fall short:
 
 1. **SiYuan Marketplace (Recommended)**: Open `Settings → Marketplace → Plugins` in SiYuan, search for **"Lv Common"** (`小驴常用`), and click Install & Enable.
 2. **Manual Offline Install / Rollback**:
-   - Extract `package.zip` (or rollback archive `package-v0.10.91.zip`) into `<workspace>/data/plugins/xiaolv-common/`;
+   - Extract `package.zip` (or rollback archive `package-v0.10.92.zip`) into `<workspace>/data/plugins/xiaolv-common/`;
    - Enable **Lv Common** in `Settings → Plugins`.
 
 ---

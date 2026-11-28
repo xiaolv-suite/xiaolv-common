@@ -2558,6 +2558,35 @@ export function saveAiRouterConfig(config: AiRouterConfig): void {
     try {
         if (storage) {
             storage.setItem(LV_AI_ROUTER_STORAGE_KEY, JSON.stringify(toPersist));
+            if (toPersist.userCustom) {
+                try {
+                    const nextEndpoint = typeof toPersist.userCustom.baseUrl === "string" ? toPersist.userCustom.baseUrl.trim() : "";
+                    const nextModel = typeof toPersist.userCustom.model === "string" ? toPersist.userCustom.model.trim() : "";
+                    if (nextEndpoint || nextModel) {
+                        let prevShared: Record<string, any> = {};
+                        try {
+                            const prevSharedRaw = storage.getItem("lv_ai_shared_config");
+                            if (prevSharedRaw) {
+                                const p = JSON.parse(prevSharedRaw);
+                                if (p && typeof p === "object") prevShared = p;
+                            }
+                        } catch { /* ignore */ }
+                        const prevLegacy = typeof prevShared.apiKey === "string" ? prevShared.apiKey.trim() : "";
+                        const { apiKey: _oldApiKey, ...restShared } = prevShared;
+                        const syncedShared: Record<string, any> = {
+                            ...restShared,
+                            ...(nextEndpoint ? { endpoint: nextEndpoint } : {}),
+                            ...(nextModel ? { model: nextModel } : {}),
+                            ...(prevLegacy ? { apiKey: prevLegacy } : {}),
+                            hasSecret: prevLegacy && typeof prevShared.hasSecret === "boolean"
+                                ? prevShared.hasSecret
+                                : toPersist.userCustom.hasSecret === true,
+                            secretSlot: LV_AI_TIER2_SECRET_SLOT,
+                        };
+                        storage.setItem("lv_ai_shared_config", JSON.stringify(syncedShared));
+                    }
+                } catch { /* ignore */ }
+            }
             if (existingLegacyKey) {
                 inMemoryTier2ApiKey = existingLegacyKey;
                 scheduleLegacyRouterSecretMigration(existingLegacyKey, storage);

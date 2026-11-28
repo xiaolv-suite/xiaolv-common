@@ -1,6 +1,7 @@
 // 捕获流程：选区/当前块 → 新条目表单（类型推断 + 元数据一步完成）。
 // 剪贴板读取失败（权限/平台）诚实回执，保留手动输入。
-import {Dialog, confirm} from "siyuan";
+import {Dialog} from "siyuan";
+import {openConfirmDialog} from "./dialog-dom";
 declare const __webpack_require__: unknown;
 declare const require: any;
 import {ItemType, inferTypeFromText, isSafeHttpUrl, parseSnippetAnnotations} from "../model/item";
@@ -408,7 +409,14 @@ export class CaptureDialog {
 
 /** 删除确认（明确回执，不静默） */
 export function confirmDelete(t: (key: string, ...args: string[]) => string, title: string, onConfirm: () => void): void {
-    confirm("⚠️ " + t("delete"), t("deleteConfirm", title), () => onConfirm(), undefined);
+    openConfirmDialog({
+        title: "⚠️ " + t("delete"),
+        message: t("deleteConfirm", title),
+        confirmText: t("delete"),
+        cancelText: t("cancel") || "取消",
+        danger: true,
+        onConfirm,
+    });
 }
 
 /*

@@ -4,7 +4,7 @@
 // 实时预览前 5 行解析结果，确认后再进入导入策略对话框。
 
 import {Dialog} from "siyuan";
-import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, attachSurfaceStack, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 import {inferColumnMapping} from "../service/csv-tsv-import";
 import {ExportedItem} from "../model/transfer";
 import {toErrorMessage} from "../model/errors";
@@ -34,10 +34,12 @@ export function openCsvTsvImportWizard(
     const t = ctx.t;
     let released = false;
     let parseTimer: ReturnType<typeof setTimeout> | undefined;
+    let surface: {onDestroy: () => void} | null = null;
 
     const release = (): void => {
         if (released) return;
         released = true;
+        surface?.onDestroy();
         if (parseTimer) {
             clearTimeout(parseTimer);
             parseTimer = undefined;
@@ -60,6 +62,7 @@ export function openCsvTsvImportWizard(
             release();
         },
     });
+    surface = attachSurfaceStack("xlc-csv-tsv-wizard", () => dialog);
     const container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
     if (container) container.classList.add("xlc-form-host", "xlc-settings-host");
     mountPlatformDialogTitleWrap(dialog.element, t("csvImportTitle"));
@@ -77,7 +80,7 @@ export function openCsvTsvImportWizard(
     }
     const body = getDialogBody(dialog.element);
     if (!body) {
-        onClose?.();
+        dialog.destroy();
         return;
     }
     body.innerHTML = "";

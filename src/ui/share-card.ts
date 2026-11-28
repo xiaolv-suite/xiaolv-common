@@ -3,7 +3,7 @@
 
 import {Dialog} from "siyuan";
 import {lvNotify} from "../libs/lv-notice-kit";
-import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {adaptSecondaryDialogForMobile, attachSurfaceStack, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
 
 export interface ShareCardDeps {
     t: (key: string, ...args: string[]) => string;
@@ -27,11 +27,16 @@ export function openShareCardDialog(
     shareCode: string,
 ): Dialog {
     const isMobileModal = isMobileDialogViewport();
+    let surface: {onDestroy: () => void} | null = null;
     const dialog = new Dialog({
         title: deps.t("shareCardTitle") || "常用条目便携分享卡片",
         content: "",
         width: isMobileModal ? "100vw" : "min(560px, 92vw)",
+        destroyCallback: () => {
+            surface?.onDestroy();
+        },
     });
+    surface = attachSurfaceStack("xlc-share-card", () => dialog);
     // 令牌作用域：与套件市场同源问题，缺 host 类时 --xlc-* 全部失效
     dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-dialog-host", "xlc-form-host");
 
@@ -39,7 +44,10 @@ export function openShareCardDialog(
     adaptSecondaryDialogForMobile(dialog, deps.t("close") || "关闭");
 
     const body = getDialogBody(dialog.element);
-    if (!body) return dialog;
+    if (!body) {
+        dialog.destroy();
+        return dialog;
+    }
 
     const container = document.createElement("div");
     container.className = "xlc-share-card-container";

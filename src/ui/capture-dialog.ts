@@ -1,6 +1,6 @@
 // 捕获对话框表单渲染（CaptureDialog Surface · S8 动态分包）
-import {Dialog, confirm} from "siyuan";
-import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {Dialog} from "siyuan";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap, openConfirmDialog} from "./dialog-dom";
 import {ItemType, cleanShortcode, extractKramdownNativeTags, inferTypeFromText, isSafeHttpUrl, parseSnippetAnnotations} from "../model/item";
 import {formatAiError, toErrorMessage} from "../model/errors";
 import {LIMITS} from "../constants";
@@ -8,7 +8,8 @@ import {deriveOmniItemMetadata} from "../service/omni-search";
 import {itemBodyRestriction} from "../model/kramdown";
 import {newWriteKey, type CaptureDeps, type ICaptureDialogHost} from "./capture-types";
 import {getSessionDraft, setSessionDraft} from "../model/capture-draft";
-import {mountLvAiThinkingCard} from "../libs/lv-notice-kit";
+import {lvSurfaceStack, mountLvAiThinkingCard} from "../libs/lv-notice-kit";
+import {createFocusTrap, type FocusTrapInstance} from "../libs/lv-focus-trap";
 
 export function openCaptureFormDialog(
     hostInstance: ICaptureDialogHost,
@@ -32,6 +33,7 @@ export function openCaptureFormDialog(
     let closed = false;
     let saving = false;
     let savedSuccessfully = false;
+    let explicitlyCanceled = false;
     let contentElRef: HTMLTextAreaElement | null = null;
     let titleElRef: HTMLInputElement | null = null;
     let aliasElRef: HTMLInputElement | null = null;
@@ -46,6 +48,8 @@ export function openCaptureFormDialog(
     let draftAbort: AbortController | null = null;
     let tidyThinkingHandle: ReturnType<typeof mountLvAiThinkingCard> | null = null;
     let draftThinkingHandle: ReturnType<typeof mountLvAiThinkingCard> | null = null;
+    let aliasCheckTimer: ReturnType<typeof setTimeout> | null = null;
+    let aliasInitTimer: ReturnType<typeof setTimeout> | null = null;
     const cleanupAiWaiters = (): void => {
         if (tidyAbort) {
             tidyAbort.abort();
@@ -65,27 +69,43 @@ export function openCaptureFormDialog(
         }
     };
     const isMobileModal = isMobileDialogViewport();
+    const surfaceId = `xlc-capture-dialog-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    let surfacePopped = false;
+    let focusTrap: FocusTrapInstance | null = null;
+    const popSurface = (): void => {
+        if (surfacePopped) return;
+        surfacePopped = true;
+        lvSurfaceStack.pop(surfaceId);
+    };
+    const saveDraftIfNeeded = (): boolean => {
+        if (!savedSuccessfully && !explicitlyCanceled && contentElRef) {
+            const draftVal = contentElRef.value.trim();
+            if (draftVal.length > 0) {
+                setSessionDraft({
+                    content: contentElRef.value,
+                    title: titleElRef?.value,
+                    alias: aliasElRef?.value,
+                    shortcode: shortcodeElRef?.value,
+                    tags: tagsElRef?.value,
+                    category: categoryElRef?.value,
+                    type: typeSelectRef?.value as ItemType,
+                });
+                return true;
+            }
+        }
+        return false;
+    };
     const dialog = new Dialog({
         title: t("newItem"),
         content: "",
         width: isMobileModal ? "100vw" : "min(620px, 92vw)",
         height: isMobileModal ? "100dvh" : "min(860px, 92vh)",
         destroyCallback: () => {
-            if (!savedSuccessfully && contentElRef) {
-                const draftVal = contentElRef.value.trim();
-                if (draftVal.length > 0) {
-                    setSessionDraft({
-                        content: contentElRef.value,
-                        title: titleElRef?.value,
-                        alias: aliasElRef?.value,
-                        shortcode: shortcodeElRef?.value,
-                        tags: tagsElRef?.value,
-                        category: categoryElRef?.value,
-                        type: typeSelectRef?.value as ItemType,
-                    });
-                }
-            }
+            saveDraftIfNeeded();
             closed = true;
+            popSurface();
+            focusTrap?.release();
+            focusTrap = null;
             hostInstance.formOpen = false;
             hostInstance.currentDialog = null;
             if (typeof window !== "undefined" && window.visualViewport) {
@@ -94,12 +114,38 @@ export function openCaptureFormDialog(
             }
             ++tidySeq;
             ++draftSeq;
+            if (aliasInitTimer !== null) {
+                clearTimeout(aliasInitTimer);
+                aliasInitTimer = null;
+            }
+            if (aliasCheckTimer !== null) {
+                clearTimeout(aliasCheckTimer);
+                aliasCheckTimer = null;
+            }
             cleanupAiWaiters();
+        },
+    });
+    lvSurfaceStack.push({
+        id: surfaceId,
+        type: "dialog",
+        dismiss: () => {
+            if (closed) {
+                popSurface();
+                return false;
+            }
+            if (saving) return "keep";
+            const savedDraft = saveDraftIfNeeded();
+            dialog.destroy();
+            if (savedDraft) {
+                deps.notify("info", "已自动暂存未保存草稿，下次新建可一键恢复");
+            }
+            popSurface();
+            return "keep";
         },
     });
     hostInstance.currentDialog = dialog;
     const container = dialog.element.querySelector(".b3-dialog__container") as HTMLElement | null;
-    container?.classList.add("xlc-form-host", "xlc-capture-host");
+    container?.classList.add("xlc-form-host", "xlc-capture-host", "xlc-gm-surface");
     mountPlatformDialogTitleWrap(dialog.element, t("newItem"));
     adaptSecondaryDialogForMobile(dialog, t("close"));
 
@@ -121,11 +167,8 @@ export function openCaptureFormDialog(
     }
     body.innerHTML = "";
     const form = document.createElement("div");
-    form.className = "xlc-form xlc-capture";
-    const intro = document.createElement("p");
-    intro.className = "xlc-page-intro";
-    intro.textContent = t("captureIntro");
-    form.appendChild(intro);
+    form.className = "xlc-form xlc-capture xlc-gm-surface";
+    form.dataset.xlcLayout = "graphite-mist-tiered";
 
     const field = (label: string, value: string, isArea: boolean, cls: string, parent?: HTMLElement): HTMLInputElement | HTMLTextAreaElement => {
         const wrap = document.createElement("label");
@@ -144,7 +187,7 @@ export function openCaptureFormDialog(
         if (isArea) {
             (inputEl as HTMLTextAreaElement).rows = 6;
             inputEl.style.resize = "vertical";
-            inputEl.style.minHeight = "130px";
+            inputEl.style.minHeight = "132px";
             inputEl.style.maxHeight = "50vh";
         }
         inputEl.className = "b3-text-field " + cls;
@@ -154,21 +197,35 @@ export function openCaptureFormDialog(
         return inputEl as HTMLInputElement;
     };
 
-    // 类型
-    const metaRow = document.createElement("div");
-    metaRow.className = "xlc-form-row";
-    const typeWrap = document.createElement("label");
+    // 第一层（高频核心）：标题 + 内容类型
+    const topTwoCol = document.createElement("div");
+    topTwoCol.className = "xlc-gm-cap-two-col xlc-gm-cap-two-col--title";
+    form.appendChild(topTwoCol);
+
+    const titleEl = field(t("title"), overrides?.title ?? "", false, "xlc-form-title", topTwoCol);
+    titleEl.dataset.xlcControl = "capture.title";
+    (titleEl as HTMLInputElement).placeholder = "例如：周报撰写通用模板";
+
+    const typeWrap = document.createElement("div");
     typeWrap.className = "xlc-form-field xlc-form-field--fixed";
     const typeSelectId = "xlc-capture-field-type";
-    typeWrap.htmlFor = typeSelectId;
-    const typeLabel = document.createElement("span");
+    const typeLabel = document.createElement("label");
     typeLabel.className = "xlc-form-label";
+    typeLabel.htmlFor = typeSelectId;
     typeLabel.textContent = t("type");
     typeWrap.appendChild(typeLabel);
+
+    const typeChipsWrap = document.createElement("div");
+    typeChipsWrap.className = "xlc-gm-type-chips";
+    typeChipsWrap.setAttribute("role", "radiogroup");
+    typeChipsWrap.setAttribute("aria-label", t("type"));
+
     const typeSelect = document.createElement("select");
     typeSelect.id = typeSelectId;
-    typeSelect.className = "b3-select xlc-form-type";
+    typeSelect.className = "b3-select xlc-form-type xlc-gm-type-select-hidden";
     typeSelect.dataset.xlcControl = "capture.type";
+    typeSelect.tabIndex = -1;
+    typeSelect.setAttribute("aria-hidden", "true");
     typeSelect.setAttribute("aria-label", t("type"));
     for (const it of ["text", "markdown", "url", "code", "image", "asset", "blockref", "structure"] as ItemType[]) {
         const opt = document.createElement("option");
@@ -177,16 +234,66 @@ export function openCaptureFormDialog(
         if (it === defaultType) opt.selected = true;
         typeSelect.appendChild(opt);
     }
+
+    const chipDefs: Array<{key: string; label: string; targetType: ItemType; matches: ItemType[]}> = [
+        {key: "snippet", label: "片段模板", targetType: "text", matches: ["text", "markdown"]},
+        {key: "block", label: "文档与块", targetType: "blockref", matches: ["blockref", "structure", "image", "asset"]},
+        {key: "url", label: "常用网址", targetType: "url", matches: ["url"]},
+        {key: "command", label: "快捷命令", targetType: "code", matches: ["code"]},
+    ];
+    let contentLabelTextEl: HTMLElement | null = null;
+    const syncTypeUi = (): void => {
+        const curType = typeSelect.value as ItemType;
+        typeChipsWrap.querySelectorAll<HTMLButtonElement>(".xlc-gm-type-chip").forEach((btn) => {
+            const matches = (btn.dataset.matches || "").split(",");
+            const on = matches.includes(curType);
+            btn.classList.toggle("is-active", on);
+            btn.setAttribute("aria-checked", String(on));
+        });
+        if (contentLabelTextEl) {
+            contentLabelTextEl.textContent = curType === "url"
+                ? "目标网址链接"
+                : (curType === "blockref" || curType === "structure" ? "关联文档 / 块内容" : t("contentLabel"));
+        }
+    };
     let userExplicitlySetType = Boolean(defaultType && defaultType !== "text");
+    for (const def of chipDefs) {
+        const chipBtn = document.createElement("button");
+        chipBtn.type = "button";
+        chipBtn.className = "xlc-gm-type-chip";
+        chipBtn.dataset.captype = def.key;
+        chipBtn.dataset.matches = def.matches.join(",");
+        chipBtn.dataset.xlcControl = `capture.type.${def.key}`;
+        chipBtn.setAttribute("role", "radio");
+        chipBtn.textContent = def.label;
+        chipBtn.addEventListener("click", () => {
+            userExplicitlySetType = true;
+            typeSelect.value = def.targetType;
+            syncTypeUi();
+        });
+        typeChipsWrap.appendChild(chipBtn);
+    }
     typeSelect.addEventListener("change", () => {
         userExplicitlySetType = true;
+        syncTypeUi();
     });
+    typeWrap.appendChild(typeChipsWrap);
     typeWrap.appendChild(typeSelect);
-    metaRow.appendChild(typeWrap);
+    topTwoCol.appendChild(typeWrap);
 
+    // 正文内容 / 目标地址
     const contentEl = field(t("contentLabel"), defaultText, true, "xlc-form-content");
     contentEl.dataset.xlcControl = "capture.content";
     const contentWrap = contentEl.parentElement as HTMLElement;
+    const contentCap = contentWrap.querySelector(".xlc-form-label") as HTMLElement | null;
+    if (contentCap) {
+        contentCap.textContent = "";
+        contentLabelTextEl = document.createElement("span");
+        contentLabelTextEl.textContent = t("contentLabel");
+        contentCap.appendChild(contentLabelTextEl);
+    }
+    syncTypeUi();
+
     const contentError = document.createElement("span");
     contentError.className = "xlc-form-error";
     contentError.id = "xlc-capture-content-error";
@@ -202,19 +309,32 @@ export function openCaptureFormDialog(
     counterEl.textContent = `${(contentEl as HTMLTextAreaElement).value.length} / ${LIMITS.contentChars}`;
     contentWrap.appendChild(counterEl);
 
-    // 变量快捷插入条
-    void import(/* webpackChunkName: "variable-form" */ "./variable-form").then(({buildVariableBar}) => {
-        if (closed) return;
-        const varbar = buildVariableBar(t, () => contentEl as HTMLTextAreaElement);
-        (contentEl.parentElement as HTMLElement)?.after(varbar);
-    }).catch(() => undefined);
+    // 快捷简码与检索别名（首屏高频直达）
+    const shortcutTwoCol = document.createElement("div");
+    shortcutTwoCol.className = "xlc-gm-cap-two-col";
+    form.appendChild(shortcutTwoCol);
 
-    const titleEl = field(t("title"), overrides?.title ?? "", false, "xlc-form-title");
-    titleEl.dataset.xlcControl = "capture.title";
-    form.appendChild(metaRow);
-    const aliasEl = field(t("alias"), overrides?.alias ?? "", false, "xlc-form-alias", metaRow);
+    const shortcodeEl = field(t("shortcode") || "快捷简码 (:shortcode)", overrides?.shortcode ?? "", false, "xlc-form-shortcode", shortcutTwoCol);
+    shortcodeEl.dataset.xlcControl = "capture.shortcode";
+    (shortcodeEl as HTMLInputElement).placeholder = t("shortcodePlaceholder") || "如 :wk、:bug（选填）";
+    const shortcodeFeedback = document.createElement("div");
+    shortcodeFeedback.className = "xlc-gm-alias-feedback";
+    shortcodeFeedback.textContent = "可填简短字母组合（如 :zb），日后输入即秒搜";
+    (shortcodeEl.parentElement as HTMLElement).appendChild(shortcodeFeedback);
+    shortcodeEl.addEventListener("input", () => {
+        const sc = (shortcodeEl as HTMLInputElement).value.trim();
+        if (sc) {
+            shortcodeFeedback.className = "xlc-gm-alias-feedback xlc-gm-alias-feedback--ok";
+            shortcodeFeedback.textContent = `简码可用，搜索输入 ${sc.startsWith(":") ? sc : ":" + sc} 即可置顶直达`;
+        } else {
+            shortcodeFeedback.className = "xlc-gm-alias-feedback";
+            shortcodeFeedback.textContent = "可填简短字母组合（如 :zb），日后输入即秒搜";
+        }
+    });
+
+    const aliasEl = field(t("alias"), overrides?.alias ?? "", false, "xlc-form-alias", shortcutTwoCol);
     aliasEl.dataset.xlcControl = "capture.alias";
-    metaRow.insertBefore(aliasEl.parentElement as HTMLElement, typeWrap);
+    (aliasEl as HTMLInputElement).placeholder = "如：每周汇报、报销单（选填）";
 
     // 智能别名推荐胶囊
     const aliasHint = document.createElement("div");
@@ -224,6 +344,7 @@ export function openCaptureFormDialog(
     (aliasEl.parentElement as HTMLElement).appendChild(aliasHint);
 
     const syncAliasRecommendation = () => {
+        if (closed) return;
         const currentTitle = (titleEl as HTMLInputElement).value.trim();
         const currentAlias = (aliasEl as HTMLInputElement).value.trim();
         if (!currentTitle) {
@@ -238,7 +359,7 @@ export function openCaptureFormDialog(
         if (rec && rec !== currentAlias) {
             aliasHint.textContent = "";
             const tipLabel = document.createElement("span");
-            tipLabel.textContent = "⚡ 推荐别名：";
+            tipLabel.textContent = "推荐别名：";
             const pill = document.createElement("button");
             pill.type = "button";
             pill.className = "xlc-quick-pill";
@@ -260,13 +381,21 @@ export function openCaptureFormDialog(
     };
 
     titleEl.addEventListener("input", syncAliasRecommendation);
-    setTimeout(syncAliasRecommendation, 0);
+    aliasInitTimer = setTimeout(() => {
+        aliasInitTimer = null;
+        syncAliasRecommendation();
+    }, 0);
 
     // 别名实时查重防抖反馈
-    let aliasCheckTimer: any = null;
     aliasEl.addEventListener("input", () => {
-        if (aliasCheckTimer) clearTimeout(aliasCheckTimer);
+        if (closed) return;
+        if (aliasCheckTimer !== null) {
+            clearTimeout(aliasCheckTimer);
+            aliasCheckTimer = null;
+        }
         aliasCheckTimer = setTimeout(async () => {
+            aliasCheckTimer = null;
+            if (closed) return;
             const currentAlias = (aliasEl as HTMLInputElement).value.trim();
             if (!currentAlias) {
                 syncAliasRecommendation();
@@ -274,6 +403,7 @@ export function openCaptureFormDialog(
             }
             if (deps.checkAliasConflict) {
                 const res = await deps.checkAliasConflict(currentAlias);
+                if (closed) return;
                 if (res.conflict) {
                     aliasHint.textContent = `⚠️ 该别名已被「${res.itemTitle || "其他条目"}」占用`;
                     aliasHint.style.color = "var(--xlc-warm-ink)";
@@ -281,12 +411,47 @@ export function openCaptureFormDialog(
                     return;
                 }
             }
+            if (closed) return;
             aliasHint.style.color = "";
             syncAliasRecommendation();
         }, 150);
     });
 
-    // 标签 + 分类
+    // 第二层（次级默认折叠收纳）：分组、标签、变量与 AI 辅助
+    const foldBox = document.createElement("div");
+    foldBox.className = "xlc-gm-fold-box";
+    const foldBtn = document.createElement("button");
+    foldBtn.type = "button";
+    foldBtn.className = "xlc-gm-fold-btn";
+    foldBtn.dataset.xlcControl = "capture.advanced.toggle";
+    foldBtn.setAttribute("aria-expanded", "false");
+    const foldTitleSpan = document.createElement("span");
+    foldTitleSpan.textContent = "分组、标签、变量与补充说明（默认折叠，选填）";
+    const foldArrowSpan = document.createElement("span");
+    foldArrowSpan.className = "xlc-gm-fold-arrow";
+    foldArrowSpan.textContent = "展开 ▾";
+    foldBtn.append(foldTitleSpan, foldArrowSpan);
+
+    const foldInner = document.createElement("div");
+    foldInner.className = "xlc-gm-fold-inner";
+    foldInner.hidden = true;
+    foldBtn.addEventListener("click", () => {
+        const nextOpen = foldInner.hidden;
+        foldInner.hidden = !nextOpen;
+        foldBtn.setAttribute("aria-expanded", String(nextOpen));
+        foldArrowSpan.textContent = nextOpen ? "收起 ▴" : "展开 ▾";
+    });
+    foldBox.append(foldBtn, foldInner);
+    form.appendChild(foldBox);
+
+    // 变量快捷插入条（收纳至次级折叠区）
+    void import(/* webpackChunkName: "variable-form" */ "./variable-form").then(({buildVariableBar}) => {
+        if (closed) return;
+        const varbar = buildVariableBar(t, () => contentEl as HTMLTextAreaElement);
+        foldInner.appendChild(varbar);
+    }).catch(() => undefined);
+
+    // 标签 + 分类（收纳至次级折叠区）
     const tagRow = document.createElement("div");
     tagRow.className = "xlc-form-row";
     const autoTags = defaultType !== "code" ? extractKramdownNativeTags(defaultText) : [];
@@ -363,11 +528,7 @@ export function openCaptureFormDialog(
         }
         (categoryEl.parentElement as HTMLElement).appendChild(catDatalist);
     }
-    form.appendChild(tagRow);
-
-    const shortcodeEl = field(t("shortcode") || "简码 (:shortcode)", overrides?.shortcode ?? "", false, "xlc-form-shortcode");
-    shortcodeEl.dataset.xlcControl = "capture.shortcode";
-    (shortcodeEl as HTMLInputElement).placeholder = t("shortcodePlaceholder") || "如 :wk、:bug（选填，搜索框输入即置顶直达）";
+    foldInner.appendChild(tagRow);
 
     contentElRef = contentEl as HTMLTextAreaElement;
     titleElRef = titleEl as HTMLInputElement;
@@ -390,15 +551,15 @@ export function openCaptureFormDialog(
         draftBanner.style.display = "flex";
         draftBanner.style.alignItems = "center";
         draftBanner.style.justifyContent = "space-between";
-        draftBanner.style.padding = "6px 12px";
+        draftBanner.style.padding = "8px 12px";
         draftBanner.style.background = "var(--xlc-warm)";
         draftBanner.style.color = "var(--xlc-warm-ink)";
         draftBanner.style.borderRadius = "var(--xlc-radius-sm)";
         draftBanner.style.fontSize = "var(--xlc-font-sm)";
-        draftBanner.style.marginBottom = "8px";
+        draftBanner.style.marginBottom = "4px";
 
         const textSpan = document.createElement("span");
-        textSpan.textContent = `📝 检测到上次未保存的内容草稿（${draft.content.length} 字符）`;
+        textSpan.textContent = `已保护上次未保存草稿（${draft.content.length} 字符），可一键恢复或放弃`;
         draftBanner.appendChild(textSpan);
 
         const btnWrap = document.createElement("div");
@@ -429,7 +590,10 @@ export function openCaptureFormDialog(
             if (draft.shortcode && shortcodeElRef) shortcodeElRef.value = draft.shortcode;
             if (draft.tags && tagsElRef) tagsElRef.value = draft.tags;
             if (draft.category && categoryElRef) categoryElRef.value = draft.category;
-            if (draft.type && typeSelectRef) typeSelectRef.value = draft.type;
+            if (draft.type && typeSelectRef) {
+                typeSelectRef.value = draft.type;
+                syncTypeUi();
+            }
             setSessionDraft(null);
             draftBanner.remove();
             deps.notify("info", "已恢复未保存草稿");
@@ -457,7 +621,7 @@ export function openCaptureFormDialog(
     const hint = document.createElement("div");
     hint.className = "xlc-form-hint";
     hint.textContent = t("captureHint");
-    form.appendChild(hint);
+    foldInner.appendChild(hint);
     if (deps.getLibraryName) {
         void deps.getLibraryName().then((name) => {
             if (closed || !name) return;
@@ -489,6 +653,7 @@ export function openCaptureFormDialog(
             const detected = inferTypeFromText(val);
             if (detected !== typeSelect.value) {
                 typeSelect.value = detected;
+                syncTypeUi();
             }
         }
         if (!(titleEl as HTMLInputElement).value.trim() && val) {
@@ -527,7 +692,7 @@ export function openCaptureFormDialog(
     adoptBtn.textContent = t("adoptAll");
     adoptBtn.addEventListener("click", applySuggestions);
     sugrow.appendChild(adoptBtn);
-    form.insertBefore(sugrow, titleEl.parentElement as Node);
+    form.insertBefore(sugrow, foldBox);
 
     if (deps.aiEnabled()) {
         const contentLabel = (contentEl.parentElement as HTMLElement).querySelector(".xlc-form-label");
@@ -780,9 +945,15 @@ export function openCaptureFormDialog(
                 }
                 const contentBox = contentEl as HTMLTextAreaElement;
                 if (contentBox.value.trim()) {
-                    confirm(t("aiDraft"), t("aiDraftOverwrite"), () => {
-                        contentBox.value = result.text;
-                        contentBox.dispatchEvent(new Event("input", {bubbles: true}));
+                    openConfirmDialog({
+                        title: t("aiDraft"),
+                        message: t("aiDraftOverwrite"),
+                        confirmText: "确定",
+                        cancelText: t("cancel") || "取消",
+                        onConfirm: () => {
+                            contentBox.value = result.text;
+                            contentBox.dispatchEvent(new Event("input", {bubbles: true}));
+                        },
                     });
                     return;
                 }
@@ -799,15 +970,21 @@ export function openCaptureFormDialog(
         };
         draftBtn.addEventListener("click", runDraft);
         draftRetryBtn.addEventListener("click", runDraft);
-        form.insertBefore(draftWrap, form.firstChild);
+        foldInner.insertBefore(draftWrap, foldInner.firstChild);
     }
 
     const actions = document.createElement("div");
-    actions.className = "xlc-form-actions";
+    actions.className = "xlc-form-actions xlc-gm-cap-foot";
     if (typeof actions.setAttribute === "function") {
         actions.setAttribute("role", "toolbar");
         actions.setAttribute("aria-label", "捕获表单操作栏");
     }
+    const footNote = document.createElement("span");
+    footNote.className = "xlc-gm-cap-foot-note";
+    footNote.textContent = "点「取消」立即清空草稿；误按 Esc 或点遮罩自动保留防丢";
+    actions.appendChild(footNote);
+    const footBtns = document.createElement("div");
+    footBtns.className = "xlc-gm-cap-foot-btns";
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "b3-button";
@@ -817,6 +994,8 @@ export function openCaptureFormDialog(
         cancelBtn.setAttribute("aria-label", t("cancel") || "取消新建");
     }
     cancelBtn.addEventListener("click", () => {
+        explicitlyCanceled = true;
+        setSessionDraft(null);
         closed = true;
         ++tidySeq;
         ++draftSeq;
@@ -1001,8 +1180,14 @@ export function openCaptureFormDialog(
             saveBtn.disabled = false;
             saveBtn.textContent = t("save");
             cancelBtn.disabled = false;
-            confirm("⚠️ " + t("duplicateTitle"), t("duplicateConfirm", dup.title), () => {
-                if (!closed) doSave();
+            openConfirmDialog({
+                title: "⚠️ " + t("duplicateTitle"),
+                message: t("duplicateConfirm", dup.title),
+                confirmText: t("save"),
+                cancelText: t("cancel") || "取消",
+                onConfirm: () => {
+                    if (!closed) doSave();
+                },
             });
         }).catch((err: unknown) => {
             if (closed) return;
@@ -1013,9 +1198,16 @@ export function openCaptureFormDialog(
             deps.notify("error", t("kernelError", toErrorMessage(err)));
         });
     });
-    actions.appendChild(cancelBtn);
-    actions.appendChild(saveBtn);
+    footBtns.appendChild(cancelBtn);
+    footBtns.appendChild(saveBtn);
+    actions.appendChild(footBtns);
     form.appendChild(actions);
     body.appendChild(form);
+    focusTrap = createFocusTrap(dialog.element, {
+        initialFocus: contentEl as HTMLElement,
+        restoreFocus: true,
+        capture: true,
+    });
+    focusTrap.activate();
     (contentEl as HTMLTextAreaElement).focus();
 }

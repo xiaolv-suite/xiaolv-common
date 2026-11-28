@@ -8,7 +8,7 @@
 
 将零散的代码片段、客服话术、Prompt 提示词、常用表格、文本模板沉淀为有元数据、有来源追溯、可参数化动态求值的思源笔记原生块资产
 
-**当前版本：v0.10.91** ｜ [English Documentation](README.en-US.md) ｜ [更新日志](CHANGELOG.md)
+**当前版本：v0.10.92** ｜ [English Documentation](README.en-US.md) ｜ [更新日志](CHANGELOG.md)
 
 [![CI](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaolv-suite/xiaolv-common/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/github/v/tag/xiaolv-suite/xiaolv-common?label=%E7%89%88%E6%9C%AC&sort=semver)](https://github.com/xiaolv-suite/xiaolv-common/releases)
@@ -25,18 +25,16 @@
 
 ---
 
-## 🚀 本次更新要点（v0.10.91 · 2026-11-26 里程碑正式版）
+## 🚀 本次更新要点（v0.10.92 · 2026-11-27 稳定优化版）
 
-- **紧凑顶栏与默认无遮罩悬浮**：迷你悬浮窗统一为单行紧凑拖拽顶栏，完整版桌面工作台默认无遮罩非模态悬浮，可直接点击底层编辑器跨段、跨文档连续插入；
-- **高密度卡片与分类即时跳转**：迷你视图采用高密度卡片一屏多看，分类栏支持左右箭头翻页、一键展开全部分类与点击即时跳转筛选；
-- **首页多条剪贴板与四大专页分流**：首页紧凑呈现最近 3 条剪贴板并支持「全部 N 条 →」直跳剪贴板专页，顶栏页签清晰分流「🏠 首页 / 💬 常用语 / 📋 剪贴板 / ⭐ 星标」；
-- **桌面独立系统置顶悬浮窗**：一键弹出独立置顶小窗，思源主窗最小化后仍稳浮在微信、浏览器等外部软件之上，点击即复制；
-- **三大共享中枢与 `.lv-ai-thinking` AI 等待统一**：深度接入小驴罗盘、全生态 AI 路由、块助手 1–8 原生底座与自定义双击触发及联合灾备，日记同步安全落盘 `#### 🐴 小驴记录` 四级折叠区；AI 变换、捕获整理/草稿、`?` 语义找、AI 标签体检与模板智能展开统一接入 `.lv-ai-thinking` 阶段化思考卡与 `AbortSignal` 实时取消；
-- **零 `:has()` / 零高模糊 60fps 极速性能**：全面消除 CSS `:has()` 回溯选择器与高耗能大半径模糊，启动剪贴板监听静默 5 秒，优化打字链路惰性集合缓存与拖拽列宽防抖落盘，适配 `390×844` 移动端与深浅双色主题。
+- **石墨雾灰三屏极简重塑**：重构常用面板、极速唤起面板与捕获表单，对齐家族像素规格、单行顶栏、`390×844` 移动端底栏宽度与 Dock SVG 图标；
+- **首页最近剪贴板条带与稳定性加固**：首页新增最近剪贴板条带；修复 Top5 列表、Esc 关闭、明暗对比度、快捷浮窗关闭监听、显式取消清空草稿与捕获弹窗销毁清理 `aliasCheckTimer`；
+- **全生态公共底座合龙**：同步最新 `lv-kit` 零 Protyle DOM 残留治理与 Batch 1 A1–A4 规范，严格保持零 `:has(` 与 60fps 渲染。
 
 <details>
-<summary>展开查看历史版本更新记录（v0.10.90 及更早版本 · 完整记录见 CHANGELOG.md）</summary>
+<summary>展开查看历史版本更新记录（v0.10.91 及更早版本 · 完整记录见 CHANGELOG.md）</summary>
 
+- **v0.10.91**：全生态大重构里程碑正式版，紧凑顶栏无遮罩悬浮、高密度卡片、桌面置顶独立窗、`.lv-ai-thinking` 等待卡与 60fps 优化。
 - **v0.10.90**：启动剪贴板自动监听静默 5 秒、CaptureDialog 惰性单例与卸载生命周期守卫。
 
 - **v0.10.86**：全生态基础设施升级与交互打磨（罗盘启动防抖对齐、LifeLog 照片流与原子多块撤销、全生态联合灾备恢复、移动端全面去电脑化）。
@@ -149,7 +147,7 @@
 
 1. **思源集市安装（推荐）**：在思源笔记中打开 `设置 → 集市 → 插件`，搜索 **「小驴常用」**（或 `xiaolv-common`）点击下载并启用。
 2. **离线包手动安装 / 回滚升级**：
-   - 获取项目根目录产出的 `package.zip`（或回滚包 `package-v0.10.91.zip`）；
+   - 获取项目根目录产出的 `package.zip`（或回滚包 `package-v0.10.92.zip`）；
    - 解压到思源工作空间 `<workspace>/data/plugins/xiaolv-common/` 目录（确保 `plugin.json`、`index.js`、`index.css` 位于该目录根层）；
    - 在思源笔记 `设置 → 插件` 中开启「小驴常用」。
 

@@ -156,7 +156,7 @@
   "previewTemplateSource": "模板源码",
   "previewExpandedEffect": "展开后真实效果",
   "shortcode": "简码 (:shortcode)",
-  "shortcodePlaceholder": "如 :wk、:bug（选填，搜索框输入即置顶直达）",
+  "shortcodePlaceholder": "如 :wk、:bug（选填）",
   "variableMemoryHint": "变量填写历史记忆保存在本机侧车，插入填写时自动预填上次输入值。",
   "clearVariableMemoryBtn": "清空变量记忆",
   "clearVariableMemoryEmpty": "暂无变量记忆",

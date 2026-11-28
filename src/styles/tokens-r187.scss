@@ -1,7 +1,7 @@
 // R187 · 小驴常用视觉基座。
 // 配色取自小驴闪卡 R54 原型；变量别名参考小驴打卡的局部主题适配。
 // 只向本插件的根与已标记弹窗提供变量，不重定义宿主全局主题。
-$roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-quick-popover, .xlc-copy-format-menu, .b3-dialog__container.xlc-dialog-host, .b3-dialog__container.xlc-form-host, .b3-dialog__container.xlc-varform-host, .b3-dialog__container.xlc-sheet, .b3-dialog__container.xlc-sync-diff-modal, .b3-dialog__container.xlc-mobile-modal";
+$roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-quick-popover, .xlc-copy-format-menu, .xlc-mini-preview-popover, .b3-dialog__container.xlc-dialog-host, .b3-dialog__container.xlc-form-host, .b3-dialog__container.xlc-varform-host, .b3-dialog__container.xlc-sheet, .b3-dialog__container.xlc-sync-diff-modal, .b3-dialog__container.xlc-mobile-modal";
 
 @mixin light-palette {
   // ① 底色关系：以主题色色相(243°)为基准，L=97.6%、S=4.5%的极浅同族底色，与纯白卡片明度差仅2.4%
@@ -445,30 +445,38 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
     line-height: var(--xlc-line-body);
   }
 
-  // 设置面板快速导航胶囊条（置顶吸顶，便捷跳转各配置卡片）
+  // 设置面板快速导航胶囊条（置顶吸顶，单行紧凑横排，便捷跳转各配置卡片）
   .xlc-settings-nav-bar {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--xlc-space-2);
-    padding: var(--xlc-space-2) var(--xlc-space-0);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 6px;
+    padding: 6px 0 8px;
     margin: var(--xlc-space-2) 0;
     position: sticky;
     top: 0;
     z-index: 5;
     background: var(--xlc-canvas);
     border-bottom: 1px solid var(--xlc-line);
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   .xlc-settings-nav-pill {
     display: inline-flex;
     align-items: center;
-    padding: var(--xlc-space-1) var(--xlc-space-3);
+    padding: 5px 11px;
     border: 1px solid var(--xlc-line);
     border-radius: var(--xlc-radius-pill);
     background: var(--xlc-surface);
     color: var(--xlc-muted);
     font-size: var(--xlc-font-xs);
-    font-weight: var(--xlc-weight-semibold);
+    font-weight: var(--xlc-weight-medium);
+    white-space: nowrap;
+    flex-shrink: 0;
     cursor: pointer;
     box-shadow: none;
     transition: transform var(--xlc-dur-fast) ease, background var(--xlc-dur-fast) ease, border-color var(--xlc-dur-fast) ease, box-shadow var(--xlc-dur-fast) ease, color var(--xlc-dur-fast) ease, opacity var(--xlc-dur-fast) ease;
@@ -1156,9 +1164,129 @@ $roots: ".xlc-dialog, .xlc-form, .xlc-varform, .xlc-dock, .xlc-dock-menu, .xlc-q
   }
 }
 
+// ══════════ 风格 A · 石墨清雾（Graphite Mist）双主题扁平令牌 ══════════
+@mixin graphite-mist-light {
+  --xlc-canvas: #F7F8FA;
+  --xlc-surface: #FFFFFF;
+  --xlc-rail: #FAFBFD;
+  --xlc-soft: #F1F3F7;
+  --xlc-hover: #F5F7FA;
+  --xlc-raised: #FFFFFF;
+  --xlc-ink: #16181D;
+  --xlc-ink-2: #4A505E;
+  --xlc-muted: #5A6275;
+  --xlc-faint: #60687B;
+  --xlc-line: rgba(15, 23, 42, 0.08);
+  --xlc-line-strong: #D6DCE6;
+
+  --xlc-primary-bg: #1E2430;
+  --xlc-primary-fg: #FFFFFF;
+  --xlc-primary-hover: #2C3445;
+
+  --xlc-accent: #5B6AD0;
+  --xlc-accent-text: #4756BC;
+  --xlc-accent-contrast: #FFFFFF;
+  --xlc-lavender: #EEF0FD;
+  --xlc-lavender-ink: #4756BC;
+  --xlc-accent-line: #D7DCF9;
+
+  --xlc-data-accent: #2A7A56;
+  --xlc-data-soft: #EDF7F2;
+  --xlc-success: #2A7A56;
+  --xlc-success-soft: #EDF7F2;
+  --xlc-fresh-line: #CBE6D9;
+  --xlc-warm: #FCF6EB;
+  --xlc-warm-ink: #855818;
+  --xlc-warn-line: #EDDCB9;
+  --xlc-danger: #B43C32;
+  --xlc-danger-soft: rgba(180, 60, 50, 0.09);
+  --xlc-scrim: rgba(16, 18, 23, 0.34);
+
+  --xlc-gm-shadow-menu: 0 8px 24px rgba(15, 20, 30, 0.08);
+  --xlc-gm-shadow-card: 0 12px 32px rgba(15, 20, 30, 0.08);
+
+  --b3-theme-background: var(--xlc-surface);
+  --b3-theme-surface: var(--xlc-soft);
+  --b3-theme-surface-light: var(--xlc-canvas);
+  --b3-theme-on-background: var(--xlc-ink);
+  --b3-theme-on-surface: var(--xlc-muted);
+  --b3-theme-on-surface-light: var(--xlc-muted);
+  --b3-theme-primary: var(--xlc-primary-bg);
+  --b3-theme-on-primary: var(--xlc-primary-fg);
+  --b3-border-color: var(--xlc-line);
+  --b3-list-hover: var(--xlc-hover);
+  color-scheme: light;
+}
+
+@mixin graphite-mist-dark {
+  --xlc-canvas: #14161B;
+  --xlc-surface: #1C1F26;
+  --xlc-rail: #181B22;
+  --xlc-soft: #222630;
+  --xlc-hover: #242936;
+  --xlc-raised: #1C1F26;
+  --xlc-ink: #ECEFF4;
+  --xlc-ink-2: #B9C0CE;
+  --xlc-muted: #9098AA;
+  --xlc-faint: #939BAD;
+  --xlc-line: rgba(236, 239, 244, 0.08);
+  --xlc-line-strong: #323846;
+
+  --xlc-primary-bg: #ECEFF4;
+  --xlc-primary-fg: #14161B;
+  --xlc-primary-hover: #FFFFFF;
+
+  --xlc-accent: #8492EA;
+  --xlc-accent-text: #9AA6F0;
+  --xlc-accent-contrast: #14161B;
+  --xlc-lavender: rgba(91, 106, 208, 0.16);
+  --xlc-lavender-ink: #9AA6F0;
+  --xlc-accent-line: rgba(132, 146, 234, 0.30);
+
+  --xlc-data-accent: #55BD8D;
+  --xlc-data-soft: rgba(85, 189, 141, 0.14);
+  --xlc-success: #55BD8D;
+  --xlc-success-soft: rgba(85, 189, 141, 0.14);
+  --xlc-fresh-line: rgba(85, 189, 141, 0.28);
+  --xlc-warm: rgba(223, 169, 83, 0.14);
+  --xlc-warm-ink: #DFA953;
+  --xlc-warn-line: rgba(223, 169, 83, 0.30);
+  --xlc-danger: #F08A80;
+  --xlc-danger-soft: rgba(240, 138, 128, 0.14);
+  --xlc-scrim: rgba(5, 7, 11, 0.56);
+
+  --xlc-gm-shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --xlc-gm-shadow-card: 0 12px 32px rgba(0, 0, 0, 0.36);
+
+  --b3-theme-background: var(--xlc-surface);
+  --b3-theme-surface: var(--xlc-soft);
+  --b3-theme-surface-light: var(--xlc-canvas);
+  --b3-theme-on-background: var(--xlc-ink);
+  --b3-theme-on-surface: var(--xlc-muted);
+  --b3-theme-on-surface-light: var(--xlc-muted);
+  --b3-theme-primary: var(--xlc-primary-bg);
+  --b3-theme-on-primary: var(--xlc-primary-fg);
+  --b3-border-color: var(--xlc-line);
+  --b3-list-hover: var(--xlc-hover);
+  color-scheme: dark;
+}
+
+:is(#{$roots}).xlc-gm-surface,
+.xlc-gm-surface {
+  @include graphite-mist-light;
+}
+
+:is(:root[data-theme-mode="dark"], [data-theme-mode="dark"], body.body--dark, .b3-theme-dark, [data-theme="dark"], .b3-scope.dark) :is(#{$roots}).xlc-gm-surface,
+:is(:root[data-theme-mode="dark"], [data-theme-mode="dark"], body.body--dark, .b3-theme-dark, [data-theme="dark"], .b3-scope.dark) .xlc-gm-surface,
+:is(#{$roots}).xlc-gm-surface:is([data-theme-mode="dark"], .b3-theme-dark, [data-theme="dark"]),
+.xlc-gm-surface:is([data-theme-mode="dark"], .b3-theme-dark, [data-theme="dark"]) {
+  @include graphite-mist-dark;
+}
+
 // ══════════ 强制颜色与系统变量映射（forced-colors: active · Epoch 5）══════════
 @media (forced-colors: active) {
-  :is(#{$roots}) {
+  :is(#{$roots}),
+  .xlc-gm-surface {
     --xlc-canvas: Canvas;
     --xlc-surface: Canvas;
     --xlc-soft: Canvas;

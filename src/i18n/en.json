@@ -156,7 +156,7 @@
   "previewTemplateSource": "Template Source",
   "previewExpandedEffect": "Live Expanded Effect",
   "shortcode": "Shortcode (:shortcode)",
-  "shortcodePlaceholder": "e.g. :wk, :bug (optional, instant top match in search)",
+  "shortcodePlaceholder": "e.g. :wk, :bug (optional)",
   "variableMemoryHint": "Variable fill history is stored locally to prefill your last used values when inserting.",
   "clearVariableMemoryBtn": "Clear Variable Memory",
   "clearVariableMemoryEmpty": "No Variable Memory",

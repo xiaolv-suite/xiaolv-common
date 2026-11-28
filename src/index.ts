@@ -200,6 +200,11 @@ export default class XiaolvCommonPlugin extends Plugin implements XiaolvCommonPl
         if (isNonWebpackNode) { try { const mod = nodeRequire("./service/search-modal"); if (mod?.openSearchModal) return mod.openSearchModal(this, insertTarget, initialQuery, surroundText, defaultAction, initialScope, options); } catch {} }
         void import(/* webpackChunkName: "search-modal" */ "./service/search-modal").then(({openSearchModal}) => { if (!this.unloading) openSearchModal(this, insertTarget, initialQuery, surroundText, defaultAction, initialScope, options); }).catch((e) => this.notify("error", toErrorMessage(e)));
     }
+    public async openQuickAccessPopover(e?: MouseEvent): Promise<void> {
+        if (isNonWebpackNode) { try { const mod = nodeRequire("./service/search-modal"); if (mod?.openQuickAccessPopover) return mod.openQuickAccessPopover(this, e); } catch {} }
+        const {openQuickAccessPopover} = await import(/* webpackChunkName: "search-modal" */ "./service/search-modal");
+        if (!this.unloading) await openQuickAccessPopover(this, e);
+    }
     public openSetup(): void { void this.getSettingsHelper().then((h) => h.openSetup()); } public openSetting(): void { this.openSettings(); } public openSettings(): void { void this.getSettingsHelper().then((h) => h.openSettings()); }
     // tags: tagsEl.value.split(/[,，、;；\s]+/)
     public async openEditDialog(item: CommonItem): Promise<void> { return (await this.getSettingsHelper()).openEditDialog(item); } public async exportBundle(): Promise<string> { return (await this.getDataBackup()).exportBundle(); }

@@ -11,13 +11,14 @@ import {formatAiError, toErrorMessage} from "../model/errors";
 import {getPinyinAdapter} from "../model/pinyin";
 import {deriveOmniItemMetadata} from "./omni-search";
 import {PromoteClipPayload} from "../ui/promote-clip";
-import {lvActivity, showDocTreeNativeMenu, safeDocTitleFromHPath, withDocLock} from "../libs/lv-notice-kit";
+import {lvActivity, lvSurfaceStack, showDocTreeNativeMenu, safeDocTitleFromHPath, withDocLock} from "../libs/lv-notice-kit";
 import {confirmDelete} from "../ui/dialog-dom";
 import {buildProviderRows} from "../model/provider-section";
 import {queryEcosystemItems} from "./ecosystem";
 import {pushRecentQuery, removeRecentQuery} from "../model/storage";
 import {SearchMetaEntry, TransformKind} from "./ai";
 import type {XiaolvCommonPluginContext} from "./plugin-context";
+import {createGmSvg, getGmTypeLabel, mapItemTypeToIconKind} from "../ui/gm-icons";
 
 function shortTitle(title: string): string {
     return title.length > 48 ? `${title.slice(0, 48)}…` : title;
@@ -48,26 +49,52 @@ export async function openQuickAccessPopover(plugin: XiaolvCommonPluginContext, 
         entries = [];
     }
 
-    if (typeof document === "undefined") return;
+    if (plugin.unloading || typeof document === "undefined") return;
+    closeQuickAccessPopover(plugin);
 
     const popover = document.createElement("div");
-    popover.className = "xlc-quick-popover";
+    popover.className = "xlc-quick-popover xlc-gm-surface";
     popover.dataset.xlcControl = "host.quick-popover";
     if (typeof popover.setAttribute === "function") {
         popover.setAttribute("role", "dialog");
         popover.setAttribute("aria-label", "小驴常用极速气泡卡片");
     }
 
-    const anchorRect = (e?.currentTarget as HTMLElement | null)?.getBoundingClientRect?.()
-        ?? (plugin.topBarElement as HTMLElement | null)?.getBoundingClientRect?.();
-    const rect = anchorRect ?? {
-        left: e?.clientX ?? 0,
-        bottom: (e?.clientY ?? 0) + 8,
-        right: (e?.clientX ?? 0) + 220,
-    };
-    const popW = typeof window !== "undefined" ? Math.min(250, Math.max(180, window.innerWidth - 16)) : 250;
-    const posX = typeof window !== "undefined" ? Math.max(8, Math.min(rect.right - popW, window.innerWidth - popW - 8)) : 100;
-    const posY = typeof window !== "undefined" ? Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 280)) : 100;
+    const isVisibleRect = (r: {width?: number; height?: number} | null | undefined): r is DOMRect =>
+        Boolean(r && typeof r.width === "number" && r.width > 0 && typeof r.height === "number" && r.height > 0);
+    const eventTargetRect = (e?.currentTarget as HTMLElement | null)?.getBoundingClientRect?.();
+    const topBarRect = (plugin.topBarElement as HTMLElement | null)?.getBoundingClientRect?.();
+    const launchpadEl = typeof document !== "undefined"
+        ? (document.getElementById("lvLaunchpadDesktopEntry")
+            ?? document.getElementById("lv-launchpad-mobile-entry")
+            ?? document.getElementById("lv-launchpad-mobile-ball"))
+        : null;
+    const launchpadRect = launchpadEl?.getBoundingClientRect?.();
+    const anchorRect = isVisibleRect(eventTargetRect)
+        ? eventTargetRect
+        : isVisibleRect(topBarRect)
+            ? topBarRect
+            : isVisibleRect(launchpadRect)
+                ? launchpadRect
+                : null;
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 720;
+    const hasPointerCoords = typeof e?.clientX === "number" && typeof e?.clientY === "number" && (e.clientX > 0 || e.clientY > 0);
+    const rect = anchorRect ?? (hasPointerCoords
+        ? {
+            left: e!.clientX,
+            bottom: e!.clientY + 8,
+            right: e!.clientX + 280,
+        }
+        : {
+            left: Math.max(8, vw - 316),
+            bottom: 46,
+            right: Math.max(288, vw - 16),
+        });
+    const popW = typeof window !== "undefined" ? Math.min(300, Math.max(220, vw - 16)) : 300;
+    const estimatedPopH = typeof window !== "undefined" ? Math.min(380, Math.max(180, vh - 16)) : 380;
+    const posX = typeof window !== "undefined" ? Math.max(8, Math.min(rect.right - popW, vw - popW - 8)) : 100;
+    const posY = typeof window !== "undefined" ? Math.max(8, Math.min(rect.bottom + 6, vh - estimatedPopH - 8)) : 100;
 
     popover.style.position = "fixed";
     popover.style.left = `${posX}px`;
@@ -81,13 +108,24 @@ export async function openQuickAccessPopover(plugin: XiaolvCommonPluginContext, 
 
     const head = document.createElement("div");
     head.className = "xlc-quick-popover-head";
-    const safeHeadTitle = escapeHtml("🐴 极速常用 (Top 5)");
-    head.innerHTML = `<strong>${safeHeadTitle}</strong><button type="button" class="xlc-quick-popover-close" aria-label="关闭">×</button>`;
-    head.querySelector(".xlc-quick-popover-close")?.addEventListener("click", () => closeQuickAccessPopover(plugin));
+    const headLeft = document.createElement("strong");
+    headLeft.className = "xlc-quick-popover-head-title";
+    headLeft.appendChild(createGmSvg("star", "xlc-gm-svg xlc-gm-svg--sm"));
+    const headLabel = document.createElement("span");
+    headLabel.textContent = "极速常用 · Top 5";
+    headLeft.appendChild(headLabel);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "xlc-quick-popover-close";
+    closeBtn.setAttribute("aria-label", "关闭");
+    closeBtn.textContent = "关闭";
+    closeBtn.addEventListener("click", () => closeQuickAccessPopover(plugin));
+    head.append(headLeft, closeBtn);
     popover.appendChild(head);
 
     const list = document.createElement("div");
     list.className = "xlc-quick-popover-list";
+    const usageSnapshot = plugin.state?.usage ?? {};
 
     if (entries.length === 0) {
         const emptyTip = document.createElement("div");
@@ -99,9 +137,47 @@ export async function openQuickAccessPopover(plugin: XiaolvCommonPluginContext, 
             const item = document.createElement("div");
             item.className = "xlc-quick-popover-item";
             item.dataset.id = entry.id;
+            item.dataset.xlcControl = `host.quick-popover.item.${idx}`;
+            item.tabIndex = 0;
+            item.setAttribute("role", "button");
             const titleStr = entry.title || "未命名常用语";
             const numKey = idx + 1;
-            item.innerHTML = `<span class="xlc-quick-popover-num">${escapeHtml(String(numKey))}</span><span class="xlc-quick-popover-title">${escapeHtml(titleStr)}</span>`;
+            const typeLabel = getGmTypeLabel(entry.itemType);
+            const countVal = usageSnapshot[entry.id]?.count ?? 0;
+            const subParts = [entry.shortcode ? entry.shortcode.trim() : "", typeLabel, `${countVal} 次`].filter(Boolean).join(" · ");
+            item.setAttribute("aria-label", `${titleStr}${subParts ? ` (${subParts})` : ""}`);
+            item.innerHTML = `<span class="xlc-quick-popover-num">${escapeHtml(String(numKey))}</span><span class="xlc-gm-type-ic-box xlc-gm-type-ic-box--sm" aria-hidden="true"></span><span class="xlc-quick-popover-main"><span class="xlc-quick-popover-title">${escapeHtml(titleStr)}</span><span class="xlc-quick-popover-sub">${escapeHtml(subParts)}</span></span><button type="button" class="xlc-quick-popover-copy" aria-label="复制">复制</button>`;
+            item.addEventListener("keydown", (ev) => {
+                if (ev.target !== item) return;
+                if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    item.click();
+                }
+            });
+            const icSlot = item.querySelector(".xlc-gm-type-ic-box");
+            if (icSlot) {
+                icSlot.appendChild(createGmSvg(mapItemTypeToIconKind(entry.itemType), "xlc-gm-svg xlc-gm-svg--xs"));
+            }
+            const copyBtn = item.querySelector(".xlc-quick-popover-copy");
+            copyBtn?.addEventListener("click", async (ev) => {
+                ev.stopPropagation();
+                closeQuickAccessPopover(plugin);
+                const got = await plugin.library.getItem(entry.id);
+                if (!got.ok) {
+                    plugin.notify("error", got.message);
+                    return;
+                }
+                const receipt = await plugin.executor.run(got.data, "copy");
+                if (receipt.ok) {
+                    plugin.service.touchRecent(entry.id);
+                    plugin.recordUsage(entry.id);
+                    plugin.notify("info", receiptText(plugin, receipt.message, got.data.title, receipt.pendingVerification));
+                    plugin.notifyExternalDataChange();
+                } else {
+                    plugin.notify("error", receipt.message);
+                }
+            });
             item.addEventListener("click", async () => {
                 closeQuickAccessPopover(plugin);
                 const got = await plugin.library.getItem(entry.id);
@@ -124,28 +200,89 @@ export async function openQuickAccessPopover(plugin: XiaolvCommonPluginContext, 
     }
     popover.appendChild(list);
 
+    const foot = document.createElement("div");
+    foot.className = "xlc-quick-popover-foot";
+    const footHint = document.createElement("span");
+    footHint.className = "xlc-quick-popover-foot-hint";
+    footHint.textContent = "点外部或按 Esc 立即关闭";
+    const manageAllBtn = document.createElement("button");
+    manageAllBtn.type = "button";
+    manageAllBtn.className = "xlc-quick-popover-all-btn";
+    manageAllBtn.dataset.xlcControl = "host.quick-popover.manage-all";
+    manageAllBtn.textContent = "管理全部";
+    manageAllBtn.addEventListener("click", () => {
+        closeQuickAccessPopover(plugin);
+        openSearchModal(plugin);
+    });
+    foot.append(footHint, manageAllBtn);
+    popover.appendChild(foot);
+
+    let dismissed = false;
+    let listenersAttached = false;
+    let attachTimer: ReturnType<typeof setTimeout> | null = null;
+    const popoverSurfaceId = "xlc-quick-popover";
+    let surfacePopped = false;
+    const popSurface = (): void => {
+        if (surfacePopped) return;
+        surfacePopped = true;
+        lvSurfaceStack.pop(popoverSurfaceId);
+    };
     const onDocClick = (ev: MouseEvent) => {
+        if (dismissed) return;
         if (!popover.contains(ev.target as Node)) {
             closeQuickAccessPopover(plugin);
         }
     };
     const onKeydown = (ev: KeyboardEvent) => {
+        if (dismissed) return;
         if (ev.key === "Escape") {
+            ev.preventDefault?.();
+            ev.stopPropagation?.();
             closeQuickAccessPopover(plugin);
         }
     };
-    setTimeout(() => {
-        document.addEventListener("click", onDocClick, { capture: true, once: true });
-        document.addEventListener("keydown", onKeydown, { once: true });
+    lvSurfaceStack.push({
+        id: popoverSurfaceId,
+        type: "menu",
+        dismiss: () => {
+            if (dismissed) {
+                popSurface();
+                return false;
+            }
+            closeQuickAccessPopover(plugin);
+            return "keep";
+        },
+    });
+    attachTimer = setTimeout(() => {
+        attachTimer = null;
+        if (dismissed) return;
+        listenersAttached = true;
+        document.addEventListener("click", onDocClick, { capture: true });
+        document.addEventListener("keydown", onKeydown, { capture: true });
     }, 10);
 
     plugin.quickAccessPopoverDismiss = () => {
-        document.removeEventListener("click", onDocClick, { capture: true });
-        document.removeEventListener("keydown", onKeydown);
+        if (dismissed) return;
+        dismissed = true;
+        popSurface();
+        if (attachTimer !== null) {
+            clearTimeout(attachTimer);
+            attachTimer = null;
+        }
+        if (listenersAttached) {
+            listenersAttached = false;
+            document.removeEventListener("click", onDocClick, { capture: true });
+            document.removeEventListener("keydown", onKeydown, { capture: true });
+        }
         popover.remove();
     };
 
     document.body.appendChild(popover);
+    const actualPopH = popover.getBoundingClientRect?.().height ?? 0;
+    if (actualPopH > 0 && typeof window !== "undefined") {
+        const clampedY = Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - actualPopH - 8));
+        popover.style.top = `${clampedY}px`;
+    }
 }
 
 export function openSearchModal(
@@ -280,12 +417,18 @@ export function openSearchModal(
                 plugin.state.search.clipPanelCollapsed = collapsed;
                 plugin.persistSoon();
             },
+            homeRecentClipCollapsed: plugin.state.search.homeRecentClipCollapsed ?? false,
+            onHomeRecentClipCollapsedChange: (collapsed: any) => {
+                plugin.state.search.homeRecentClipCollapsed = collapsed;
+                plugin.persistSoon();
+            },
             columnWidths: plugin.state.search.columnWidths,
             onColumnWidthsChange: (widths: any) => {
                 plugin.state.search.columnWidths = widths;
                 plugin.persistSoon();
             },
             getProfilePresets: () => plugin.state.profilePresets ?? {},
+            getAllEntries: () => plugin.library.getIndex()?.entries ?? [],
             getDocumentContext: () => {
                 const info = plugin.host.currentDocInfo();
                 return {
@@ -723,11 +866,35 @@ export function openSearchModal(
             },
             runAction: (itemId: any, mode: any) => withEditorTarget(mode, async (snapshot) => {
                 if (itemId.startsWith("xlc-omni-") || itemId.startsWith("xlc-clip-")) {
-                    const active = plugin.searchDialog?.getActiveEntry();
-                    const content = active?.content || active?.summary || "";
+                    const matched = plugin.searchDialog?.getEntryById?.(itemId) ?? null;
+                    let content = matched?.content || matched?.summary || "";
+                    let entryTitle = matched?.title || "条目";
+                    if (!matched && itemId.startsWith("xlc-omni-")) {
+                        const cleanId = itemId.replace(/^xlc-omni-/, "");
+                        if (isBlockId(cleanId)) {
+                            try {
+                                const res = await plugin.kernelClient.request<{kramdown?: unknown}>("getBlockKramdown", {id: cleanId});
+                                if (res && typeof res.kramdown === "string" && res.kramdown.trim()) {
+                                    content = res.kramdown.trim();
+                                }
+                            } catch {}
+                        }
+                    }
+                    if (!content) {
+                        const active = plugin.searchDialog?.getActiveEntry();
+                        if (active && active.id === itemId) {
+                            content = active.content || active.summary || "";
+                            entryTitle = active.title || entryTitle;
+                        }
+                    }
+                    if (!content) {
+                        const msg = plugin.i18nFn()(mode.startsWith("copy") ? "copyFailed" : "insertFailed");
+                        plugin.notify("error", msg);
+                        return {ok: false, message: msg};
+                    }
                     if (mode.startsWith("copy")) {
                         const ok = await plugin.host.writeClipboard(kramdownToPlainText(content));
-                        const msg = ok ? plugin.i18nFn()("copied", shortTitle(active?.title || "条目")) : plugin.i18nFn()("copyFailed");
+                        const msg = ok ? plugin.i18nFn()("copied", shortTitle(entryTitle)) : plugin.i18nFn()("copyFailed");
                         if (!ok) plugin.notify("error", msg);
                         return {ok, message: msg};
                     } else {
@@ -743,13 +910,13 @@ export function openSearchModal(
                                 return plugin.host.insertMarkdown(content, snapshot);
                             });
                         }
-                        let msg = ok ? plugin.i18nFn()("inserted", shortTitle(active?.title || "条目")) : plugin.i18nFn()("insertFailed");
+                        let msg = ok ? plugin.i18nFn()("inserted", shortTitle(entryTitle)) : plugin.i18nFn()("insertFailed");
                         if (!ok && (plugin.host.isMobile() || targetUnavailable)) {
                             const copied = await plugin.host.writeClipboard(kramdownToPlainText(content));
                             if (copied) {
                                 ok = true;
                                 msg = plugin.host.isMobile()
-                                    ? plugin.i18nFn()("copied", shortTitle(active?.title || "条目"))
+                                    ? plugin.i18nFn()("copied", shortTitle(entryTitle))
                                     : snapshot?.editor ? plugin.i18nFn()("insertTargetUnavailableCopied") : plugin.i18nFn()("insertNoEditor");
                             }
                         }

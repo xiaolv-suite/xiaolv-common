@@ -4,10 +4,10 @@
 // 键盘：↑↓ 选择（预览跟随）、Enter 插入、Ctrl+Enter 复制、Esc 关闭；搜索框首焦点。
 // 触控：44px 命中区、长按 550ms（移动 <10px 判定）弹动作菜单；不依赖 hover、不做坐标猜测。
 // AI：? 前缀语义找条目（默认仅元数据出域）；动作菜单 AI 变换（预览后选插入，原文永不被改写）。
-import {Dialog, Menu, confirm} from "siyuan";
+import {Dialog, Menu} from "siyuan";
 import {lvEcosystem, lvLaunchpad, lvNotify, lvSurfaceStack, mountLvAiThinkingCard} from "../libs/lv-notice-kit";
-import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap, openTextPromptDialog} from "./dialog-dom";
-import {ITEM_TYPES, ItemType, getCategoryColorVariant, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations, extractCleanPayload} from "../model/item";
+import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap, openConfirmDialog, openTextPromptDialog} from "./dialog-dom";
+import {ITEM_TYPES, ItemType, deriveSmartSummary, isBlockId, kramdownToPlainText, parseSnippetAnnotations, extractCleanPayload} from "../model/item";
 import {ItemSortMode, ColumnWidths} from "../model/storage";
 import {cleanClipboardText, formatPanguSpacing, tsvToMarkdownTable, formatJsonText, compactJsonText, stripUrlTrackingParams, normalizeListFormatting, deduplicateLines, compactWhitespaceAndLines, convertWidth, encodeBase64, decodeBase64, encodeUrlText, decodeUrlText, toggleMarkdownBlockquote, escapeHtmlEntities, unescapeHtmlEntities, formatMarkdownTable, csvToJson, toggleMarkdownTaskStatus, extractMarkdownLinks, generateTextHash, titleCaseLines, reverseLines, sortLinesByLength, numberLines, trimLinesAdvanced, normalizeObjectQuotes, truncateText, stripAffixes, propertiesToJson, jsonToProperties, maskSensitiveText, joinLinesWithDelimiter, splitTextToLines, formatChineseCurrency, extractInitials, stripMarkdownFormatting, formatByteSize, shuffleLines, filterLines, reverseText, romanToArabic, arabicToRoman, padLines, explainCronExpression, convertChineseVariant, compactBlankLines, formatRelativeTime, countWordFrequency, surroundEachLine, extractExecutiveSummary, convertIndentation, sumNumericLines, getChineseZodiacAndStemBranch, extractRepeatedPhrases, extractColumnFromLines, pickWeightedOption, pluralizeText, transposeMatrixText, numberToEnglishWords, expandEnglishContractions, diffLinesQuick, convertColorFormat, humanizeIdentifier, zipLines, calculateStats, slugifyText, setOperationsOnLines, convertRadix, stripAffixWords, parseKeyValuePairs, sortLinesByColumn, formatByRegexGroups, indentLines, outdentLines, validateFormat, filterMarkdownTable, swapLineParts, parsePathParts, deduplicateWithCount, normalizeSmartQuotes, interleaveLines, convertObjectKeysCase, formatUnitSpacing, filterCharacterSet, generateNanoId, toggleLineComments, renderSimpleTemplate, checkBracketsBalance, normalizePunctuationAdaptive, obfuscateText, wrapTextLines, shiftMarkdownHeadings, ensureLineAffixes, regexReplaceMultiline, detectCodeLanguage, scrambleText, compactRepeatedCharacters, calculateTaskProgress, sliceLinesByPattern, formatNumberGrouping, shiftMarkdownBlockquotes, calculateChecksum, alignDelimitedColumns, stripCodeComments, groupLinesByPattern, normalizeHorizontalRules, alignMarkdownTableColumns, padOrTruncate, sanitizeLineEndingsAndSpaces, convertIdentifierNamingStyle, generateNumericSequence, markdownTableToDelimited, convertListStyle, generateShortHash, filterTaskItems, filterLinesByAffix, generateRandomColor, renumberOrderedList, convertMarkdownLinks, truncateByBytes, formatPunctuationSpacing, markdownTableToKeyValue, extractChinesePinyinInitials, normalizeBlankLinesStrict, keyValueToMarkdownTable, generateMarkdownToc, setMarkdownCodeFenceLang, escapeMacroPipe, formatTextColumnsGrid, sortMarkdownList, repeatText, sortLinesByVisualWidth, invertTaskStatus, centerText, convertListDelimiter, normalizeMarkdownFootnotes, escapeBackslash, chunkLinesByDelimiter, flattenMarkdownBlockquotes, reverseWords, stripInlineMarkdownFormatting, formatKpiSummaryCard, generateRandomName, groupLinesByAlphabet, measureVisualWidth, shiftListIndentation, flattenNestedList, formatCJKSpacingComprehensive, convertNumberSymbols, extractCodeBlocksFromMarkdown, convertHeadingsToList, filterNumericRangeLines, numberMarkdownHeadings, formatTaskProgressBar, transposeMarkdownTable, beautifyMarkdownTable, queryJsonPath, formatMarkdownCallout} from "../model/clipboard-cleaner";
 import {inferTypeFromText} from "../model/item";
@@ -45,6 +45,7 @@ import {STARTER_PACKS, StarterPackMeta, YIWAIWAI_DEFAULT_PRESET_PACK_MD, DEFAULT
 import {openPromoteClipDialog, PromoteClipPayload} from "./promote-clip";
 import {formatMiniHeroSnippet, buildMiniCategoryChips, calculateMiniPopoverPosition, formatCollapsedPillMarquee} from "../model/mini-mode";
 import {DesktopFloatHandle, isElectronFloatAvailable, openDesktopFloatWindow} from "./desktop-float-window";
+import {createGmSvg, getGmTypeLabel, mapItemTypeToIconKind} from "./gm-icons";
 
 /**
  * 提取条目关联的真实 22 位思源物理块 ID（T-0757 / FN-02）：
@@ -151,6 +152,9 @@ export interface DialogDeps {
     /** 剪贴板专属面板折叠状态（桌面端默认 false 展开）与变更回调 */
     clipPanelCollapsed?: boolean;
     onClipPanelCollapsedChange?: (collapsed: boolean) => void;
+    /** 首页中栏「最近剪贴板」速用区折叠状态（默认 false 展开）与变更回调 */
+    homeRecentClipCollapsed?: boolean;
+    onHomeRecentClipCollapsedChange?: (collapsed: boolean) => void;
     /** 四栏桌面大视窗自定义列宽记忆（像素值） */
     columnWidths?: ColumnWidths;
     onColumnWidthsChange?: (widths: ColumnWidths) => void;
@@ -203,6 +207,8 @@ export interface DialogDeps {
     getPinnedTopChips?: () => string[];
     setPinnedTopChips?: (ids: string[]) => void;
     promoteClipboardEntry?: (entry: SearchEntry, payload: PromoteClipPayload) => Promise<boolean>;
+    /** 获取完整常用语库索引条目（用于剪贴板转正时检测全库简码冲突与悬浮窗全量数据） */
+    getAllEntries?: () => readonly SearchEntry[];
 }
 
 const TYPE_BADGES: Record<ItemType, string> = {
@@ -301,6 +307,8 @@ export class CommonSearchDialog {
     private miniChipsExpandBtn: HTMLButtonElement | null = null;
     private miniChipsExpanded = false;
     private desktopFloatHandle: DesktopFloatHandle | null = null;
+    private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+    private cachedLibraryEntries: SearchEntry[] = [];
     private miniPreviewPopoverEl: HTMLElement | null = null;
     private miniPreviewTimer: any = null;
     private miniPreviewActiveEntryId: string | null = null;
@@ -313,6 +321,7 @@ export class CommonSearchDialog {
     private surfaceUnregister?: (() => void);
     /** 桌面端左侧专属剪贴板快调面板 */
     private clipPanelCollapsed = false;
+    private homeRecentClipCollapsed = false;
     private clipPanelEl: HTMLElement | null = null;
     private clipPanelBodyEl: HTMLElement | null = null;
     /** 四栏桌面大视窗自定义列宽记忆与分割条引用 */
@@ -328,6 +337,29 @@ export class CommonSearchDialog {
     private collapsedTreeNodes = new Set<string>();
     /** 精选示范视图（✨ 系统置顶分类）：新老用户均可一键查看开箱精选模板并装入 */
     private featuredViewActive = false;
+    /** 石墨清雾三屏重构 DOM 引用 */
+    private gmRailEl: HTMLElement | null = null;
+    private gmRailGroupsEl: HTMLElement | null = null;
+    private gmHeaderMoreOpen = false;
+    private gmHeaderMoreDismiss: (() => void) | null = null;
+    private gmHeaderMoreCleanup: (() => void) | null = null;
+    private headerDragCleanup: (() => void) | null = null;
+    private miniDragCleanup: (() => void) | null = null;
+    private gmPinnedSectionEl: HTMLElement | null = null;
+    private gmPinnedGridEl: HTMLElement | null = null;
+    private gmRecentClipSectionEl: HTMLElement | null = null;
+    private gmRecentClipListEl: HTMLElement | null = null;
+    private gmRecentClipCountEl: HTMLElement | null = null;
+    private gmRecentClipToggleBtn: HTMLButtonElement | null = null;
+    private gmRecentClipViewAllBtn: HTMLButtonElement | null = null;
+    private gmListCountEl: HTMLElement | null = null;
+    private gmListLabelEl: HTMLElement | null = null;
+    private gmMainHeadingEl: HTMLElement | null = null;
+    private gmMainSubEl: HTMLElement | null = null;
+    private gmPhoneTitleEl: HTMLElement | null = null;
+    private gmPhoneNavEl: HTMLElement | null = null;
+    private gmTypeSelectEl: HTMLSelectElement | null = null;
+    private gmSortSelectEl: HTMLSelectElement | null = null;
 
     constructor(private readonly deps: DialogDeps) {
         if (deps.density) this.density = deps.density;
@@ -335,6 +367,7 @@ export class CommonSearchDialog {
         if (deps.miniPosition) this.miniPosition = deps.miniPosition;
         if (deps.miniCollapsed !== undefined) this.miniCollapsed = deps.miniCollapsed;
         if (deps.clipPanelCollapsed !== undefined) this.clipPanelCollapsed = deps.clipPanelCollapsed;
+        if (deps.homeRecentClipCollapsed !== undefined) this.homeRecentClipCollapsed = deps.homeRecentClipCollapsed;
 
         // 桌面四栏宽度记忆加载（优先配置传入，次之本地存储缓存，兜底默认）
         const defaultWidths = { clip: 260, cat: 180, list: 340 };
@@ -357,8 +390,9 @@ export class CommonSearchDialog {
     open(): void {
         const isMobile = this.deps.isMobile();
         void this.deps.syncSystemClipboard?.().then((latest) => {
-            if (latest && this.clipPanelEl) {
-                this.renderClipPanelContent();
+            if (latest) {
+                if (this.clipPanelEl) this.renderClipPanelContent();
+                if (this.gmRecentClipSectionEl) this.renderGmRecentClipStrip();
             }
         });
         if (this.deps.initialScope) {
@@ -386,6 +420,10 @@ export class CommonSearchDialog {
                 if (this.menuDismiss) {
                     this.menuDismiss();
                     this.menuDismiss = null;
+                    return "keep";
+                }
+                if (this.gmHeaderMoreOpen && this.gmHeaderMoreDismiss) {
+                    this.gmHeaderMoreDismiss();
                     return "keep";
                 }
                 if (this.multiSelectMode) {
@@ -433,17 +471,19 @@ export class CommonSearchDialog {
             });
         }
         const container = this.dialog.element.querySelector<HTMLElement>(".b3-dialog__container");
-        if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host");
+        if (container) container.classList.add(isMobile ? "xlc-sheet" : "xlc-dialog-host", "xlc-gm-surface");
         this.bindMobileVisualViewport(isMobile, container, content);
         mountPlatformDialogTitleWrap(this.dialog.element, this.deps.t("pluginName"));
         if (!isMobile) {
             adaptSecondaryDialogForMobile(this.dialog, this.deps.t("close") || "关闭");
             const headerEl = this.dialog.element.querySelector<HTMLElement>(".b3-dialog__header");
-            if (headerEl && container && typeof headerEl.addEventListener === "function") {
-                headerEl.classList?.add?.("xlc-dialog-header-draggable");
-                headerEl.addEventListener("mousedown", (ev: MouseEvent) => {
+            const viewHeadEl = this.dialog.element.querySelector<HTMLElement>(".xlc-gm-view-head");
+            const attachDragHandle = (handleEl: HTMLElement | null) => {
+                if (!handleEl || !container || typeof handleEl.addEventListener !== "function") return;
+                handleEl.classList?.add?.("xlc-dialog-header-draggable");
+                handleEl.addEventListener("mousedown", (ev: MouseEvent) => {
                     if (ev.button !== 0) return;
-                    if ((ev.target as HTMLElement | null)?.closest?.("button, .b3-dialog__close, .xlc-dialog-close-btn")) return;
+                    if ((ev.target as HTMLElement | null)?.closest?.("button, a, input, select, .b3-dialog__close, .xlc-dialog-close-btn, .xlc-gm-more-menu")) return;
                     ev.preventDefault();
                     const rect = container.getBoundingClientRect();
                     const shiftX = ev.clientX - rect.left;
@@ -458,14 +498,24 @@ export class CommonSearchDialog {
                         container.style.margin = "0";
                         container.style.transform = "none";
                     };
-                    const onUp = () => {
-                        document.removeEventListener("mousemove", onMove);
-                        document.removeEventListener("mouseup", onUp);
+                    const cleanupHeaderDrag = () => {
+                        if (typeof document !== "undefined") {
+                            document.removeEventListener("mousemove", onMove);
+                            document.removeEventListener("mouseup", onUp);
+                        }
+                        if (this.headerDragCleanup === cleanupHeaderDrag) {
+                            this.headerDragCleanup = null;
+                        }
                     };
+                    const onUp = () => cleanupHeaderDrag();
+                    this.headerDragCleanup?.();
+                    this.headerDragCleanup = cleanupHeaderDrag;
                     document.addEventListener("mousemove", onMove);
                     document.addEventListener("mouseup", onUp);
                 });
-            }
+            };
+            attachDragHandle(headerEl);
+            attachDragHandle(viewHeadEl);
         }
         this.applyMiniMode();
         this.syncScopeChips();
@@ -587,20 +637,207 @@ export class CommonSearchDialog {
 
     private buildDom(isMobile: boolean): HTMLElement {
         const root = document.createElement("div");
-        root.className = "xlc-dialog" + (isMobile ? " xlc-dialog--mobile" : "");
+        root.className = "xlc-dialog xlc-gm-surface" + (isMobile ? " xlc-dialog--mobile" : "");
+
+        // 桌面端左侧精简导航（风格 A · 石墨清雾：置顶常用 / 最近使用 / 剪贴板 / 分组 / 偏好与维护）
+        if (!isMobile) {
+            const rail = this.buildGmRail();
+            this.gmRailEl = rail;
+            root.appendChild(rail);
+        } else {
+            const phoneTopbar = document.createElement("div");
+            phoneTopbar.className = "xlc-gm-phone-topbar";
+            const ptLeft = document.createElement("div");
+            ptLeft.className = "xlc-gm-phone-topbar-title";
+            const ptMark = document.createElement("span");
+            ptMark.className = "xlc-gm-rail-mark xlc-gm-rail-mark--sm";
+            ptMark.setAttribute("aria-hidden", "true");
+            ptMark.textContent = "常";
+            const ptTitle = document.createElement("span");
+            ptTitle.textContent = "全部常用";
+            this.gmPhoneTitleEl = ptTitle;
+            ptLeft.append(ptMark, ptTitle);
+
+            const ptActions = document.createElement("div");
+            ptActions.className = "xlc-gm-phone-topbar-actions";
+            const ptNewBtn = document.createElement("button");
+            ptNewBtn.type = "button";
+            ptNewBtn.className = "b3-button xlc-btn-primary xlc-gm-btn-sm xlc-gm-btn-touch";
+            ptNewBtn.dataset.xlcControl = "search.mobile.gm-new";
+            ptNewBtn.textContent = "+ 收藏常用";
+            ptNewBtn.addEventListener("click", () => this.deps.newItem());
+
+            const ptSettingsBtn = document.createElement("button");
+            ptSettingsBtn.type = "button";
+            ptSettingsBtn.className = "xlc-gm-phone-icon-btn";
+            ptSettingsBtn.dataset.xlcControl = "search.mobile.settings";
+            ptSettingsBtn.title = this.deps.t("openSettings") || "偏好设置";
+            ptSettingsBtn.setAttribute("aria-label", this.deps.t("openSettings") || "偏好设置");
+            ptSettingsBtn.appendChild(createGmSvg("settings", "xlc-gm-svg"));
+            ptSettingsBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.destroy();
+                this.deps.openSetup();
+            });
+
+            const ptCloseBtn = document.createElement("button");
+            ptCloseBtn.type = "button";
+            ptCloseBtn.className = "xlc-mobile-close-btn";
+            ptCloseBtn.dataset.xlcControl = "search.mobile.close";
+            ptCloseBtn.textContent = "✕";
+            ptCloseBtn.title = this.deps.t("close") || "关闭";
+            ptCloseBtn.setAttribute("aria-label", this.deps.t("close") || "关闭搜索弹窗");
+            ptCloseBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.destroy();
+            });
+            ptActions.append(ptNewBtn, ptSettingsBtn, ptCloseBtn);
+            phoneTopbar.append(ptLeft, ptActions);
+            root.appendChild(phoneTopbar);
+        }
+
+        const workspace = document.createElement("div");
+        workspace.className = "xlc-gm-workspace";
+        root.appendChild(workspace);
+
+        if (!isMobile) {
+            const viewHead = document.createElement("div");
+            viewHead.className = "xlc-gm-view-head";
+            const headTitleWrap = document.createElement("div");
+            headTitleWrap.className = "xlc-gm-view-head-title";
+            const heading = document.createElement("h3");
+            heading.textContent = "全部常用";
+            this.gmMainHeadingEl = heading;
+            const sub = document.createElement("p");
+            sub.textContent = "高频项置顶一键直达，其余按分组清爽收纳";
+            this.gmMainSubEl = sub;
+            headTitleWrap.append(heading, sub);
+
+            const headActions = document.createElement("div");
+            headActions.className = "xlc-gm-view-head-actions";
+            const addBtn = document.createElement("button");
+            addBtn.type = "button";
+            addBtn.className = "b3-button xlc-btn-primary xlc-gm-btn-sm";
+            addBtn.dataset.xlcControl = "search.gm-new";
+            addBtn.textContent = "+ 收藏常用";
+            addBtn.addEventListener("click", () => this.deps.newItem());
+
+            const moreWrap = document.createElement("div");
+            moreWrap.className = "xlc-gm-more-wrap";
+            const moreBtn = document.createElement("button");
+            moreBtn.type = "button";
+            moreBtn.className = "b3-button xlc-gm-btn-sm";
+            moreBtn.dataset.xlcControl = "search.more-menu-toggle";
+            moreBtn.setAttribute("aria-haspopup", "menu");
+            moreBtn.setAttribute("aria-expanded", "false");
+            moreBtn.textContent = "更多 ▾";
+
+            const moreMenu = document.createElement("div");
+            moreMenu.className = "xlc-gm-more-menu";
+            moreMenu.setAttribute("role", "menu");
+            moreMenu.hidden = true;
+
+            const closeHeaderMore = () => {
+                this.gmHeaderMoreOpen = false;
+                moreMenu.hidden = true;
+                moreBtn.setAttribute("aria-expanded", "false");
+            };
+            this.gmHeaderMoreDismiss = closeHeaderMore;
+
+            const mkMenuItem = (label: string, onClick: () => void) => {
+                const b = document.createElement("button");
+                b.type = "button";
+                b.setAttribute("role", "menuitem");
+                b.textContent = label;
+                b.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    closeHeaderMore();
+                    onClick();
+                });
+                return b;
+            };
+
+            moreMenu.append(
+                mkMenuItem("批量整理分组与标签", () => this.toggleMultiSelectMode()),
+                mkMenuItem("导入与导出常用包", () => {
+                    this.destroy();
+                    this.deps.openSetup();
+                }),
+                mkMenuItem("浏览行业精选模板", () => {
+                    if (this.deps.importStarterPackDirect) {
+                        openStarterPacksHubDialog({
+                            t: this.deps.t,
+                            notify: this.deps.notify,
+                            importStarterPackDirect: this.deps.importStarterPackDirect,
+                            createStarterPackDedicatedDoc: this.deps.createStarterPackDedicatedDoc,
+                            onImportSuccess: () => void this.refresh(),
+                        });
+                    }
+                }),
+                mkMenuItem("切换极速搜索浮条 (Alt+M)", () => this.toggleMiniMode()),
+                mkMenuItem("使用帮助与实操指引", () => this.openUsageGuide()),
+            );
+            const menuSep = document.createElement("div");
+            menuSep.className = "xlc-gm-more-menu-sep";
+            moreMenu.appendChild(menuSep);
+            moreMenu.appendChild(
+                mkMenuItem("偏好设置与内容体检", () => {
+                    this.destroy();
+                    this.deps.openSetup();
+                })
+            );
+
+            moreBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                this.gmHeaderMoreOpen = !this.gmHeaderMoreOpen;
+                moreMenu.hidden = !this.gmHeaderMoreOpen;
+                moreBtn.setAttribute("aria-expanded", String(this.gmHeaderMoreOpen));
+            });
+            const onDocMoreClick = (ev: MouseEvent) => {
+                if (this.gmHeaderMoreOpen && !moreWrap.contains(ev.target as Node)) {
+                    closeHeaderMore();
+                }
+            };
+            this.gmHeaderMoreCleanup?.();
+            if (typeof document !== "undefined") {
+                document.addEventListener("click", onDocMoreClick, true);
+            }
+            this.gmHeaderMoreCleanup = () => {
+                if (typeof document !== "undefined") {
+                    document.removeEventListener("click", onDocMoreClick, true);
+                }
+            };
+
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.className = "xlc-gm-view-head-close";
+            closeBtn.dataset.xlcControl = "search.desktop.close";
+            closeBtn.title = (this.deps.t("close") || "关闭") + " (Esc)";
+            closeBtn.setAttribute("aria-label", this.deps.t("close") || "关闭");
+            closeBtn.appendChild(createGmSvg("close", "xlc-gm-svg"));
+            closeBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                this.destroy();
+            });
+
+            moreWrap.append(moreBtn, moreMenu);
+            headActions.append(addBtn, moreWrap, closeBtn);
+            viewHead.append(headTitleWrap, headActions);
+            workspace.appendChild(viewHead);
+        }
 
         // 顶部：搜索框。把普通搜索与 ? 语义搜索拆成可读提示，避免用户只看到一个神秘符号。
         const top = document.createElement("div");
         top.className = "xlc-top";
 
-        // 极窄迷你悬浮条统一紧凑顶栏（合并标题 + 钉住 + 独立悬浮窗 + 切完整版 + 折叠 + 关闭为单行 ~36px）
+        // 极窄迷你悬浮条统一紧凑顶栏（单色极细，去玩具 Emoji）
         const miniDragBar = document.createElement("div");
         miniDragBar.className = "xlc-mini-drag-bar";
         miniDragBar.dataset.xlcControl = "search.mini.drag-bar";
 
         const handleText = document.createElement("span");
         handleText.className = "xlc-mini-drag-handle";
-        handleText.textContent = "⠿ " + (this.deps.t("pluginName") || "小驴常用");
+        handleText.textContent = "极速搜索 · " + (this.deps.t("pluginName") || "小驴常用");
         handleText.title = "按住拖拽移动悬浮窗位置，双击折叠/展开";
         handleText.addEventListener("dblclick", () => {
             this.toggleMiniCollapse();
@@ -629,12 +866,23 @@ export class CommonSearchDialog {
                 this.miniPosition = {x: Math.round(newX), y: Math.round(newY)};
             };
 
+            const cleanupMiniDrag = () => {
+                if (typeof document !== "undefined") {
+                    document.removeEventListener("mousemove", onMouseMove);
+                    document.removeEventListener("mouseup", onMouseUp);
+                }
+                if (this.miniDragCleanup === cleanupMiniDrag) {
+                    this.miniDragCleanup = null;
+                }
+            };
+
             const onMouseUp = () => {
-                document.removeEventListener("mousemove", onMouseMove);
-                document.removeEventListener("mouseup", onMouseUp);
+                cleanupMiniDrag();
                 const containerRect = container.getBoundingClientRect();
-                const curLeft = parseFloat(container.style.left) || rect.left;
-                const curTop = parseFloat(container.style.top) || rect.top;
+                const parsedLeft = parseFloat(container.style.left);
+                const parsedTop = parseFloat(container.style.top);
+                const curLeft = Number.isFinite(parsedLeft) ? parsedLeft : rect.left;
+                const curTop = Number.isFinite(parsedTop) ? parsedTop : rect.top;
                 const snap = calculateMagneticSnap(
                     curLeft,
                     curTop,
@@ -654,6 +902,8 @@ export class CommonSearchDialog {
                 }
             };
 
+            this.miniDragCleanup?.();
+            this.miniDragCleanup = cleanupMiniDrag;
             document.addEventListener("mousemove", onMouseMove);
             document.addEventListener("mouseup", onMouseUp);
         });
@@ -665,7 +915,7 @@ export class CommonSearchDialog {
         miniPinBtn.type = "button";
         miniPinBtn.className = "xlc-mini-bar-btn" + (this.pinWindow ? " xlc-mini-bar-btn--active" : "");
         miniPinBtn.dataset.xlcControl = "search.mini.pin";
-        miniPinBtn.textContent = "📌";
+        miniPinBtn.appendChild(createGmSvg("star", "xlc-gm-svg xlc-gm-svg--xs"));
         miniPinBtn.title = "应用内固定（插入后保持打开，Alt+P 切换）";
         miniPinBtn.setAttribute("aria-label", "应用内固定");
         miniPinBtn.setAttribute("aria-pressed", String(this.pinWindow));
@@ -754,6 +1004,7 @@ export class CommonSearchDialog {
         const qMark = document.createElement("span");
         qMark.className = "xlc-search-icon";
         qMark.setAttribute("aria-hidden", "true");
+        qMark.appendChild(createGmSvg("search", "xlc-gm-svg xlc-gm-svg--sm"));
         const input = document.createElement("input");
         input.className = "b3-text-field xlc-search-input";
         input.dataset.xlcControl = "search.input";
@@ -848,35 +1099,6 @@ export class CommonSearchDialog {
         search.appendChild(input);
         search.appendChild(clearBtn);
 
-        if (isMobile) {
-            const mobileNewBtn = document.createElement("button");
-            mobileNewBtn.type = "button";
-            mobileNewBtn.className = "xlc-mobile-new-btn";
-            mobileNewBtn.dataset.xlcControl = "search.mobile.new";
-            mobileNewBtn.textContent = "＋";
-            mobileNewBtn.title = this.deps.t("newItem");
-            mobileNewBtn.setAttribute("aria-label", this.deps.t("newItem"));
-            mobileNewBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                this.deps.newItem();
-            });
-            search.appendChild(mobileNewBtn);
-
-            // 审计 1: 消除 Esc-only 隐患，手机端提供可见 ✕ 关闭按钮
-            const mobileCloseBtn = document.createElement("button");
-            mobileCloseBtn.type = "button";
-            mobileCloseBtn.className = "xlc-mobile-close-btn";
-            mobileCloseBtn.dataset.xlcControl = "search.mobile.close";
-            mobileCloseBtn.textContent = "✕";
-            mobileCloseBtn.title = this.deps.t("close") || "关闭";
-            mobileCloseBtn.setAttribute("aria-label", this.deps.t("close") || "关闭搜索弹窗");
-            mobileCloseBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                this.destroy();
-            });
-            search.appendChild(mobileCloseBtn);
-        }
-
         if (!isMobile) {
             // 应用内固定按钮（悬浮于思源编辑区之上，连续取用时不自动关闭，支持 Alt+P 快捷切换 · G50）
             const pinBtn = document.createElement("button");
@@ -945,10 +1167,10 @@ export class CommonSearchDialog {
         miniViewTabs.setAttribute("role", "tablist");
         miniViewTabs.setAttribute("aria-label", "迷你视图切换");
         const tabDefs: Array<{key: "home" | "common" | "clipboard" | "favorites"; label: string}> = [
-            {key: "home", label: "🏠 首页"},
-            {key: "common", label: "💬 常用语"},
-            {key: "clipboard", label: "📋 剪贴板"},
-            {key: "favorites", label: "⭐ 星标"},
+            {key: "home", label: "全部常用"},
+            {key: "common", label: "常用语"},
+            {key: "clipboard", label: "最近剪贴板"},
+            {key: "favorites", label: "置顶"},
         ];
         for (const tabDef of tabDefs) {
             const tabBtn = document.createElement("button");
@@ -1073,6 +1295,28 @@ export class CommonSearchDialog {
 
         const historyBar = document.createElement("div");
         historyBar.className = "xlc-search-history-bar";
+        historyBar.addEventListener("keydown", (e) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                const btns = Array.from(historyBar.querySelectorAll<HTMLButtonElement>("button"));
+                if (!btns.length) return;
+                const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                if (idx === -1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                btns[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                const btns = Array.from(historyBar.querySelectorAll<HTMLButtonElement>("button"));
+                if (!btns.length) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") btns[0]?.focus();
+                else btns[btns.length - 1]?.focus();
+            }
+        });
         const updateHistoryBar = (): void => {
             const hasText = input.value.trim().length > 0;
             if (this.currentScope === "clipboard") {
@@ -1123,28 +1367,6 @@ export class CommonSearchDialog {
             historyBar.replaceChildren();
             historyBar.setAttribute("role", "toolbar");
             historyBar.setAttribute("aria-label", "搜索历史");
-            historyBar.addEventListener("keydown", (e) => {
-                if (e.isComposing || e.keyCode === 229) return;
-                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                    const btns = Array.from(historyBar.querySelectorAll<HTMLButtonElement>("button"));
-                    if (!btns.length) return;
-                    const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
-                    if (idx === -1) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
-                    btns[nextIdx]?.focus();
-                    return;
-                }
-                if (e.key === "Home" || e.key === "End") {
-                    const btns = Array.from(historyBar.querySelectorAll<HTMLButtonElement>("button"));
-                    if (!btns.length) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (e.key === "Home") btns[0]?.focus();
-                    else btns[btns.length - 1]?.focus();
-                }
-            });
             const lbl = document.createElement("span");
             lbl.className = "xlc-history-label";
             lbl.textContent = "🕐 历史:";
@@ -1263,9 +1485,56 @@ export class CommonSearchDialog {
             topActions.appendChild(topNew);
             topMain.appendChild(topActions);
         }
+        const gmFilterControls = document.createElement("div");
+        gmFilterControls.className = "xlc-gm-filter-controls";
+        const gmTypeSelect = document.createElement("select");
+        gmTypeSelect.className = "xlc-gm-select";
+        gmTypeSelect.dataset.xlcControl = "gm.filter.type";
+        gmTypeSelect.setAttribute("aria-label", "按类型筛选");
+        const gmTypeOpts: Array<{value: string; label: string}> = [
+            {value: "", label: "类型：全部"},
+            {value: "text", label: "片段模板"},
+            {value: "blockref", label: "文档与块"},
+            {value: "url", label: "常用网址"},
+            {value: "code", label: "快捷命令"},
+            {value: "markdown", label: "Markdown"},
+            {value: "image", label: "图片素材"},
+            {value: "asset", label: "文档附件"},
+        ];
+        for (const optDef of gmTypeOpts) {
+            const opt = document.createElement("option");
+            opt.value = optDef.value;
+            opt.textContent = optDef.label;
+            gmTypeSelect.appendChild(opt);
+        }
+        const savedTypeFilter = this.deps.getFilters().type;
+        if (savedTypeFilter) gmTypeSelect.value = savedTypeFilter;
+        this.gmTypeSelectEl = gmTypeSelect;
+
+        const gmSortSelect = document.createElement("select");
+        gmSortSelect.className = "xlc-gm-select";
+        gmSortSelect.dataset.xlcControl = "gm.filter.sort";
+        gmSortSelect.setAttribute("aria-label", "排序方式");
+        const gmSortOpts: Array<{value: ItemSortMode; label: string}> = [
+            {value: "frequent", label: "按使用频次"},
+            {value: "recent", label: "按最近使用"},
+            {value: "title", label: "按名称排序"},
+            {value: "manual", label: "默认置顶顺序"},
+        ];
+        for (const sOpt of gmSortOpts) {
+            const opt = document.createElement("option");
+            opt.value = sOpt.value;
+            opt.textContent = sOpt.label;
+            gmSortSelect.appendChild(opt);
+        }
+        gmSortSelect.value = this.deps.getSort();
+        this.gmSortSelectEl = gmSortSelect;
+
+        gmFilterControls.append(gmTypeSelect, gmSortSelect);
+        topMain.appendChild(gmFilterControls);
         top.appendChild(topMain);
         if (kbdRow) top.appendChild(kbdRow);
-        root.appendChild(top);
+        workspace.appendChild(top);
 
         // 筛选 chips 行：每个控件的首项都带上语义前缀，避免「标签/分类」被误解成当前值。
         const filters = document.createElement("div");
@@ -1288,12 +1557,29 @@ export class CommonSearchDialog {
         const savedFilters = this.deps.getFilters();
         if (savedFilters.type) typeSelect.value = savedFilters.type;
         typeSelect.addEventListener("change", () => {
+            if (this.gmTypeSelectEl) this.gmTypeSelectEl.value = typeSelect.value;
             this.deps.setFilters({
                 type: typeSelect.value,
                 tag: tagSelect?.value ?? "",
                 category: categorySelect?.value ?? "",
             });
             this.syncMobileFilterToggleRef?.();
+            void this.refresh();
+        });
+        gmTypeSelect.addEventListener("change", () => {
+            typeSelect.value = gmTypeSelect.value;
+            this.deps.setFilters({
+                type: gmTypeSelect.value,
+                tag: tagSelect?.value ?? "",
+                category: categorySelect?.value ?? "",
+            });
+            this.syncMobileFilterToggleRef?.();
+            void this.refresh();
+        });
+        gmSortSelect.addEventListener("change", () => {
+            const nextSort = gmSortSelect.value as ItemSortMode;
+            this.deps.setSort(nextSort);
+            paintSort();
             void this.refresh();
         });
         filters.appendChild(typeSelect);
@@ -1497,19 +1783,41 @@ export class CommonSearchDialog {
             targetBanner.setAttribute("aria-label", this.deps.t(fallbackKey));
             filters.insertBefore(targetBanner, filters.firstChild);
         }
-        root.appendChild(filters);
+        workspace.appendChild(filters);
 
         // 热门标签快速筛选胶囊行（桌面与平板快捷直达）
-        const quickPills = document.createElement("div");
-        quickPills.className = "xlc-quick-filter-pills";
-        quickPills.style.display = "none";
-        root.appendChild(quickPills);
+        const quickPillsHost = document.createElement("div");
+        quickPillsHost.className = "xlc-quick-filter-pills";
+        quickPillsHost.style.display = "none";
+        quickPillsHost.addEventListener("keydown", (e) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                const btns = Array.from(quickPillsHost.querySelectorAll<HTMLButtonElement>(".xlc-quick-pill"));
+                if (!btns.length) return;
+                const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+                if (idx === -1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
+                btns[nextIdx]?.focus();
+                return;
+            }
+            if (e.key === "Home" || e.key === "End") {
+                const btns = Array.from(quickPillsHost.querySelectorAll<HTMLButtonElement>(".xlc-quick-pill"));
+                if (!btns.length) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Home") btns[0]?.focus();
+                else btns[btns.length - 1]?.focus();
+            }
+        });
+        workspace.appendChild(quickPillsHost);
 
         // 状态行（aria-live）
         const status = document.createElement("div");
         status.className = "xlc-status";
         status.setAttribute("aria-live", "polite");
-        root.appendChild(status);
+        workspace.appendChild(status);
 
         // 主体：剪贴板专属面板 + 易歪歪话术分类树 + 常用语列表 + 预览（桌面大视窗四栏）
         const bodyWrap = document.createElement("div");
@@ -1548,10 +1856,18 @@ export class CommonSearchDialog {
         list.addEventListener("keydown", (e) => void this.onKeydown(e));
         list.addEventListener("click", (e) => {
             if ((e.target as HTMLElement).closest(".xlc-row-action")) return;
-            const row = (e.target as HTMLElement).closest<HTMLElement>("[data-xlc-index]");
+            const row = (e.target as HTMLElement).closest<HTMLElement>("[data-xlc-index], [data-xlc-item-id]");
             if (!row) return;
-            const index = Number(row.dataset.xlcIndex);
-            const entry = this.results[index];
+            const rawIdx = row.dataset.xlcIndex !== undefined ? Number(row.dataset.xlcIndex) : -1;
+            let index = Number.isInteger(rawIdx) && rawIdx >= 0 ? rawIdx : -1;
+            let entry = index >= 0 ? this.results[index] : undefined;
+            if (!entry && row.dataset.xlcItemId) {
+                const foundIdx = this.results.findIndex((item) => item.id === row.dataset.xlcItemId);
+                if (foundIdx >= 0) {
+                    index = foundIdx;
+                    entry = this.results[foundIdx];
+                }
+            }
             if (!entry) return;
 
             // 多选模式或按住 Shift/Ctrl 点击行：切换选择状态
@@ -1588,17 +1904,23 @@ export class CommonSearchDialog {
         // 悬停更新预览（触屏设备无 hover 不受影响；迷你模式下展开悬浮气泡预览 Popover）
         list.addEventListener("mouseover", (e) => {
             if (isMobile) return;
-            const row = (e.target as HTMLElement).closest<HTMLElement>("[data-xlc-index]");
+            const row = (e.target as HTMLElement).closest<HTMLElement>("[data-xlc-index], [data-xlc-item-id]");
             if (!row) {
                 if (this.miniMode) this.scheduleHideMiniPreviewPopover();
                 return;
             }
-            const entry = this.results[Number(row.dataset.xlcIndex)];
+            const rawIdx = row.dataset.xlcIndex !== undefined ? Number(row.dataset.xlcIndex) : -1;
+            let idx = Number.isInteger(rawIdx) && rawIdx >= 0 ? rawIdx : -1;
+            let entry = idx >= 0 ? this.results[idx] : undefined;
+            if (!entry && row.dataset.xlcItemId) {
+                idx = this.results.findIndex((item) => item.id === row.dataset.xlcItemId);
+                entry = idx >= 0 ? this.results[idx] : undefined;
+            }
             if (!entry) return;
             if (this.miniMode) {
                 this.showMiniPreviewPopover(entry, row);
-            } else if (this.activeIndex !== Number(row.dataset.xlcIndex)) {
-                this.activeIndex = Number(row.dataset.xlcIndex);
+            } else if (this.activeIndex !== idx) {
+                this.activeIndex = idx;
                 this.activeProvider = -1; // 回到库行必须退出提供方激活态，否则预览/高亮与悬停行脱节（R138）
                 this.paintActive();
                 this.schedulePreview(entry);
@@ -1643,7 +1965,102 @@ export class CommonSearchDialog {
             }, {passive: true});
         }
 
-        bodyWrap.appendChild(list);
+        const listCol = document.createElement("div");
+        listCol.className = "xlc-gm-list-col";
+
+        const pinnedSection = document.createElement("div");
+        pinnedSection.className = "xlc-gm-pinned-section";
+        pinnedSection.hidden = true;
+        const pinnedHeader = document.createElement("div");
+        pinnedHeader.className = "xlc-gm-section-label-row";
+        const pinnedLabel = document.createElement("b");
+        pinnedLabel.appendChild(createGmSvg("star", "xlc-gm-svg xlc-gm-svg--xs"));
+        const pinnedLabelText = document.createElement("span");
+        pinnedLabelText.textContent = "置顶常用（一键直达）";
+        pinnedLabel.appendChild(pinnedLabelText);
+        const pinnedHint = document.createElement("span");
+        pinnedHint.className = "xlc-gm-section-hint";
+        pinnedHint.textContent = "点击卡片预览，点「插入」一键复用";
+        pinnedHeader.append(pinnedLabel, pinnedHint);
+        const pinnedGrid = document.createElement("div");
+        pinnedGrid.className = "xlc-gm-pinned-grid";
+        pinnedSection.append(pinnedHeader, pinnedGrid);
+        this.gmPinnedSectionEl = pinnedSection;
+        this.gmPinnedGridEl = pinnedGrid;
+        listCol.appendChild(pinnedSection);
+
+        const recentClipSection = document.createElement("section");
+        recentClipSection.className = "xlc-gm-recent-clip-section";
+        recentClipSection.dataset.xlcControl = "gm.recent-clip.section";
+        recentClipSection.setAttribute("aria-label", "最近剪贴板");
+        recentClipSection.hidden = true;
+        const recentClipHeader = document.createElement("div");
+        recentClipHeader.className = "xlc-gm-section-label-row xlc-gm-recent-clip-head";
+        const recentClipLabelWrap = document.createElement("div");
+        recentClipLabelWrap.className = "xlc-gm-recent-clip-title-wrap";
+        const recentClipLabel = document.createElement("b");
+        recentClipLabel.appendChild(createGmSvg("clipboard", "xlc-gm-svg xlc-gm-svg--xs"));
+        const recentClipLabelText = document.createElement("span");
+        recentClipLabelText.textContent = "最近剪贴板";
+        recentClipLabel.appendChild(recentClipLabelText);
+        const recentClipCount = document.createElement("span");
+        recentClipCount.className = "xlc-gm-recent-clip-count";
+        this.gmRecentClipCountEl = recentClipCount;
+        recentClipLabelWrap.append(recentClipLabel, recentClipCount);
+
+        const recentClipHeadActions = document.createElement("div");
+        recentClipHeadActions.className = "xlc-gm-recent-clip-head-actions";
+        const recentClipToggleBtn = document.createElement("button");
+        recentClipToggleBtn.type = "button";
+        recentClipToggleBtn.className = "xlc-gm-btn-link";
+        recentClipToggleBtn.dataset.xlcControl = "gm.recent-clip.toggle";
+        recentClipToggleBtn.addEventListener("click", () => {
+            this.homeRecentClipCollapsed = !this.homeRecentClipCollapsed;
+            this.deps.onHomeRecentClipCollapsedChange?.(this.homeRecentClipCollapsed);
+            this.renderGmRecentClipStrip();
+        });
+        const recentClipViewAllBtn = document.createElement("button");
+        recentClipViewAllBtn.type = "button";
+        recentClipViewAllBtn.className = "xlc-gm-btn-link xlc-gm-btn-link--accent";
+        recentClipViewAllBtn.dataset.xlcControl = "gm.recent-clip.view-all";
+        recentClipViewAllBtn.textContent = "查看全部 →";
+        recentClipViewAllBtn.addEventListener("click", () => {
+            this.featuredViewActive = false;
+            this.activeCategoryPath = "";
+            this.currentScope = "clipboard";
+            this.deps.setFilters({ ...this.deps.getFilters(), category: "" });
+            const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+            if (categorySelect) categorySelect.value = "";
+            this.syncScopeChips();
+            this.syncCategoryTreeActive();
+            void this.refresh();
+        });
+        recentClipHeadActions.append(recentClipToggleBtn, recentClipViewAllBtn);
+        recentClipHeader.append(recentClipLabelWrap, recentClipHeadActions);
+
+        const recentClipList = document.createElement("div");
+        recentClipList.className = "xlc-gm-recent-clip-card";
+        recentClipSection.append(recentClipHeader, recentClipList);
+        this.gmRecentClipSectionEl = recentClipSection;
+        this.gmRecentClipListEl = recentClipList;
+        this.gmRecentClipToggleBtn = recentClipToggleBtn;
+        this.gmRecentClipViewAllBtn = recentClipViewAllBtn;
+        listCol.appendChild(recentClipSection);
+
+        const listHeader = document.createElement("div");
+        listHeader.className = "xlc-gm-section-label-row";
+        const listLabel = document.createElement("b");
+        listLabel.textContent = "全部分组清单";
+        this.gmListLabelEl = listLabel;
+        const listCount = document.createElement("span");
+        listCount.className = "xlc-gm-section-count";
+        listCount.textContent = "共 0 项";
+        this.gmListCountEl = listCount;
+        listHeader.append(listLabel, listCount);
+        listCol.appendChild(listHeader);
+
+        listCol.appendChild(list);
+        bodyWrap.appendChild(listCol);
 
         // 参考图同款：移动端右下角深色悬浮快捷新建加号键（FAB）
         if (isMobile) {
@@ -1701,8 +2118,8 @@ export class CommonSearchDialog {
             bodyWrap.appendChild(pane);
             this.setupColumnResizers(bodyWrap);
         }
-        root.appendChild(bodyWrap);
-        root.appendChild(this.buildBatchBar());
+        workspace.appendChild(bodyWrap);
+        workspace.appendChild(this.buildBatchBar());
 
         // 常用语购物车暂存托盘栏（CAND-019 / TODO-FEAT-018）
         const trayEl = document.createElement("div");
@@ -1710,7 +2127,7 @@ export class CommonSearchDialog {
         trayEl.dataset.xlcControl = "search.paste-tray";
         trayEl.style.display = "none";
         this.pasteTrayEl = trayEl;
-        root.appendChild(trayEl);
+        workspace.appendChild(trayEl);
 
         // 底栏（原型：左计数 / 右真源声明 + 设置入口；移动端=操作钮行 + 点按提示）
         const footer = document.createElement("div");
@@ -1872,7 +2289,102 @@ export class CommonSearchDialog {
         });
         footRight.appendChild(gear);
         footer.appendChild(footRight);
-        root.appendChild(footer);
+        workspace.appendChild(footer);
+
+        // 极速搜索弹窗底部快捷键提示条（Raycast / Linear Command Palette）
+        const cmdFooter = document.createElement("div");
+        cmdFooter.className = "xlc-gm-cmd-footer";
+        cmdFooter.dataset.xlcControl = "search.mini.cmd-footer";
+        const hintsWrap = document.createElement("div");
+        hintsWrap.className = "xlc-gm-cmd-hints";
+        const isApple = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform || "");
+        const hintsPairs: ReadonlyArray<readonly [string, string]> = [
+            ["↑↓", "选择"],
+            ["Enter", "插入"],
+            [isApple ? "⌘Enter" : "Ctrl+Enter", "复制"],
+            ["Tab", "更多动作"],
+            ["Esc", "关闭"],
+        ];
+        for (const [kbd, lbl] of hintsPairs) {
+            const hItem = document.createElement("span");
+            hItem.className = "xlc-gm-cmd-hint-item";
+            const cap = document.createElement("span");
+            cap.className = "xlc-gm-kbd-cap";
+            cap.textContent = kbd;
+            const txt = document.createElement("span");
+            txt.textContent = lbl;
+            hItem.append(cap, txt);
+            hintsWrap.appendChild(hItem);
+        }
+        const cmdNewBtn = document.createElement("button");
+        cmdNewBtn.type = "button";
+        cmdNewBtn.className = "b3-button b3-button--text xlc-gm-btn-xs";
+        cmdNewBtn.dataset.xlcControl = "search.mini.new";
+        cmdNewBtn.textContent = "+ 新建常用";
+        cmdNewBtn.addEventListener("click", () => this.deps.newItem());
+        cmdFooter.append(hintsWrap, cmdNewBtn);
+        workspace.appendChild(cmdFooter);
+
+        if (isMobile) {
+            const phoneNav = document.createElement("div");
+            phoneNav.className = "xlc-gm-phone-bottom-nav";
+            phoneNav.setAttribute("role", "tablist");
+            phoneNav.setAttribute("aria-label", "移动端视图导航");
+            const navDefs: Array<{key: string; icon: "all" | "star" | "clipboard" | "search"; label: string; onClick: () => void}> = [
+                {
+                    key: "all", icon: "all", label: "全部常用",
+                    onClick: () => {
+                        this.featuredViewActive = false;
+                        this.activeCategoryPath = "";
+                        this.currentScope = "all";
+                        this.deps.setFilters({ ...this.deps.getFilters(), category: "" });
+                        this.syncScopeChips();
+                        void this.refresh();
+                    },
+                },
+                {
+                    key: "favorites", icon: "star", label: "置顶",
+                    onClick: () => {
+                        this.featuredViewActive = false;
+                        this.activeCategoryPath = "";
+                        this.currentScope = "favorites";
+                        this.syncScopeChips();
+                        void this.refresh();
+                    },
+                },
+                {
+                    key: "clipboard", icon: "clipboard", label: "剪贴板",
+                    onClick: () => {
+                        this.featuredViewActive = false;
+                        this.activeCategoryPath = "";
+                        this.currentScope = "clipboard";
+                        this.deps.setFilters({ ...this.deps.getFilters(), category: "" });
+                        this.syncScopeChips();
+                        void this.refresh();
+                    },
+                },
+                {
+                    key: "search", icon: "search", label: "极速搜",
+                    onClick: () => {
+                        this.focusInput();
+                    },
+                },
+            ];
+            for (const nd of navDefs) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "xlc-gm-phone-nav-item" + (nd.key === "all" ? " is-active" : "");
+                btn.dataset.gmPhoneNav = nd.key;
+                btn.appendChild(createGmSvg(nd.icon, "xlc-gm-svg xlc-gm-svg--sm"));
+                const lbl = document.createElement("span");
+                lbl.textContent = nd.label;
+                btn.appendChild(lbl);
+                btn.addEventListener("click", nd.onClick);
+                phoneNav.appendChild(btn);
+            }
+            this.gmPhoneNavEl = phoneNav;
+            workspace.appendChild(phoneNav);
+        }
 
         // 迷你模式贴边折叠灵动药丸胶囊（CAND-023 / TODO-FEAT-021 / 20261121-01）
         const pill = document.createElement("div");
@@ -1880,7 +2392,7 @@ export class CommonSearchDialog {
         pill.dataset.xlcControl = "search.mini.collapsed-pill";
         const pillIcon = document.createElement("span");
         pillIcon.className = "xlc-pill-icon";
-        pillIcon.textContent = "🐴 常用语";
+        pillIcon.textContent = "常用语";
         const pillMarquee = document.createElement("div");
         pillMarquee.className = "xlc-pill-marquee";
         pillMarquee.style.display = "none";
@@ -1908,11 +2420,36 @@ export class CommonSearchDialog {
     /** 打开一页内置使用说明（不离开搜索弹窗，适合首次使用与移动端）。 */
     private openUsageGuide(): void {
         const isMobileModal = isMobileDialogViewport();
+        const surfaceId = `xlc-usage-guide-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        let closed = false;
+        let surfacePopped = false;
+        const popSurface = (): void => {
+            if (surfacePopped) return;
+            surfacePopped = true;
+            lvSurfaceStack.pop(surfaceId);
+        };
         const guideDialog = new Dialog({
             title: this.deps.t("usageGuideTitle"),
             content: "",
             width: isMobileModal ? "100vw" : "min(600px, 92vw)",
             height: isMobileModal ? "100dvh" : "min(680px, 88vh)",
+            destroyCallback: () => {
+                closed = true;
+                popSurface();
+            },
+        });
+        lvSurfaceStack.push({
+            id: surfaceId,
+            type: "dialog",
+            dismiss: () => {
+                if (closed) {
+                    popSurface();
+                    return false;
+                }
+                guideDialog.destroy();
+                popSurface();
+                return "keep";
+            },
         });
         mountPlatformDialogTitleWrap(guideDialog.element, this.deps.t("usageGuideTitle"));
         guideDialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
@@ -2104,7 +2641,7 @@ export class CommonSearchDialog {
                         else this.deps.notify?.("error", this.deps.t("copyFailed"));
                     });
                 }
-                if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
+                this.scheduleAutoClose(350);
                 return;
             }
             const entry = this.results[this.activeIndex];
@@ -2127,7 +2664,7 @@ export class CommonSearchDialog {
                         }
                     });
                 }
-                if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
+                this.scheduleAutoClose(350);
             }
         });
 
@@ -2363,7 +2900,7 @@ export class CommonSearchDialog {
         categoryAll.textContent = this.deps.t("filterAllCategories");
         categorySelect.appendChild(categoryAll);
         const [tagsResult, categoriesResult] = await Promise.allSettled([this.deps.getTags(), this.deps.getCategories()]);
-        if (seq !== this.filterOptionsSeq || !this.dialog) return false;
+        if (seq !== this.filterOptionsSeq || this.isDestroying || !this.dialog) return false;
         const tags = tagsResult.status === "fulfilled" ? Array.from(new Set(tagsResult.value.filter(Boolean))) : [];
         const categories = categoriesResult.status === "fulfilled" ? Array.from(new Set(categoriesResult.value.filter(Boolean))) : [];
 
@@ -2416,6 +2953,7 @@ export class CommonSearchDialog {
         const changed = (tagsResult.status === "fulfilled" && nextTag !== current.tag)
             || (categoriesResult.status === "fulfilled" && nextCategory !== current.category);
         if (changed) {
+            if (categoriesResult.status === "fulfilled") this.activeCategoryPath = nextCategory;
             this.deps.setFilters({type: current.type, tag: nextTag, category: nextCategory});
         }
         if (this.miniMode) {
@@ -2429,28 +2967,6 @@ export class CommonSearchDialog {
             quickPillsHost.replaceChildren();
             quickPillsHost.setAttribute("role", "toolbar");
             quickPillsHost.setAttribute("aria-label", "常用标签筛选");
-            quickPillsHost.addEventListener("keydown", (e) => {
-                if (e.isComposing || e.keyCode === 229) return;
-                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                    const btns = Array.from(quickPillsHost.querySelectorAll<HTMLButtonElement>(".xlc-quick-pill"));
-                    if (!btns.length) return;
-                    const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
-                    if (idx === -1) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const nextIdx = e.key === "ArrowRight" ? (idx + 1) % btns.length : (idx - 1 + btns.length) % btns.length;
-                    btns[nextIdx]?.focus();
-                    return;
-                }
-                if (e.key === "Home" || e.key === "End") {
-                    const btns = Array.from(quickPillsHost.querySelectorAll<HTMLButtonElement>(".xlc-quick-pill"));
-                    if (!btns.length) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (e.key === "Home") btns[0]?.focus();
-                    else btns[btns.length - 1]?.focus();
-                }
-            });
             const topTags = tags.filter(Boolean).slice(0, 6);
             if (topTags.length > 0) {
                 const label = document.createElement("span");
@@ -2539,15 +3055,15 @@ export class CommonSearchDialog {
             const isMob = this.deps.isMobile();
             let ph = isMob ? (this.deps.t("searchPlaceholderMobile") || "搜索常用语、标签或 @全库") : this.deps.t("searchPlaceholder");
             if (this.currentScope === "all-notes") {
-                ph = isMob ? "🔍 搜全库块与文档..." : ("🔍 " + (this.deps.t("scopeAllNotesPlaceholder") || "搜索思源全库内容块与文档..."));
+                ph = isMob ? "搜全库块与文档..." : (this.deps.t("scopeAllNotesPlaceholder") || "搜索思源全库内容块与文档...");
             } else if (this.currentScope === "clipboard") {
-                ph = isMob ? "📋 搜剪贴板..." : ("📋 " + (this.deps.t("scopeClipboardPlaceholder") || "搜索剪贴板历史暂存..."));
+                ph = isMob ? "搜剪贴板..." : (this.deps.t("scopeClipboardPlaceholder") || "搜索剪贴板历史暂存...");
             } else if (this.currentScope === "current-doc") {
-                ph = isMob ? "☵ 搜当前文档..." : ("☵ " + (this.deps.t("scopeCurrentDocPlaceholder") || "搜索当前打开文档中的内容块..."));
+                ph = isMob ? "搜当前文档..." : (this.deps.t("scopeCurrentDocPlaceholder") || "搜索当前打开文档中的内容块...");
             } else if (this.currentScope === "favorites") {
-                ph = "★ " + (this.deps.t("filterFavorites") || "收藏常用语");
+                ph = this.deps.t("filterFavorites") || "收藏常用语";
             } else if (this.currentScope === "recent") {
-                ph = "🕐 " + (this.deps.t("filterRecent") || "最近使用常用语");
+                ph = this.deps.t("filterRecent") || "最近使用常用语";
             } else if (!isMob) {
                 ph = this.deps.t("searchPlaceholder") + " (@ / 检索全库)";
             }
@@ -2752,7 +3268,8 @@ export class CommonSearchDialog {
                     });
                 }
                 const adapter = getPinyinAdapter();
-                const entries: SearchEntry[] = filtered.map((h, i) => {
+                const seenClipIds = new Set<string>();
+                const entries: SearchEntry[] = filtered.map((h) => {
                     const parsed = parseSnippetAnnotations(h.text);
                     const firstLine = h.text.trim().split(/[\r\n]+/)[0]?.slice(0, 35) || "剪贴板文本";
                     const displayTitle = parsed.title ? `📋 ${parsed.title}` : `📋 ${firstLine}`;
@@ -2765,8 +3282,16 @@ export class CommonSearchDialog {
                             if (anno?.pyi) clipAlias = anno.pyi.toLowerCase().slice(0, 8);
                         } catch {}
                     }
+                    const baseHash = generateTextHash(h.text, "fnv1a") || "0";
+                    let clipId = `xlc-clip-${baseHash}`;
+                    if (seenClipIds.has(clipId)) {
+                        let suffix = 2;
+                        while (seenClipIds.has(`${clipId}-${suffix}`)) suffix++;
+                        clipId = `${clipId}-${suffix}`;
+                    }
+                    seenClipIds.add(clipId);
                     return {
-                        id: `xlc-clip-${i}`,
+                        id: clipId,
                         blockId: "",
                         libraryDocId: "",
                         title: displayTitle,
@@ -2781,7 +3306,7 @@ export class CommonSearchDialog {
                         isOmni: true,
                     };
                 });
-                if (seq !== this.searchSeq) return;
+                if (seq !== this.searchSeq || this.isDestroying || !this.dialog) return;
                 this.results = entries;
                 total = entries.length;
                 truncated = false;
@@ -2791,7 +3316,7 @@ export class CommonSearchDialog {
             } else if (this.currentScope === "all-notes" && this.deps.searchAllNotes) {
                 const cleanKeyword = query.text.replace(/^(@|\/|sy:)/, "").trim();
                 const entries = await this.deps.searchAllNotes(cleanKeyword);
-                if (seq !== this.searchSeq) return;
+                if (seq !== this.searchSeq || this.isDestroying || !this.dialog) return;
                 this.results = entries;
                 total = entries.length;
                 truncated = false;
@@ -2800,8 +3325,11 @@ export class CommonSearchDialog {
                 if (aiBanner) aiBanner.style.display = "none";
             } else {
                 const result = await this.deps.search(query);
-                if (seq !== this.searchSeq) return;
+                if (seq !== this.searchSeq || this.isDestroying || !this.dialog) return;
                 this.results = result.entries;
+                if (this.currentScope === "all" && !query.text && !query.itemType && !query.tag && !query.category) {
+                    this.cachedLibraryEntries = result.entries.filter((e) => !e.isOmni);
+                }
                 total = result.total;
                 truncated = result.truncated;
                 loading = result.loading === true;
@@ -2973,7 +3501,7 @@ export class CommonSearchDialog {
             } catch {
                 this.providerRows = [];
             }
-            if (seq !== this.searchSeq) return;
+            if (seq !== this.searchSeq || this.isDestroying || !this.dialog) return;
         }
         this.finishSearchLoad(list);
         this.renderList(list);
@@ -2988,7 +3516,9 @@ export class CommonSearchDialog {
                 || document.body?.classList?.contains?.("body--dark") === true
             );
             const clips = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
-            const floatEntries = this.results
+            const fullEntries = this.getPromoteLibraryEntries();
+            const sourceEntries = fullEntries.length > 0 ? fullEntries : this.results;
+            const floatEntries = sourceEntries
                 .filter((e) => !e.isOmni)
                 .map((e) => ({
                     id: e.id,
@@ -3142,6 +3672,7 @@ export class CommonSearchDialog {
         try {
             if (!navigator.clipboard?.readText || (typeof window !== "undefined" && !window.isSecureContext)) return;
             const clipText = (await navigator.clipboard.readText() || "").trim();
+            if (this.isDestroying || !this.dialog || !this.smartMatchBannerEl) return;
             if (clipText.length < 4) {
                 this.smartMatchBannerEl.style.display = "none";
                 return;
@@ -3442,40 +3973,16 @@ export class CommonSearchDialog {
             row.appendChild(checkbox);
         }
 
+        const iconBox = document.createElement("div");
+        iconBox.className = "xlc-gm-type-ic-box";
+        iconBox.setAttribute("aria-hidden", "true");
+        iconBox.appendChild(createGmSvg(mapItemTypeToIconKind(entry.itemType), "xlc-gm-svg xlc-gm-svg--sm"));
+        row.appendChild(iconBox);
+
         const main = document.createElement("div");
         main.className = "xlc-row-main";
         const title = document.createElement("div");
         title.className = "xlc-row-title";
-        if (this.miniMode && index < 9) {
-            const miniNum = document.createElement("span");
-            miniNum.className = "xlc-mini-row-num";
-            miniNum.textContent = String(index + 1);
-            miniNum.title = `迷你直达：列表聚焦按 ${index + 1} 插入 / Shift+${index + 1} 复制；搜索输入时按 Alt+${index + 1} 插入`;
-            miniNum.setAttribute("aria-label", miniNum.title);
-            title.appendChild(miniNum);
-        } else if (!this.miniMode && index < 9) {
-            const ordinal = document.createElement("span");
-            ordinal.className = "xlc-row-ordinal";
-            const numStr = String(index + 1);
-            ordinal.textContent = numStr;
-            const hint = this.deps.t("ordinalShortcutHint", numStr, numStr);
-            ordinal.title = hint;
-            ordinal.setAttribute("aria-label", hint);
-            title.appendChild(ordinal);
-        }
-        const badge = document.createElement("span");
-        badge.className = `xlc-badge xlc-badge--${entry.itemType}`;
-        badge.textContent = TYPE_BADGES[entry.itemType] ?? "TXT";
-        badge.title = this.deps.t(`type.${entry.itemType}`);
-        badge.setAttribute("aria-label", this.deps.t(`type.${entry.itemType}`));
-        title.appendChild(badge);
-        if (entry.isOmni) {
-            const omniBadge = document.createElement("span");
-            omniBadge.className = "xlc-badge xlc-badge--omni";
-            omniBadge.textContent = entry.tags?.includes("全库块") ? "思源块" : (entry.tags?.includes("当前文档") ? "本文档" : (entry.category === "剪贴板" ? "剪贴板" : "思源"));
-            omniBadge.title = entry.category === "剪贴板" ? "剪贴板历史暂存条目，可一键复制或沉淀为常用语 (Alt+S)" : "思源全库检索条目，可直接复用或一键收录为常用语 (Alt+S)";
-            title.appendChild(omniBadge);
-        }
         // 标题文本前置独占主行：作为行内核心识别信息，必须拥有最高渲染优先级与弹性自适应空间
         const titleText = document.createElement("span");
         titleText.className = "xlc-row-titletext";
@@ -3486,14 +3993,29 @@ export class CommonSearchDialog {
         else titleText.textContent = entry.title || this.deps.t("unknownType");
         title.appendChild(titleText);
 
-        // G27 / ADR 0080 / TASK-20261031: 唯一简码或别名精确匹配金色直达徽标（命中状态强反馈保留在标题尾部）
+        if (entry.shortcode) {
+            const scTag = document.createElement("span");
+            scTag.className = "xlc-gm-code-tag";
+            scTag.textContent = entry.shortcode;
+            scTag.title = `简码：输入 ${entry.shortcode} 触发`;
+            title.appendChild(scTag);
+        }
+
+        if (entry.isOmni) {
+            const omniBadge = document.createElement("span");
+            omniBadge.className = "xlc-gm-pill-badge";
+            omniBadge.textContent = entry.tags?.includes("全库块") ? "思源块" : (entry.tags?.includes("当前文档") ? "本文档" : (entry.category === "剪贴板" ? "剪贴板" : "思源"));
+            title.appendChild(omniBadge);
+        }
+
+        // G27 / ADR 0080 / TASK-20261031: 唯一简码或别名精确匹配直达微标
         const cleanQuery = this.lastQueryText.trim().toLowerCase();
         const isShortcodeHit = Boolean(cleanQuery && entry.shortcode && (entry.shortcode.trim().toLowerCase() === cleanQuery || entry.shortcode.trim().toLowerCase() === ":" + cleanQuery));
         const isAliasHit = Boolean(cleanQuery && entry.alias && entry.alias.trim().toLowerCase() === cleanQuery);
         if (isShortcodeHit || isAliasHit) {
             const directBadge = document.createElement("span");
-            directBadge.className = "xlc-badge xlc-badge--direct";
-            directBadge.textContent = "⚡ Tab直达";
+            directBadge.className = "xlc-gm-pill-badge xlc-gm-pill-badge--accent";
+            directBadge.textContent = "Tab 直达";
             directBadge.title = isShortcodeHit ? "简码唯一命中：按 Tab 或 Enter 极速插入" : "唯一别名精确匹配：按 Tab 或 Enter 极速插入";
             title.appendChild(directBadge);
         }
@@ -3511,96 +4033,33 @@ export class CommonSearchDialog {
         const meta = document.createElement("div");
         meta.className = "xlc-row-meta";
 
-        // 次级属性徽标统一收敛至 meta 副行，彻底释放主标题行宽度，避免 flex 挤压导致标题 0px 隐形
-        if (entry.shortcode) {
-            const scBadge = document.createElement("span");
-            scBadge.className = "xlc-badge xlc-badge--shortcode";
-            scBadge.textContent = entry.shortcode;
-            scBadge.title = `简码：输入 ${entry.shortcode} 触发`;
-            meta.appendChild(scBadge);
-        }
-
-        // 当前若已处于该分类树节点，自动省略重复分类胶囊（避免整列重复占位挤占空间）
-        const isCurrentCategorySelected = Boolean(this.activeCategoryPath && entry.category?.trim() === this.activeCategoryPath);
-        if (entry.category && entry.category.trim() && !entry.isOmni && !isCurrentCategorySelected) {
-            const catBadge = document.createElement("span");
-            const variant = getCategoryColorVariant(entry.category);
-            catBadge.className = `xlc-badge xlc-badge--cat xlc-cat--${variant}`;
-            catBadge.textContent = entry.category.trim();
-            catBadge.title = `${this.deps.t("category")}：${entry.category.trim()}`;
-            catBadge.setAttribute("aria-label", `${this.deps.t("category")}：${entry.category.trim()}`);
-            meta.appendChild(catBadge);
-        }
-
-        const hasSelectionPlaceholder = Boolean(entry.content?.includes("{{xlc:selection}}") || entry.summary?.includes("{{xlc:selection}}"));
-        if (hasSelectionPlaceholder) {
-            const surroundBadge = document.createElement("span");
-            surroundBadge.className = "xlc-badge xlc-badge--surround";
-            surroundBadge.textContent = "✦ 包裹";
-            surroundBadge.title = "支持选区包裹：插入时自动将当前选区文本嵌入此模板";
-            meta.appendChild(surroundBadge);
-        }
-
-        if ((entry.varCount ?? 0) > 0) {
-            const varBadge = document.createElement("span");
-            varBadge.className = "xlc-badge xlc-badge--var";
-            varBadge.textContent = this.deps.t("varCountBadge", String(entry.varCount));
-            meta.appendChild(varBadge);
-        }
-
-        // 全域条目显示精细面包屑路径（手机端已有分组标题头，省略行内重复路径避免挤占摘要）
-        const isMobileRow = this.deps.isMobile();
-        if (entry.isOmni && entry.category && !isMobileRow) {
-            const breadcrumb = document.createElement("span");
-            breadcrumb.className = "xlc-row-breadcrumb";
+        const metaParts: string[] = [];
+        if (entry.category && entry.category.trim() && !entry.isOmni) {
+            metaParts.push(entry.category.trim());
+        } else if (entry.isOmni && entry.category) {
             const cleanPath = entry.category.replace(/^\/+/, "").replace(/\.sy$/, "");
             const parts = cleanPath.split("/").filter(Boolean);
-            breadcrumb.textContent = parts.length > 0 ? parts.join(" › ") : entry.category;
-            breadcrumb.title = `所属文档路径：${entry.category}`;
-            meta.appendChild(breadcrumb);
+            metaParts.push(parts.length > 0 ? parts.join(" › ") : entry.category);
         }
-
-        const currentFilters = this.deps.getFilters();
-        const cleanTags = entry.tags.filter((tg) => Boolean(tg) && !(isMobileRow && entry.isOmni && (tg === "全库块" || tg === "当前文档")));
-        const shownTags = cleanTags.slice(0, 3);
-        if (shownTags.length > 0) {
-            const tagsWrapper = document.createElement("span");
-            tagsWrapper.className = "xlc-row-tags";
-            for (const tag of shownTags) {
-                const isSelected = currentFilters.tag === tag;
-                const pill = document.createElement("button");
-                pill.type = "button";
-                pill.className = "xlc-tag-pill" + (isSelected ? " xlc-tag-pill--on" : "");
-                pill.dataset.xlcControl = "row.filter.tag";
-                pill.textContent = `#${tag}`;
-                const tip = this.deps.t(isSelected ? "clearThisTagFilter" : "filterByThisTag", tag);
-                pill.title = tip;
-                pill.setAttribute("aria-label", tip);
-                pill.setAttribute("aria-pressed", String(isSelected));
-                pill.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    this.filterByTag(tag);
-                });
-                tagsWrapper.appendChild(pill);
-            }
-            if (cleanTags.length > shownTags.length) {
-                const more = document.createElement("span");
-                more.className = "xlc-tag-pill xlc-tag-pill--more";
-                more.textContent = `+${cleanTags.length - shownTags.length}`;
-                tagsWrapper.appendChild(more);
-            }
-            meta.appendChild(tagsWrapper);
+        if (entry.alias && entry.alias.trim()) {
+            metaParts.push(entry.alias.trim());
+        }
+        if (metaParts.length > 0) {
+            const subSpan = document.createElement("span");
+            subSpan.className = "xlc-gm-row-subtext";
+            subSpan.textContent = metaParts.join(" · ");
+            meta.appendChild(subSpan);
         }
 
         const useCount = this.usageCounts.get(entry.id) ?? 0;
         const sourceTextForSummary = entry.content || entry.summary || "";
-        if (sourceTextForSummary) {
+        if (sourceTextForSummary && (this.miniMode || metaParts.length === 0)) {
             const summarySpan = document.createElement("span");
             summarySpan.className = "xlc-row-summary";
             const tokens = this.lastQueryText ? splitSearchTokens(this.lastQueryText) : [];
             const cleanSummarySource = (entry.itemType !== "code") ? extractCleanPayload(sourceTextForSummary) : sourceTextForSummary;
-            const summaryText = deriveSmartSummary(cleanSummarySource, tokens, 90);
-            const prefix = (shownTags.length > 0 || (entry.isOmni && entry.category)) ? " · " : "";
+            const summaryText = deriveSmartSummary(cleanSummarySource, tokens, 72);
+            const prefix = metaParts.length > 0 ? " · " : "";
             if (prefix) summarySpan.appendChild(document.createTextNode(prefix));
             if (this.lastQueryText && !this.lastQueryText.startsWith("?") && !this.aiResults) {
                 this.appendHighlighted(summarySpan, summaryText, this.lastQueryText);
@@ -3616,7 +4075,7 @@ export class CommonSearchDialog {
                 useSpan.setAttribute("role", "status");
                 useSpan.setAttribute("aria-label", this.deps.t("useCount", String(useCount)));
             }
-            useSpan.textContent = (shownTags.length > 0 || entry.summary ? " · " : "") + this.deps.t("useCount", String(useCount));
+            useSpan.textContent = (metaParts.length > 0 || (sourceTextForSummary && this.miniMode) ? " · " : "") + this.deps.t("useCount", String(useCount));
             meta.appendChild(useSpan);
         }
         main.appendChild(meta);
@@ -3626,7 +4085,6 @@ export class CommonSearchDialog {
             if (entry.id.startsWith("xlc-clip-")) {
                 const actionsWrap = document.createElement("div");
                 actionsWrap.className = "xlc-row-action-wrap";
-                actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
 
                 const isCaptured = this.capturedOmniIds.has(entry.id);
                 const saveBtn = document.createElement("button");
@@ -3641,14 +4099,16 @@ export class CommonSearchDialog {
                     e.stopPropagation();
                     if (saveBtn.disabled || this.capturedOmniIds.has(entry.id)) return;
                     if (this.deps.promoteClipboardEntry) {
-                        const existingCategories = Array.from(new Set(this.results.map((r) => r.category).filter(Boolean)));
+                        const allEntries = this.getPromoteLibraryEntries();
+                        const catSource = allEntries.length > 0 ? allEntries : this.results;
+                        const existingCategories = Array.from(new Set(catSource.map((r) => r.category).filter(Boolean)));
                         const lastCategory = this.deps.getFilters().category || "常用";
                         openPromoteClipDialog({
                             t: this.deps.t,
                             entry,
                             categories: existingCategories,
                             defaultCategory: lastCategory,
-                            entries: this.results,
+                            entries: allEntries.length > 0 ? allEntries : this.results,
                             notify: this.deps.notify,
                             onPromote: async (payload) => {
                                 const ok = await this.deps.promoteClipboardEntry!(entry, payload);
@@ -3747,7 +4207,6 @@ export class CommonSearchDialog {
             } else {
                 const actionsWrap = document.createElement("div");
                 actionsWrap.className = "xlc-row-action-wrap";
-                actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
 
                 const insertBtn = document.createElement("button");
                 insertBtn.type = "button";
@@ -3848,83 +4307,72 @@ export class CommonSearchDialog {
                 row.appendChild(actionsWrap);
             }
         } else {
-            const actionsWrap = document.createElement("div");
-            actionsWrap.className = "xlc-row-action-wrap";
-            actionsWrap.style.cssText = "display:flex; align-items:center; gap:4px;";
-
-            // 桌面标准多栏模式下（!this.miniMode && !isMobile），右侧详情窗格已有大号「↵ 插入」与「复制」按钮；
-            // 列表中仅在移动端（isMobile）、迷你模式（miniMode）或极紧凑视图时在行内显示快捷动作，
-            // 避免在桌面 280~320px 列宽内常驻抢占 110px+ 宽度导致条目标题被挤压至 0px（GTP-小驴1号 终审截图实证）
-            if (this.miniMode || this.deps.isMobile()) {
-                const insertBtn = document.createElement("button");
-                insertBtn.type = "button";
-                insertBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill xlc-row-action--primary";
-                insertBtn.dataset.xlcControl = "item.insert-common";
-                insertBtn.textContent = this.mobilePrimaryIsCopy() ? this.deps.t("copy") : "↵ 插入";
-                insertBtn.title = this.mobilePrimaryIsCopy() ? this.deps.t("insertMobileActionHint") : "将此常用语插入到当前光标处 (Enter)";
-                insertBtn.setAttribute("aria-label", this.mobilePrimaryIsCopy() ? this.deps.t("copy") : "插入常用语");
-                insertBtn.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    void this.runPrimary(entry);
-                });
-                actionsWrap.appendChild(insertBtn);
-
-                if (!this.mobilePrimaryIsCopy()) {
-                    const copyBtn = document.createElement("button");
-                    copyBtn.type = "button";
-                    copyBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action--pill";
-                    copyBtn.dataset.xlcControl = "item.copy-common";
-                    copyBtn.textContent = "复制";
-                    copyBtn.title = "复制此常用语到剪贴板 (Ctrl+Enter)";
-                    copyBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        void this.resolveEntryFullText(entry).then((text) => this.deps.copyText(text)).then((ok) => {
-                            if (ok) {
-                                copyBtn.textContent = "✓ 已复制";
-                                lvNotify.inline(copyBtn, "已复制");
-                                setTimeout(() => { copyBtn.textContent = "复制"; }, 1400);
-                            }
-                        });
-                    });
-                    actionsWrap.appendChild(copyBtn);
+            if (this.miniMode && !this.deps.isMobile()) {
+                const cmdRight = document.createElement("div");
+                cmdRight.className = "xlc-gm-cmd-right";
+                const typePill = document.createElement("span");
+                typePill.className = "xlc-gm-pill-badge";
+                typePill.textContent = getGmTypeLabel(entry.itemType);
+                cmdRight.appendChild(typePill);
+                if (index >= 0 && index < 9) {
+                    const isApple = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform || "");
+                    const kbdCap = document.createElement("span");
+                    kbdCap.className = "xlc-gm-kbd-cap";
+                    kbdCap.textContent = `${isApple ? "⌥" : "Alt+"}${index + 1}`;
+                    cmdRight.appendChild(kbdCap);
                 }
+                row.appendChild(cmdRight);
             }
 
-            const star = document.createElement("button");
-            star.type = "button";
-            star.className = "b3-button b3-button--small xlc-row-action";
-            star.dataset.xlcControl = "item.favorite";
-            star.textContent = fav ? "★" : "☆";
-            star.setAttribute("aria-label", fav ? this.deps.t("unfavorite") : this.deps.t("favorite"));
-            star.addEventListener("click", (e) => {
+            const actionsWrap = document.createElement("div");
+            actionsWrap.className = "xlc-row-action-wrap xlc-gm-row-ops";
+
+            const insertBtn = document.createElement("button");
+            insertBtn.type = "button";
+            insertBtn.className = "b3-button b3-button--small xlc-row-action xlc-gm-row-insert";
+            insertBtn.dataset.xlcControl = "item.insert-common";
+            insertBtn.textContent = this.mobilePrimaryIsCopy() ? this.deps.t("copy") : "插入";
+            insertBtn.title = this.mobilePrimaryIsCopy() ? this.deps.t("insertMobileActionHint") : "将此常用语插入到当前光标处 (Enter)";
+            insertBtn.setAttribute("aria-label", this.mobilePrimaryIsCopy() ? this.deps.t("copy") : "插入常用语");
+            insertBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
-                this.deps.toggleFavorite(entry.id);
-                const isFav = this.deps.isFavorite(entry.id);
-                star.textContent = isFav ? "★" : "☆";
-                lvNotify.inline(star, isFav ? "已收藏" : "已取消收藏");
-                void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
+                void this.runPrimary(entry);
             });
-            actionsWrap.appendChild(star);
+            actionsWrap.appendChild(insertBtn);
 
-            // 常用语购物车暂存托盘按钮（仅桌面端展示，手机端隐藏 · CAND-019 / Mobile Spec v1）
-            if (!this.deps.isMobile()) {
-                const trayBtn = document.createElement("button");
-                trayBtn.type = "button";
-                trayBtn.className = "b3-button b3-button--small xlc-row-action xlc-row-action-tray";
-                trayBtn.dataset.xlcControl = "item.add-tray";
-                const inTray = this.pasteTrayItems.some((it) => it.id === entry.id);
-                trayBtn.textContent = inTray ? "✓" : "🛒";
-                trayBtn.title = inTray ? "已加入暂存托盘" : "加入暂存托盘 (Alt+A)";
-                trayBtn.setAttribute("aria-label", trayBtn.title);
-                trayBtn.addEventListener("click", (e) => {
+            if (!this.mobilePrimaryIsCopy()) {
+                const copyBtn = document.createElement("button");
+                copyBtn.type = "button";
+                copyBtn.className = "b3-button b3-button--text b3-button--small xlc-row-action xlc-gm-row-copy";
+                copyBtn.dataset.xlcControl = "item.copy-common";
+                copyBtn.textContent = "复制";
+                copyBtn.title = "复制此常用语到剪贴板 (Ctrl+Enter)";
+                copyBtn.setAttribute("aria-label", "复制常用语");
+                copyBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    this.togglePasteTrayItem(entry);
-                    const nowIn = this.pasteTrayItems.some((it) => it.id === entry.id);
-                    trayBtn.textContent = nowIn ? "✓" : "🛒";
-                    lvNotify.inline(trayBtn, nowIn ? "已暂存" : "已移出");
+                    void this.resolveEntryFullText(entry).then((text) => this.deps.copyText(text)).then((ok) => {
+                        if (ok) {
+                            copyBtn.textContent = "✓ 已复制";
+                            lvNotify.inline(copyBtn, "已复制");
+                            setTimeout(() => { copyBtn.textContent = "复制"; }, 1400);
+                        }
+                    });
                 });
-                actionsWrap.appendChild(trayBtn);
+                actionsWrap.appendChild(copyBtn);
             }
+
+            const moreBtn = document.createElement("button");
+            moreBtn.type = "button";
+            moreBtn.className = "b3-button b3-button--text b3-button--small xlc-row-action xlc-gm-row-more";
+            moreBtn.dataset.xlcControl = "item.more";
+            moreBtn.textContent = "···";
+            moreBtn.title = "更多操作（置顶 / 编辑 / 打开来源 / 移出）";
+            moreBtn.setAttribute("aria-label", "更多操作");
+            moreBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                void this.showActionMenu(entry);
+            });
+            actionsWrap.appendChild(moreBtn);
             row.appendChild(actionsWrap);
         }
         return row;
@@ -3935,9 +4383,10 @@ export class CommonSearchDialog {
         this.virtualListCleanup = null;
         this.virtualEnsureIndex = null;
         list.innerHTML = "";
+        this.syncGmChrome();
         // 空库态独占整宽（R431 截图实证）：空库下右预览栏无条目可预览，只剩大片灰白空白，
         // 与左侧 330px 空态卡片形成割裂。此时隐藏右栏让空态居中铺满。
-        const bodyWrapEl = list.parentElement;
+        const bodyWrapEl = this.dialog?.element.querySelector<HTMLElement>(".xlc-body") ?? list.parentElement;
         if (bodyWrapEl) {
             const soloEmpty = this.results.length === 0 && this.providerRows.length === 0
                 && this.emptyMessage === this.deps.t("emptyLibrary");
@@ -4125,9 +4574,11 @@ export class CommonSearchDialog {
                 clear.textContent = this.deps.t("clearFilters");
                 clear.setAttribute("aria-label", this.deps.t("clearFilters"));
                 clear.addEventListener("click", () => {
+                    this.activeCategoryPath = "";
                     this.deps.setFilters({type: "", tag: "", category: ""});
                     this.dialog?.element.querySelectorAll<HTMLSelectElement>(".xlc-type-select, .xlc-tag-select, .xlc-category-select")
                         .forEach((select) => { select.value = ""; });
+                    this.syncCategoryTreeActive();
                     void this.refresh();
                 });
                 empty.appendChild(clear);
@@ -4486,7 +4937,9 @@ export class CommonSearchDialog {
                     recHead.textContent = `🎯 当前文档智能推荐 (${recs.length})`;
                     list.appendChild(recHead);
                     for (const r of recs) {
-                        const recRow = this.createEntryRow(r.entry, -1);
+                        const realIndex = this.results.findIndex((item) => item.id === r.entry.id);
+                        const recRow = this.createEntryRow(r.entry, realIndex);
+                        recRow.id = `xlc-recommend-${realIndex >= 0 ? realIndex : r.entry.id}`;
                         recRow.classList.add("xlc-row--recommend");
                         if (r.reasons.length > 0) {
                             const reasonSpan = document.createElement("span");
@@ -5222,9 +5675,12 @@ export class CommonSearchDialog {
         if (!entry.isOmni && isBlockId(entry.blockId)) {
             const libBlockBtn = document.createElement("button");
             libBlockBtn.type = "button";
-            libBlockBtn.className = "xlc-meta-chip xlc-meta-chip--path";
+            libBlockBtn.className = "xlc-meta-chip xlc-meta-chip--path xlc-gm-chip-with-icon";
             libBlockBtn.dataset.xlcControl = "preview.open-lib-block";
-            libBlockBtn.textContent = "📦 库内原块";
+            libBlockBtn.appendChild(createGmSvg("block", "xlc-gm-svg xlc-gm-svg--xs"));
+            const libBlockLabel = document.createElement("span");
+            libBlockLabel.textContent = "库内原块";
+            libBlockBtn.appendChild(libBlockLabel);
             libBlockBtn.title = "点击在思源常用库文档中直接定位此条目的本体块";
             libBlockBtn.addEventListener("click", () => {
                 if (!this.pinWindow) this.destroy();
@@ -5272,9 +5728,12 @@ export class CommonSearchDialog {
         if (this.deps.getAdjacentBlocks && isBlockId(resolveEntryBlockId(entry)) && isBlockId(entry.sourceDocId || entry.libraryDocId)) {
             const probeBtn = document.createElement("button");
             probeBtn.type = "button";
-            probeBtn.className = "xlc-meta-chip";
+            probeBtn.className = "xlc-meta-chip xlc-gm-chip-with-icon";
             probeBtn.dataset.xlcControl = "preview.adjacent-probe";
-            probeBtn.textContent = "🔍 前后文 (Alt+J)";
+            probeBtn.appendChild(createGmSvg("search", "xlc-gm-svg xlc-gm-svg--xs"));
+            const probeLabel = document.createElement("span");
+            probeLabel.textContent = "前后文 (Alt+J)";
+            probeBtn.appendChild(probeLabel);
             probeBtn.title = "就地展开源文档中的前后相邻上下文块 (Alt+J)";
             probeBtn.addEventListener("click", () => void this.toggleAdjacentContextProbe());
             meta.appendChild(probeBtn);
@@ -5787,7 +6246,7 @@ export class CommonSearchDialog {
                 }
                 if (success) {
                     lvNotify.inline(anchor, "已复制");
-                    if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
+                    this.scheduleAutoClose(350);
                 } else {
                     this.deps.notify?.("error", this.deps.t("copyFailed"));
                 }
@@ -5908,7 +6367,7 @@ export class CommonSearchDialog {
                             await run();
                             lvNotify.inline(btn, "已复制");
                             if (destroyBeforeRun && !this.pinWindow) {
-                                setTimeout(() => this.destroy(), 350);
+                                this.scheduleAutoClose(350);
                             }
                         } catch (err) {
                             this.deps.notify?.("error", toErrorMessage(err));
@@ -6045,14 +6504,16 @@ export class CommonSearchDialog {
                     }
                     if (this.deps.promoteClipboardEntry) {
                         addSilent("⭐", "⭐ 存为常用 (转正为永久片段)", () => {
-                            const existingCategories = Array.from(new Set(this.results.map((r) => r.category).filter(Boolean)));
+                            const allEntries = this.getPromoteLibraryEntries();
+                            const catSource = allEntries.length > 0 ? allEntries : this.results;
+                            const existingCategories = Array.from(new Set(catSource.map((r) => r.category).filter(Boolean)));
                             const lastCategory = this.deps.getFilters().category || "常用";
                             openPromoteClipDialog({
                                 t: this.deps.t,
                                 entry,
                                 categories: existingCategories,
                                 defaultCategory: lastCategory,
-                                entries: this.results,
+                                entries: allEntries.length > 0 ? allEntries : this.results,
                                 notify: this.deps.notify,
                                 onPromote: async (payload) => {
                                     const ok = await this.deps.promoteClipboardEntry!(entry, payload);
@@ -8029,9 +8490,20 @@ export class CommonSearchDialog {
         const list = this.dialog?.element.querySelector<HTMLElement>(".xlc-list");
         const input = this.dialog?.element.querySelector<HTMLInputElement>(".xlc-search-input");
         const isInputFocused = e.target === input || document.activeElement === input;
+        const isInteractiveTarget = (node: EventTarget | null | undefined): boolean => {
+            if (!node || typeof node !== "object") return false;
+            const el = node as HTMLElement;
+            if (typeof el.closest === "function") {
+                return Boolean(el.closest('button, select, textarea, input, [contenteditable="true"]'));
+            }
+            const tag = typeof el.tagName === "string" ? el.tagName.toLowerCase() : "";
+            if (tag === "button" || tag === "select" || tag === "textarea" || tag === "input") return true;
+            return typeof el.getAttribute === "function" && el.getAttribute("contenteditable") === "true";
+        };
+        const isInteractiveControl = isInteractiveTarget(e.target) || isInteractiveTarget(document.activeElement);
 
         // 空格键极速大卡片预览（G21 / ADR 0073）：浮层已开时空格关闭；
-        // 非输入态且有条目选中时空格打开；输入框内打空格一律归还输入（不拦截）。
+        // 非输入态/非交互控件聚焦态且有条目选中时空格打开；输入框及按钮/下拉等交互控件按空格一律归还原生操作（不拦截）。
         if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey) {
             if (this.quickLookOpen) {
                 e.preventDefault();
@@ -8039,7 +8511,7 @@ export class CommonSearchDialog {
                 return;
             }
             if (!list) return;
-            if (!isInputFocused && this.hasActiveEntry() && this.openQuickLook()) {
+            if (!isInputFocused && !isInteractiveControl && this.hasActiveEntry() && this.openQuickLook()) {
                 e.preventDefault();
                 return;
             }
@@ -8206,7 +8678,7 @@ export class CommonSearchDialog {
                         const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
                         const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(".xlc-row--active");
                         lvNotify.inline(targetEl, "已复制");
-                        if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
+                        this.scheduleAutoClose(350);
                     }
                 }
             } finally {
@@ -8226,7 +8698,7 @@ export class CommonSearchDialog {
                         await this.deps.copyProviderPayload(row.payload);
                         const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
                         lvNotify.inline(copyBtn, "已复制");
-                        if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
+                        this.scheduleAutoClose(350);
                     }
                     return;
                 }
@@ -8241,7 +8713,7 @@ export class CommonSearchDialog {
                     const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
                     const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(".xlc-row--active");
                     lvNotify.inline(targetEl, "已复制");
-                    if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
+                    this.scheduleAutoClose(350);
                 }
             } finally {
                 this.primaryBusy = false;
@@ -8262,7 +8734,7 @@ export class CommonSearchDialog {
                         const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
                         const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(".xlc-row--active");
                         lvNotify.inline(targetEl, "已复制");
-                        if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
+                        this.scheduleAutoClose(350);
                     } catch {
                         this.deps.notify?.("error", "无法生成块引用：目标块 ID 无效");
                     }
@@ -8295,23 +8767,11 @@ export class CommonSearchDialog {
             this.toggleMultiSelectMode();
             return;
         } else if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "m" || e.key === "M")) {
-            // Alt+M: 切换极窄迷你模式；若在折叠状态则秒级展开唤醒
+            // Alt+M: 切换极速搜索浮条 / 极窄迷你模式；若在折叠状态则秒级展开唤醒
             e.preventDefault();
-            if (this.miniMode) {
-                if (this.miniCollapsed) {
-                    this.setMiniCollapsed(false);
-                } else {
-                    this.toggleMiniMode();
-                }
-                return;
-            }
             if (this.quickLookOpen) this.closeQuickLook();
-            const entry = this.results[this.activeIndex];
-            if (entry) {
-                const text = entry.isOmni ? (entry.content || entry.summary || "") : await this.deps.preview(entry.id);
-                await this.deps.copyProviderPayload(text || entry.summary || "");
-                if (!this.pinWindow) this.destroy();
-                this.deps.notify?.("info", this.pinWindow ? "已复制原始 Markdown（窗口已固定，可连续取用）" : "已复制原始 Markdown 语法到剪贴板");
+            if (this.miniMode && this.miniCollapsed) {
+                this.setMiniCollapsed(false);
             } else {
                 this.toggleMiniMode();
             }
@@ -8361,14 +8821,17 @@ export class CommonSearchDialog {
                 this.closeQuickLook();
                 return;
             }
+            if (this.gmHeaderMoreOpen && this.gmHeaderMoreDismiss) {
+                this.gmHeaderMoreDismiss();
+                return;
+            }
             if (this.multiSelectMode) {
                 this.exitMultiSelectMode();
                 return;
             }
             this.destroy();
         } else if (
-            e.key === " " && !isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
-            && !(e.target as HTMLElement | null)?.closest?.("input, textarea, select, button")
+            e.key === " " && !isInputFocused && !isInteractiveControl && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
         ) {
             if (e.repeat) return;
             e.preventDefault();
@@ -8392,8 +8855,8 @@ export class CommonSearchDialog {
                         if (this.primaryBusy) return;
                         this.primaryBusy = true;
                         try {
-                            const res = await this.deps.runAction(entry.id, "copy");
-                            if (res.ok) {
+                            const ok = await this.copyTargetEntry(entry);
+                            if (ok) {
                                 const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
                                 const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(`[data-xlc-index="${idx}"]`);
                                 lvNotify.inline(targetEl, "已复制");
@@ -8425,8 +8888,8 @@ export class CommonSearchDialog {
                         if (this.primaryBusy) return;
                         this.primaryBusy = true;
                         try {
-                            const res = await this.deps.runAction(entry.id, "copy");
-                            if (res.ok) {
+                            const ok = await this.copyTargetEntry(entry);
+                            if (ok) {
                                 const copyBtn = this.dialog?.element.querySelector<HTMLElement>('[data-xlc-control="preview.copy"]');
                                 const targetEl = copyBtn || this.listEl?.querySelector<HTMLElement>(`[data-xlc-index="${idx}"]`);
                                 lvNotify.inline(targetEl, "已复制");
@@ -8536,7 +8999,34 @@ export class CommonSearchDialog {
             if (entry) {
                 e.preventDefault();
                 if (entry.isOmni) {
-                    if (this.deps.quickEditBlock) {
+                    if (entry.id.startsWith("xlc-clip-")) {
+                        if (this.deps.promoteClipboardEntry) {
+                            const allEntries = this.getPromoteLibraryEntries();
+                            const catSource = allEntries.length > 0 ? allEntries : this.results;
+                            const existingCategories = Array.from(new Set(catSource.map((r) => r.category).filter(Boolean)));
+                            const lastCategory = this.deps.getFilters().category || "常用";
+                            openPromoteClipDialog({
+                                t: this.deps.t,
+                                entry,
+                                categories: existingCategories,
+                                defaultCategory: lastCategory,
+                                entries: allEntries.length > 0 ? allEntries : this.results,
+                                notify: this.deps.notify,
+                                onPromote: async (payload) => {
+                                    const ok = await this.deps.promoteClipboardEntry!(entry, payload);
+                                    if (ok) {
+                                        this.capturedOmniIds.add(entry.id);
+                                        this.syncPaneActions();
+                                    }
+                                    return ok;
+                                },
+                            });
+                        } else if (this.deps.captureOmniWithForm) {
+                            this.deps.captureOmniWithForm(entry);
+                        } else {
+                            this.deps.notify?.("info", "剪贴板暂存条目请先「存为常用」后再编辑");
+                        }
+                    } else if (this.deps.quickEditBlock) {
                         void this.deps.quickEditBlock(resolveEntryBlockId(entry) || entry.id, entry.content || entry.summary || "");
                     }
                 } else {
@@ -8550,6 +9040,12 @@ export class CommonSearchDialog {
             const entry = this.results[this.activeIndex];
             if (entry) {
                 e.preventDefault();
+                if (entry.isOmni) {
+                    this.deps.notify?.("info", entry.id.startsWith("xlc-clip-")
+                        ? "剪贴板暂存条目不支持复制副本，请先「存为常用」"
+                        : "全库检索块不支持在常用库内复制副本，请先「收录为常用」");
+                    return;
+                }
                 await this.deps.duplicateItem(entry.id);
                 await this.refresh();
             }
@@ -8581,6 +9077,12 @@ export class CommonSearchDialog {
             const entry = this.results[this.activeIndex];
             if (entry) {
                 e.preventDefault();
+                if (entry.isOmni) {
+                    this.deps.notify?.("info", entry.id.startsWith("xlc-clip-")
+                        ? "剪贴板暂存条目请通过「清空暂存」管理，不可删除库条目"
+                        : "全库检索结果来自思源原笔记块，不支持在此删除");
+                    return;
+                }
                 await this.deps.deleteItem(entry.id);
             }
         } else if (
@@ -8591,10 +9093,44 @@ export class CommonSearchDialog {
             const entry = this.results[this.activeIndex];
             if (entry) {
                 e.preventDefault();
+                if (entry.isOmni) {
+                    this.deps.notify?.("info", entry.id.startsWith("xlc-clip-")
+                        ? "剪贴板暂存条目不支持直接收藏，请先「存为常用」"
+                        : "全库检索块不支持直接收藏，请先「收录为常用」");
+                    return;
+                }
                 this.deps.toggleFavorite(entry.id);
                 void this.refreshPreservingPosition().then(() => this.restoreFocusToSearch());
             }
         }
+    }
+
+    private getPromoteLibraryEntries(): readonly SearchEntry[] {
+        const fromDeps = this.deps.getAllEntries?.() ?? [];
+        if (fromDeps.length > 0) return fromDeps;
+        return this.cachedLibraryEntries;
+    }
+
+    private async copyTargetEntry(entry: SearchEntry): Promise<boolean> {
+        if (entry.isOmni) {
+            const full = await this.resolveEntryFullText(entry);
+            return await this.deps.copyProviderPayload(full);
+        }
+        const res = await this.deps.runAction(entry.id, "copy");
+        return res.ok;
+    }
+
+    private scheduleAutoClose(delayMs = 350): void {
+        if (this.pinWindow) return;
+        if (this.autoCloseTimer) {
+            clearTimeout(this.autoCloseTimer);
+            this.autoCloseTimer = null;
+        }
+        this.autoCloseTimer = setTimeout(() => {
+            this.autoCloseTimer = null;
+            if (this.pinWindow || this.isDestroying || !this.dialog) return;
+            this.destroy();
+        }, delayMs);
     }
 
     /** 是否有选中条目（空格极速预览入口前置判定） */
@@ -8606,12 +9142,20 @@ export class CommonSearchDialog {
         return this.results[this.activeIndex] ?? null;
     }
 
+    getEntryById(itemId: string): SearchEntry | null {
+        return this.results.find((r) => r.id === itemId) ?? null;
+    }
+
     public isNonModalMode(): boolean {
         return Boolean((!this.deps.isMobile() && (this.miniMode || this.pinWindow || this.desktopFloating)) || (this.miniMode && !this.deps.isMobile()) || this.pinWindow);
     }
 
     public togglePinWindow(): boolean {
         this.pinWindow = !this.pinWindow;
+        if (this.pinWindow && this.autoCloseTimer) {
+            clearTimeout(this.autoCloseTimer);
+            this.autoCloseTimer = null;
+        }
         const pinTitle = this.pinWindow
             ? "已开启应用内固定（悬浮于思源编辑区之上，底层笔记可自由点击编辑，连续复制/插入不关闭，Alt+P 切换）"
             : "应用内固定（悬浮于思源编辑区之上，连续复制/插入不关闭，Alt+P 切换）";
@@ -8739,12 +9283,21 @@ export class CommonSearchDialog {
         }
         if (containerEl) {
             if (effectiveMini) {
-                containerEl.style.width = "min(380px, 92vw)";
-                containerEl.style.maxWidth = "380px";
+                containerEl.style.width = "min(520px, 94vw)";
+                containerEl.style.maxWidth = "520px";
                 containerEl.style.minWidth = "0";
-                containerEl.style.height = "min(560px, 82vh)";
+                containerEl.style.height = "min(580px, 84vh)";
                 containerEl.style.position = "fixed";
                 if (this.miniPosition) {
+                    const vw = typeof window !== "undefined" && typeof window.innerWidth === "number" && window.innerWidth > 0 ? window.innerWidth : 1280;
+                    const vh = typeof window !== "undefined" && typeof window.innerHeight === "number" && window.innerHeight > 0 ? window.innerHeight : 720;
+                    const estW = Math.min(520, Math.round(vw * 0.94));
+                    const estH = Math.min(580, Math.round(vh * 0.84));
+                    const maxX = Math.max(0, vw - estW);
+                    const maxY = Math.max(0, vh - estH);
+                    const clampedX = Math.max(0, Math.min(this.miniPosition.x, maxX > 0 ? maxX : Math.max(0, vw - 80)));
+                    const clampedY = Math.max(0, Math.min(this.miniPosition.y, maxY > 0 ? maxY : Math.max(0, vh - 40)));
+                    this.miniPosition = {x: Math.round(clampedX), y: Math.round(clampedY)};
                     containerEl.style.left = `${this.miniPosition.x}px`;
                     containerEl.style.top = `${this.miniPosition.y}px`;
                     containerEl.style.right = "auto";
@@ -8793,6 +9346,7 @@ export class CommonSearchDialog {
         }
 
         this.applyMiniCollapse();
+        this.syncGmChrome();
     }
 
     public toggleMiniCollapse(): boolean {
@@ -8887,7 +9441,9 @@ export class CommonSearchDialog {
             || document.body?.classList?.contains?.("body--dark") === true
         );
         const clips = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
-        const entries = this.results
+        const fullEntries = this.getPromoteLibraryEntries();
+        const sourceEntries = fullEntries.length > 0 ? fullEntries : this.results;
+        const entries = sourceEntries
             .filter((e) => !e.isOmni)
             .map((e) => ({
                 id: e.id,
@@ -9203,7 +9759,7 @@ export class CommonSearchDialog {
             this.hideMiniPreviewPopoverDOM();
 
             const popover = document.createElement("div");
-            popover.className = "xlc-mini-preview-popover";
+            popover.className = "xlc-mini-preview-popover xlc-gm-surface";
             popover.dataset.xlcControl = "search.mini.popover";
 
             const head = document.createElement("div");
@@ -9643,7 +10199,7 @@ export class CommonSearchDialog {
         if (ok) {
             const copyBtn = this.pasteTrayEl?.querySelector<HTMLButtonElement>("[data-xlc-control='paste-tray.merge-copy']");
             if (copyBtn) lvNotify.inline(copyBtn, "已合并复制");
-            if (!this.pinWindow) setTimeout(() => this.destroy(), 350);
+            this.scheduleAutoClose(350);
         } else {
             this.deps.notify?.("error", this.deps.t("copyFailed"));
         }
@@ -10131,6 +10687,18 @@ export class CommonSearchDialog {
     destroy(): void {
         if (this.isDestroying) return;
         this.isDestroying = true;
+        ++this.searchSeq;
+        ++this.previewSeq;
+        ++this.filterOptionsSeq;
+        ++this.quickLookSeq;
+        if (this.autoCloseTimer) {
+            clearTimeout(this.autoCloseTimer);
+            this.autoCloseTimer = null;
+        }
+        if (this.desktopFloatHandle) {
+            try { this.desktopFloatHandle.close(); } catch {}
+            this.desktopFloatHandle = null;
+        }
         this.cleanupSemanticThinking();
         this.cleanupTransformThinking();
         this.hideMiniPreviewPopover();
@@ -10159,6 +10727,31 @@ export class CommonSearchDialog {
         }
         this.surfaceUnregister?.();
         this.surfaceUnregister = undefined;
+        this.headerDragCleanup?.();
+        this.headerDragCleanup = null;
+        this.miniDragCleanup?.();
+        this.miniDragCleanup = null;
+        this.gmHeaderMoreCleanup?.();
+        this.gmHeaderMoreCleanup = null;
+        this.gmHeaderMoreDismiss?.();
+        this.gmHeaderMoreDismiss = null;
+        this.gmRailEl = null;
+        this.gmRailGroupsEl = null;
+        this.gmPinnedSectionEl = null;
+        this.gmPinnedGridEl = null;
+        this.gmRecentClipSectionEl = null;
+        this.gmRecentClipListEl = null;
+        this.gmRecentClipCountEl = null;
+        this.gmRecentClipToggleBtn = null;
+        this.gmRecentClipViewAllBtn = null;
+        this.gmListCountEl = null;
+        this.gmListLabelEl = null;
+        this.gmMainHeadingEl = null;
+        this.gmMainSubEl = null;
+        this.gmPhoneTitleEl = null;
+        this.gmPhoneNavEl = null;
+        this.gmTypeSelectEl = null;
+        this.gmSortSelectEl = null;
         this.categoryTreeEl = null;
         this.categoryTreeBodyEl = null;
         const wasNonModal = this.isNonModalMode();
@@ -10653,6 +11246,7 @@ export class CommonSearchDialog {
             emptyHint.textContent = this.dualT("dualPanel.emptyGroups", "暂无自定义分组");
             body.appendChild(emptyHint);
         }
+        this.renderGmRailGroups();
     }
 
     private syncCategoryTreeActive(): void {
@@ -10775,10 +11369,13 @@ export class CommonSearchDialog {
         }
         const affectedCount = await this.countCategoryEntries(node.path);
         const childHint = node.children && node.children.length > 0 ? "及其全部子分组" : "";
-        confirm(
-            this.dualT("dualPanel.deleteGroupTitle", "删除常用语分组"),
-            this.dualT("dualPanel.deleteGroupConfirm", "确定删除分组「{name}」？{childHint}下的 {n} 个条目将保留全部正文，仅移入「未分类」，之后可随时重新分组。", {name: node.name, childHint, n: affectedCount}),
-            () => {
+        openConfirmDialog({
+            title: this.dualT("dualPanel.deleteGroupTitle", "删除常用语分组"),
+            message: this.dualT("dualPanel.deleteGroupConfirm", "确定删除分组「{name}」？{childHint}下的 {n} 个条目将保留全部正文，仅移入「未分类」，之后可随时重新分组。", {name: node.name, childHint, n: affectedCount}),
+            confirmText: this.deps.t("delete") || "删除",
+            cancelText: this.deps.t("cancel") || "取消",
+            danger: true,
+            onConfirm: () => {
                 void (async () => {
                     const ids = await this.deps.getCategoryEntryIds!(node.path);
                     const receipt = await this.deps.batchUpdateMetadata!(ids, {setCategory: ""});
@@ -10798,8 +11395,8 @@ export class CommonSearchDialog {
                     this.renderCategoryTree(this.cachedCategories);
                     void this.refresh();
                 })();
-            }
-        );
+            },
+        });
     }
 
     /**
@@ -10882,11 +11479,18 @@ export class CommonSearchDialog {
         clearBtn.title = this.dualT("dualPanel.clearHistoryTip", "清空剪贴板暂存历史");
         clearBtn.setAttribute("aria-label", this.dualT("dualPanel.clearHistoryTip", "清空剪贴板暂存历史"));
         clearBtn.addEventListener("click", () => {
-            confirm(this.dualT("dualPanel.clearHistoryTitle", "⚠️ 清空暂存"), this.dualT("dualPanel.clearHistoryConfirm", "确定清空全部剪贴板暂存记录？"), () => {
-                this.deps.clearClipboardHistory?.();
-                this.deps.notify?.("info", this.dualT("dualPanel.historyCleared", "已清空剪贴板历史暂存"));
-                this.renderClipPanelContent();
-                this.updateHistoryBarRef?.();
+            openConfirmDialog({
+                title: this.dualT("dualPanel.clearHistoryTitle", "⚠️ 清空暂存"),
+                message: this.dualT("dualPanel.clearHistoryConfirm", "确定清空全部剪贴板暂存记录？"),
+                confirmText: this.deps.t("delete") || "清空",
+                cancelText: this.deps.t("cancel") || "取消",
+                danger: true,
+                onConfirm: () => {
+                    this.deps.clearClipboardHistory?.();
+                    this.deps.notify?.("info", this.dualT("dualPanel.historyCleared", "已清空剪贴板历史暂存"));
+                    this.renderClipPanelContent();
+                    this.updateHistoryBarRef?.();
+                },
             });
         });
 
@@ -11213,8 +11817,16 @@ export class CommonSearchDialog {
             } else if (kind === "list") {
                 const el = getTargetPanel("list");
                 if (el) {
-                    el.style.width = `${width}px`;
-                    el.style.flex = `0 0 ${width}px`;
+                    const inVerticalCol = Boolean(el.parentElement?.classList?.contains("xlc-gm-list-col"));
+                    if (inVerticalCol) {
+                        // 石墨清雾中 .xlc-list 位于纵向 flex 列 .xlc-gm-list-col 内，
+                        // 写入 flex:0 0 <width> 会错误锁死垂直高度导致半截列表+下方大片空白。
+                        el.style.width = "";
+                        el.style.flex = "";
+                    } else {
+                        el.style.width = `${width}px`;
+                        el.style.flex = `0 0 ${width}px`;
+                    }
                 }
             }
         };
@@ -11379,14 +11991,16 @@ export class CommonSearchDialog {
             isOmni: true,
         };
         if (this.deps.promoteClipboardEntry) {
-            const existingCategories = Array.from(new Set(this.results.map((r) => r.category).filter(Boolean)));
+            const allEntries = this.getPromoteLibraryEntries();
+            const catSource = allEntries.length > 0 ? allEntries : this.results;
+            const existingCategories = Array.from(new Set(catSource.map((r) => r.category).filter(Boolean)));
             const lastCategory = this.deps.getFilters().category || "常用";
             openPromoteClipDialog({
                 t: this.deps.t,
                 entry,
                 categories: existingCategories,
                 defaultCategory: lastCategory,
-                entries: this.results,
+                entries: allEntries.length > 0 ? allEntries : this.results,
                 notify: this.deps.notify,
                 onPromote: async (payload) => {
                     const ok = await this.deps.promoteClipboardEntry!(entry, payload);
@@ -11481,5 +12095,495 @@ export class CommonSearchDialog {
         await this.deps.copyText(cleanedText);
         this.deps.notify?.("info", this.dualT("dualPanel.cleanResultCopied", "{action}，已复制到剪贴板，可直接粘贴或点按插入", {action: actionDesc}));
         this.renderClipPanelContent();
+    }
+
+    /** 构建石墨清雾左侧静谧导航栏 */
+    private buildGmRail(): HTMLElement {
+        const rail = document.createElement("aside");
+        rail.className = "xlc-gm-rail";
+        rail.setAttribute("aria-label", "常用分类与导航");
+        rail.dataset.xlcControl = "gm.rail";
+
+        const brand = document.createElement("div");
+        brand.className = "xlc-gm-rail-brand";
+        const brandLeft = document.createElement("div");
+        brandLeft.className = "xlc-gm-rail-brand-left";
+        const mark = document.createElement("div");
+        mark.className = "xlc-gm-rail-mark";
+        mark.setAttribute("aria-hidden", "true");
+        mark.textContent = "常";
+        const brandText = document.createElement("div");
+        brandText.className = "xlc-gm-rail-brand-text";
+        const brandTitle = document.createElement("b");
+        brandTitle.textContent = this.deps.t("pluginName") || "小驴常用";
+        const brandSub = document.createElement("small");
+        brandSub.textContent = "高频内容库";
+        brandText.append(brandTitle, brandSub);
+        brandLeft.append(mark, brandText);
+
+        const paletteSwitchBtn = document.createElement("button");
+        paletteSwitchBtn.type = "button";
+        paletteSwitchBtn.className = "b3-button b3-button--text xlc-gm-btn-xs";
+        paletteSwitchBtn.dataset.xlcControl = "gm.rail.palette";
+        paletteSwitchBtn.title = "打开极速搜索面板 (Alt+M)";
+        paletteSwitchBtn.setAttribute("aria-label", "打开极速搜索面板");
+        paletteSwitchBtn.appendChild(createGmSvg("search", "xlc-gm-svg xlc-gm-svg--sm"));
+        paletteSwitchBtn.addEventListener("click", () => this.toggleMiniMode());
+        brand.append(brandLeft, paletteSwitchBtn);
+        rail.appendChild(brand);
+
+        const quickBtn = document.createElement("button");
+        quickBtn.type = "button";
+        quickBtn.className = "xlc-gm-rail-quick-btn";
+        quickBtn.dataset.xlcControl = "gm.rail.new";
+        quickBtn.appendChild(createGmSvg("plus", "xlc-gm-svg xlc-gm-svg--sm"));
+        const quickBtnLbl = document.createElement("span");
+        quickBtnLbl.textContent = "收藏常用";
+        quickBtn.appendChild(quickBtnLbl);
+        quickBtn.addEventListener("click", () => this.deps.newItem());
+        rail.appendChild(quickBtn);
+
+        const quickSecHead = document.createElement("div");
+        quickSecHead.className = "xlc-gm-rail-sec-head";
+        quickSecHead.textContent = "快速视图";
+        rail.appendChild(quickSecHead);
+
+        const mkRailBtn = (
+            key: string,
+            icon: "all" | "star" | "clock" | "clipboard" | "folder",
+            label: string,
+            onClick: () => void,
+        ): HTMLButtonElement => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "xlc-gm-rail-btn";
+            btn.dataset.gmNav = key;
+            btn.dataset.xlcControl = `gm.rail.${key}`;
+            const mainSpan = document.createElement("span");
+            mainSpan.className = "xlc-gm-rail-btn-main";
+            mainSpan.appendChild(createGmSvg(icon, "xlc-gm-svg xlc-gm-svg--sm"));
+            const textSpan = document.createElement("span");
+            textSpan.textContent = label;
+            mainSpan.appendChild(textSpan);
+            const countSpan = document.createElement("span");
+            countSpan.className = "xlc-gm-rail-count";
+            countSpan.dataset.gmCountFor = key;
+            btn.append(mainSpan, countSpan);
+            btn.addEventListener("click", onClick);
+            return btn;
+        };
+
+        const switchView = (scope: SearchScope, catPath = "", featured = false) => {
+            this.featuredViewActive = featured;
+            this.activeCategoryPath = catPath;
+            this.currentScope = scope;
+            this.deps.setFilters({ ...this.deps.getFilters(), category: catPath });
+            const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+            if (categorySelect) categorySelect.value = catPath;
+            this.syncScopeChips();
+            this.syncCategoryTreeActive();
+            void this.refresh();
+        };
+
+        rail.appendChild(mkRailBtn("all", "all", "全部常用", () => switchView("all")));
+        rail.appendChild(mkRailBtn("favorites", "star", "置顶常用", () => switchView("favorites")));
+        rail.appendChild(mkRailBtn("recent", "clock", "最近使用", () => switchView("recent")));
+        rail.appendChild(mkRailBtn("clipboard", "clipboard", "剪贴板历史", () => switchView("clipboard")));
+
+        const groupSecRow = document.createElement("div");
+        groupSecRow.className = "xlc-gm-rail-sec-row";
+        const groupSecHead = document.createElement("div");
+        groupSecHead.className = "xlc-gm-rail-sec-head";
+        groupSecHead.textContent = "内容分组";
+        const groupAddBtn = document.createElement("button");
+        groupAddBtn.type = "button";
+        groupAddBtn.className = "xlc-gm-rail-add-btn";
+        groupAddBtn.dataset.xlcControl = "gm.rail.add-group";
+        groupAddBtn.title = "新建内容分组";
+        groupAddBtn.setAttribute("aria-label", "新建内容分组");
+        groupAddBtn.textContent = "+";
+        groupAddBtn.addEventListener("click", () => {
+            openTextPromptDialog({
+                title: this.dualT("dualPanel.addGroupTitle", "新建常用语分类"),
+                label: this.dualT("dualPanel.groupNameLabel", "分类名称（支持层级路径，例如：工作模板 或 售后/退款）"),
+                placeholder: this.dualT("dualPanel.groupNamePlaceholder", "例如：工作模板"),
+                confirmText: this.dualT("dualPanel.createAndEnter", "创建并进入"),
+                cancelText: this.dualT("dualPanel.cancel", "取消"),
+                onConfirm: (catName) => {
+                    const cleanName = catName.trim();
+                    if (!cleanName) return false;
+                    if (!this.cachedCategories.includes(cleanName)) {
+                        this.cachedCategories.push(cleanName);
+                    }
+                    switchView("all", cleanName);
+                    this.renderGmRailGroups();
+                    return true;
+                },
+            });
+        });
+        groupSecRow.append(groupSecHead, groupAddBtn);
+        rail.appendChild(groupSecRow);
+
+        const groupsHost = document.createElement("div");
+        groupsHost.className = "xlc-gm-rail-groups";
+        this.gmRailGroupsEl = groupsHost;
+        rail.appendChild(groupsHost);
+
+        const spacer = document.createElement("div");
+        spacer.className = "xlc-gm-rail-spacer";
+        rail.appendChild(spacer);
+
+        const foot = document.createElement("div");
+        foot.className = "xlc-gm-rail-foot";
+        const settingsBtn = document.createElement("button");
+        settingsBtn.type = "button";
+        settingsBtn.className = "xlc-gm-rail-btn";
+        settingsBtn.dataset.xlcControl = "gm.rail.settings";
+        const sMain = document.createElement("span");
+        sMain.className = "xlc-gm-rail-btn-main";
+        sMain.appendChild(createGmSvg("settings", "xlc-gm-svg xlc-gm-svg--sm"));
+        const sTxt = document.createElement("span");
+        sTxt.textContent = "偏好与维护";
+        sMain.appendChild(sTxt);
+        settingsBtn.appendChild(sMain);
+        settingsBtn.addEventListener("click", () => {
+            this.destroy();
+            this.deps.openSetup();
+        });
+        foot.appendChild(settingsBtn);
+        rail.appendChild(foot);
+
+        this.renderGmRailGroups();
+        return rail;
+    }
+
+    /** 渲染石墨清雾左侧内容分组清单 */
+    private renderGmRailGroups(): void {
+        if (!this.gmRailGroupsEl) return;
+        this.gmRailGroupsEl.replaceChildren();
+        const rawCats = this.cachedCategories || [];
+        const cats = rawCats.length > 0 ? rawCats : DEFAULT_PRESET_CATEGORIES;
+        for (const cat of cats) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "xlc-gm-rail-btn";
+            btn.dataset.gmCat = cat;
+            btn.dataset.xlcControl = `gm.rail.cat.${cat}`;
+            const mainSpan = document.createElement("span");
+            mainSpan.className = "xlc-gm-rail-btn-main";
+            mainSpan.appendChild(createGmSvg("folder", "xlc-gm-svg xlc-gm-svg--sm"));
+            const textSpan = document.createElement("span");
+            textSpan.textContent = cat;
+            textSpan.title = cat;
+            mainSpan.appendChild(textSpan);
+            btn.appendChild(mainSpan);
+            btn.addEventListener("click", () => {
+                this.featuredViewActive = false;
+                this.activeCategoryPath = cat;
+                this.currentScope = "all";
+                this.deps.setFilters({ ...this.deps.getFilters(), category: cat });
+                const categorySelect = this.dialog?.element.querySelector<HTMLSelectElement>(".xlc-category-select");
+                if (categorySelect) categorySelect.value = cat;
+                this.syncScopeChips();
+                this.syncCategoryTreeActive();
+                void this.refresh();
+            });
+            this.gmRailGroupsEl.appendChild(btn);
+        }
+        this.syncGmChrome();
+    }
+
+    /** 渲染主管理面板「置顶常用（一键直达）」两列网格 */
+    private renderGmPinnedStrip(): void {
+        if (!this.gmPinnedSectionEl || !this.gmPinnedGridEl) return;
+        const typeVal = this.deps.getFilters().type;
+        const showPinned = !this.miniMode
+            && this.currentScope === "all"
+            && !this.lastQueryText
+            && !this.activeCategoryPath
+            && !this.featuredViewActive
+            && !typeVal;
+
+        const pinnedEntries = showPinned
+            ? this.results.filter((e) => !e.isOmni && this.deps.isFavorite(e.id)).slice(0, 6)
+            : [];
+
+        if (!showPinned || pinnedEntries.length === 0) {
+            this.gmPinnedSectionEl.hidden = true;
+            this.gmPinnedGridEl.replaceChildren();
+            return;
+        }
+
+        this.gmPinnedSectionEl.hidden = false;
+        this.gmPinnedGridEl.replaceChildren();
+        for (const entry of pinnedEntries) {
+            const idx = this.results.indexOf(entry);
+            const card = document.createElement("div");
+            card.className = "xlc-gm-pin-card" + (idx === this.activeIndex ? " is-selected" : "");
+            card.dataset.xlcControl = `gm.pinned.${entry.id}`;
+
+            const left = document.createElement("div");
+            left.className = "xlc-gm-pin-card-left";
+            const icBox = document.createElement("div");
+            icBox.className = "xlc-gm-type-ic-box";
+            icBox.appendChild(createGmSvg(mapItemTypeToIconKind(entry.itemType), "xlc-gm-svg xlc-gm-svg--sm"));
+            const textWrap = document.createElement("div");
+            textWrap.className = "xlc-gm-pin-card-text";
+            const titleEl = document.createElement("div");
+            titleEl.className = "xlc-gm-pin-card-title";
+            titleEl.textContent = entry.title || this.deps.t("unknownType");
+            const subEl = document.createElement("div");
+            subEl.className = "xlc-gm-pin-card-sub";
+            if (entry.shortcode) {
+                const scTag = document.createElement("span");
+                scTag.className = "xlc-gm-code-tag";
+                scTag.textContent = entry.shortcode;
+                subEl.appendChild(scTag);
+            }
+            const useCount = this.usageCounts.get(entry.id) ?? 0;
+            const subParts = [entry.alias || entry.category || getGmTypeLabel(entry.itemType)];
+            if (useCount > 0) subParts.push(`${useCount} 次`);
+            const subTxt = document.createElement("span");
+            subTxt.textContent = subParts.filter(Boolean).join(" · ");
+            subEl.appendChild(subTxt);
+            textWrap.append(titleEl, subEl);
+            left.append(icBox, textWrap);
+
+            const insertBtn = document.createElement("button");
+            insertBtn.type = "button";
+            insertBtn.className = "b3-button b3-button--text xlc-gm-btn-xs";
+            insertBtn.textContent = this.mobilePrimaryIsCopy() ? "复制" : "插入";
+            insertBtn.title = "一键使用";
+            insertBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                void this.runPrimary(entry);
+            });
+
+            card.append(left, insertBtn);
+            card.addEventListener("click", () => {
+                if (idx >= 0) {
+                    this.activeIndex = idx;
+                    this.activeProvider = -1;
+                    this.paintActive();
+                    this.updatePreview(entry.id);
+                    this.renderGmPinnedStrip();
+                }
+            });
+            this.gmPinnedGridEl.appendChild(card);
+        }
+    }
+
+    /** 通过捕获表单预填剪贴板正文并存为常用语 */
+    private saveClipToCommonViaForm(text: string): void {
+        const clean = (text ?? "").trim();
+        if (!clean) return;
+        const parsed = parseSnippetAnnotations(clean);
+        const cleanText = parsed.cleanText || clean;
+        const firstLine = cleanText.split(/[\r\n]+/)[0]?.slice(0, 60).trim() || "剪贴板条目";
+        const entry: SearchEntry = {
+            id: `xlc-clip-home-${Date.now()}`,
+            blockId: "",
+            libraryDocId: "",
+            title: parsed.title || firstLine,
+            content: clean,
+            summary: cleanText.slice(0, 100).replace(/[\s\r\n]+/g, " "),
+            itemType: inferTypeFromText(cleanText),
+            category: "常用",
+            tags: Array.from(new Set(["剪贴板", ...parsed.tags].filter(Boolean))),
+            alias: "",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            isOmni: true,
+        };
+        if (this.deps.captureOmniWithForm) {
+            this.deps.captureOmniWithForm(entry);
+        } else if (this.deps.newWithContent) {
+            this.deps.newWithContent(cleanText, {title: parsed.title || firstLine});
+        } else {
+            this.deps.newItem(parsed.title || firstLine);
+        }
+    }
+
+    /** 渲染首页中栏紧凑「最近剪贴板」速用区（方案 1：默认最新 3 条 + 插入/复制/存为常用 + 折叠/查看全部） */
+    private renderGmRecentClipStrip(): void {
+        if (!this.gmRecentClipSectionEl || !this.gmRecentClipListEl) return;
+        const typeVal = this.deps.getFilters().type;
+        const showStrip = !this.miniMode
+            && this.currentScope === "all"
+            && !this.lastQueryText
+            && !this.activeCategoryPath
+            && !this.featuredViewActive
+            && !typeVal;
+
+        if (!showStrip) {
+            this.gmRecentClipSectionEl.hidden = true;
+            this.gmRecentClipListEl.replaceChildren();
+            return;
+        }
+
+        const history = this.deps.getClipboardHistory ? this.deps.getClipboardHistory() : [];
+        this.gmRecentClipSectionEl.hidden = false;
+        if (this.gmRecentClipCountEl) {
+            this.gmRecentClipCountEl.textContent = history.length > 0 ? `${Math.min(history.length, 3)} / ${history.length}` : "";
+        }
+        if (this.gmRecentClipViewAllBtn) {
+            this.gmRecentClipViewAllBtn.textContent = history.length > 0 ? `查看全部 (${history.length}) →` : "查看全部 →";
+        }
+        if (this.gmRecentClipToggleBtn) {
+            this.gmRecentClipToggleBtn.textContent = this.homeRecentClipCollapsed ? "展开 ▾" : "折叠 ▴";
+            this.gmRecentClipToggleBtn.setAttribute("aria-expanded", String(!this.homeRecentClipCollapsed));
+        }
+
+        this.gmRecentClipListEl.hidden = this.homeRecentClipCollapsed;
+        this.gmRecentClipListEl.replaceChildren();
+        if (this.homeRecentClipCollapsed) return;
+
+        if (history.length === 0) {
+            const emptyLine = document.createElement("div");
+            emptyLine.className = "xlc-gm-recent-clip-empty";
+            emptyLine.dataset.xlcControl = "gm.recent-clip.empty";
+            emptyLine.textContent = "暂无剪贴板记录，复制文本后将自动出现于此";
+            this.gmRecentClipListEl.appendChild(emptyLine);
+            return;
+        }
+
+        const latestThree = history.slice(0, 3);
+        latestThree.forEach((item, idx) => {
+            const row = document.createElement("div");
+            row.className = "xlc-gm-recent-clip-row";
+            row.dataset.xlcControl = `gm.recent-clip.row.${idx}`;
+
+            const summaryWrap = document.createElement("div");
+            summaryWrap.className = "xlc-gm-recent-clip-main";
+            const textSpan = document.createElement("span");
+            textSpan.className = "xlc-gm-recent-clip-text";
+            const singleLine = item.text.trim().replace(/[\r\n]+/g, " ") || item.text;
+            textSpan.textContent = singleLine;
+            textSpan.title = item.text.length > 300 ? item.text.slice(0, 300) + "…" : item.text;
+            const timeSpan = document.createElement("span");
+            timeSpan.className = "xlc-gm-recent-clip-time";
+            timeSpan.textContent = formatRelativeTime(item.copiedAt);
+            summaryWrap.append(textSpan, timeSpan);
+
+            const ops = document.createElement("div");
+            ops.className = "xlc-gm-recent-clip-ops";
+
+            const insertBtn = document.createElement("button");
+            insertBtn.type = "button";
+            insertBtn.className = "b3-button b3-button--small xlc-gm-row-insert";
+            insertBtn.dataset.xlcControl = `gm.recent-clip.insert.${idx}`;
+            insertBtn.textContent = "插入";
+            insertBtn.title = "直接插入到当前思源文档光标处";
+            insertBtn.setAttribute("aria-label", "插入剪贴板内容");
+            insertBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                void this.insertClipDirect(item.text);
+            });
+
+            const copyBtn = document.createElement("button");
+            copyBtn.type = "button";
+            copyBtn.className = "b3-button b3-button--text b3-button--small xlc-gm-row-copy";
+            copyBtn.dataset.xlcControl = `gm.recent-clip.copy.${idx}`;
+            copyBtn.textContent = "复制";
+            copyBtn.title = "复制到系统剪贴板";
+            copyBtn.setAttribute("aria-label", "复制剪贴板内容");
+            copyBtn.addEventListener("click", async (ev) => {
+                ev.stopPropagation();
+                const ok = await this.deps.copyText(item.text);
+                if (ok) {
+                    lvNotify.inline(copyBtn, "已复制");
+                } else {
+                    this.deps.notify?.("error", this.deps.t("copyFailed") || "复制失败");
+                }
+            });
+
+            const saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.className = "b3-button b3-button--text b3-button--small xlc-gm-recent-clip-save";
+            saveBtn.dataset.xlcControl = `gm.recent-clip.save.${idx}`;
+            saveBtn.textContent = "存为常用";
+            saveBtn.title = "打开捕获表单并预填该剪贴板正文";
+            saveBtn.setAttribute("aria-label", "存为常用");
+            saveBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                this.saveClipToCommonViaForm(item.text);
+            });
+
+            ops.append(insertBtn, copyBtn, saveBtn);
+            row.append(summaryWrap, ops);
+            this.gmRecentClipListEl!.appendChild(row);
+        });
+    }
+
+    /** 同步石墨清雾外框状态（导航激活态、标题文案、计数、置顶区与手机底栏） */
+    private syncGmChrome(): void {
+        const headingMap: Record<string, [string, string]> = {
+            all: ["全部常用", "高频项置顶一键直达，其余按分组清爽收纳"],
+            favorites: ["置顶常用", "固定在最前端的高频内容，打开面板即可直达"],
+            recent: ["最近使用", "按最近取用时间顺序列出，随时接着复用"],
+            clipboard: ["剪贴板历史", "最近复制内容按需查看，一键插入或沉淀为常用"],
+            "current-doc": ["当前文档", "当前打开文档内的内容块"],
+            "all-notes": ["全库笔记", "思源全部笔记本与文档内容检索"],
+        };
+        const [headingText, subText]: [string, string] = this.activeCategoryPath
+            ? [this.activeCategoryPath, "按分组整理收纳，支持快速筛选与直达"]
+            : (headingMap[this.currentScope] ?? ["全部常用", "高频项置顶一键直达，其余按分组清爽收纳"]);
+
+        if (this.gmMainHeadingEl) this.gmMainHeadingEl.textContent = headingText;
+        if (this.gmMainSubEl) this.gmMainSubEl.textContent = subText;
+        if (this.gmPhoneTitleEl) this.gmPhoneTitleEl.textContent = headingText;
+        if (this.gmListLabelEl) {
+            this.gmListLabelEl.textContent = (this.currentScope === "all" && !this.activeCategoryPath && !this.lastQueryText)
+                ? "全部分组清单"
+                : headingText;
+        }
+        if (this.gmListCountEl) {
+            this.gmListCountEl.textContent = `共 ${this.results.length} 项`;
+        }
+
+        if (this.gmTypeSelectEl) {
+            this.gmTypeSelectEl.value = this.deps.getFilters().type || "";
+        }
+        if (this.gmSortSelectEl) {
+            this.gmSortSelectEl.value = this.deps.getSort();
+        }
+
+        if (this.gmRailEl) {
+            this.gmRailEl.querySelectorAll<HTMLButtonElement>(".xlc-gm-rail-btn").forEach((btn) => {
+                const nav = btn.dataset.gmNav;
+                const cat = btn.dataset.gmCat;
+                let active = false;
+                if (cat) {
+                    active = this.currentScope === "all" && this.activeCategoryPath === cat;
+                } else if (nav === "all") {
+                    active = this.currentScope === "all" && !this.activeCategoryPath && !this.featuredViewActive;
+                } else if (nav) {
+                    active = this.currentScope === nav;
+                }
+                btn.classList.toggle("is-active", active);
+            });
+            const clipsCount = this.deps.getClipboardHistory ? this.deps.getClipboardHistory().length : 0;
+            const clipBadge = this.gmRailEl.querySelector<HTMLElement>('[data-gm-count-for="clipboard"]');
+            if (clipBadge) clipBadge.textContent = clipsCount > 0 ? String(clipsCount) : "";
+            if (this.currentScope === "all" && !this.activeCategoryPath && !this.lastQueryText) {
+                const allBadge = this.gmRailEl.querySelector<HTMLElement>('[data-gm-count-for="all"]');
+                if (allBadge) allBadge.textContent = String(this.results.length);
+                const favCount = this.results.filter((r) => !r.isOmni && this.deps.isFavorite(r.id)).length;
+                const favBadge = this.gmRailEl.querySelector<HTMLElement>('[data-gm-count-for="favorites"]');
+                if (favBadge) favBadge.textContent = favCount > 0 ? String(favCount) : "";
+            }
+        }
+
+        if (this.gmPhoneNavEl) {
+            const key = this.currentScope === "favorites"
+                ? "favorites"
+                : (this.currentScope === "clipboard" ? "clipboard" : "all");
+            this.gmPhoneNavEl.querySelectorAll<HTMLButtonElement>(".xlc-gm-phone-nav-item").forEach((b) => {
+                b.classList.toggle("is-active", b.dataset.gmPhoneNav === key);
+            });
+        }
+
+        this.renderGmPinnedStrip();
+        this.renderGmRecentClipStrip();
     }
 }

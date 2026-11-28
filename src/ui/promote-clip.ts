@@ -252,8 +252,12 @@ export function openPromoteClipDialog(options: PromoteClipDialogOptions): Dialog
     form.appendChild(foot);
     body.appendChild(form);
 
-    // 键盘监听：Ctrl+Enter 快捷提交（补 IME isComposing 守卫）与 Esc 关闭
+    // 键盘监听：IME 合成期全局让路；Ctrl+Enter 快捷提交与 Esc 关闭
     form.addEventListener("keydown", (ev: KeyboardEvent) => {
+        if (ev.isComposing || ev.keyCode === 229) {
+            ev.stopPropagation();
+            return;
+        }
         if (ev.key === "Escape") {
             ev.preventDefault();
             ev.stopPropagation();
@@ -261,8 +265,6 @@ export function openPromoteClipDialog(options: PromoteClipDialogOptions): Dialog
             return;
         }
         if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
-            // IME isComposing 守卫：中文输入法选词回车不触发提交
-            if (ev.isComposing || ev.keyCode === 229) return;
             ev.preventDefault();
             ev.stopPropagation();
             void doSubmit();

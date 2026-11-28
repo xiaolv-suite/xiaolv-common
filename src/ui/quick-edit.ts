@@ -4,6 +4,7 @@
 
 import {Dialog} from "siyuan";
 import {adaptSecondaryDialogForMobile, getDialogBody, isMobileDialogViewport, mountPlatformDialogTitleWrap} from "./dialog-dom";
+import {lvSurfaceStack} from "../libs/lv-notice-kit";
 import {validateOmniBlockUpdate} from "../service/omni-search";
 import {toErrorMessage} from "../model/errors";
 import {renderSafePreview} from "./preview-renderer";
@@ -26,12 +27,20 @@ export function openQuickEditDialog(
     let previewDebounce: ReturnType<typeof setTimeout> | null = null;
     const isMobileModal = isMobileDialogViewport();
     const prevActive = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
+    const surfaceId = `xlc-quick-edit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    let surfacePopped = false;
+    const popSurface = (): void => {
+        if (surfacePopped) return;
+        surfacePopped = true;
+        lvSurfaceStack.pop(surfaceId);
+    };
     const dialog = new Dialog({
         title: `${deps.t("quickEditBlock")} (${blockId})`,
         content: "",
         width: isMobileModal ? "100vw" : "min(620px, 92vw)",
         destroyCallback: () => {
             closed = true;
+            popSurface();
             if (previewDebounce) {
                 clearTimeout(previewDebounce);
                 previewDebounce = null;
@@ -43,6 +52,20 @@ export function openQuickEditDialog(
             try {
                 prevActive?.focus();
             } catch {}
+        },
+    });
+    lvSurfaceStack.push({
+        id: surfaceId,
+        type: "dialog",
+        dismiss: () => {
+            if (saving) return "keep";
+            if (closed) {
+                popSurface();
+                return false;
+            }
+            dialog.destroy();
+            popSurface();
+            return "keep";
         },
     });
 
@@ -268,7 +291,10 @@ export function openQuickEditDialog(
 
     saveBtn.addEventListener("click", () => void doSave());
     textarea.addEventListener("keydown", (e) => {
-        if (e.isComposing || (e as KeyboardEvent).keyCode === 229) return;
+        if (e.isComposing || (e as KeyboardEvent).keyCode === 229) {
+            e.stopPropagation();
+            return;
+        }
         if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
             if (e.repeat) return;
             e.preventDefault();
@@ -276,14 +302,20 @@ export function openQuickEditDialog(
         } else if (e.key === "Escape") {
             if (saving) return;
             e.preventDefault();
+            e.stopPropagation();
             dialog.destroy();
         }
     });
 
     container.addEventListener("keydown", (e) => {
+        if (e.isComposing || (e as KeyboardEvent).keyCode === 229) {
+            e.stopPropagation();
+            return;
+        }
         if (e.key === "Escape") {
             if (saving) return;
             e.preventDefault();
+            e.stopPropagation();
             dialog.destroy();
             return;
         }
