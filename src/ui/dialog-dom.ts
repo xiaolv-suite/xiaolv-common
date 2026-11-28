@@ -1,0 +1,515 @@
+import * as siyuan from "siyuan";
+import {Dialog, confirm} from "siyuan";
+import {PLUGIN_DISPLAY_VERSION} from "../constants";
+import {isMobileFrontend, lvSurfaceStack} from "../libs/lv-notice-kit";
+import {createFocusTrap, type FocusTrapInstance} from "../libs/lv-focus-trap";
+
+/**
+ * 判定当前弹窗是否运行于移动端或窄屏（<=640px）视口环境。
+ */
+export function isMobileDialogViewport(): boolean {
+    try {
+        const getFn = (siyuan as unknown as {getFrontend?: () => string}).getFrontend;
+        if (typeof getFn === "function") {
+            const frontend = getFn();
+            if (frontend === "mobile" || frontend === "browser-mobile") return true;
+        }
+    } catch {
+        // ignore
+    }
+    try {
+        if (isMobileFrontend()) return true;
+    } catch {
+        // ignore in minimal unit test DOM stubs where document.getElementById is absent
+    }
+    try {
+        const winMobile = typeof window !== "undefined"
+            ? (window as unknown as {siyuan?: {mobile?: unknown}}).siyuan?.mobile
+            : undefined;
+        if (winMobile === true || (typeof winMobile === "object" && winMobile !== null)) return true;
+    } catch {
+        // ignore
+    }
+    try {
+        if (typeof document !== "undefined" && document.body?.classList?.contains?.("body--mobile")) return true;
+        if (typeof window !== "undefined" && typeof window.innerWidth === "number" && window.innerWidth > 0 && window.innerWidth <= 640) {
+            return true;
+        }
+    } catch {
+        // ignore
+    }
+    return false;
+}
+
+/**
+ * 为小驴常用弹窗外壳与内层 .b3-dialog 显式挂载主权标识类，避免 SCSS 使用代价高昂的 :has() 全树回溯。
+ */
+export function markSovereignDialog(dialogElement: HTMLElement | null | undefined): void {
+    if (!dialogElement) return;
+    dialogElement.classList?.add?.("xlc-sovereign-dialog", "xlc-gm-surface");
+    try {
+        const inner = typeof dialogElement.querySelector === "function"
+            ? dialogElement.querySelector<HTMLElement>(".b3-dialog")
+            : null;
+        if (inner && inner !== dialogElement) {
+            inner.classList?.add?.("xlc-sovereign-dialog", "xlc-gm-surface");
+        }
+    } catch {
+        // ignore in minimal stubs
+    }
+}
+
+/**
+ * 为次级弹窗（设置、捕获、提示、向导等）适配手机端视口约束与顶栏 44x44px 可见 ✕ 关闭按钮。
+ */
+export function adaptSecondaryDialogForMobile(
+    dialog: Dialog,
+    closeLabel = "关闭",
+    onClose?: () => void,
+): void {
+    const dialogEl = dialog?.element as HTMLElement | undefined;
+    if (!dialogEl || typeof dialogEl.querySelector !== "function") return;
+    markSovereignDialog(dialogEl);
+    const container = dialogEl.querySelector(".b3-dialog__container") as HTMLElement | null;
+    const isMobile = isMobileDialogViewport();
+    if (container && isMobile) {
+        container.classList?.add?.("xlc-mobile-modal");
+        if (container.style) {
+            container.style.maxWidth = "100vw";
+            container.style.maxHeight = "100dvh";
+        }
+    }
+    const header = dialogEl.querySelector(".b3-dialog__header") as HTMLElement | null;
+    if (!header || typeof header.appendChild !== "function" || typeof document === "undefined" || typeof document.createElement !== "function") {
+        return;
+    }
+    header.classList?.add?.("xlc-dialog-header--has-close");
+    const existingClose = typeof header.querySelector === "function"
+        ? header.querySelector(".xlc-dialog-close-btn")
+        : null;
+    if (existingClose && (existingClose as {className?: string}).className?.includes?.("xlc-dialog-close-btn")) {
+        return;
+    }
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "xlc-dialog-close-btn";
+    closeBtn.dataset.xlcControl = "dialog.mobile.close";
+    closeBtn.textContent = "✕";
+    closeBtn.title = closeLabel;
+    closeBtn.setAttribute("aria-label", closeLabel);
+    closeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (onClose) {
+            onClose();
+        } else {
+            dialog.destroy();
+        }
+    });
+    header.appendChild(closeBtn);
+}
+
+/**
+ * SiYuan 弹窗内容容器兼容层（R142 P0）。
+ * 真实 v3.8.x 前端的 Dialog 内容容器是 .b3-dialog__body（旧版为 .b3-dialog__content）。
+ * 此前全部弹窗用单一选择器查询，真实前端查不到即静默空壳——真机验收（R142）坐实。
+ * 规则：一律经由本函数取挂载点；stub-dom 已对齐真实 __body 结构。
+ */
+export function getDialogBody(root: HTMLElement | Document): HTMLElement | null {
+    return root.querySelector<HTMLElement>(".b3-dialog__body")
+        ?? root.querySelector<HTMLElement>(".b3-dialog__content");
+}
+
+/**
+ * 给思源原生 Dialog 标题栏装配统一的品牌标题栏规范（.lv-dialog-title-wrap）。
+ * 包含 22×22 帝王紫底白标 + 标题 + 版本胶囊，重复调用保持幂等。
+ */
+export function mountPlatformDialogTitleWrap(
+    dialogElement: HTMLElement | null | undefined,
+    titleText: string,
+    badgeText = PLUGIN_DISPLAY_VERSION,
+    iconName = "iconXlcCommon",
+): HTMLElement | null {
+    if (!dialogElement || typeof dialogElement.querySelector !== "function") return null;
+    markSovereignDialog(dialogElement);
+    const header = dialogElement.querySelector(".b3-dialog__header");
+    const titleEl = header?.querySelector(".b3-dialog__title");
+    if (!header || !titleEl) return null;
+    const existing = header.querySelector(".lv-dialog-title-wrap") as HTMLElement | null;
+    if (existing) return existing;
+
+    const wrap = document.createElement("div");
+    wrap.className = "lv-dialog-title-wrap";
+    wrap.setAttribute("role", "heading");
+    wrap.setAttribute("aria-level", "1");
+    wrap.setAttribute("aria-label", `${titleText} ${badgeText ? `版本 ${badgeText}` : ""}`.trim());
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "lv-dialog-title-icon";
+    iconSpan.setAttribute("aria-hidden", "true");
+    const safeIcon = (iconName || "iconXlcCommon").replace(/[^A-Za-z0-9_-]/g, "") || "iconXlcCommon";
+    const svg = typeof document.createElementNS === "function"
+        ? document.createElementNS("http://www.w3.org/2000/svg", "svg")
+        : document.createElement("svg");
+    const use = typeof document.createElementNS === "function"
+        ? document.createElementNS("http://www.w3.org/2000/svg", "use")
+        : document.createElement("use");
+    use.setAttribute("xlink:href", `#${safeIcon}`);
+    svg.appendChild(use);
+    iconSpan.appendChild(svg);
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "lv-dialog-title-text";
+    titleSpan.textContent = titleText || "";
+    wrap.append(iconSpan, titleSpan);
+    if (badgeText) {
+        const badgeSpan = document.createElement("span");
+        badgeSpan.className = "lv-dialog-title-pill";
+        badgeSpan.setAttribute("role", "status");
+        badgeSpan.setAttribute("aria-label", `插件版本：${badgeText}`);
+        badgeSpan.textContent = badgeText;
+        wrap.appendChild(badgeSpan);
+    }
+    titleEl.textContent = "";
+    titleEl.appendChild(wrap);
+    return wrap;
+}
+
+export interface TextPromptDialogOptions {
+    title: string;
+    label: string;
+    defaultValue?: string;
+    placeholder?: string;
+    allowEmpty?: boolean;
+    maxLength?: number;
+    confirmText?: string;
+    cancelText?: string;
+    controlId?: string;
+    onConfirm: (value: string) => void;
+}
+
+/**
+ * 替代在 Electron 宿主中被禁用的 window.prompt()，提供无障碍、支持 Enter/Esc 的单字段输入弹窗。
+ */
+export function openTextPromptDialog(options: TextPromptDialogOptions): Dialog {
+    const isMobile = isMobileDialogViewport();
+    const surfaceId = `xlc-text-prompt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    let closed = false;
+    let surfacePopped = false;
+    let focusTrap: FocusTrapInstance | null = null;
+    const popSurface = (): void => {
+        if (surfacePopped) return;
+        surfacePopped = true;
+        lvSurfaceStack.pop(surfaceId);
+    };
+    const dialog = new Dialog({
+        title: options.title,
+        content: "",
+        width: isMobile ? "100vw" : "min(440px, 92vw)",
+        destroyCallback: () => {
+            closed = true;
+            focusTrap?.release();
+            focusTrap = null;
+            popSurface();
+        },
+    });
+    lvSurfaceStack.push({
+        id: surfaceId,
+        type: "dialog",
+        dismiss: () => {
+            if (closed) {
+                popSurface();
+                return false;
+            }
+            dialog.destroy();
+            popSurface();
+            return "keep";
+        },
+    });
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+    dialog.element.addEventListener?.("click", (e) => {
+        if (e.target === dialog.element || (e.target as HTMLElement).classList?.contains("b3-dialog__scrim")) {
+            dialog.destroy();
+        }
+    });
+    mountPlatformDialogTitleWrap(dialog.element, options.title);
+    adaptSecondaryDialogForMobile(dialog, options.cancelText || "关闭");
+    const body = getDialogBody(dialog.element);
+    if (!body) {
+        dialog.destroy();
+        return dialog;
+    }
+    const form = document.createElement("form");
+    form.className = "xlc-form xlc-prompt-form";
+    form.noValidate = true;
+
+    const field = document.createElement("label");
+    field.className = "xlc-form-field";
+    const caption = document.createElement("span");
+    caption.className = "xlc-form-label";
+    caption.textContent = options.label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "b3-text-field";
+    if (options.controlId) input.dataset.xlcControl = options.controlId;
+    if (options.maxLength) input.maxLength = options.maxLength;
+    if (options.placeholder) input.placeholder = options.placeholder;
+    input.value = options.defaultValue ?? "";
+    field.append(caption, input);
+
+    const actions = document.createElement("div");
+    actions.className = "xlc-form-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "b3-button b3-button--cancel";
+    cancelBtn.textContent = options.cancelText || "取消";
+    cancelBtn.addEventListener("click", () => dialog.destroy());
+
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "b3-button xlc-btn-primary";
+    submitBtn.textContent = options.confirmText || "确定";
+    actions.append(cancelBtn, submitBtn);
+
+    form.append(field, actions);
+    form.addEventListener("keydown", (e) => {
+        if (e.isComposing || (e as KeyboardEvent).keyCode === 229) {
+            e.stopPropagation();
+            return;
+        }
+        if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            dialog.destroy();
+        }
+    });
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const val = input.value;
+        if (!options.allowEmpty && !val.trim()) {
+            input.focus();
+            return;
+        }
+        dialog.destroy();
+        options.onConfirm(val);
+    });
+    body.appendChild(form);
+    focusTrap = createFocusTrap(dialog.element, {
+        initialFocus: input,
+        restoreFocus: true,
+        fallbackToContainer: true,
+    });
+    focusTrap.activate();
+    setTimeout(() => {
+        input.focus();
+        if (typeof input.select === "function") input.select();
+    }, 0);
+    return dialog;
+}
+
+/**
+ * 替代阻塞式的 window.alert()，以非阻塞宿主弹窗展示统计或提示信息。
+ */
+export function openInfoDialog(title: string, lines: string[], closeText = "关闭"): Dialog {
+    const isMobile = isMobileDialogViewport();
+    const surfaceId = `xlc-info-dialog-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    let closed = false;
+    let surfacePopped = false;
+    const popSurface = (): void => {
+        if (surfacePopped) return;
+        surfacePopped = true;
+        lvSurfaceStack.pop(surfaceId);
+    };
+    const dialog = new Dialog({
+        title,
+        content: "",
+        width: isMobile ? "100vw" : "min(400px, 92vw)",
+        destroyCallback: () => {
+            closed = true;
+            popSurface();
+        },
+    });
+    lvSurfaceStack.push({
+        id: surfaceId,
+        type: "dialog",
+        dismiss: () => {
+            if (closed) {
+                popSurface();
+                return false;
+            }
+            dialog.destroy();
+            popSurface();
+            return "keep";
+        },
+    });
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+    dialog.element.addEventListener?.("click", (e) => {
+        if (e.target === dialog.element || (e.target as HTMLElement).classList?.contains("b3-dialog__scrim")) {
+            dialog.destroy();
+        }
+    });
+    mountPlatformDialogTitleWrap(dialog.element, title);
+    adaptSecondaryDialogForMobile(dialog, closeText);
+    const body = getDialogBody(dialog.element);
+    if (!body) {
+        dialog.destroy();
+        return dialog;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "xlc-form";
+    const list = document.createElement("div");
+    list.className = "xlc-form-hint";
+    for (const line of lines) {
+        const row = document.createElement("div");
+        row.textContent = line;
+        list.appendChild(row);
+    }
+    const actions = document.createElement("div");
+    actions.className = "xlc-form-actions";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "b3-button xlc-btn-primary";
+    closeBtn.textContent = closeText;
+    closeBtn.addEventListener("click", () => dialog.destroy());
+    actions.appendChild(closeBtn);
+    wrap.append(list, actions);
+    body.appendChild(wrap);
+    setTimeout(() => closeBtn.focus(), 0);
+    return dialog;
+}
+
+/**
+ * 为次级弹窗接入全生态浮层仲裁栈 (lvSurfaceStack)，按 Esc 时仅关闭最顶层子弹窗，严防穿透误杀父弹窗。
+ */
+export function attachSurfaceStack(
+    idPrefix: string,
+    getDialog: () => Dialog | null | undefined,
+    canDismiss?: () => boolean,
+): {onDestroy: () => void} {
+    const surfaceId = `${idPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    let closed = false;
+    let popped = false;
+    const pop = (): void => {
+        if (popped) return;
+        popped = true;
+        lvSurfaceStack.pop(surfaceId);
+    };
+    lvSurfaceStack.push({
+        id: surfaceId,
+        type: "dialog",
+        dismiss: () => {
+            if (canDismiss && !canDismiss()) return "keep";
+            if (closed) {
+                pop();
+                return false;
+            }
+            const dlg = getDialog();
+            if (dlg) dlg.destroy();
+            pop();
+            return "keep";
+        },
+    });
+    return {
+        onDestroy: () => {
+            closed = true;
+            pop();
+        },
+    };
+}
+
+export interface ConfirmDialogOptions {
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    danger?: boolean;
+    onConfirm: () => void;
+    onCancel?: () => void;
+}
+
+/**
+ * 接入 lvSurfaceStack 的非阻塞确认弹窗：避免原生 confirm() 未入栈导致按 Esc 穿透关闭父级弹窗。
+ */
+export function openConfirmDialog(options: ConfirmDialogOptions): Dialog | null {
+    if (typeof Dialog === "undefined" || typeof document === "undefined" || typeof document.createElement !== "function") {
+        confirm(options.title, options.message, () => options.onConfirm(), () => options.onCancel?.());
+        return null;
+    }
+    const isMobile = isMobileDialogViewport();
+    let confirmed = false;
+    let surface: {onDestroy: () => void} | null = null;
+    let focusTrap: FocusTrapInstance | null = null;
+    const dialog = new Dialog({
+        title: options.title,
+        content: "",
+        width: isMobile ? "100vw" : "min(420px, 92vw)",
+        destroyCallback: () => {
+            focusTrap?.release();
+            focusTrap = null;
+            surface?.onDestroy();
+            if (!confirmed) options.onCancel?.();
+        },
+    });
+    surface = attachSurfaceStack("xlc-confirm-dialog", () => dialog);
+    dialog.element.querySelector(".b3-dialog__container")?.classList.add("xlc-form-host");
+    dialog.element.addEventListener?.("click", (e) => {
+        if (e.target === dialog.element || (e.target as HTMLElement).classList?.contains("b3-dialog__scrim")) {
+            dialog.destroy();
+        }
+    });
+    mountPlatformDialogTitleWrap(dialog.element, options.title);
+    adaptSecondaryDialogForMobile(dialog, options.cancelText || "取消");
+    const body = getDialogBody(dialog.element);
+    if (!body) {
+        dialog.destroy();
+        return dialog;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "xlc-form xlc-confirm-form";
+    const msgEl = document.createElement("p");
+    msgEl.className = "xlc-form-hint";
+    msgEl.style.whiteSpace = "pre-line";
+    msgEl.textContent = options.message;
+
+    const actions = document.createElement("div");
+    actions.className = "xlc-form-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "b3-button b3-button--cancel";
+    cancelBtn.dataset.xlcControl = "confirm.cancel";
+    cancelBtn.textContent = options.cancelText || "取消";
+    cancelBtn.addEventListener("click", () => dialog.destroy());
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = options.danger ? "b3-button b3-button--outline" : "b3-button xlc-btn-primary";
+    if (options.danger) confirmBtn.style.color = "var(--xlc-danger, var(--b3-theme-error, #d23f31))";
+    confirmBtn.dataset.xlcControl = "confirm.ok";
+    confirmBtn.textContent = options.confirmText || "确定";
+    confirmBtn.addEventListener("click", () => {
+        confirmed = true;
+        dialog.destroy();
+        options.onConfirm();
+    });
+
+    actions.append(cancelBtn, confirmBtn);
+    wrap.append(msgEl, actions);
+    body.appendChild(wrap);
+    focusTrap = createFocusTrap(dialog.element, {
+        initialFocus: options.danger ? cancelBtn : confirmBtn,
+        restoreFocus: true,
+        fallbackToContainer: true,
+    });
+    focusTrap.activate();
+    setTimeout(() => (options.danger ? cancelBtn : confirmBtn).focus(), 0);
+    return dialog;
+}
+
+/** 统一确认删除弹窗 */
+export function confirmDelete(t: (key: string, ...args: string[]) => string, title: string, onConfirm: () => void): void {
+    openConfirmDialog({
+        title: "⚠️ " + t("delete"),
+        message: t("deleteConfirm", title),
+        confirmText: t("delete"),
+        cancelText: t("cancel") || "取消",
+        danger: true,
+        onConfirm,
+    });
+}

@@ -1,0 +1,21 @@
+node_modules/
+dist/
+package.zip
+package-*.zip
+dist-backup*/
+tests/.build/
+*.log
+.DS_Store
+
+.mimosa/
+prep-r*.tmp
+.jeikcode/codegraph/
+.zcode/
+scripts/.last-live-instance.json
+
+# Design prototype & harness build artifacts (S9)
+docs/design/*-bundle.js
+docs/design/*/*-bundle.js
+docs/design/*/*-harness.js
+docs/design/harness-bundle.js
+

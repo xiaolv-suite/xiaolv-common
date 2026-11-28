@@ -1,0 +1,240 @@
+// Markdown 包解析（R31）：把 buildMarkdownExport 的 items.md 解析回可导入条目。
+// 与导出格式严格互逆：条目以 <!-- xlc-item ... --> 元数据注释为界（正文含 ## 标题不误切）；
+// 无元数据注释的段落不识别（外来 Markdown 请走思源原生导入）。
+import {ExportedItem, ImportReceipt, ParsedImport} from "../model/transfer";
+import {LIMITS} from "../constants";
+import {LibraryService} from "./library";
+import {importBundle as importJsonBundleCore} from "./importer";
+import {cleanShortcode, isItemType, isSafeHttpUrl} from "../model/item";
+import {listSnippetRefs} from "../model/variables";
+const ITEM_COMMENT_START = "<!-- xlc-item";
+const ITEM_COMMENT_END = "-->";
+const PACK_COMMENT_START = "<!-- xlc-pack";
+const TITLE_RE = /^##\s+(.+)$/;
+
+function parseMetadata(lines: string[]): {fields: Map<string, string>; titleHint: string} {
+    const fields = new Map<string, string>();
+    let titleHint = "";
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === ITEM_COMMENT_START || trimmed === ITEM_COMMENT_END) continue;
+        const idx = trimmed.indexOf(":");
+        if (idx <= 0) continue;
+        fields.set(trimmed.slice(0, idx).trim(), trimmed.slice(idx + 1).trim());
+    }
+    return {fields, titleHint};
+}
+
+export interface MarkdownPackManifest {
+    name: string;
+    vars: string[];
+    snippets?: string[];
+    missingSnippets?: string[];
+    /** 片段依赖图谱（G29 / T-0141）：父条目标题 -> 依赖子片段标题列表 */
+    dependencyMap?: Record<string, string[]>;
+}
+
+export interface MarkdownPackParseResult {
+    items: ExportedItem[];
+    issues: Array<{index: number; reason: string}>;
+    /** 包清单（F6）：xlc-pack 注释中的包名与变量清单；旧包/外来 MD 无此信息 */
+    pack?: MarkdownPackManifest;
+}
+
+/** 解析首部 xlc-pack 清单（存在且位于首个条目之前才有效；字段缺失容忍）。 */
+function parsePackManifest(md: string, firstItemAt: number): MarkdownPackManifest | undefined {
+    const start = md.indexOf(PACK_COMMENT_START);
+    if (start === -1 || start > firstItemAt) return undefined;
+    const end = md.indexOf(ITEM_COMMENT_END, start);
+    if (end === -1) return undefined;
+    const fields = parseMetadata(md.slice(start + PACK_COMMENT_START.length, end).split("\n")).fields;
+    const name = (fields.get("name") ?? "").slice(0, LIMITS.title);
+    const vars = (fields.get("vars") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.maxAskFields);
+    const snippets = (fields.get("snippets") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 16);
+    if (!name) return undefined;
+    return {name, vars, ...(snippets.length > 0 ? {snippets} : {})};
+}
+
+/** 构建包内条目的片段依赖映射表（G29 / T-0141） */
+export function buildPackDependencyMap(items: readonly ExportedItem[]): Record<string, string[]> {
+    const map: Record<string, string[]> = {};
+    for (const it of items) {
+        if (it.itemType === "code") continue;
+        const refs = listSnippetRefs(it.kramdown);
+        if (refs.length > 0) {
+            map[it.title || it.id] = refs;
+        }
+    }
+    return map;
+}
+
+/** 解析 items.md → 可导入条目。无 xlc-item 注释的内容一律忽略（不吞外来文本）。 */
+export function parseMarkdownPack(md: string): MarkdownPackParseResult {
+    const items: ExportedItem[] = [];
+    const issues: Array<{index: number; reason: string}> = [];
+    const seenIds = new Set<string>();
+    if (!md || !md.includes(ITEM_COMMENT_START)) return {items, issues};
+    const firstItemAt = md.indexOf(ITEM_COMMENT_START);
+    const pack = parsePackManifest(md, firstItemAt);
+
+    // 以元数据注释为界切块；每块起点回溯到紧邻注释前的 `## ` 标题行（标题在注释之前）
+    const commentStarts: number[] = [];
+    const commentEnds: number[] = [];
+    let hasUnclosed = false;
+    let scan = 0;
+    while (true) {
+        const start = md.indexOf(ITEM_COMMENT_START, scan);
+        if (start === -1) break;
+        const end = md.indexOf(ITEM_COMMENT_END, start);
+        if (end === -1) {
+            hasUnclosed = true;
+            break;
+        }
+        commentStarts.push(start);
+        commentEnds.push(end + ITEM_COMMENT_END.length);
+        scan = start + ITEM_COMMENT_START.length;
+        if (commentStarts.length > LIMITS.maxItems) break;
+    }
+    const chunks: string[] = [];
+    for (let i = 0; i < commentStarts.length; i++) {
+        const itemStart = commentStarts[i] ?? 0;
+        const lowerBound = i > 0 ? commentEnds[i - 1] ?? 0 : 0;
+        // 回溯：注释前最近的行首 `## `（标题行），但不越过上一条目的注释结束
+        const titleLineStart = md.lastIndexOf("\n## ", itemStart) + 1;
+        const chunkStart = Math.max(Math.min(titleLineStart, itemStart), lowerBound);
+        // 下一条记录的边界是它的标题行（标题位于 xlc-item 注释之前）。
+        // 不能用下一条注释结束位置：那会把下一条的元数据注释并入当前正文，
+        // 导致导入后的条目出现 xlc-item 文本与错误的变量提示。
+        const nextCommentStart = commentStarts[i + 1];
+        const nextTitleStart = nextCommentStart === undefined
+            ? -1
+            : md.lastIndexOf("\n## ", nextCommentStart) + 1;
+        const chunkEnd = nextTitleStart > itemStart
+            ? nextTitleStart
+            : (nextCommentStart ?? md.length);
+        chunks.push(md.slice(chunkStart, chunkEnd));
+    }
+
+    chunks.forEach((chunk, index) => {
+        const endIdx = chunk.indexOf(ITEM_COMMENT_END);
+        if (endIdx === -1) {
+            issues.push({index, reason: "metadata-comment-unclosed"});
+            return;
+        }
+        const metaLines = chunk.slice(0, endIdx).split("\n");
+        const {fields} = parseMetadata(metaLines);
+        const id = fields.get("id") ?? "";
+        if (!/^xlc-[0-9a-z]{10,40}$/.test(id)) {
+            issues.push({index, reason: "invalid-id"});
+            return;
+        }
+        if (seenIds.has(id)) {
+            issues.push({index, reason: "duplicate-id"});
+            return;
+        }
+        const itemType = fields.get("type") ?? "text";
+        if (!isItemType(itemType)) {
+            issues.push({index, reason: "invalid-item-type"});
+            return;
+        }
+        const url = fields.get("url") ?? "";
+        if (url && !isSafeHttpUrl(url)) {
+            issues.push({index, reason: "invalid-url"});
+            return;
+        }
+        // 标题：元数据注释前的最后一个 ## 行（导出格式为 `## {title}` 紧邻注释前）
+        let title = "";
+        const before = chunk.slice(0, chunk.indexOf(ITEM_COMMENT_START));
+        for (const line of before.split("\n")) {
+            const m = line.match(TITLE_RE);
+            const matched = m?.[1];
+            if (matched) title = matched.trim();
+        }
+        if (!title && fields.get("alias")) title = fields.get("alias") ?? "";
+        // 正文：注释结束后去掉紧跟的空行
+        const body = chunk.slice(endIdx + ITEM_COMMENT_END.length).replace(/^\s*\n/, "").replace(/\n\s*$/, "");
+        const shortcode = cleanShortcode(fields.get("shortcode") ?? "");
+        seenIds.add(id);
+        items.push({
+            id,
+            itemType,
+            title: title.slice(0, LIMITS.title),
+            alias: (fields.get("alias") ?? "").slice(0, LIMITS.alias),
+            ...(shortcode ? {shortcode} : {}),
+            tags: (fields.get("tags") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, LIMITS.tags),
+            category: (fields.get("category") ?? "").slice(0, LIMITS.category),
+            kramdown: body.slice(0, LIMITS.contentChars),
+            source: {
+                sourceDocId: fields.get("source-doc") ?? "",
+                sourceBlockId: fields.get("source-block") ?? "",
+                sourceType: fields.get("source-type") ?? "external",
+            },
+            url,
+            targetBlockId: fields.get("target") ?? "",
+            createdAt: 0,
+            updatedAt: Date.now(),
+        });
+    });
+    if (hasUnclosed) issues.push({index: commentStarts.length, reason: "metadata-comment-unclosed"});
+
+    // 依赖完整性预检：收集包内条目引用到的所有子片段标题并对比包内标题
+    const packTitles = new Set(items.map((it) => it.title).filter(Boolean));
+    const allReferencedSnippets = new Set<string>();
+    for (const it of items) {
+        if (it.itemType === "code") continue;
+        for (const ref of listSnippetRefs(it.kramdown)) {
+            allReferencedSnippets.add(ref);
+        }
+    }
+    if (pack?.snippets) {
+        for (const sn of pack.snippets) allReferencedSnippets.add(sn);
+    }
+    const missingSnippets = Array.from(allReferencedSnippets).filter((snTitle) => !packTitles.has(snTitle));
+    let finalPack = pack;
+    if (missingSnippets.length > 0) {
+        finalPack = finalPack
+            ? {...finalPack, missingSnippets}
+            : {name: "", vars: [], missingSnippets};
+    }
+
+    const dependencyMap = buildPackDependencyMap(items);
+    if (Object.keys(dependencyMap).length > 0) {
+        finalPack = finalPack
+            ? {...finalPack, dependencyMap}
+            : {name: "", vars: [], dependencyMap};
+    }
+
+    return {items, issues, pack: finalPack};
+}
+
+/** Markdown 包逐条应用：复用 importer 的单一真源（含 R21 overwrite 更新语义与 conflict 防御），完成后重建索引。 */
+export async function importMarkdownBundle(
+    library: LibraryService,
+    items: ReadonlyArray<ExportedItem>,
+    policy: "skip" | "overwrite" | "rename",
+): Promise<ImportReceipt> {
+    // 委托 importer.importBundle：overwrite=更新既有块（类型变化删旧建新）、
+    // createItem 侧 conflict 防御自动生效（绝不双块）；全字段保真与 JSON 导入一致
+    const parsed: ParsedImport = {schemaVersion: 1, items: items as ExportedItem[], unknownTopFields: []};
+    return importJsonBundleCore(library, parsed, policy);
+}
+
+/** 供 parseMarkdownPack 使用的元数据行渲染（与 buildMarkdownExport 格式一致） */
+export function renderItemMetadata(item: ExportedItem): string {
+    const lines = [
+        ITEM_COMMENT_START,
+        `id: ${item.id}`,
+        `type: ${item.itemType}`,
+    ];
+    if (item.alias) lines.push(`alias: ${item.alias}`);
+    if (item.shortcode) lines.push(`shortcode: ${item.shortcode}`);
+    if (item.tags.length) lines.push(`tags: ${item.tags.join(",")}`);
+    if (item.category) lines.push(`category: ${item.category}`);
+    if (item.source.sourceDocId) lines.push(`source-doc: ${item.source.sourceDocId}`);
+    if (item.source.sourceBlockId) lines.push(`source-block: ${item.source.sourceBlockId}`);
+    if (item.source.sourceType) lines.push(`source-type: ${item.source.sourceType}`);
+    if (item.url) lines.push(`url: ${item.url}`);
+    if (item.targetBlockId) lines.push(`target: ${item.targetBlockId}`);
+    lines.push(ITEM_COMMENT_END);
+    return lines.join("\n");
+}
